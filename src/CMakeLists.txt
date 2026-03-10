@@ -14,9 +14,9 @@ add_executable(${PROJECT_NAME}
 	${ALL_FILES}
 )
 
-setup_msvc_options(${PROJECT_NAME})
+add_subdirectory(util)
 
-target_compile_definitions(${PROJECT_NAME} PRIVATE ASSET_DIRECTORY=\"${PROJECT_SOURCE_DIR}/assets\")
+setup_msvc_options(${PROJECT_NAME})
 
 find_package(SDL3 REQUIRED)
 

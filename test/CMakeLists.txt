@@ -30,19 +30,8 @@ set(ADDITIONAL_LIBRARY_DEPENDENCIES
 	spdlog::spdlog
 	sdl::sdl
 	volk
-	util
-	vulkan
 	libassert::assert
-	platform
-	application
-	application_events
-	application_input
-	event
-	file_system
-	"global"
-	threading
-	"path"
-	compiler
+	util
 )
 
 target_link_libraries(${TEST_PROJECT_NAME} PUBLIC ${ADDITIONAL_LIBRARY_DEPENDENCIES})
