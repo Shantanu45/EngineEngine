@@ -2,6 +2,8 @@
 #include "util/logger.h"
 #include <memory>
 
+using namespace Util;
+
 class SpdlogTest : public ::testing::Test
 {
 protected:

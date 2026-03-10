@@ -10,11 +10,12 @@ set(ALL_FILES
 	${UNGROUPED_FILES}
 )
 
-add_executable(${PROJECT_NAME}
+add_executable(${PROJECT_NAME} WIN32
 	${ALL_FILES}
 )
 
 add_subdirectory(util)
+add_subdirectory(application)
 
 setup_msvc_options(${PROJECT_NAME})
 
@@ -34,6 +35,9 @@ set(ADDITIONAL_LIBRARY_DEPENDENCIES
 	libassert::assert
 	sdl::sdl
 	volk
+	util
+	application
+	application_entry
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE "${ADDITIONAL_LIBRARY_DEPENDENCIES}")
