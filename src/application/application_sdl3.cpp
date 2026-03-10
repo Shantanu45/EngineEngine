@@ -1,7 +1,7 @@
 #include "application.h"
 #include "application_entry/application_entry.h"
 #include "SDL3/SDL.h"
-#include <SDL3/SDL_vulkan.h>
+#include "SDL3/SDL_vulkan.h"
 #include "util/logger.h"
 #include <memory>
 #include "spdlog/sinks/stdout_color_sinks.h"

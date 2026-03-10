@@ -16,6 +16,7 @@ add_executable(${PROJECT_NAME} WIN32
 
 add_subdirectory(util)
 add_subdirectory(application)
+add_subdirectory(event)
 
 setup_msvc_options(${PROJECT_NAME})
 
