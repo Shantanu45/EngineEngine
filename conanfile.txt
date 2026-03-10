@@ -1,0 +1,15 @@
+[requires]
+spdlog/1.16.0
+gtest/1.17.0
+libassert/2.2.1
+shaderc/2025.3
+sdl/3.4.0
+glm/1.0.1
+rapidjson/1.1.0
+
+[generators]
+CMakeDeps
+CMakeToolchain
+
+[layout]
+cmake_layout
