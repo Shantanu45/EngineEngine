@@ -14,11 +14,7 @@ namespace EE
 	}
 }
 
-int WINAPI WinMain(
-    HINSTANCE hInstance,      // Handle to the current instance of the application
-    HINSTANCE hPrevInstance,  // Legacy parameter (always NULL in modern Windows)
-    LPSTR     lpCmdLine,      // The command line arguments as a single string
-    int       nCmdShow        // Flags that determine how the window should be shown
+int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow      
 )
 {
 	int argc;
