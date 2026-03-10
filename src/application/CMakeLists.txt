@@ -17,6 +17,8 @@ find_package(SDL3 REQUIRED)
 set(INCLUDES 
 	"${PROJECT_SOURCE_DIR}/src"
 	"${PROJECT_SOURCE_DIR}/third_party"
+	"${PROJECT_SOURCE_DIR}/third_party/Vulkan-Headers/include"
+	"${PROJECT_SOURCE_DIR}/third_party/volk"
 )
 target_include_directories(${PROJECT_NAME} PRIVATE ${INCLUDES})
 

@@ -1,10 +1,12 @@
 #include "application.h"
 #include "application_entry/application_entry.h"
-#include <iostream>
 #include "SDL3/SDL.h"
+#include <SDL3/SDL_vulkan.h>
 #include "util/logger.h"
 #include <memory>
 #include "spdlog/sinks/stdout_color_sinks.h"
+#include "util/timer.h"
+#include "volk.h"
 
 namespace EE
 {
@@ -32,6 +34,49 @@ namespace EE
 		{
 			width = width_;
 			height = height_;
+
+			Util::Timer tmp_timer;
+			tmp_timer.start();
+			if (!SDL_Init(SDL_INIT_EVENTS | SDL_INIT_VIDEO))
+			{
+				LOGE("Failed to init SDL.\n");
+				return false;
+			}
+			LOGI("SDL_Init took %.3f seconds.\n", tmp_timer.end());
+
+			SDL_SetEventEnabled(SDL_EVENT_DROP_FILE, false);
+			SDL_SetEventEnabled(SDL_EVENT_DROP_TEXT, false);
+
+			if (!SDL_Vulkan_LoadLibrary(nullptr))
+			{
+				LOGE("Failed to load Vulkan library.\n");
+				return false;
+			}
+
+			//if (!Vulkan::Context::init_loader(
+			//	reinterpret_cast<PFN_vkGetInstanceProcAddr>(SDL_Vulkan_GetVkGetInstanceProcAddr())))
+			//{
+			//	LOGE("Failed to initialize Vulkan loader.\n");
+			//	return false;
+			//}
+
+			application.name = name;
+			if (application.name.empty())
+				application.name = "EngineEngine";
+
+			window = SDL_CreateWindow(application.name.empty() ? "SDL Window" : application.name.c_str(),
+				int(width), int(height), SDL_WINDOW_RESIZABLE | SDL_WINDOW_VULKAN);
+			if (!window)
+			{
+				LOGE("Failed to create SDL window.\n");
+				return false;
+			}
+
+			application.info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+			application.info.pEngineName = "Maker";
+			application.info.pApplicationName = application.name.empty() ? "Maker" : application.name.c_str();
+			application.info.apiVersion = VK_API_VERSION_1_1;
+
 			return true;
 		}
 
@@ -44,6 +89,12 @@ namespace EE
 		SDL_Window* window = nullptr;
 		unsigned width = 0;
 		unsigned height = 0;
+
+		struct
+		{
+			VkApplicationInfo info = {};
+			std::string name;
+		} application;
 	};
 }
 
