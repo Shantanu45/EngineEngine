@@ -8,7 +8,7 @@ namespace Util
 {
 	void Logger::log_error(const char* p_function, const char* p_file, int p_line, const char* p_code, const char* p_rationale, bool p_editor_notify, ErrorType p_type)
 	{
-		if (!should_log(true)) {
+		if (!should_log(p_type)) {
 			return;
 		}
 
@@ -22,61 +22,96 @@ namespace Util
 			err_details = p_code;
 		}
 
-		logf_error("%s: %s\n", err_type, err_details);
-		logf_error("   at: %s (%s:%i)\n", p_function, p_file, p_line);
+		logf(p_type, "%s: %s\n", err_type, err_details);
+		logf(p_type, "   at: %s (%s:%i)\n", p_function, p_file, p_line);
 	}
 
-	void Logger::logf(const char* p_format, ...) {
-		if (!should_log(false)) {
+	void Logger::logf(ErrorType p_type, const char* p_format, ...) {
+		if (!should_log(p_type)) {
 			return;
 		}
 
 		va_list argp;
 		va_start(argp, p_format);
 
-		logv(p_format, argp, false);
+		logv(p_format, argp, p_type);
 
 		va_end(argp);
 	}
 
 	void Logger::logf_error(const char* p_format, ...) {
-		if (!should_log(true)) {
+		if (!should_log(ErrorType::ERR_ERROR)) {
 			return;
 		}
 
 		va_list argp;
 		va_start(argp, p_format);
 
-		logv(p_format, argp, true);
+		logv(p_format, argp, ErrorType::ERR_ERROR);
 
 		va_end(argp);
 	}
 
-	bool Logger::should_log(bool p_err) {
+	void Logger::logf_warn(const char* p_format, ...)
+	{
+		if (!should_log(ErrorType::ERR_WARNING)) {
+			return;
+		}
+
+		va_list argp;
+		va_start(argp, p_format);
+
+		logv(p_format, argp, ErrorType::ERR_WARNING);
+
+		va_end(argp);
+	}
+
+	void Logger::logf_info(const char* p_format, ...)
+	{
+		if (!should_log(ErrorType::NONE)) {
+			return;
+		}
+
+		va_list argp;
+		va_start(argp, p_format);
+
+		logv(p_format, argp, ErrorType::NONE);
+
+		va_end(argp);
+	}
+
+	bool Logger::should_log(ErrorType p_type) {
 		// SHAN: TODO: add global controls 
-		return (!p_err || true /*|| CoreGlobals::print_error_enabled) && (p_err || CoreGlobals::print_line_enabled*/);
+		return (true /*|| CoreGlobals::print_error_enabled) && (p_err || CoreGlobals::print_line_enabled*/);
 	}
 
 	void Logger::set_flush_stdout_on_print(bool value) {
 		_flush_stdout_on_print = value;
 	}
 
-	void StdLogger::logv(const char* p_format, va_list p_list, bool p_err)
+	void StdLogger::logv(const char* p_format, va_list p_list, ErrorType p_type)
 	{
-		if (!should_log(p_err)) {
+		if (!should_log(p_type)) {
 			return;
 		}
 
-		if (p_err) {
-			vfprintf(stderr, p_format, p_list);
-		}
-		else {
+		switch (p_type)
+		{
+		case Util::Logger::NONE:
 			vprintf(p_format, p_list);
 			if (_flush_stdout_on_print) {
 				// Don't always flush when printing stdout to avoid performance
 				// issues when `print()` is spammed in release builds.
 				fflush(stdout);
 			}
+			break;
+		case Util::Logger::ERR_ERROR:
+		case Util::Logger::ERR_WARNING:
+		case Util::Logger::ERR_SCRIPT:
+		case Util::Logger::ERR_SHADER:
+		default:
+			vfprintf(stderr, p_format, p_list);
+			break;
 		}
 	}
 
@@ -86,30 +121,41 @@ namespace Util
 		m_logger->set_pattern("[%^%l%$] %v");
 	}
 
-	void StdSpdLogger::logv(const char* p_format, va_list p_list, bool p_err)
+	void StdSpdLogger::logv(const char* p_format, va_list p_list, ErrorType p_type)
 	{
 		// 1. Standard spdlog 'should_log' check
-		if (!should_log(p_err)) {
+		if (!should_log(p_type)) {
 			return;
 		}
-		auto level = p_err ? spdlog::level::err : spdlog::level::info;
 
 		// 2. Format the va_list into a string
 		// Note: spdlog/fmt doesn't take va_list directly, so we use vsnprintf
 		char buffer[1024];
 		vsnprintf(buffer, sizeof(buffer), p_format, p_list);
 
-		// 3. Log it
-		if (p_err) {
-			m_logger->error("{}", buffer);
-		}
-		else {
+		switch (p_type)
+		{
+		case Util::Logger::NONE:
+		{
 			m_logger->info("{}", buffer);
 
 			// 4. Handle flushing manually if needed
 			if (_flush_stdout_on_print) {
 				m_logger->flush();
 			}
+			break;
+		}
+		case Util::Logger::ERR_WARNING:
+			m_logger->warn("{}", buffer);
+			break;
+		case Util::Logger::ERR_ERROR:
+		case Util::Logger::ERR_SCRIPT:
+		case Util::Logger::ERR_SHADER:
+			m_logger->error("{}", buffer);
+			break;
+		default:
+			m_logger->info("{}", buffer);
+			break;
 		}
 	}
 
@@ -127,13 +173,31 @@ namespace Util
 		//spdlog::register_logger(m_logger);
 	}
 
-	void RotatedFileLogger::logv(const char* p_format, va_list p_list, bool p_err)
+	void RotatedFileLogger::logv(const char* p_format, va_list p_list, ErrorType p_type)
 	{
 		// 1. Level Check (Replaces should_log)
-		if (!should_log(p_err)) {
+		if (!should_log(p_type)) {
 			return;
 		}
-		auto level = p_err ? spdlog::level::err : spdlog::level::info;
+
+		auto level = spdlog::level::info;
+		switch (p_type)
+		{
+		case Util::Logger::NONE:
+			level = spdlog::level::info;
+			break;
+		case Util::Logger::ERR_WARNING:
+			level = spdlog::level::warn;
+			break;
+		case Util::Logger::ERR_ERROR:
+		case Util::Logger::ERR_SCRIPT:
+		case Util::Logger::ERR_SHADER:
+			level = spdlog::level::err;
+			break;
+		default:
+			level = spdlog::level::info;
+			break;
+		}
 
 		// 2. Expand va_list into a formatted string
 		// We use vsnprintf once to get the size, then format into a string.
@@ -154,7 +218,7 @@ namespace Util
 			m_logger->log(level, "{}", buf);
 
 			// 4. Handle Flushing
-			if (p_err || _flush_stdout_on_print) {
+			if (p_type >= ErrorType::ERR_ERROR || _flush_stdout_on_print) {
 				m_logger->flush();
 			}
 		}
@@ -165,21 +229,21 @@ namespace Util
 		loggers(p_loggers) {
 	}
 
-	void CompositeLogger::logv(const char* p_format, va_list p_list, bool p_err) {
-		if (!should_log(p_err)) {
+	void CompositeLogger::logv(const char* p_format, va_list p_list, ErrorType p_type) {
+		if (!should_log(p_type)) {
 			return;
 		}
 
 		for (int i = 0; i < loggers.size(); ++i) {
 			va_list list_copy;
 			va_copy(list_copy, p_list);
-			loggers[i]->logv(p_format, list_copy, p_err);
+			loggers[i]->logv(p_format, list_copy, p_type);
 			va_end(list_copy);
 		}
 	}
 
 	void CompositeLogger::log_error(const char* p_function, const char* p_file, int p_line, const char* p_code, const char* p_rationale, bool p_editor_notify, ErrorType p_type) {
-		if (!should_log(true)) {
+		if (!should_log(p_type)) {
 			return;
 		}
 

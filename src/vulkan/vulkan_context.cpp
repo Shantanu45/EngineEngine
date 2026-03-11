@@ -4,6 +4,7 @@
 #include <mutex>
 #include "util/logger.h"
 #include "libassert/assert.hpp"
+#include "util/error_macros.h"
 
 namespace Vulkan
 {
@@ -105,15 +106,11 @@ namespace Vulkan
 		std::vector<const char*> enabled_layer_names;
 		if (_use_validation_layers()) {
 			err = _find_validation_layers(enabled_layer_names);
-			//ERR_FAIL_COND_V(err != OK, err);
+			ERR_FAIL_COND_V(err != OK, err);
 		}
 
 		VkInstanceCreateInfo instance_info = {};
 		instance_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-
-#if defined(USE_VOLK) && (defined(MACOS_ENABLED) || defined(IOS_ENABLED))
-		instance_info.flags = VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
-#endif
 
 		instance_info.pApplicationInfo = &app_info;
 		instance_info.enabledExtensionCount = enabled_extension_names.size();
@@ -159,10 +156,10 @@ namespace Vulkan
 			case VK_SUCCESS:
 				break;
 			case VK_ERROR_OUT_OF_HOST_MEMORY:
-				//ERR_FAIL_V_MSG(ERR_CANT_CREATE, "CreateDebugUtilsMessengerEXT: out of host memory\nCreateDebugUtilsMessengerEXT Failure");
+				ERR_FAIL_V_MSG(ERR_CANT_CREATE, "CreateDebugUtilsMessengerEXT: out of host memory\nCreateDebugUtilsMessengerEXT Failure");
 				break;
 			default:
-				//ERR_FAIL_V_MSG(ERR_CANT_CREATE, "CreateDebugUtilsMessengerEXT: unknown failure\nCreateDebugUtilsMessengerEXT Failure");
+				ERR_FAIL_V_MSG(ERR_CANT_CREATE, "CreateDebugUtilsMessengerEXT: unknown failure\nCreateDebugUtilsMessengerEXT Failure");
 				break;
 			}
 		}
@@ -172,10 +169,10 @@ namespace Vulkan
 			case VK_SUCCESS:
 				break;
 			case VK_ERROR_OUT_OF_HOST_MEMORY:
-				//ERR_FAIL_V_MSG(ERR_CANT_CREATE, "CreateDebugReportCallbackEXT: out of host memory\nCreateDebugReportCallbackEXT Failure");
+				ERR_FAIL_V_MSG(ERR_CANT_CREATE, "CreateDebugReportCallbackEXT: out of host memory\nCreateDebugReportCallbackEXT Failure");
 				break;
 			default:
-				//ERR_FAIL_V_MSG(ERR_CANT_CREATE, "CreateDebugReportCallbackEXT: unknown failure\nCreateDebugReportCallbackEXT Failure");
+				ERR_FAIL_V_MSG(ERR_CANT_CREATE, "CreateDebugReportCallbackEXT: unknown failure\nCreateDebugReportCallbackEXT Failure");
 				break;
 			}
 		}
@@ -185,14 +182,14 @@ namespace Vulkan
 	Error Context::_initialize_devices() {
 		uint32_t physical_device_count = 0;
 		VkResult err = vkEnumeratePhysicalDevices(instance, &physical_device_count, nullptr);
-		//ERR_FAIL_COND_V(err != VK_SUCCESS, ERR_CANT_CREATE);
-		//ERR_FAIL_COND_V_MSG(physical_device_count == 0, ERR_CANT_CREATE, "vkEnumeratePhysicalDevices reported zero accessible devices.\n\nDo you have a compatible Vulkan installable client driver (ICD) installed?\nvkEnumeratePhysicalDevices Failure.");
+		ERR_FAIL_COND_V(err != VK_SUCCESS, ERR_CANT_CREATE);
+		ERR_FAIL_COND_V_MSG(physical_device_count == 0, ERR_CANT_CREATE, "vkEnumeratePhysicalDevices reported zero accessible devices.\n\nDo you have a compatible Vulkan installable client driver (ICD) installed?\nvkEnumeratePhysicalDevices Failure.");
 
 		driver_devices.resize(physical_device_count);
 		physical_devices.resize(physical_device_count);
 		device_queue_families.resize(physical_device_count);
 		err = vkEnumeratePhysicalDevices(instance, &physical_device_count, physical_devices.data());
-		//ERR_FAIL_COND_V(err != VK_SUCCESS, ERR_CANT_CREATE);
+		ERR_FAIL_COND_V(err != VK_SUCCESS, ERR_CANT_CREATE);
 
 		// Fill the list of driver devices with the properties from the physical devices.
 		for (uint32_t i = 0; i < physical_devices.size(); i++) {
@@ -234,7 +231,7 @@ namespace Vulkan
 			else {
 				// According to the documentation this shouldn't fail with anything except a memory allocation error
 				// in which case we're in deep trouble anyway.
-				//ERR_FAIL_V(ERR_CANT_CREATE);
+				ERR_FAIL_V(ERR_CANT_CREATE);
 			}
 		}
 		else {
@@ -328,17 +325,17 @@ namespace Vulkan
 		// Convert VK severity to our own log macros.
 		switch (p_message_severity) {
 		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
-			//print_verbose(error_message);
+			LOGE(error_message.c_str());
 			break;
 		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
-			//print_line(error_message);
+			LOGE(error_message.c_str());
 			break;
 		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
-			//WARN_PRINT(error_message);
+			LOGW(error_message.c_str());
 			break;
 		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
-			//ERR_PRINT(error_message);
-			//CRASH_COND_MSG(Engine::get_singleton()->is_abort_on_gpu_errors_enabled(), "Crashing, because abort on GPU errors is enabled.");
+			LOGE(error_message.c_str());
+			CRASH_COND_MSG(true/*Engine::get_singleton()->is_abort_on_gpu_errors_enabled()*/, "Crashing, because abort on GPU errors is enabled.");
 			break;
 		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_FLAG_BITS_MAX_ENUM_EXT:
 			break; // Shouldn't happen, only handling to make compilers happy.
@@ -373,12 +370,12 @@ namespace Vulkan
 
 		uint32_t instance_layer_count = 0;
 		VkResult err = vkEnumerateInstanceLayerProperties(&instance_layer_count, nullptr);
-		//ERR_FAIL_COND_V(err != VK_SUCCESS, ERR_CANT_CREATE);
+		ERR_FAIL_COND_V(err != VK_SUCCESS, ERR_CANT_CREATE);
 		if (instance_layer_count > 0) {
 			std::vector<VkLayerProperties> layer_properties;
 			layer_properties.resize(instance_layer_count);
 			err = vkEnumerateInstanceLayerProperties(&instance_layer_count, layer_properties.data());
-			//ERR_FAIL_COND_V(err != VK_SUCCESS, ERR_CANT_CREATE);
+			ERR_FAIL_COND_V(err != VK_SUCCESS, ERR_CANT_CREATE);
 
 			// Preferred set of validation layers.
 			const std::initializer_list<const char*> preferred = { "VK_LAYER_KHRONOS_validation" };
@@ -425,18 +422,18 @@ namespace Vulkan
 	{
 
 		VkResult err = vkCreateInstance(p_create_info, nullptr, r_instance);
-		//ERR_FAIL_COND_V_MSG(err == VK_ERROR_INCOMPATIBLE_DRIVER, ERR_CANT_CREATE,
-		//	"Cannot find a compatible Vulkan installable client driver (ICD).\n\n"
-		//	"vkCreateInstance Failure");
-		//ERR_FAIL_COND_V_MSG(err == VK_ERROR_EXTENSION_NOT_PRESENT, ERR_CANT_CREATE,
-		//	"Cannot find a specified extension library.\n"
-		//	"Make sure your layers path is set appropriately.\n"
-		//	"vkCreateInstance Failure");
-		//ERR_FAIL_COND_V_MSG(err, ERR_CANT_CREATE,
-		//	"vkCreateInstance failed.\n\n"
-		//	"Do you have a compatible Vulkan installable client driver (ICD) installed?\n"
-		//	"Please look at the Getting Started guide for additional information.\n"
-		//	"vkCreateInstance Failure");
+		ERR_FAIL_COND_V_MSG(err == VK_ERROR_INCOMPATIBLE_DRIVER, ERR_CANT_CREATE,
+			"Cannot find a compatible Vulkan installable client driver (ICD).\n\n"
+			"vkCreateInstance Failure");
+		ERR_FAIL_COND_V_MSG(err == VK_ERROR_EXTENSION_NOT_PRESENT, ERR_CANT_CREATE,
+			"Cannot find a specified extension library.\n"
+			"Make sure your layers path is set appropriately.\n"
+			"vkCreateInstance Failure");
+		ERR_FAIL_COND_V_MSG(err, ERR_CANT_CREATE,
+			"vkCreateInstance failed.\n\n"
+			"Do you have a compatible Vulkan installable client driver (ICD) installed?\n"
+			"Please look at the Getting Started guide for additional information.\n"
+			"vkCreateInstance Failure");
 
 		return OK;
 	}
@@ -487,14 +484,14 @@ namespace Vulkan
 		// Load instance extensions that are available.
 		uint32_t instance_extension_count = 0;
 		VkResult err = vkEnumerateInstanceExtensionProperties(nullptr, &instance_extension_count, nullptr);
-		//ERR_FAIL_COND_V(err != VK_SUCCESS && err != VK_INCOMPLETE, ERR_CANT_CREATE);
-		//ERR_FAIL_COND_V_MSG(instance_extension_count == 0, ERR_CANT_CREATE, "No instance extensions were found.");
+		ERR_FAIL_COND_V(err != VK_SUCCESS && err != VK_INCOMPLETE, ERR_CANT_CREATE);
+		ERR_FAIL_COND_V_MSG(instance_extension_count == 0, ERR_CANT_CREATE, "No instance extensions were found.");
 
 		std::vector<VkExtensionProperties> instance_extensions;
 		instance_extensions.resize(instance_extension_count);
 		err = vkEnumerateInstanceExtensionProperties(nullptr, &instance_extension_count, instance_extensions.data());
 		if (err != VK_SUCCESS && err != VK_INCOMPLETE) {
-			//ERR_FAIL_V(ERR_CANT_CREATE);
+			ERR_FAIL_V(ERR_CANT_CREATE);
 		}
 
 #ifdef VULKAN_DEBUG
@@ -515,10 +512,11 @@ namespace Vulkan
 		for (std::pair<std::string, bool> requested_extension : requested_instance_extensions) {
 			if (!enabled_instance_extension_names.contains(requested_extension.first)) {
 				if (requested_extension.second) {
-					//ERR_FAIL_V_MSG(ERR_BUG, String("Required extension ") + String::utf8(requested_extension.key) + String(" not found."));
+					std::string msg = "Required extension " + requested_extension.first + " not found.";
+					ERR_FAIL_V_MSG(ERR_BUG, msg.c_str());
 				}
 				else {
-					//print_verbose(String("Optional extension ") + String::utf8(requested_extension.key) + String(" not found."));
+					LOGI("Optional extension %s not found.", requested_extension.first.c_str());
 				}
 			}
 		}
@@ -537,16 +535,16 @@ namespace Vulkan
 	#endif
 
 		err = _initialize_vulkan_version();
-		//ERR_FAIL_COND_V(err != OK, err);
+		ERR_FAIL_COND_V(err != OK, err);
 
 		err = _initialize_instance_extensions();
-		//ERR_FAIL_COND_V(err != OK, err);
+		ERR_FAIL_COND_V(err != OK, err);
 
 		err = _initialize_instance();
-		//ERR_FAIL_COND_V(err != OK, err);
+		ERR_FAIL_COND_V(err != OK, err);
 
 		err = _initialize_devices();
-		//ERR_FAIL_COND_V(err != OK, err);
+		ERR_FAIL_COND_V(err != OK, err);
 
 		return OK;
 	}
@@ -567,7 +565,7 @@ namespace Vulkan
 
 		VkSurfaceKHR vk_surface = VK_NULL_HANDLE;
 		VkResult err = vkCreateWin32SurfaceKHR(instance, &create_info, nullptr, &vk_surface);
-		//ERR_FAIL_COND_V(err != VK_SUCCESS, SurfaceID());
+		ERR_FAIL_COND_V(err != VK_SUCCESS, SurfaceID());
 
 		Surface* surface = new Surface;
 		surface->vk_surface = vk_surface;

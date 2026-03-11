@@ -10,16 +10,11 @@ namespace Util
 {
 
 	class Logger {
-	protected:
-		bool should_log(bool p_err);
-
-		static inline bool _flush_stdout_on_print = true;
-
 	public:
 		enum ErrorType {
 			NONE,
-			ERR_ERROR,
 			ERR_WARNING,
+			ERR_ERROR,
 			ERR_SCRIPT,
 			ERR_SHADER,
 		};
@@ -54,13 +49,20 @@ namespace Util
 
 		static void set_flush_stdout_on_print(bool value);
 
-		virtual void logv(const char* p_format, va_list p_list, bool p_err) = 0;
+		virtual void logv(const char* p_format, va_list p_list, ErrorType p_type = ErrorType::NONE) = 0;
 		virtual void log_error(const char* p_function, const char* p_file, int p_line, const char* p_code, const char* p_rationale, bool p_editor_notify = false, ErrorType p_type = ERR_ERROR);
 
-		void logf(const char* p_format, ...);
+		void logf(ErrorType p_type, const char* p_format, ...);
 		void logf_error(const char* p_format, ...);
+		void logf_warn(const char* p_format, ...);
+		void logf_info(const char* p_format, ...);
 
 		virtual ~Logger() {}
+
+	protected:
+		bool should_log(ErrorType p_type);
+
+		static inline bool _flush_stdout_on_print = true;
 	};
 
 	/**
@@ -68,7 +70,7 @@ namespace Util
 	 */
 	class StdLogger : public Logger {
 	public:
-		virtual void logv(const char* p_format, va_list p_list, bool p_err) override;
+		virtual void logv(const char* p_format, va_list p_list, ErrorType p_type) override;
 		virtual ~StdLogger() {}
 	};
 
@@ -79,7 +81,7 @@ namespace Util
 		std::shared_ptr<spdlog::logger> m_logger;
 	public:
 		StdSpdLogger();
-		virtual void logv(const char* p_format, va_list p_list, bool p_err) override;
+		virtual void logv(const char* p_format, va_list p_list, ErrorType p_type) override;
 		virtual ~StdSpdLogger() {};
 	};
 
@@ -101,7 +103,7 @@ namespace Util
 	public:
 		explicit RotatedFileLogger(const fs::path& p_base_path, int p_max_files = 10, bool rotate_on_open = false);
 
-		virtual void logv(const char* p_format, va_list p_list, bool p_err) override;
+		virtual void logv(const char* p_format, va_list p_list, ErrorType p_type) override;
 	};
 
 	class CompositeLogger : public Logger {
@@ -110,7 +112,7 @@ namespace Util
 	public:
 		explicit CompositeLogger(const std::vector<Logger*>& p_loggers);
 
-		virtual void logv(const char* p_format, va_list p_list, bool p_err) override;
+		virtual void logv(const char* p_format, va_list p_list, ErrorType p_type) override;
 		virtual void log_error(const char* p_function, const char* p_file, int p_line, const char* p_code, const char* p_rationale, bool p_editor_notify, ErrorType p_type = ERR_ERROR) override;
 
 		void add_logger(Logger* p_logger);
@@ -123,4 +125,10 @@ namespace Util
 }
 
 #define LOGE(...) do { ((::Util::StdSpdLogger*)::Util::get_logger_iface())->logf_error(__VA_ARGS__);} while(0)
-#define LOGI(...) do { ((::Util::StdSpdLogger*)::Util::get_logger_iface())->logf(__VA_ARGS__);} while(0)
+#define LOGW(...) do { ((::Util::StdSpdLogger*)::Util::get_logger_iface())->logf_warn(__VA_ARGS__);} while(0)
+#define LOGI(...) do { ((::Util::StdSpdLogger*)::Util::get_logger_iface())->logf_info(__VA_ARGS__);} while(0)
+#define LOG(...) do { ((::Util::StdSpdLogger*)::Util::get_logger_iface())->logf(__VA_ARGS__);} while(0)
+
+#define LOGF(...) do { ((::Util::StdSpdLogger*)::Util::get_logger_iface())->log_error(__VA_ARGS__);} while(0)
+
+
