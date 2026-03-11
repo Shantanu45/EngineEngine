@@ -3,6 +3,7 @@
 #include <windows.h>
 #include <mutex>
 #include "util/logger.h"
+#include "libassert/assert.hpp"
 
 namespace Vulkan
 {
@@ -67,7 +68,7 @@ namespace Vulkan
 
 	bool Context::device_supports_present(uint32_t p_device_index, SurfaceID p_surface) const
 	{
-		//DEV_ASSERT(p_device_index < physical_devices.size());
+		DEBUG_ASSERT(p_device_index < physical_devices.size());
 
 		// Check if any of the queues supported by the device supports presenting to the window's surface.
 		const VkPhysicalDevice physical_device = physical_devices[p_device_index];
@@ -83,8 +84,8 @@ namespace Vulkan
 
 	bool Context::queue_family_supports_present(VkPhysicalDevice p_physical_device, uint32_t p_queue_family_index, SurfaceID p_surface) const
 	{
-		//DEV_ASSERT(p_physical_device != VK_NULL_HANDLE);
-		//DEV_ASSERT(p_surface != 0);
+		DEBUG_ASSERT(p_physical_device != VK_NULL_HANDLE);
+		DEBUG_ASSERT(p_surface != 0);
 		Surface* surface = (Surface*)(p_surface);
 		VkBool32 present_supported = false;
 		VkResult err = vkGetPhysicalDeviceSurfaceSupportKHR(p_physical_device, p_queue_family_index, surface->vk_surface, &present_supported);
@@ -551,7 +552,6 @@ namespace Vulkan
 	}
 
 	Context::SurfaceID Context::set_surface(VkSurfaceKHR vk_surface) {
-		//DEV_ASSERT(false && "Surface creation should not be called on the platform-agnostic version of the driver.");
 		Surface* surface = new Surface;
 		surface->vk_surface = vk_surface;
 		return SurfaceID(surface);
@@ -651,5 +651,42 @@ namespace Vulkan
 		Surface* surface = (Surface*)(p_surface);
 		vkDestroySurfaceKHR(instance, surface->vk_surface, nullptr);
 		delete surface;
+	}
+
+	const Context::Device& Context::device_get(uint32_t p_device_index) const {
+		DEBUG_ASSERT(p_device_index < driver_devices.size());
+		return driver_devices[p_device_index];
+	}
+
+	uint32_t Context::device_get_count() const {
+		return driver_devices.size();
+	}
+
+	bool Context::is_debug_utils_enabled() const {
+		return enabled_instance_extension_names.contains(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+	}
+
+	bool Context::is_colorspace_supported() const {
+		return enabled_instance_extension_names.contains(VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME);
+	}
+
+	VkInstance Context::instance_get() const {
+		return instance;
+	}
+
+	VkPhysicalDevice Context::physical_device_get(uint32_t p_device_index) const {
+		DEBUG_ASSERT(p_device_index < physical_devices.size());
+		return physical_devices[p_device_index];
+	}
+
+	uint32_t Context::queue_family_get_count(uint32_t p_device_index) const {
+		DEBUG_ASSERT(p_device_index < physical_devices.size());
+		return device_queue_families[p_device_index].properties.size();
+	}
+
+	VkQueueFamilyProperties Context::queue_family_get(uint32_t p_device_index, uint32_t p_queue_family_index) const {
+		DEBUG_ASSERT(p_device_index < physical_devices.size());
+		DEBUG_ASSERT(p_queue_family_index < queue_family_get_count(p_device_index));
+		return device_queue_families[p_device_index].properties[p_queue_family_index];
 	}
 }

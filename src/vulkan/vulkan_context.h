@@ -99,6 +99,22 @@ namespace Vulkan
 		virtual bool surface_get_needs_resize(SurfaceID p_surface) const ;
 		virtual void surface_destroy(SurfaceID p_surface) ;
 
+		const Device& device_get(uint32_t p_device_index) const;
+
+		uint32_t device_get_count() const;
+
+		bool is_debug_utils_enabled() const;
+
+		bool is_colorspace_supported() const;
+
+		VkInstance instance_get() const;
+
+		VkPhysicalDevice physical_device_get(uint32_t p_device_index) const;
+
+		uint32_t queue_family_get_count(uint32_t p_device_index) const;
+
+		VkQueueFamilyProperties queue_family_get(uint32_t p_device_index, uint32_t p_queue_family_index) const;
+
 	protected:
 		Error _create_vulkan_instance(const VkInstanceCreateInfo* p_create_info, VkInstance* r_instance);
 
