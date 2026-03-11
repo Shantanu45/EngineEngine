@@ -17,6 +17,7 @@ add_executable(${PROJECT_NAME} WIN32
 add_subdirectory(util)
 add_subdirectory(application)
 add_subdirectory(event)
+add_subdirectory(input)
 
 setup_msvc_options(${PROJECT_NAME})
 
@@ -39,6 +40,8 @@ set(ADDITIONAL_LIBRARY_DEPENDENCIES
 	util
 	application
 	application_entry
+	event
+	input
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE "${ADDITIONAL_LIBRARY_DEPENDENCIES}")

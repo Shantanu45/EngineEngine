@@ -27,6 +27,7 @@ set(ADDITIONAL_LIBRARY_DEPENDENCIES
 	libassert::assert
 	volk::volk
 	sdl::sdl
+	input
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE ${ADDITIONAL_LIBRARY_DEPENDENCIES})
