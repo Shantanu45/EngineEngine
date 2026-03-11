@@ -14,6 +14,7 @@ add_definitions(-DNOMINMAX)
 
 find_package(SDL3 REQUIRED)
 find_package(glm REQUIRED)
+find_package(VulkanMemoryAllocator REQUIRED)
 
 set(INCLUDES 
 	"${PROJECT_SOURCE_DIR}/src"
@@ -27,6 +28,7 @@ set(ADDITIONAL_LIBRARY_DEPENDENCIES
 	sdl::sdl
 	glm::glm
 	volk::volk
+	GPUOpen::VulkanMemoryAllocator
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE ${ADDITIONAL_LIBRARY_DEPENDENCIES})

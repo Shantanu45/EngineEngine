@@ -6,6 +6,7 @@ shaderc/2025.3
 sdl/3.4.0
 glm/1.0.1
 rapidjson/1.1.0
+vulkan-memory-allocator/3.3.0
 
 [generators]
 CMakeDeps

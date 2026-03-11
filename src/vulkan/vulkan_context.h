@@ -9,6 +9,7 @@ namespace Vulkan
 {
 	class Context
 	{
+	public:
 
 		struct Vendor {
 			constexpr static uint32_t VENDOR_UNKNOWN = 0x0;
