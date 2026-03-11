@@ -57,12 +57,10 @@ namespace Vulkan
 		VK_ASSERT(!inherit_info || inherit_info->pApplicationInfo);
 		uint32_t supported_instance_version = inherit_info ? inherit_info->pApplicationInfo->apiVersion : volkGetInstanceVersion();
 
-		// Maker min-req is 1.1.
-		app_info.apiVersion = std::max(VK_API_VERSION_1_1, app_info.apiVersion);
-
 		// Target Vulkan 1.4 if available,
 		// but the tooling ecosystem isn't quite ready for this yet, so stick to 1.3 for the time being.
-		app_info.apiVersion = std::max(app_info.apiVersion, std::min(VK_API_VERSION_1_4, supported_instance_version));
+		DEBUG_ASSERT(instance_api_version < supported_instance_version);
+		app_info.apiVersion = instance_api_version;
 
 		return app_info;
 	}
@@ -355,7 +353,7 @@ namespace Vulkan
 			break;
 		case VK_DEBUG_REPORT_WARNING_BIT_EXT:
 		case VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT:
-			LOGI(debug_message.c_str());
+			LOGW(debug_message.c_str());
 			break;
 		case VK_DEBUG_REPORT_ERROR_BIT_EXT:
 			LOGE(debug_message.c_str());
@@ -524,7 +522,26 @@ namespace Vulkan
 		return OK;
 	}
 
-	Error Context::initialize() 
+	Context::Context()
+	{
+	}
+
+	Context::~Context()
+	{
+		if (debug_messenger != VK_NULL_HANDLE) {
+			vkDestroyDebugUtilsMessengerEXT(instance, debug_messenger, nullptr);
+		}
+
+		if (debug_report != VK_NULL_HANDLE) {
+			vkDestroyDebugReportCallbackEXT(instance, debug_report, nullptr);
+		}
+
+		if (instance != VK_NULL_HANDLE) {
+			vkDestroyInstance(instance, nullptr);
+		}
+	}
+
+	Error Context::initialize()
 	{
 		Error err;
 

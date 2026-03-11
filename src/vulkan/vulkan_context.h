@@ -45,8 +45,8 @@ namespace Vulkan
 	public:
 		typedef uint64_t SurfaceID;
 
-		Context() = default;
-		~Context() = default;
+		Context();
+		~Context();
 
 		virtual Error initialize();
 
