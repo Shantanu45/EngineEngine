@@ -57,6 +57,7 @@ namespace EE
 
 	bool Application::init_wsi()
 	{
+		vulkan_context.initialize();
 		return true;
 	}
 

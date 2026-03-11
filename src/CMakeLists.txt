@@ -18,6 +18,7 @@ add_subdirectory(util)
 add_subdirectory(application)
 add_subdirectory(event)
 add_subdirectory(input)
+add_subdirectory(vulkan)
 
 setup_msvc_options(${PROJECT_NAME})
 
@@ -42,6 +43,7 @@ set(ADDITIONAL_LIBRARY_DEPENDENCIES
 	application_entry
 	event
 	input
+	vulkan
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE "${ADDITIONAL_LIBRARY_DEPENDENCIES}")

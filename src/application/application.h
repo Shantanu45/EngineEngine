@@ -2,6 +2,7 @@
 #include <memory>
 #include <string>
 #include "util/logger.h"
+#include "vulkan/vulkan_context.h"
 
 
 namespace EE
@@ -65,5 +66,7 @@ namespace EE
 		void check_initialization_progress();
 
 		std::unique_ptr<::Util::Logger> logger = nullptr;
+
+		Vulkan::Context vulkan_context;
 	};
 }

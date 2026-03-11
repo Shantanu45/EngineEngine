@@ -1,6 +1,7 @@
+#define VOLK_IMPLEMENTATION
+
 #include "application/application_entry/application_entry.h"
 #include "application/application.h"
-
 
 struct TriangleApplication : EE::Application
 {

@@ -1,18 +1,17 @@
+#include <memory>
 #include "application.h"
 #include "application_entry/application_entry.h"
 #include "SDL3/SDL.h"
 #include "SDL3/SDL_vulkan.h"
 #include "util/logger.h"
-#include <memory>
-#include "spdlog/sinks/stdout_color_sinks.h"
 #include "util/timer.h"
 #include "volk.h"
 #include "input/input.h"
+#include "vulkan/vulkan_context.h"
 
 namespace EE
 {
-
-	class WSIPlatformSDL
+	class WSIPlatformSDL /*: public WSIPlatform*/
 	{
 	public:
 		~WSIPlatformSDL()
@@ -54,12 +53,12 @@ namespace EE
 				return false;
 			}
 
-			//if (!Vulkan::Context::init_loader(
-			//	reinterpret_cast<PFN_vkGetInstanceProcAddr>(SDL_Vulkan_GetVkGetInstanceProcAddr())))
-			//{
-			//	LOGE("Failed to initialize Vulkan loader.\n");
-			//	return false;
-			//}
+			if (!Vulkan::Context::init_loader(
+				reinterpret_cast<PFN_vkGetInstanceProcAddr>(SDL_Vulkan_GetVkGetInstanceProcAddr())))
+			{
+				LOGE("Failed to initialize Vulkan loader.\n");
+				return false;
+			}
 
 			wake_event_type = SDL_RegisterEvents(1);
 
@@ -149,6 +148,26 @@ namespace EE
 		void run_loop(Application* app)
 		{
 			run_message_loop();
+		}
+
+		std::vector<const char*> get_instance_extensions()
+		{
+			uint32_t count;
+			const char* const* ext = SDL_Vulkan_GetInstanceExtensions(&count);
+			return { ext, ext + count };
+		}
+
+		VkSurfaceKHR create_surface(VkInstance instance, VkPhysicalDevice)
+		{
+			VkSurfaceKHR surface = VK_NULL_HANDLE;
+			if (!SDL_Vulkan_CreateSurface(window, instance, nullptr, &surface))
+				return VK_NULL_HANDLE;
+
+			int actual_width, actual_height;
+			SDL_GetWindowSizeInPixels(window, &actual_width, &actual_height);
+			width = unsigned(actual_width);
+			height = unsigned(actual_height);
+			return surface;
 		}
 	
 	private:
