@@ -571,14 +571,17 @@ namespace Vulkan
 		create_info.ppEnabledExtensionNames = enabled_extension_names.data();
 		create_info.pEnabledFeatures = &requested_device_features;
 
-		/*if (VulkanHooks::get_singleton() != nullptr) {
+/*		if (VulkanHooks::get_singleton() != nullptr) {
 			bool device_created = VulkanHooks::get_singleton()->create_vulkan_device(&create_info, &vk_device);
 			ERR_FAIL_COND_V(!device_created, ERR_CANT_CREATE);
 		}
-		else {
-			VkResult err = vkCreateDevice(physical_device, &create_info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_DEVICE), &vk_device);
+		else */
+		{
+			VkResult err = vkCreateDevice(physical_device, &create_info, nullptr, &vk_device);
 			ERR_FAIL_COND_V(err != VK_SUCCESS, ERR_CANT_CREATE);
-		}*/
+		}
+
+		volkLoadDevice(vk_device);  // loads all device functions for this VkDevice
 
 		for (uint32_t i = 0; i < queue_families.size(); i++) {
 			for (uint32_t j = 0; j < queue_families[i].size(); j++) {
