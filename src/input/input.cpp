@@ -62,6 +62,17 @@ namespace EE
 		sdl_to_key[SDL_SCANCODE_LALT] = Key::LeftAlt;
 	}
 
+	MouseButton get_mouse_button(uint8_t sdl_button)
+	{
+		switch (sdl_button)
+		{
+		case SDL_BUTTON_LEFT:   return MouseButton::Left;
+		case SDL_BUTTON_MIDDLE: return MouseButton::Middle;
+		case SDL_BUTTON_RIGHT:  return MouseButton::Right;
+		default:                return MouseButton::Left; // fallback
+		}
+	}
+
 	void InputSystem::on_sdl_event(const SDL_Event& e)
 	{
 		switch (e.type)
@@ -85,6 +96,69 @@ namespace EE
 			}
 			break;
 		}
+		case SDL_EVENT_MOUSE_BUTTON_DOWN:
+		{
+			MouseButton btn = get_mouse_button(e.button.button);
+			mouse[static_cast<size_t>(btn)] |= MOUSE_DOWN | MOUSE_PRESSED;
+			break;
 		}
+		case SDL_EVENT_MOUSE_BUTTON_UP:
+		{
+			MouseButton btn = get_mouse_button(e.button.button);
+			mouse[static_cast<size_t>(btn)] &= ~MOUSE_DOWN;
+			mouse[static_cast<size_t>(btn)] |= MOUSE_RELEASED;
+			break;
+		}
+		case SDL_EVENT_MOUSE_MOTION:
+		{
+			last_mouse_pos = mouse_pos;
+			mouse_pos = glm::vec2(e.motion.x, e.motion.y);
+			mouse_delta = mouse_pos - last_mouse_pos;
+			break;
+		}
+		}
+	}
+
+	bool InputSystem::is_mouse_held(MouseButton b) const
+	{
+		return mouse[static_cast<size_t>(b)] & MOUSE_DOWN;
+	}
+
+	bool InputSystem::just_mouse_pressed(MouseButton b) const
+	{
+		return mouse[static_cast<size_t>(b)] & MOUSE_PRESSED;
+	}
+
+	bool InputSystem::just_mouse_released(MouseButton b) const
+	{
+		return mouse[static_cast<size_t>(b)] & MOUSE_RELEASED;
+	}
+
+	glm::vec2 InputSystem::get_mouse_position() const
+	{
+		return mouse_pos;
+	}
+
+	glm::vec2 InputSystem::get_mouse_delta() const
+	{
+		return mouse_delta;
+	}
+
+	void InputSystem::update()
+	{
+		// Clear frame-specific key states
+		for (size_t i = 0; i < static_cast<size_t>(Key::Count); ++i)
+		{
+			keys[i] &= KEY_DOWN;
+		}
+
+		// Clear frame-specific mouse states
+		for (size_t i = 0; i < static_cast<size_t>(MouseButton::Count); ++i)
+		{
+			mouse[i] &= MOUSE_DOWN;
+		}
+
+		// Reset delta (optional, depending on needs)
+		// mouse_delta = glm::vec2(0.0f);
 	}
 }

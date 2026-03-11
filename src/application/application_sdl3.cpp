@@ -91,19 +91,6 @@ namespace EE
 
 		bool process_sdl_event(const SDL_Event& e)
 		{
-			//if (e.type == wake_event_type)
-			//{
-			//	LOGI("Processing events main thread.\n");
-			//	process_events_main_thread();
-			//	return true;
-			//}
-
-			//const auto dispatcher = [this](std::function<void()> func) {
-			//	push_task_to_async_thread(std::move(func));
-			//	};
-
-			//if (pad.process_sdl_event(e, get_input_tracker(), dispatcher))
-			//	return true;
 
 			switch (e.type)
 			{
@@ -111,13 +98,14 @@ namespace EE
 				return false;
 
 			case SDL_EVENT_WINDOW_RESIZED:
-				//if (e.window.windowID == SDL_GetWindowID(window))
-				//	notify_resize(e.window.data1, e.window.data2);
 				break;
 			case SDL_EVENT_KEY_DOWN:
 			case SDL_EVENT_KEY_UP:
+			case SDL_EVENT_MOUSE_BUTTON_DOWN:
+			case SDL_EVENT_MOUSE_BUTTON_UP:
+			case SDL_EVENT_MOUSE_MOTION:
 				if (input) input->on_sdl_event(e);
-
+				break;
 			
 			default:
 				break;
@@ -129,17 +117,23 @@ namespace EE
 		void run_message_loop()
 		{
 			SDL_Event e;
-			while (async_loop_alive && SDL_WaitEvent(&e))
+			while (async_loop_alive && SDL_WaitEvent(&e))		// SDL_WaitEvent (Blocking), CPU Usage: Very low (OS puts thread to sleep), Best for: Applications that don't need continuous updates (editors, menus, idle apps)
+			{
+				input->update();
 				if (!process_sdl_event(e))
 					break;
+			}
 		}
 
 		bool iterate_message_loop()
 		{
 			SDL_Event e;
-			while (SDL_PollEvent(&e))
+			while (SDL_PollEvent(&e))			// SDL_PollEvent (Non-blocking), CPU Usage: High (busy-waiting), Best for: Games that need constant 60+ FPS rendering
+			{
+				input->update();
 				if (!process_sdl_event(e))
 					return false;
+			}
 			return true;
 		}
 
