@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include "spdlog/sinks/rotating_file_sink.h"
 #include <spdlog/sinks/stdout_color_sinks.h>
+#include "libassert/assert.hpp"
 
 namespace Util
 {
@@ -196,5 +197,18 @@ namespace Util
 			//SHAN: TODO: change if custom allocator 
 			delete loggers[i];
 		}
+	}
+
+	static thread_local Logger* logger_iface = nullptr;
+
+	void set_logger_iface(Logger* iface)
+	{
+		logger_iface = iface;
+	}
+
+	Logger* get_logger_iface()
+	{
+		DEBUG_ASSERT(logger_iface);
+		return logger_iface;
 	}
 }

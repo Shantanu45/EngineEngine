@@ -117,8 +117,10 @@ namespace Util
 
 		virtual ~CompositeLogger();
 	};
+
+	void set_logger_iface(Logger* iface);
+	Logger* get_logger_iface();
 }
 
-
-//#define LOGE(...) do {::Util::debug_log(Util::Logger::ErrorType::ERR_ERROR, __VA_ARGS__);} while(0)
-//#define LOGI(...) do {::Util::debug_log(Util::Logger::ErrorType::NONE, __VA_ARGS__);} while(0)
+#define LOGE(...) do { ((::Util::StdSpdLogger*)::Util::get_logger_iface())->logf_error(__VA_ARGS__);} while(0)
+#define LOGI(...) do { ((::Util::StdSpdLogger*)::Util::get_logger_iface())->logf(__VA_ARGS__);} while(0)

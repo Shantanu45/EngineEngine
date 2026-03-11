@@ -77,45 +77,45 @@ namespace EE
 	{
 		switch (e.type)
 		{
-		case SDL_EVENT_KEY_DOWN:
-			if (!e.key.repeat)
+			case SDL_EVENT_KEY_DOWN:
+				if (!e.key.repeat)
+				{
+					Key k = sdl_to_key[e.key.scancode];
+					if (k != Key::Unknown)
+						keys[static_cast<size_t>(k)] |= (KeyState::KEY_DOWN | KeyState::KEY_PRESSED);
+				}
+				break;
+
+			case SDL_EVENT_KEY_UP:
 			{
 				Key k = sdl_to_key[e.key.scancode];
 				if (k != Key::Unknown)
-					keys[static_cast<size_t>(k)] |= (KeyState::KEY_DOWN | KeyState::KEY_PRESSED);
+				{
+					keys[static_cast<size_t>(k)] &= ~(KeyState::KEY_DOWN);
+					keys[static_cast<size_t>(k)] |= KeyState::KEY_RELEASED;
+				}
+				break;
 			}
-			break;
-
-		case SDL_EVENT_KEY_UP:
-		{
-			Key k = sdl_to_key[e.key.scancode];
-			if (k != Key::Unknown)
+			case SDL_EVENT_MOUSE_BUTTON_DOWN:
 			{
-				keys[static_cast<size_t>(k)] &= ~(KeyState::KEY_DOWN);
-				keys[static_cast<size_t>(k)] |= KeyState::KEY_RELEASED;
+				MouseButton btn = get_mouse_button(e.button.button);
+				mouse[static_cast<size_t>(btn)] |= MOUSE_DOWN | MOUSE_PRESSED;
+				break;
 			}
-			break;
-		}
-		case SDL_EVENT_MOUSE_BUTTON_DOWN:
-		{
-			MouseButton btn = get_mouse_button(e.button.button);
-			mouse[static_cast<size_t>(btn)] |= MOUSE_DOWN | MOUSE_PRESSED;
-			break;
-		}
-		case SDL_EVENT_MOUSE_BUTTON_UP:
-		{
-			MouseButton btn = get_mouse_button(e.button.button);
-			mouse[static_cast<size_t>(btn)] &= ~MOUSE_DOWN;
-			mouse[static_cast<size_t>(btn)] |= MOUSE_RELEASED;
-			break;
-		}
-		case SDL_EVENT_MOUSE_MOTION:
-		{
-			last_mouse_pos = mouse_pos;
-			mouse_pos = glm::vec2(e.motion.x, e.motion.y);
-			mouse_delta = mouse_pos - last_mouse_pos;
-			break;
-		}
+			case SDL_EVENT_MOUSE_BUTTON_UP:
+			{
+				MouseButton btn = get_mouse_button(e.button.button);
+				mouse[static_cast<size_t>(btn)] &= ~MOUSE_DOWN;
+				mouse[static_cast<size_t>(btn)] |= MOUSE_RELEASED;
+				break;
+			}
+			case SDL_EVENT_MOUSE_MOTION:
+			{
+				last_mouse_pos = mouse_pos;
+				mouse_pos = glm::vec2(e.motion.x, e.motion.y);
+				mouse_delta = mouse_pos - last_mouse_pos;
+				break;
+			}
 		}
 	}
 

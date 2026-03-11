@@ -42,6 +42,7 @@ namespace EE
 	{
 		CreateConsole();
 		logger = std::make_unique<::Util::StdSpdLogger>();
+		::Util::set_logger_iface(logger.get());
 	}
 
 	Application::~Application()

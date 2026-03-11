@@ -46,10 +46,6 @@ namespace EE
 		void run_frame();
 		//void show_message_box(const std::string& str, Vulkan::WSIPlatform::MessageType type);
 
-		static const ::Util::Logger* get_logger() {
-			return logger.get();
-		}
-
 	protected:
 		void request_shutdown()
 		{
@@ -68,9 +64,6 @@ namespace EE
 		bool ready_pipelines = false;
 		void check_initialization_progress();
 
-		inline static std::unique_ptr<::Util::Logger> logger = nullptr;
+		std::unique_ptr<::Util::Logger> logger = nullptr;
 	};
 }
-
-#define LOGE(...) do { ((::Util::StdSpdLogger*)Application::get_logger())->logf_error(__VA_ARGS__); } while(0)
-#define LOGI(...) do { ((::Util::StdSpdLogger*)Application::get_logger())->logf(__VA_ARGS__); } while(0)
