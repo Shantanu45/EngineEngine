@@ -2445,4 +2445,55 @@ namespace Vulkan
 
 #pragma endregion
 
+#pragma region Sampler
+
+	Device::SamplerID Device::sampler_create(const SamplerState& p_state) {
+		VkSamplerCreateInfo sampler_create_info = {};
+		sampler_create_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+		sampler_create_info.pNext = nullptr;
+		sampler_create_info.flags = 0;
+		sampler_create_info.magFilter = p_state.mag_filter == SAMPLER_FILTER_LINEAR ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+		sampler_create_info.minFilter = p_state.min_filter == SAMPLER_FILTER_LINEAR ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+		sampler_create_info.mipmapMode = p_state.mip_filter == SAMPLER_FILTER_LINEAR ? VK_SAMPLER_MIPMAP_MODE_LINEAR : VK_SAMPLER_MIPMAP_MODE_NEAREST;
+		sampler_create_info.addressModeU = (VkSamplerAddressMode)p_state.repeat_u;
+		sampler_create_info.addressModeV = (VkSamplerAddressMode)p_state.repeat_v;
+		sampler_create_info.addressModeW = (VkSamplerAddressMode)p_state.repeat_w;
+		sampler_create_info.mipLodBias = p_state.lod_bias;
+		sampler_create_info.anisotropyEnable = p_state.use_anisotropy && (physical_device_features.samplerAnisotropy == VK_TRUE);
+		sampler_create_info.maxAnisotropy = p_state.anisotropy_max;
+		sampler_create_info.compareEnable = p_state.enable_compare;
+		sampler_create_info.compareOp = (VkCompareOp)p_state.compare_op;
+		sampler_create_info.minLod = p_state.min_lod;
+		sampler_create_info.maxLod = p_state.max_lod;
+		sampler_create_info.borderColor = (VkBorderColor)p_state.border_color;
+		sampler_create_info.unnormalizedCoordinates = p_state.unnormalized_uvw;
+
+		VkSampler vk_sampler = VK_NULL_HANDLE;
+		VkResult res = vkCreateSampler(vk_device, &sampler_create_info, nullptr, &vk_sampler);
+		ERR_FAIL_COND_V_MSG(res, SamplerID(), std::format("vkCreateSampler failed with error %s .", std::to_string(res)));
+
+		return SamplerID(vk_sampler);
+	}
+
+	void Device::sampler_free(SamplerID p_sampler) {
+		vkDestroySampler(vk_device, (VkSampler)p_sampler.id, nullptr);
+	}
+
+	bool Device::sampler_is_format_supported_for_filter(DataFormat p_format, SamplerFilter p_filter) {
+		switch (p_filter) {
+		case SAMPLER_FILTER_NEAREST: {
+			return true;
+		}
+		case SAMPLER_FILTER_LINEAR: {
+			VkFormatProperties properties = {};
+			vkGetPhysicalDeviceFormatProperties(physical_device, RD_TO_VK_FORMAT[p_format], &properties);
+			return (properties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT);
+		}
+		}
+		return false;
+	}
+
+#pragma endregion
+
+
 }

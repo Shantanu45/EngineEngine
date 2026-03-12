@@ -389,6 +389,48 @@ namespace Vulkan
 				uint64_t row_pitch = 0;
 			};
 
+			enum SamplerFilter {
+				SAMPLER_FILTER_NEAREST,
+				SAMPLER_FILTER_LINEAR,
+			};
+
+			enum SamplerRepeatMode {
+				SAMPLER_REPEAT_MODE_REPEAT,
+				SAMPLER_REPEAT_MODE_MIRRORED_REPEAT,
+				SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE,
+				SAMPLER_REPEAT_MODE_CLAMP_TO_BORDER,
+				SAMPLER_REPEAT_MODE_MIRROR_CLAMP_TO_EDGE,
+				SAMPLER_REPEAT_MODE_MAX
+			};
+
+			enum SamplerBorderColor {
+				SAMPLER_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,
+				SAMPLER_BORDER_COLOR_INT_TRANSPARENT_BLACK,
+				SAMPLER_BORDER_COLOR_FLOAT_OPAQUE_BLACK,
+				SAMPLER_BORDER_COLOR_INT_OPAQUE_BLACK,
+				SAMPLER_BORDER_COLOR_FLOAT_OPAQUE_WHITE,
+				SAMPLER_BORDER_COLOR_INT_OPAQUE_WHITE,
+				SAMPLER_BORDER_COLOR_MAX
+			};
+
+			struct SamplerState {
+				SamplerFilter mag_filter = SAMPLER_FILTER_NEAREST;
+				SamplerFilter min_filter = SAMPLER_FILTER_NEAREST;
+				SamplerFilter mip_filter = SAMPLER_FILTER_NEAREST;
+				SamplerRepeatMode repeat_u = SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE;
+				SamplerRepeatMode repeat_v = SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE;
+				SamplerRepeatMode repeat_w = SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE;
+				float lod_bias = 0.0f;
+				bool use_anisotropy = false;
+				float anisotropy_max = 1.0f;
+				bool enable_compare = false;
+				CompareOperator compare_op = COMPARE_OP_ALWAYS;
+				float min_lod = 0.0f;
+				float max_lod = 1e20; // Something very large should do.
+				SamplerBorderColor border_color = SAMPLER_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
+				bool unnormalized_uvw = false;
+			};
+
 			Device::BufferID buffer_create(uint64_t p_size, BitField<Device::BufferUsageBits> p_usage, Device::MemoryAllocationType p_allocation_type, uint64_t p_frames_drawn);
 
 			void buffer_free(BufferID p_buffer);
@@ -440,6 +482,12 @@ namespace Vulkan
 			BitField<TextureUsageBits> texture_get_usages_supported_by_format(DataFormat p_format, bool p_cpu_readable);
 
 			bool texture_can_make_shared_with_format(TextureID p_texture, DataFormat p_format, bool& r_raw_reinterpretation);
+
+			Device::SamplerID sampler_create(const SamplerState& p_state);
+
+			void sampler_free(SamplerID p_sampler);
+
+			bool sampler_is_format_supported_for_filter(DataFormat p_format, SamplerFilter p_filter);
 
 			struct PendingFlushes {
 				std::vector<VmaAllocation> allocations;
