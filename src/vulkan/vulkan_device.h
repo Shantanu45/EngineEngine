@@ -607,6 +607,16 @@ namespace Vulkan
 		bool sampler_is_format_supported_for_filter(DataFormat p_format, SamplerFilter p_filter);
 
 		void command_pipeline_barrier(CommandBufferID p_cmd_buffer, BitField<PipelineStageBits> p_src_stages, BitField<PipelineStageBits> p_dst_stages, std::span<MemoryAccessBarrier> p_memory_barriers, std::span<BufferBarrier> p_buffer_barriers, std::span<TextureBarrier> p_texture_barriers, std::span<AccelerationStructureBarrier> p_acceleration_structure_barriers);
+
+		Device::FenceID fence_create();
+
+		Error fence_wait(FenceID p_fence);
+
+		void fence_free(FenceID p_fence);
+
+		Device::SemaphoreID semaphore_create();
+
+		void semaphore_free(SemaphoreID p_semaphore);
 		
 		Device::SwapChainID swap_chain_create(Context::SurfaceID p_surface);
 

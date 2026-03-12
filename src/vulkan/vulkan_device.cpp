@@ -2561,6 +2561,7 @@ namespace Vulkan
 #pragma endregion
 
 #pragma region Barriers
+
 	void Device::command_pipeline_barrier(
 		CommandBufferID p_cmd_buffer,
 		BitField<PipelineStageBits> p_src_stages,
@@ -2695,6 +2696,78 @@ namespace Vulkan
 
 #pragma endregion
 
+#pragma region Fences
+
+	Device::FenceID Device::fence_create() {
+		VkFence vk_fence = VK_NULL_HANDLE;
+		VkFenceCreateInfo create_info = {};
+		create_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+		VkResult err = vkCreateFence(vk_device, &create_info, nullptr, &vk_fence);
+		ERR_FAIL_COND_V(err != VK_SUCCESS, FenceID());
+
+		Fence* fence = new Fence;
+		fence->vk_fence = vk_fence;
+		fence->queue_signaled_from = nullptr;
+		return FenceID(fence);
+	}
+
+	Error Device::fence_wait(FenceID p_fence) {
+		Fence* fence = (Fence*)(p_fence.id);
+		VkResult fence_status = vkGetFenceStatus(vk_device, fence->vk_fence);
+		if (fence_status == VK_NOT_READY) {
+			VkResult err = vkWaitForFences(vk_device, 1, &fence->vk_fence, VK_TRUE, UINT64_MAX);
+			ERR_FAIL_COND_V(err != VK_SUCCESS, FAILED);
+		}
+
+		VkResult err = vkResetFences(vk_device, 1, &fence->vk_fence);
+		ERR_FAIL_COND_V(err != VK_SUCCESS, FAILED);
+
+		if (fence->queue_signaled_from != nullptr) {
+			// Release all semaphores that the command queue associated to the fence waited on the last time it was submitted.
+			std::vector<std::pair<Fence*, uint32_t>>& pairs = fence->queue_signaled_from->image_semaphores_for_fences;
+			uint32_t i = 0;
+			while (i < pairs.size()) {
+				if (pairs[i].first == fence) {
+					_release_image_semaphore(fence->queue_signaled_from, pairs[i].second, true);
+					fence->queue_signaled_from->free_image_semaphores.push_back(pairs[i].second);
+					pairs.erase(pairs.begin() + i);
+				}
+				else {
+					i++;
+				}
+			}
+
+			fence->queue_signaled_from = nullptr;
+		}
+
+		return OK;
+	}
+
+	void Device::fence_free(FenceID p_fence) {
+		Fence* fence = (Fence*)(p_fence.id);
+		vkDestroyFence(vk_device, fence->vk_fence, nullptr);
+		delete fence;
+	}
+
+#pragma endregion
+
+#pragma region Semaphores
+
+	Device::SemaphoreID Device::semaphore_create() {
+		VkSemaphore semaphore = VK_NULL_HANDLE;
+		VkSemaphoreCreateInfo create_info = {};
+		create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+		VkResult err = vkCreateSemaphore(vk_device, &create_info, nullptr, &semaphore);
+		ERR_FAIL_COND_V(err != VK_SUCCESS, SemaphoreID());
+
+		return SemaphoreID(semaphore);
+	}
+
+	void Device::semaphore_free(SemaphoreID p_semaphore) {
+		vkDestroySemaphore(vk_device, VkSemaphore(p_semaphore.id), nullptr);
+	}
+
+#pragma endregion
 
 #pragma region Command
 
