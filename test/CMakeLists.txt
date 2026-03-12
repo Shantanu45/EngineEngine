@@ -10,6 +10,9 @@ ${HEADERS}
 
 find_package(GTest REQUIRED)
 find_package(SDL3 REQUIRED)
+find_package(glm REQUIRED)
+find_package(VulkanMemoryAllocator REQUIRED)
+
 # For Windows: Prevent overriding the parent project's compiler/linker settings
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 
@@ -32,6 +35,12 @@ set(ADDITIONAL_LIBRARY_DEPENDENCIES
 	volk
 	libassert::assert
 	util
+	glm::glm
+	vulkan	glm::glm
+	volk::volk
+	GPUOpen::VulkanMemoryAllocator
+	application
+	application_entry
 )
 
 target_link_libraries(${TEST_PROJECT_NAME} PUBLIC ${ADDITIONAL_LIBRARY_DEPENDENCIES})

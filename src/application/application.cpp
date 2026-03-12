@@ -1,6 +1,7 @@
-#include "application.h"
-#include <Windows.h>
 #include <iostream>
+#include <Windows.h>
+#include "application.h"
+#include "libassert/assert.hpp"
 
 namespace EE
 {
@@ -50,16 +51,17 @@ namespace EE
 		FreeConsole();
 	}
 
-	bool Application::init_platform()
+	bool Application::init_platform(std::unique_ptr<Vulkan::WSIPlatform> new_platform)
 	{
+		platform = std::move(new_platform);
+		application_wsi.set_platform(platform.get());
 		return true;
 	}
 
 	bool Application::init_wsi()
 	{
-		vulkan_context.initialize();
-		vulkan_device_ptr = std::make_unique<Vulkan::Device>(&vulkan_context);
-		vulkan_device_ptr->initialize(0, 2);
+		DEBUG_ASSERT(application_wsi.init_context());
+		DEBUG_ASSERT(application_wsi.init_device());
 		return true;
 	}
 

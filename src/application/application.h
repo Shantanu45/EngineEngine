@@ -4,7 +4,7 @@
 #include "util/logger.h"
 #include "vulkan/vulkan_context.h"
 #include "vulkan/vulkan_device.h"
-
+#include "vulkan/wsi.h"
 
 namespace EE
 {
@@ -14,7 +14,7 @@ namespace EE
 		Application();
 		virtual ~Application();
 		virtual void render_frame(double frame_time, double elapsed_time) = 0;
-		bool init_platform();
+		bool init_platform(std::unique_ptr<Vulkan::WSIPlatform> new_platform);
 		bool init_wsi();
 		void teardown_wsi();
 
@@ -57,8 +57,6 @@ namespace EE
 		//void poll_input_tracker_async(InputTrackerHandler* override_handler);
 
 	private:
-		//std::unique_ptr<Vulkan::WSIPlatform> platform;
-		//Vulkan::WSI application_wsi;
 		bool requested_shutdown = false;
 
 		// Ready state for deferred device initialization.
@@ -70,5 +68,8 @@ namespace EE
 
 		Vulkan::Context vulkan_context;
 		std::unique_ptr<Vulkan::Device> vulkan_device_ptr = nullptr;
+
+		std::unique_ptr<Vulkan::WSIPlatform> platform;
+		Vulkan::WSI application_wsi;
 	};
 }

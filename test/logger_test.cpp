@@ -26,7 +26,7 @@ namespace EETests
     {
         std::unique_ptr logger = std::make_unique<StdLogger>();
         testing::internal::CaptureStdout();
-        logger->logf("Hello %d \n", 8);
+        logger->logf_info("Hello %d \n", 8);
         std::string output = testing::internal::GetCapturedStdout();
         EXPECT_EQ(output, "Hello 8 \n");
     }
@@ -34,7 +34,7 @@ namespace EETests
     TEST_F(SpdlogTest, StdSpdLogger)
     {
         std::unique_ptr logger = std::make_unique<StdSpdLogger>();
-        logger->logf("Hello %d \n", 8);
+        logger->logf_info("Hello %d \n", 8);
     }
 
     TEST_F(SpdlogTest, RotatedFileLogger)
@@ -42,7 +42,7 @@ namespace EETests
         for (size_t i = 0; i <= 10; i++)
         {
             std::unique_ptr logger = std::make_unique<RotatedFileLogger>("./TestLogs/log.txt", 3);
-            logger->logf("Hello %d \n", i);
+            logger->logf_info("Hello %d \n", i);
         }
     }
 

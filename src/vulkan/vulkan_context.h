@@ -116,6 +116,7 @@ namespace Vulkan
 
 		VkQueueFamilyProperties queue_family_get(uint32_t p_device_index, uint32_t p_queue_family_index) const;
 
+		void set_platform_surface_extension(const char* ext) { surface_extension = ext; }
 	protected:
 		Error _create_vulkan_instance(const VkInstanceCreateInfo* p_create_info, VkInstance* r_instance);
 
@@ -126,7 +127,7 @@ namespace Vulkan
 
 		Error _initialize_instance_extensions();
 
-		const char* _get_platform_surface_extension() const { return nullptr; }
+		const char* _get_platform_surface_extension() const { return surface_extension; }
 	private:
 		Error _initialize_instance();
 
@@ -140,6 +141,7 @@ namespace Vulkan
 		static VKAPI_ATTR VkBool32 VKAPI_CALL _debug_report_callback(VkDebugReportFlagsEXT p_flags, VkDebugReportObjectTypeEXT p_object_type, uint64_t p_object, size_t p_location, int32_t p_message_code, const char* p_layer_prefix, const char* p_message, void* p_user_data);
 
 	private:
+		const char* surface_extension = nullptr;
 		struct DeviceQueueFamilies {
 			std::vector<VkQueueFamilyProperties> properties;
 		};

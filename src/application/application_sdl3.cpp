@@ -8,10 +8,11 @@
 #include "volk.h"
 #include "input/input.h"
 #include "vulkan/vulkan_context.h"
+#include "vulkan/wsi.h"
 
 namespace EE
 {
-	class WSIPlatformSDL /*: public WSIPlatform*/
+	class WSIPlatformSDL : public Vulkan::WSIPlatform
 	{
 	public:
 		~WSIPlatformSDL()
@@ -169,6 +170,16 @@ namespace EE
 			height = unsigned(actual_height);
 			return surface;
 		}
+
+		uint32_t get_surface_width() override
+		{
+			return width;
+		}
+
+		uint32_t get_surface_height() override
+		{
+			return height;
+		}
 	
 	private:
 		std::unique_ptr<InputSystem> input;
@@ -206,7 +217,7 @@ namespace EE
 			if (!platform->init(app->get_name(), app->get_default_width(), app->get_default_height()))
 				return 1;
 
-			if (!app->init_platform())
+			if (!app->init_platform(std::move(platform)))
 				return 1;
 
 			if (!app->init_wsi())
