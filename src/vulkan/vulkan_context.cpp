@@ -452,8 +452,11 @@ namespace Vulkan
 		// The surface extension and the platform-specific surface extension are core requirements.
 		// // TODO:
 		_register_requested_instance_extension(VK_KHR_SURFACE_EXTENSION_NAME, true);
-		if (_get_platform_surface_extension()) {
-			_register_requested_instance_extension(_get_platform_surface_extension(), true);
+		if (!_get_platform_surface_extension().empty()) {
+			for (auto ext: _get_platform_surface_extension())
+			{
+				_register_requested_instance_extension(ext, true);
+			}
 		}
 
 		if (_use_validation_layers()) {

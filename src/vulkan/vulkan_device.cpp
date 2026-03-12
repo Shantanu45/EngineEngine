@@ -2501,6 +2501,399 @@ namespace Vulkan
 
 #pragma endregion
 
+#pragma region Command
+
+	// ----- QUEUE FAMILY -----
+	Device::CommandQueueFamilyID Device::command_queue_family_get(BitField<Device::CommandQueueFamilyBits> p_cmd_queue_family_bits, Context::SurfaceID p_surface) {
+		// Pick the queue with the least amount of bits that can fulfill the requirements.
+		VkQueueFlags picked_queue_flags = VK_QUEUE_FLAG_BITS_MAX_ENUM;
+		uint32_t picked_family_index = UINT_MAX;
+		for (uint32_t i = 0; i < queue_family_properties.size(); i++) {
+			if (queue_families[i].empty()) {
+				// Ignore empty queue families.
+				continue;
+			}
+
+			if (p_surface != 0 && !context_driver->queue_family_supports_present(physical_device, i, p_surface)) {
+				// Present is not an actual bit but something that must be queried manually.
+				continue;
+			}
+
+			// Preferring a queue with less bits will get us closer to getting a queue that performs better for our requirements.
+			// For example, dedicated compute and transfer queues are usually indicated as such.
+			const VkQueueFlags option_queue_flags = queue_family_properties[i].queueFlags;
+			const bool includes_all_bits = p_cmd_queue_family_bits.get_shared(option_queue_flags) == p_cmd_queue_family_bits;
+			const bool prefer_less_bits = option_queue_flags < picked_queue_flags;
+			if (includes_all_bits && prefer_less_bits) {
+				picked_family_index = i;
+				picked_queue_flags = option_queue_flags;
+			}
+		}
+
+		if (picked_family_index >= queue_family_properties.size()) {
+			return CommandQueueFamilyID();
+		}
+
+		// Since 0 is a valid index and we use 0 as the error case, we make the index start from 1 instead.
+		return CommandQueueFamilyID(picked_family_index + 1);
+	}
+
+	// ----- QUEUE -----
+
+	Device::CommandQueueID Device::command_queue_create(CommandQueueFamilyID p_cmd_queue_family, bool p_identify_as_main_queue) {
+		DEV_ASSERT(p_cmd_queue_family.id != 0);
+
+		// Make a virtual queue on top of a real queue. Use the queue from the family with the least amount of virtual queues created.
+		uint32_t family_index = p_cmd_queue_family.id - 1;
+		std::vector<Queue>& queue_family = queue_families[family_index];
+		uint32_t picked_queue_index = UINT_MAX;
+		uint32_t picked_virtual_count = UINT_MAX;
+		for (uint32_t i = 0; i < queue_family.size(); i++) {
+			if (queue_family[i].virtual_count < picked_virtual_count) {
+				picked_queue_index = i;
+				picked_virtual_count = queue_family[i].virtual_count;
+			}
+		}
+
+		ERR_FAIL_COND_V_MSG(picked_queue_index >= queue_family.size(), CommandQueueID(), "A queue in the picked family could not be found.");
+
+		// Create the virtual queue.
+		CommandQueue* command_queue = new CommandQueue;
+		command_queue->queue_family = family_index;
+		command_queue->queue_index = picked_queue_index;
+		queue_family[picked_queue_index].virtual_count++;
+
+		// If is was identified as the main queue and a hook is active, indicate it as such to the hook.
+		//if (p_identify_as_main_queue && (VulkanHooks::get_singleton() != nullptr)) {
+		//	VulkanHooks::get_singleton()->set_direct_queue_family_and_index(family_index, picked_queue_index);
+		//}
+
+		return CommandQueueID(command_queue);
+	}
+
+	Error Device::command_queue_execute_and_present(CommandQueueID p_cmd_queue, std::span<SemaphoreID> p_wait_semaphores, std::span<CommandBufferID> p_cmd_buffers, std::span<SemaphoreID> p_cmd_semaphores, FenceID p_cmd_fence, std::span<SwapChainID> p_swap_chains) {
+		DEV_ASSERT(p_cmd_queue.id != 0);
+
+		VkResult err;
+		CommandQueue* command_queue = (CommandQueue*)(p_cmd_queue.id);
+		Queue& device_queue = queue_families[command_queue->queue_family][command_queue->queue_index];
+		Fence* fence = (Fence*)(p_cmd_fence.id);
+		VkFence vk_fence = (fence != nullptr) ? fence->vk_fence : VK_NULL_HANDLE;
+
+		thread_local std::vector<VkSemaphore> wait_semaphores;
+		thread_local std::vector<VkPipelineStageFlags> wait_semaphores_stages;
+		wait_semaphores.clear();
+		wait_semaphores_stages.clear();
+
+		if (!command_queue->pending_semaphores_for_execute.empty()) {
+			for (uint32_t i = 0; i < command_queue->pending_semaphores_for_execute.size(); i++) {
+				VkSemaphore wait_semaphore = command_queue->image_semaphores[command_queue->pending_semaphores_for_execute[i]];
+				wait_semaphores.push_back(wait_semaphore);
+				wait_semaphores_stages.push_back(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+			}
+
+			command_queue->pending_semaphores_for_execute.clear();
+		}
+
+		for (uint32_t i = 0; i < p_wait_semaphores.size(); i++) {
+			// FIXME: Allow specifying the stage mask in more detail.
+			wait_semaphores.push_back(VkSemaphore(p_wait_semaphores[i].id));
+			wait_semaphores_stages.push_back(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
+		}
+
+		if (!pending_flushes.allocations.empty()) {
+			// We must do this now, even if p_cmd_buffers is empty; because afterwards pending_flushes.allocations
+			// could become dangling. We cannot delay this call for the next frame(s).
+			err = vmaFlushAllocations(allocator, pending_flushes.allocations.size(),
+				pending_flushes.allocations.data(), pending_flushes.offsets.data(),
+				pending_flushes.sizes.data());
+			pending_flushes.allocations.clear();
+			pending_flushes.offsets.clear();
+			pending_flushes.sizes.clear();
+			ERR_FAIL_COND_V(err != VK_SUCCESS, FAILED);
+		}
+
+		if (p_cmd_buffers.size() > 0) {
+			thread_local std::vector<VkCommandBuffer> command_buffers;
+			thread_local std::vector<VkSemaphore> present_semaphores;
+			thread_local std::vector<VkSemaphore> signal_semaphores;
+			command_buffers.clear();
+			present_semaphores.clear();
+			signal_semaphores.clear();
+
+			for (uint32_t i = 0; i < p_cmd_buffers.size(); i++) {
+				const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)(p_cmd_buffers[i].id);
+				command_buffers.push_back(command_buffer->vk_command_buffer);
+			}
+
+			for (uint32_t i = 0; i < p_cmd_semaphores.size(); i++) {
+				signal_semaphores.push_back(VkSemaphore(p_cmd_semaphores[i].id));
+			}
+
+			for (uint32_t i = 0; i < p_swap_chains.size(); i++) {
+				const SwapChain* swap_chain = (const SwapChain*)(p_swap_chains[i].id);
+				VkSemaphore semaphore = swap_chain->present_semaphores[swap_chain->image_index];
+				present_semaphores.push_back(semaphore);
+				signal_semaphores.push_back(semaphore);
+			}
+
+			VkSubmitInfo submit_info = {};
+			submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+			submit_info.waitSemaphoreCount = wait_semaphores.size();
+			submit_info.pWaitSemaphores = wait_semaphores.data();
+			submit_info.pWaitDstStageMask = wait_semaphores_stages.data();
+			submit_info.commandBufferCount = command_buffers.size();
+			submit_info.pCommandBuffers = command_buffers.data();
+			submit_info.signalSemaphoreCount = signal_semaphores.size();
+			submit_info.pSignalSemaphores = signal_semaphores.data();
+
+			device_queue.submit_mutex.lock();
+			err = vkQueueSubmit(device_queue.queue, 1, &submit_info, vk_fence);
+			device_queue.submit_mutex.unlock();
+
+			if (err == VK_ERROR_DEVICE_LOST) {
+				print_lost_device_info();
+				CRASH_NOW_MSG("Vulkan device was lost.");
+			}
+			ERR_FAIL_COND_V(err != VK_SUCCESS, FAILED);
+
+			if (fence != nullptr && !command_queue->pending_semaphores_for_fence.empty()) {
+				fence->queue_signaled_from = command_queue;
+
+				// Indicate to the fence that it should release the semaphores that were waited on this submission the next time the fence is waited on.
+				for (uint32_t i = 0; i < command_queue->pending_semaphores_for_fence.size(); i++) {
+					command_queue->image_semaphores_for_fences.push_back({ fence, command_queue->pending_semaphores_for_fence[i] });
+				}
+
+				command_queue->pending_semaphores_for_fence.clear();
+			}
+
+			if (!present_semaphores.empty()) {
+				// If command buffers were executed, swap chains must wait on the present semaphore used by the command queue.
+				wait_semaphores = present_semaphores;
+			}
+		}
+
+		if (p_swap_chains.size() > 0) {
+			thread_local std::vector<VkSwapchainKHR> swapchains;
+			thread_local std::vector<uint32_t> image_indices;
+			thread_local std::vector<VkResult> results;
+			swapchains.clear();
+			image_indices.clear();
+
+			for (uint32_t i = 0; i < p_swap_chains.size(); i++) {
+				SwapChain* swap_chain = (SwapChain*)(p_swap_chains[i].id);
+				swapchains.push_back(swap_chain->vk_swapchain);
+				DEV_ASSERT(swap_chain->image_index < swap_chain->images.size());
+				image_indices.push_back(swap_chain->image_index);
+			}
+
+			results.resize(swapchains.size());
+
+			VkPresentInfoKHR present_info = {};
+			present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+			present_info.waitSemaphoreCount = wait_semaphores.size();
+			present_info.pWaitSemaphores = wait_semaphores.data();
+			present_info.swapchainCount = swapchains.size();
+			present_info.pSwapchains = swapchains.data();
+			present_info.pImageIndices = image_indices.data();
+			present_info.pResults = results.data();
+
+			device_queue.submit_mutex.lock();
+
+			err = vkQueuePresentKHR(device_queue.queue, &present_info);
+
+			device_queue.submit_mutex.unlock();
+
+			// Set the index to an invalid value. If any of the swap chains returned out of date, indicate it should be resized the next time it's acquired.
+			bool any_result_is_out_of_date = false;
+			for (uint32_t i = 0; i < p_swap_chains.size(); i++) {
+				SwapChain* swap_chain = (SwapChain*)(p_swap_chains[i].id);
+				swap_chain->image_index = UINT_MAX;
+				if (results[i] == VK_ERROR_OUT_OF_DATE_KHR) {
+					context_driver->surface_set_needs_resize(swap_chain->surface, true);
+					any_result_is_out_of_date = true;
+				}
+			}
+
+			if (any_result_is_out_of_date || err == VK_ERROR_OUT_OF_DATE_KHR) {
+				// It is possible for presentation to fail with out of date while acquire might've succeeded previously. This case
+				// will be considered a silent failure as it can be triggered easily by resizing a window in the OS natively.
+				return FAILED;
+			}
+
+			// Handling VK_SUBOPTIMAL_KHR the same as VK_SUCCESS is completely intentional.
+			//
+			// Godot does not currently support native rotation in Android when creating the swap chain. It intentionally uses
+			// VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR instead of the current transform bits available in the surface capabilities.
+			// Choosing the transform that leads to optimal presentation leads to distortion that makes the application unusable,
+			// as the rotation of all the content is not handled at the moment.
+			//
+			// VK_SUBOPTIMAL_KHR is accepted as a successful case even if it's not the most efficient solution to work around this
+			// problem. This behavior should not be changed unless the swap chain recreation uses the current transform bits, as
+			// it'll lead to very low performance in Android by entering an endless loop where it'll always resize the swap chain
+			// every frame.
+
+			ERR_FAIL_COND_V_MSG(
+				err != VK_SUCCESS && err != VK_SUBOPTIMAL_KHR,
+				FAILED,
+				std::format("QueuePresentKHR failed with error: %s .", get_vulkan_result(err)));
+		}
+
+		return OK;
+	}
+
+	void Device::command_queue_free(CommandQueueID p_cmd_queue) {
+		DEV_ASSERT(p_cmd_queue);
+
+		CommandQueue* command_queue = (CommandQueue*)(p_cmd_queue.id);
+
+		// Erase all the semaphores used for image acquisition.
+		for (VkSemaphore semaphore : command_queue->image_semaphores) {
+			vkDestroySemaphore(vk_device, semaphore, nullptr);
+		}
+
+		// Retrieve the queue family corresponding to the virtual queue.
+		DEV_ASSERT(command_queue->queue_family < queue_families.size());
+		std::vector<Queue>& queue_family = queue_families[command_queue->queue_family];
+
+		// Decrease the virtual queue count.
+		DEV_ASSERT(command_queue->queue_index < queue_family.size());
+		DEV_ASSERT(queue_family[command_queue->queue_index].virtual_count > 0);
+		queue_family[command_queue->queue_index].virtual_count--;
+
+		// Destroy the virtual queue structure.
+		delete command_queue;
+	}
+
+	// ----- POOL -----
+
+	Device::CommandPoolID Device::command_pool_create(CommandQueueFamilyID p_cmd_queue_family, CommandBufferType p_cmd_buffer_type) {
+		DEV_ASSERT(p_cmd_queue_family.id != 0);
+
+		uint32_t family_index = p_cmd_queue_family.id - 1;
+		VkCommandPoolCreateInfo cmd_pool_info = {};
+		cmd_pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+		cmd_pool_info.queueFamilyIndex = family_index;
+
+		if (!command_pool_reset_enabled) {
+			cmd_pool_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+		}
+
+		VkCommandPool vk_command_pool = VK_NULL_HANDLE;
+		VkResult res = vkCreateCommandPool(vk_device, &cmd_pool_info, nullptr, &vk_command_pool);
+		ERR_FAIL_COND_V_MSG(res, CommandPoolID(), std::format("vkCreateCommandPool failed with error %s .",std::to_string(res)));
+
+		CommandPool* command_pool = new CommandPool;
+		command_pool->vk_command_pool = vk_command_pool;
+		command_pool->buffer_type = p_cmd_buffer_type;
+		return CommandPoolID(command_pool);
+	}
+
+	bool Device::command_pool_reset(CommandPoolID p_cmd_pool) {
+		DEV_ASSERT(p_cmd_pool);
+
+		CommandPool* command_pool = (CommandPool*)(p_cmd_pool.id);
+		VkResult err = vkResetCommandPool(vk_device, command_pool->vk_command_pool, 0);
+		ERR_FAIL_COND_V_MSG(err, false, std::format("vkResetCommandPool failed with error %s .", std::to_string(err)));
+
+		return true;
+	}
+
+	void Device::command_pool_free(CommandPoolID p_cmd_pool) {
+		DEV_ASSERT(p_cmd_pool);
+
+		CommandPool* command_pool = (CommandPool*)(p_cmd_pool.id);
+		for (CommandBufferInfo* command_buffer : command_pool->command_buffers_created) {
+			delete command_buffer;
+		}
+
+		vkDestroyCommandPool(vk_device, command_pool->vk_command_pool, nullptr);
+		delete command_pool;
+	}
+
+	// ----- BUFFER -----
+
+	Device::CommandBufferID Device::command_buffer_create(CommandPoolID p_cmd_pool) {
+		DEV_ASSERT(p_cmd_pool);
+
+		CommandPool* command_pool = (CommandPool*)(p_cmd_pool.id);
+		VkCommandBufferAllocateInfo cmd_buf_info = {};
+		cmd_buf_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+		cmd_buf_info.commandPool = command_pool->vk_command_pool;
+		cmd_buf_info.commandBufferCount = 1;
+
+		if (command_pool->buffer_type == COMMAND_BUFFER_TYPE_SECONDARY) {
+			cmd_buf_info.level = VK_COMMAND_BUFFER_LEVEL_SECONDARY;
+		}
+		else {
+			cmd_buf_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+		}
+
+		VkCommandBuffer vk_command_buffer = VK_NULL_HANDLE;
+		VkResult err = vkAllocateCommandBuffers(vk_device, &cmd_buf_info, &vk_command_buffer);
+		ERR_FAIL_COND_V_MSG(err, CommandBufferID(), std::format("vkAllocateCommandBuffers failed with error %s .", std::to_string(err)));
+
+		CommandBufferInfo* command_buffer = new CommandBufferInfo;
+		command_buffer->vk_command_buffer = vk_command_buffer;
+		command_pool->command_buffers_created.push_back(command_buffer);
+		return CommandBufferID(command_buffer);
+	}
+
+	bool Device::command_buffer_begin(CommandBufferID p_cmd_buffer) {
+		CommandBufferInfo* command_buffer = (CommandBufferInfo*)(p_cmd_buffer.id);
+
+		VkCommandBufferBeginInfo cmd_buf_begin_info = {};
+		cmd_buf_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		cmd_buf_begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+		VkResult err = vkBeginCommandBuffer(command_buffer->vk_command_buffer, &cmd_buf_begin_info);
+		ERR_FAIL_COND_V_MSG(err, false, std::format("vkBeginCommandBuffer failed with error %s .", std::to_string(err)));
+
+		return true;
+	}
+
+	bool Device::command_buffer_begin_secondary(CommandBufferID p_cmd_buffer, RenderPassID p_render_pass, uint32_t p_subpass, FramebufferID p_framebuffer) {
+		Framebuffer* framebuffer = (Framebuffer*)(p_framebuffer.id);
+		RenderPassInfo* render_pass = (RenderPassInfo*)(p_render_pass.id);
+		CommandBufferInfo* command_buffer = (CommandBufferInfo*)(p_cmd_buffer.id);
+
+		VkCommandBufferInheritanceInfo inheritance_info = {};
+		inheritance_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
+		inheritance_info.renderPass = render_pass->vk_render_pass;
+		inheritance_info.subpass = p_subpass;
+		inheritance_info.framebuffer = framebuffer->vk_framebuffer;
+
+		VkCommandBufferBeginInfo cmd_buf_begin_info = {};
+		cmd_buf_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		cmd_buf_begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT | VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
+		cmd_buf_begin_info.pInheritanceInfo = &inheritance_info;
+
+		VkResult err = vkBeginCommandBuffer(command_buffer->vk_command_buffer, &cmd_buf_begin_info);
+		ERR_FAIL_COND_V_MSG(err, false, std::format("vkBeginCommandBuffer failed with error %s .", std::to_string(err)));
+
+		return true;
+	}
+
+	void Device::command_buffer_end(CommandBufferID p_cmd_buffer) {
+		CommandBufferInfo* command_buffer = (CommandBufferInfo*)(p_cmd_buffer.id);
+		vkEndCommandBuffer(command_buffer->vk_command_buffer);
+	}
+
+	void Device::command_buffer_execute_secondary(CommandBufferID p_cmd_buffer, std::span<CommandBufferID> p_secondary_cmd_buffers) {
+		thread_local std::vector<VkCommandBuffer> secondary_command_buffers;
+		CommandBufferInfo* command_buffer = (CommandBufferInfo*)(p_cmd_buffer.id);
+		secondary_command_buffers.resize(p_secondary_cmd_buffers.size());
+		for (uint32_t i = 0; i < p_secondary_cmd_buffers.size(); i++) {
+			CommandBufferInfo* secondary_command_buffer = (CommandBufferInfo*)(p_secondary_cmd_buffers[i].id);
+			secondary_command_buffers[i] = secondary_command_buffer->vk_command_buffer;
+		}
+
+		vkCmdExecuteCommands(command_buffer->vk_command_buffer, p_secondary_cmd_buffers.size(), secondary_command_buffers.data());
+	}
+
+#pragma endregion
+
 #pragma region Swapchain
 
 	struct FormatCandidate {
@@ -3100,5 +3493,153 @@ namespace Vulkan
 	}
 
 #pragma endregion
+
+#pragma region Debug
+
+	void Device::print_lost_device_info() {
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+		{
+			String error_msg = "Printing last known breadcrumbs in reverse order (last executed first).";
+			if (!Engine::get_singleton()->is_accurate_breadcrumbs_enabled()) {
+				error_msg += "\nSome of them might be inaccurate. Try running with --accurate-breadcrumbs for precise information.";
+			}
+			_err_print_error(FUNCTION_STR, __FILE__, __LINE__, error_msg);
+		}
+
+	uint8_t* breadcrumb_ptr = nullptr;
+	VkResult map_result = VK_SUCCESS;
+
+	vmaFlushAllocation(allocator, ((BufferInfo*)breadcrumb_buffer.id)->allocation.handle, 0, BREADCRUMB_BUFFER_ENTRIES * sizeof(uint32_t) * 2u);
+	vmaInvalidateAllocation(allocator, ((BufferInfo*)breadcrumb_buffer.id)->allocation.handle, 0, BREADCRUMB_BUFFER_ENTRIES * sizeof(uint32_t) * 2u);
+	{
+		void* ptr = nullptr;
+		map_result = vmaMapMemory(allocator, ((BufferInfo*)breadcrumb_buffer.id)->allocation.handle, &ptr);
+		breadcrumb_ptr = reinterpret_cast<uint8_t*>(ptr);
+	}
+
+	if (breadcrumb_ptr && map_result == VK_SUCCESS) {
+		uint32_t last_breadcrumb_offset = 0;
+		{
+			_err_print_error_asap("Searching last breadcrumb. We've sent up to ID: " + itos(breadcrumb_id - 1u));
+
+			// Scan the whole buffer to find the offset with the highest ID.
+			// That means that was the last one to be written.
+			//
+			// We use "breadcrumb_id - id" to account for wraparound.
+			// e.g. breadcrumb_id = 2 and id = 4294967294; then 2 - 4294967294 = 4.
+			// The one with the smallest difference is the closest to breadcrumb_id, which means it's
+			// the last written command.
+			uint32_t biggest_id = 0u;
+			uint32_t smallest_id_diff = std::numeric_limits<uint32_t>::max();
+			const uint32_t* breadcrumb_ptr32 = reinterpret_cast<const uint32_t*>(breadcrumb_ptr);
+			for (size_t i = 0u; i < BREADCRUMB_BUFFER_ENTRIES; ++i) {
+				const uint32_t id = breadcrumb_ptr32[i * 2u];
+				const uint32_t id_diff = breadcrumb_id - id;
+				if (id_diff < smallest_id_diff) {
+					biggest_id = i;
+					smallest_id_diff = id_diff;
+				}
+			}
+
+			_err_print_error_asap("Last breadcrumb ID found: " + itos(breadcrumb_ptr32[biggest_id * 2u]));
+
+			last_breadcrumb_offset = biggest_id * sizeof(uint32_t) * 2u;
+		}
+
+		const size_t entries_to_print = 8u; // Note: The value is arbitrary.
+		for (size_t i = 0u; i < entries_to_print; ++i) {
+			const uint32_t last_breadcrumb = *reinterpret_cast<uint32_t*>(breadcrumb_ptr + last_breadcrumb_offset + sizeof(uint32_t));
+			const uint32_t phase = last_breadcrumb & uint32_t(~((1 << 16) - 1));
+			const uint32_t user_data = last_breadcrumb & ((1 << 16) - 1);
+			String error_msg = "Last known breadcrumb: ";
+
+			switch (phase) {
+			case BreadcrumbMarker::ALPHA_PASS:
+				error_msg += "ALPHA_PASS";
+				break;
+			case BreadcrumbMarker::BLIT_PASS:
+				error_msg += "BLIT_PASS";
+				break;
+			case BreadcrumbMarker::DEBUG_PASS:
+				error_msg += "DEBUG_PASS";
+				break;
+			case BreadcrumbMarker::LIGHTMAPPER_PASS:
+				error_msg += "LIGHTMAPPER_PASS";
+				break;
+			case BreadcrumbMarker::OPAQUE_PASS:
+				error_msg += "OPAQUE_PASS";
+				break;
+			case BreadcrumbMarker::POST_PROCESSING_PASS:
+				error_msg += "POST_PROCESSING_PASS";
+				break;
+			case BreadcrumbMarker::REFLECTION_PROBES:
+				error_msg += "REFLECTION_PROBES";
+				break;
+			case BreadcrumbMarker::SHADOW_PASS_CUBE:
+				error_msg += "SHADOW_PASS_CUBE";
+				break;
+			case BreadcrumbMarker::SHADOW_PASS_DIRECTIONAL:
+				error_msg += "SHADOW_PASS_DIRECTIONAL";
+				break;
+			case BreadcrumbMarker::SKY_PASS:
+				error_msg += "SKY_PASS";
+				break;
+			case BreadcrumbMarker::TRANSPARENT_PASS:
+				error_msg += "TRANSPARENT_PASS";
+				break;
+			case BreadcrumbMarker::UI_PASS:
+				error_msg += "UI_PASS";
+				break;
+			default:
+				error_msg += "UNKNOWN_BREADCRUMB(" + itos((uint32_t)phase) + ')';
+				break;
+			}
+
+			if (user_data != 0) {
+				error_msg += " | User data: " + itos(user_data);
+			}
+
+			_err_print_error_asap(error_msg);
+
+			if (last_breadcrumb_offset == 0u) {
+				// Decrement last_breadcrumb_idx, wrapping underflow.
+				last_breadcrumb_offset = BREADCRUMB_BUFFER_ENTRIES * sizeof(uint32_t) * 2u;
+			}
+			last_breadcrumb_offset -= sizeof(uint32_t) * 2u;
+		}
+
+		vmaUnmapMemory(allocator, ((BufferInfo*)breadcrumb_buffer.id)->allocation.handle);
+		breadcrumb_ptr = nullptr;
+	}
+	else {
+		_err_print_error(FUNCTION_STR, __FILE__, __LINE__, "Couldn't map breadcrumb buffer. VkResult = " + itos(map_result));
+	}
+#endif
+	//TODO:
+	//on_device_lost();
+	}
+
+	inline std::string Device::get_vulkan_result(VkResult err) {
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+		if (err == VK_ERROR_OUT_OF_HOST_MEMORY) {
+			return "VK_ERROR_OUT_OF_HOST_MEMORY";
+		}
+		else if (err == VK_ERROR_OUT_OF_DEVICE_MEMORY) {
+			return "VK_ERROR_OUT_OF_DEVICE_MEMORY";
+		}
+		else if (err == VK_ERROR_DEVICE_LOST) {
+			return "VK_ERROR_DEVICE_LOST";
+		}
+		else if (err == VK_ERROR_SURFACE_LOST_KHR) {
+			return "VK_ERROR_SURFACE_LOST_KHR";
+		}
+		else if (err == VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT) {
+			return "VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT";
+		}
+#endif
+		return std::to_string(err);
+	}
+#pragma endregion
+
 
 }

@@ -151,14 +151,15 @@ namespace EE
 			run_message_loop();
 		}
 
-		std::vector<const char*> get_instance_extensions()
+		std::vector<const char*> get_instance_extensions() override
 		{
 			uint32_t count;
 			const char* const* ext = SDL_Vulkan_GetInstanceExtensions(&count);
+
 			return { ext, ext + count };
 		}
 
-		VkSurfaceKHR create_surface(VkInstance instance, VkPhysicalDevice)
+		VkSurfaceKHR create_surface(VkInstance instance, VkPhysicalDevice) override
 		{
 			VkSurfaceKHR surface = VK_NULL_HANDLE;
 			if (!SDL_Vulkan_CreateSurface(window, instance, nullptr, &surface))

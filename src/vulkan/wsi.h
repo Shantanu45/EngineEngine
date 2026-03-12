@@ -42,5 +42,7 @@ namespace Vulkan
 		Context context;
 		std::unique_ptr<Device> device_ptr = nullptr;
 
+		Context::SurfaceID surface;
+
 	};
 }
