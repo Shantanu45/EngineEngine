@@ -243,6 +243,8 @@ namespace Vulkan
 			std::vector<FramebufferID> framebuffers;
 			std::vector<CommandQueue*> command_queues_acquired;
 			std::vector<uint32_t> command_queues_acquired_semaphores;
+			// The swap chain's surface format can vary per window/monitor/display, so each swap chain needs its own render pass tied to its specific VkFormat. 
+			// That's why render_pass is stored on the swap chain struct itself.
 			RenderPassID render_pass;
 			int pre_transform_rotation_degrees = 0;
 			uint32_t image_index = 0;
