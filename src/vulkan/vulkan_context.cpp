@@ -59,7 +59,7 @@ namespace Vulkan
 
 		// Target Vulkan 1.4 if available,
 		// but the tooling ecosystem isn't quite ready for this yet, so stick to 1.3 for the time being.
-		DEBUG_ASSERT(instance_api_version < supported_instance_version);
+		DEBUG_ASSERT(instance_api_version <= supported_instance_version);
 		app_info.apiVersion = instance_api_version;
 
 		return app_info;
