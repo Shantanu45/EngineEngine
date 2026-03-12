@@ -164,6 +164,8 @@ namespace Vulkan
 
 		bool framebuffer_depth_resolve = false;
 
+		std::unordered_map<uint64_t, bool> has_comp_alpha;
+
 
 		Capabilities device_capabilities;
 		ShaderCapabilities shader_capabilities;
@@ -226,6 +228,47 @@ namespace Vulkan
 
 		bool _determine_swap_chain_format(Context::SurfaceID p_surface, VkFormat& r_format, VkColorSpaceKHR& r_color_space);
 		void _swap_chain_release(SwapChain* p_swap_chain);
+
+		Device::SwapChainID swap_chain_create(Context::SurfaceID p_surface);
+
+		Error swap_chain_resize(CommandQueueID p_cmd_queue, SwapChainID p_swap_chain, uint32_t p_desired_framebuffer_count);
+
+		Device::FramebufferID swap_chain_acquire_framebuffer(CommandQueueID p_cmd_queue, SwapChainID p_swap_chain, bool& r_resize_required);
+
+		Device::RenderPassID swap_chain_get_render_pass(SwapChainID p_swap_chain);
+
+		int swap_chain_get_pre_rotation_degrees(SwapChainID p_swap_chain);
+
+		DataFormat swap_chain_get_format(SwapChainID p_swap_chain);
+
+		ColorSpace swap_chain_get_color_space(SwapChainID p_swap_chain);
+
+		void swap_chain_set_max_fps(SwapChainID p_swap_chain, int p_max_fps);
+
+		void swap_chain_free(SwapChainID p_swap_chain);
+
+		struct Framebuffer {
+			VkFramebuffer vk_framebuffer = VK_NULL_HANDLE;
+
+			// Only filled in if the framebuffer uses a fragment density map with offsets. Unused otherwise.
+			uint32_t fragment_density_map_offsets_layers = 0;
+
+			// Only filled in by a framebuffer created by a swap chain. Unused otherwise.
+			VkImage swap_chain_image = VK_NULL_HANDLE;
+			VkImageSubresourceRange swap_chain_image_subresource_range = {};
+			bool swap_chain_acquired = false;
+		};
+
+		Device::FramebufferID framebuffer_create(RenderPassID p_render_pass, std::span<TextureID> p_attachments, uint32_t p_width, uint32_t p_height);
+
+		void framebuffer_free(FramebufferID p_framebuffer);
+
+		struct RenderPassInfo {
+			VkRenderPass vk_render_pass = VK_NULL_HANDLE;
+			bool uses_fragment_density_map = false;
+		};
+
+		void render_pass_free(RenderPassID p_render_pass);
 
 		private:
 			/****************/

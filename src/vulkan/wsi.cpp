@@ -17,7 +17,7 @@ namespace Vulkan
 	bool WSI::init_device()
 	{
 		device_ptr = std::make_unique<Device>(&context);
-		device_ptr->initialize(0, 2);
+		device_ptr->initialize(0, 2);			//TODO: figure out the parameters
 		return true;
 	}
 }

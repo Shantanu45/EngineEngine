@@ -267,7 +267,7 @@ namespace Vulkan
 
 		context_driver = p_context_driver;
 		//TODO:
-		//max_descriptor_sets_per_pool = 3;
+		max_descriptor_sets_per_pool = 3;
 	}
 
 	Error Device::initialize(uint32_t p_device_index, uint32_t p_frame_count)
@@ -2501,5 +2501,604 @@ namespace Vulkan
 
 #pragma endregion
 
+#pragma region Swapchain
+
+	struct FormatCandidate {
+		VkFormat format;
+		VkColorSpaceKHR colorspace;
+	};
+
+	bool Device::_determine_swap_chain_format(Context::SurfaceID p_surface, VkFormat& r_format, VkColorSpaceKHR& r_color_space) {
+		DEV_ASSERT(p_surface != 0);
+
+		Context::Surface* surface = (Context::Surface*)(p_surface);
+
+		// Retrieve the formats supported by the surface.
+		uint32_t format_count = 0;
+		VkResult err = vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface->vk_surface, &format_count, nullptr);
+		ERR_FAIL_COND_V(err != VK_SUCCESS, false);
+
+		std::vector<VkSurfaceFormatKHR> formats;
+		formats.resize(format_count);
+		err = vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface->vk_surface, &format_count, formats.data());
+		ERR_FAIL_COND_V(err != VK_SUCCESS, false);
+
+		// If the format list includes just one entry of VK_FORMAT_UNDEFINED, the surface has no preferred format.
+		if (format_count == 1 && formats[0].format == VK_FORMAT_UNDEFINED) {
+			r_format = VK_FORMAT_B8G8R8A8_UNORM;
+			r_color_space = formats[0].colorSpace;
+			return true;
+		}
+
+		bool colorspace_supported = context_driver->is_colorspace_supported();
+		bool hdr_output_requested = context_driver->surface_get_hdr_output_enabled(p_surface);
+
+		// Determine which formats to prefer based on the requested capabilities.
+		std::vector<FormatCandidate> preferred_formats;
+
+		// If the surface requests HDR output, try to get an HDR format.
+		if (hdr_output_requested && colorspace_supported) {
+			// This format is preferred for HDR output.
+			preferred_formats.push_back({ VK_FORMAT_R16G16B16A16_SFLOAT, VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT });
+		}
+
+		// These formats are always considered for SDR.
+		preferred_formats.push_back({ VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR });
+		preferred_formats.push_back({ VK_FORMAT_R8G8B8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR });
+
+		bool found = false;
+		for (const FormatCandidate& candidate : preferred_formats) {
+			for (uint32_t i = 0; i < format_count; i++) {
+				if (formats[i].format == candidate.format && formats[i].colorSpace == candidate.colorspace) {
+					r_format = formats[i].format;
+					r_color_space = formats[i].colorSpace;
+					found = true;
+					break;
+				}
+			}
+
+			if (found) {
+				break;
+			}
+		}
+
+		// Warnings for when HDR capabilities are requested but not found.
+		if (hdr_output_requested) {
+			if (!colorspace_supported) {
+				WARN_PRINT("HDR output requested but the vulkan driver does not support VK_EXT_swapchain_colorspace, falling back to SDR.");
+			}
+
+			if (r_color_space == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+				WARN_PRINT("HDR output requested but no HDR compatible format was found, falling back to SDR.");
+			}
+		}
+
+		return found;
+	}
+
+	void Device::_swap_chain_release(SwapChain* swap_chain) {
+		// Destroy views and framebuffers associated to the swapchain's images.
+		for (FramebufferID framebuffer : swap_chain->framebuffers) {
+			framebuffer_free(framebuffer);
+		}
+
+		for (VkImageView view : swap_chain->image_views) {
+			vkDestroyImageView(vk_device, view, nullptr);
+		}
+
+		swap_chain->image_index = UINT_MAX;
+		swap_chain->images.clear();
+		swap_chain->image_views.clear();
+		swap_chain->framebuffers.clear();
+
+		if (swap_chain->vk_swapchain != VK_NULL_HANDLE) 
+		{
+			vkDestroySwapchainKHR(vk_device, swap_chain->vk_swapchain, nullptr);
+			swap_chain->vk_swapchain = VK_NULL_HANDLE;
+		}
+
+		if (swap_chain->render_pass.id != 0) {
+			render_pass_free(swap_chain->render_pass);
+			swap_chain->render_pass = RenderPassID();
+		}
+
+		for (uint32_t i = 0; i < swap_chain->command_queues_acquired.size(); i++) {
+			_recreate_image_semaphore(swap_chain->command_queues_acquired[i], swap_chain->command_queues_acquired_semaphores[i], false);
+		}
+
+		swap_chain->command_queues_acquired.clear();
+		swap_chain->command_queues_acquired_semaphores.clear();
+
+		for (VkSemaphore semaphore : swap_chain->present_semaphores) {
+			vkDestroySemaphore(vk_device, semaphore, nullptr);
+		}
+
+		swap_chain->present_semaphores.clear();
+	}
+
+	Device::SwapChainID Device::swap_chain_create(Context::SurfaceID p_surface) {
+		DEV_ASSERT(p_surface != 0);
+
+		// Create an empty swap chain until it is resized.
+		SwapChain* swap_chain = new SwapChain;
+		swap_chain->surface = p_surface;
+		return SwapChainID(swap_chain);
+	}
+
+	Error Device::swap_chain_resize(CommandQueueID p_cmd_queue, SwapChainID p_swap_chain, uint32_t p_desired_framebuffer_count) {
+		DEV_ASSERT(p_cmd_queue.id != 0);
+		DEV_ASSERT(p_swap_chain.id != 0);
+
+		CommandQueue* command_queue = (CommandQueue*)(p_cmd_queue.id);
+		SwapChain* swap_chain = (SwapChain*)(p_swap_chain.id);
+
+		// Release all current contents of the swap chain.
+		_swap_chain_release(swap_chain);
+
+		// Validate if the command queue being used supports creating the swap chain for this surface.
+		if (!context_driver->queue_family_supports_present(physical_device, command_queue->queue_family, swap_chain->surface)) {
+			ERR_FAIL_V_MSG(ERR_CANT_CREATE, "Surface is not supported by device. Did the GPU go offline? Was the window created on another monitor? Check"
+				"previous errors & try launching with --gpu-validation.");
+		}
+
+		// Retrieve the surface's capabilities.
+		Context::Surface* surface = (Context::Surface*)(swap_chain->surface);
+		VkSurfaceCapabilitiesKHR surface_capabilities = {};
+		VkResult err = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device, surface->vk_surface, &surface_capabilities);
+		ERR_FAIL_COND_V(err != VK_SUCCESS, ERR_CANT_CREATE);
+
+		// No swapchain yet, this is the first time we're creating it.
+		if (!swap_chain->vk_swapchain) {
+			if (surface_capabilities.currentExtent.width == 0xFFFFFFFF) {
+				// The current extent is currently undefined, so the current surface width and height will be clamped to the surface's capabilities.
+				// We make sure to overwrite surface_capabilities.currentExtent.width so that the same check further below
+				// does not set extent.width = CLAMP( surface->width, ... ) on the first run of this function, because
+				// that'd be potentially unswapped.
+				surface_capabilities.currentExtent.width = CLAMP(surface->width, surface_capabilities.minImageExtent.width, surface_capabilities.maxImageExtent.width);
+				surface_capabilities.currentExtent.height = CLAMP(surface->height, surface_capabilities.minImageExtent.height, surface_capabilities.maxImageExtent.height);
+			}
+
+			// We must SWAP() only once otherwise we'll keep ping-ponging between
+			// the right and wrong resolutions after multiple calls to swap_chain_resize().
+			if (surface_capabilities.currentTransform & VK_SURFACE_TRANSFORM_ROTATE_90_BIT_KHR ||
+				surface_capabilities.currentTransform & VK_SURFACE_TRANSFORM_ROTATE_270_BIT_KHR) {
+				// Swap to get identity width and height.
+				SWAP(surface_capabilities.currentExtent.width, surface_capabilities.currentExtent.height);
+			}
+		}
+
+		VkExtent2D extent;
+		if (surface_capabilities.currentExtent.width == 0xFFFFFFFF) {
+			// The current extent is currently undefined, so the current surface width and height will be clamped to the surface's capabilities.
+			// We can only be here on the second call to swap_chain_resize(), by which time surface->width & surface->height should already be swapped if needed.
+			extent.width = CLAMP(surface->width, surface_capabilities.minImageExtent.width, surface_capabilities.maxImageExtent.width);
+			extent.height = CLAMP(surface->height, surface_capabilities.minImageExtent.height, surface_capabilities.maxImageExtent.height);
+		}
+		else {
+			// Grab the dimensions from the current extent.
+			extent = surface_capabilities.currentExtent;
+			surface->width = extent.width;
+			surface->height = extent.height;
+		}
+
+		if (surface->width == 0 || surface->height == 0) {
+			// The surface doesn't have valid dimensions, so we can't create a swap chain.
+			return ERR_SKIP;
+		}
+
+		// Find what present modes are supported.
+		std::vector<VkPresentModeKHR> present_modes;
+		uint32_t present_modes_count = 0;
+		err = vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface->vk_surface, &present_modes_count, nullptr);
+		ERR_FAIL_COND_V(err != VK_SUCCESS, ERR_CANT_CREATE);
+
+		present_modes.resize(present_modes_count);
+		err = vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface->vk_surface, &present_modes_count, present_modes.data());
+		ERR_FAIL_COND_V(err != VK_SUCCESS, ERR_CANT_CREATE);
+
+		// Choose the present mode based on the display server setting.
+		VkPresentModeKHR present_mode = VkPresentModeKHR::VK_PRESENT_MODE_FIFO_KHR;
+		std::string present_mode_name = "Enabled";
+		switch (surface->vsync_mode) {
+		case Context::VSyncMode::VSYNC_MAILBOX:
+			present_mode = VK_PRESENT_MODE_MAILBOX_KHR;
+			present_mode_name = "Mailbox";
+			break;
+		case Context::VSyncMode::VSYNC_ADAPTIVE:
+			present_mode = VK_PRESENT_MODE_FIFO_RELAXED_KHR;
+			present_mode_name = "Adaptive";
+			break;
+		case Context::VSyncMode::VSYNC_ENABLED:
+			present_mode = VK_PRESENT_MODE_FIFO_KHR;
+			present_mode_name = "Enabled";
+			break;
+		case Context::VSyncMode::VSYNC_DISABLED:
+			present_mode = VK_PRESENT_MODE_IMMEDIATE_KHR;
+			present_mode_name = "Disabled";
+			break;
+		}
+
+		bool present_mode_available = (std::find(present_modes.begin(), present_modes.end(), present_mode) != present_modes.end());
+		if (!present_mode_available) {
+			// Present mode is not available, fall back to FIFO which is guaranteed to be supported.
+			WARN_PRINT(std::format("The requested V-Sync mode %s is not available. Falling back to V-Sync mode Enabled.", present_mode_name));
+			surface->vsync_mode = Context::VSyncMode::VSYNC_ENABLED;
+			present_mode = VkPresentModeKHR::VK_PRESENT_MODE_FIFO_KHR;
+		}
+
+		// Clamp the desired image count to the surface's capabilities.
+		uint32_t desired_swapchain_images = MAX(p_desired_framebuffer_count, surface_capabilities.minImageCount);
+		if (surface_capabilities.maxImageCount > 0) {
+			// Only clamp to the max image count if it's defined. A max image count of 0 means there's no upper limit to the amount of images.
+			desired_swapchain_images = MIN(desired_swapchain_images, surface_capabilities.maxImageCount);
+		}
+
+		// Refer to the comment in command_queue_present() for more details.
+		VkSurfaceTransformFlagBitsKHR surface_transform_bits = surface_capabilities.currentTransform;
+
+		VkCompositeAlphaFlagBitsKHR composite_alpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+		if (true/*OS::get_singleton()->is_layered_allowed()*/ || !(surface_capabilities.supportedCompositeAlpha & composite_alpha)) {
+			// Find a supported composite alpha mode - one of these is guaranteed to be set.
+			VkCompositeAlphaFlagBitsKHR composite_alpha_flags[4] = {
+				VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR,
+				VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR,
+				VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR,
+				VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR
+			};
+
+			for (uint32_t i = 0; i < std::size(composite_alpha_flags); i++) {
+				if (surface_capabilities.supportedCompositeAlpha & composite_alpha_flags[i]) {
+					composite_alpha = composite_alpha_flags[i];
+					break;
+				}
+			}
+			has_comp_alpha[(uint64_t)p_cmd_queue.id] = (composite_alpha != VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR);
+		}
+
+		// Determine the format and color space for the swap chain.
+		VkFormat format = VK_FORMAT_UNDEFINED;
+		VkColorSpaceKHR color_space = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+		if (!_determine_swap_chain_format(swap_chain->surface, format, color_space)) {
+			ERR_FAIL_V_MSG(ERR_CANT_CREATE, "Surface did not return any valid formats.");
+		}
+		else {
+			swap_chain->format = format;
+			swap_chain->color_space = color_space;
+		}
+
+		VkSwapchainCreateInfoKHR swap_create_info = {};
+		swap_create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+		swap_create_info.surface = surface->vk_surface;
+		swap_create_info.minImageCount = desired_swapchain_images;
+		swap_create_info.imageFormat = swap_chain->format;
+		swap_create_info.imageColorSpace = swap_chain->color_space;
+		swap_create_info.imageExtent = extent;
+		swap_create_info.imageArrayLayers = 1;
+		swap_create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+		swap_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		swap_create_info.preTransform = surface_transform_bits;
+		switch (swap_create_info.preTransform) {
+		case VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR:
+			swap_chain->pre_transform_rotation_degrees = 0;
+			break;
+		case VK_SURFACE_TRANSFORM_ROTATE_90_BIT_KHR:
+			swap_chain->pre_transform_rotation_degrees = 90;
+			break;
+		case VK_SURFACE_TRANSFORM_ROTATE_180_BIT_KHR:
+			swap_chain->pre_transform_rotation_degrees = 180;
+			break;
+		case VK_SURFACE_TRANSFORM_ROTATE_270_BIT_KHR:
+			swap_chain->pre_transform_rotation_degrees = 270;
+			break;
+		default:
+			WARN_PRINT("Unexpected swap_create_info.preTransform = ", std::to_string(swap_create_info.preTransform), ".");
+			swap_chain->pre_transform_rotation_degrees = 0;
+			break;
+		}
+		swap_create_info.compositeAlpha = composite_alpha;
+		swap_create_info.presentMode = present_mode;
+		swap_create_info.clipped = true;
+		err = vkCreateSwapchainKHR(vk_device, &swap_create_info, nullptr, &swap_chain->vk_swapchain);
+		ERR_FAIL_COND_V(err != VK_SUCCESS, ERR_CANT_CREATE);
+
+		uint32_t image_count = 0;
+		err = vkGetSwapchainImagesKHR(vk_device, swap_chain->vk_swapchain, &image_count, nullptr);
+		ERR_FAIL_COND_V(err != VK_SUCCESS, ERR_CANT_CREATE);
+
+		swap_chain->images.resize(image_count);
+		err = vkGetSwapchainImagesKHR(vk_device, swap_chain->vk_swapchain, &image_count, swap_chain->images.data());
+		ERR_FAIL_COND_V(err != VK_SUCCESS, ERR_CANT_CREATE);
+
+		VkImageViewCreateInfo view_create_info = {};
+		view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		view_create_info.format = swap_chain->format;
+		view_create_info.components.r = VK_COMPONENT_SWIZZLE_R;
+		view_create_info.components.g = VK_COMPONENT_SWIZZLE_G;
+		view_create_info.components.b = VK_COMPONENT_SWIZZLE_B;
+		view_create_info.components.a = VK_COMPONENT_SWIZZLE_A;
+		view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		view_create_info.subresourceRange.levelCount = 1;
+		view_create_info.subresourceRange.layerCount = 1;
+
+		swap_chain->image_views.reserve(image_count);
+
+		VkImageView image_view;
+		for (uint32_t i = 0; i < image_count; i++) {
+			view_create_info.image = swap_chain->images[i];
+			err = vkCreateImageView(vk_device, &view_create_info, nullptr, &image_view);
+			ERR_FAIL_COND_V(err != VK_SUCCESS, ERR_CANT_CREATE);
+
+			swap_chain->image_views.push_back(image_view);
+		}
+
+		swap_chain->framebuffers.reserve(image_count);
+
+		// Create the render pass for the chosen format.
+		VkAttachmentDescription2KHR attachment = {};
+		attachment.sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2_KHR;
+		attachment.format = format;
+		attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+		attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		attachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		attachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+		VkAttachmentReference2KHR color_reference = {};
+		color_reference.sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2_KHR;
+		color_reference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+		VkSubpassDescription2KHR subpass = {};
+		subpass.sType = VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_2_KHR;
+		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+		subpass.colorAttachmentCount = 1;
+		subpass.pColorAttachments = &color_reference;
+
+		VkRenderPassCreateInfo2KHR pass_info = {};
+		pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO_2_KHR;
+		pass_info.attachmentCount = 1;
+		pass_info.pAttachments = &attachment;
+		pass_info.subpassCount = 1;
+		pass_info.pSubpasses = &subpass;
+
+		VkRenderPass vk_render_pass = VK_NULL_HANDLE;
+		err = _create_render_pass(vk_device, &pass_info, nullptr, &vk_render_pass);
+		ERR_FAIL_COND_V(err != VK_SUCCESS, ERR_CANT_CREATE);
+
+		RenderPassInfo* render_pass_info = new RenderPassInfo;
+		render_pass_info->vk_render_pass = vk_render_pass;
+
+		DEV_ASSERT(swap_chain->render_pass.id == 0);
+		swap_chain->render_pass = RenderPassID(render_pass_info);
+
+		VkFramebufferCreateInfo fb_create_info = {};
+		fb_create_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+		fb_create_info.renderPass = vk_render_pass;
+		fb_create_info.attachmentCount = 1;
+		fb_create_info.width = surface->width;
+		fb_create_info.height = surface->height;
+		fb_create_info.layers = 1;
+
+		VkFramebuffer vk_framebuffer;
+		for (uint32_t i = 0; i < image_count; i++) {
+			fb_create_info.pAttachments = &swap_chain->image_views[i];
+			err = vkCreateFramebuffer(vk_device, &fb_create_info, nullptr, &vk_framebuffer);
+			ERR_FAIL_COND_V(err != VK_SUCCESS, ERR_CANT_CREATE);
+
+			Framebuffer* framebuffer = new Framebuffer;
+			framebuffer->vk_framebuffer = vk_framebuffer;
+			framebuffer->swap_chain_image = swap_chain->images[i];
+			framebuffer->swap_chain_image_subresource_range = view_create_info.subresourceRange;
+			swap_chain->framebuffers.push_back(Device::FramebufferID(framebuffer));
+		}
+
+		VkSemaphore vk_semaphore = VK_NULL_HANDLE;
+		for (uint32_t i = 0; i < image_count; i++) {
+			VkSemaphoreCreateInfo create_info = {};
+			create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+			err = vkCreateSemaphore(vk_device, &create_info, nullptr, &vk_semaphore);
+			ERR_FAIL_COND_V(err != VK_SUCCESS, FAILED);
+
+			swap_chain->present_semaphores.push_back(vk_semaphore);
+		}
+
+		// Once everything's been created correctly, indicate the surface no longer needs to be resized.
+		context_driver->surface_set_needs_resize(swap_chain->surface, false);
+
+		return OK;
+	}
+
+	Device::FramebufferID Device::swap_chain_acquire_framebuffer(CommandQueueID p_cmd_queue, SwapChainID p_swap_chain, bool& r_resize_required) {
+		DEV_ASSERT(p_cmd_queue);
+		DEV_ASSERT(p_swap_chain);
+
+		CommandQueue* command_queue = (CommandQueue*)(p_cmd_queue.id);
+		SwapChain* swap_chain = (SwapChain*)(p_swap_chain.id);
+		if ((swap_chain->vk_swapchain == VK_NULL_HANDLE) || context_driver->surface_get_needs_resize(swap_chain->surface)) {
+			// The surface does not have a valid swap chain or it indicates it requires a resize.
+			r_resize_required = true;
+			return FramebufferID();
+		}
+
+		VkResult err;
+		VkSemaphore semaphore = VK_NULL_HANDLE;
+		uint32_t semaphore_index = 0;
+		if (command_queue->free_image_semaphores.empty()) {
+			// Add a new semaphore if none are free.
+			VkSemaphoreCreateInfo create_info = {};
+			create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+			err = vkCreateSemaphore(vk_device, &create_info, nullptr, &semaphore);
+			ERR_FAIL_COND_V(err != VK_SUCCESS, FramebufferID());
+
+			semaphore_index = command_queue->image_semaphores.size();
+			command_queue->image_semaphores.push_back(semaphore);
+			command_queue->image_semaphores_swap_chains.push_back(swap_chain);
+		}
+		else {
+			// Pick a free semaphore.
+			uint32_t free_index = command_queue->free_image_semaphores.size() - 1;
+			semaphore_index = command_queue->free_image_semaphores[free_index];
+			command_queue->image_semaphores_swap_chains[semaphore_index] = swap_chain;
+			command_queue->free_image_semaphores.erase(command_queue->free_image_semaphores.begin() + free_index);
+			semaphore = command_queue->image_semaphores[semaphore_index];
+		}
+
+		// Store in the swap chain the acquired semaphore.
+		swap_chain->command_queues_acquired.push_back(command_queue);
+		swap_chain->command_queues_acquired_semaphores.push_back(semaphore_index);
+
+		err = vkAcquireNextImageKHR(vk_device, swap_chain->vk_swapchain, UINT64_MAX, semaphore, VK_NULL_HANDLE, &swap_chain->image_index);
+		if (err == VK_ERROR_OUT_OF_DATE_KHR) {
+			// Out of date leaves the semaphore in a signaled state that will never finish, so it's necessary to recreate it.
+			bool semaphore_recreated = _recreate_image_semaphore(command_queue, semaphore_index, true);
+			ERR_FAIL_COND_V(!semaphore_recreated, FramebufferID());
+
+			// Swap chain is out of date and must be recreated.
+			r_resize_required = true;
+			return FramebufferID();
+		}
+		else if (err != VK_SUCCESS && err != VK_SUBOPTIMAL_KHR) {
+			// Swap chain failed to present but the reason is unknown.
+			// Refer to the comment in command_queue_present() as to why VK_SUBOPTIMAL_KHR is handled the same as VK_SUCCESS.
+			return FramebufferID();
+		}
+
+		// Indicate the command queue should wait on these semaphores on the next submission and that it should
+		// indicate they're free again on the next fence.
+		command_queue->pending_semaphores_for_execute.push_back(semaphore_index);
+		command_queue->pending_semaphores_for_fence.push_back(semaphore_index);
+
+		// Return the corresponding framebuffer to the new current image.
+		FramebufferID framebuffer_id = swap_chain->framebuffers[swap_chain->image_index];
+		Framebuffer* framebuffer = (Framebuffer*)(framebuffer_id.id);
+		framebuffer->swap_chain_acquired = true;
+		return framebuffer_id;
+	}
+
+	Device::RenderPassID Device::swap_chain_get_render_pass(SwapChainID p_swap_chain) {
+		DEV_ASSERT(p_swap_chain.id != 0);
+
+		SwapChain* swap_chain = (SwapChain*)(p_swap_chain.id);
+		return swap_chain->render_pass;
+	}
+
+	int Device::swap_chain_get_pre_rotation_degrees(SwapChainID p_swap_chain) {
+		DEV_ASSERT(p_swap_chain.id != 0);
+
+		SwapChain* swap_chain = (SwapChain*)(p_swap_chain.id);
+		return swap_chain->pre_transform_rotation_degrees;
+	}
+
+	DataFormat Device::swap_chain_get_format(SwapChainID p_swap_chain) {
+		DEV_ASSERT(p_swap_chain.id != 0);
+
+		SwapChain* swap_chain = (SwapChain*)(p_swap_chain.id);
+		switch (swap_chain->format) {
+		case VK_FORMAT_B8G8R8A8_UNORM:
+			return DATA_FORMAT_B8G8R8A8_UNORM;
+		case VK_FORMAT_R8G8B8A8_UNORM:
+			return DATA_FORMAT_R8G8B8A8_UNORM;
+		case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
+			return DATA_FORMAT_A2B10G10R10_UNORM_PACK32;
+		case VK_FORMAT_A2R10G10B10_UNORM_PACK32:
+			return DATA_FORMAT_A2R10G10B10_UNORM_PACK32;
+		case VK_FORMAT_R16G16B16A16_SFLOAT:
+			return DATA_FORMAT_R16G16B16A16_SFLOAT;
+		default:
+			DEV_ASSERT(false && "Unknown swap chain format.");
+			return DATA_FORMAT_MAX;
+		}
+	}
+
+	ColorSpace Device::swap_chain_get_color_space(SwapChainID p_swap_chain) {
+		DEV_ASSERT(p_swap_chain.id != 0);
+
+		SwapChain* swap_chain = (SwapChain*)(p_swap_chain.id);
+		switch (swap_chain->color_space) {
+		case VK_COLOR_SPACE_SRGB_NONLINEAR_KHR:
+			return COLOR_SPACE_REC709_NONLINEAR_SRGB;
+		case VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT:
+			return COLOR_SPACE_REC709_LINEAR;
+		default:
+			DEV_ASSERT(false && "Unknown swap chain color space.");
+			return COLOR_SPACE_MAX;
+		}
+	}
+
+	void Device::swap_chain_set_max_fps(SwapChainID p_swap_chain, int p_max_fps) {
+		//TODO: SWAPPY_FRAME_PACING_ENABLED
+		DEV_ASSERT(p_swap_chain.id != 0);
+	}
+
+	void Device::swap_chain_free(SwapChainID p_swap_chain) {
+		DEV_ASSERT(p_swap_chain.id != 0);
+
+		SwapChain* swap_chain = (SwapChain*)(p_swap_chain.id);
+		_swap_chain_release(swap_chain);
+
+		delete swap_chain;
+	}
+#pragma endregion
+
+#pragma region Framebuffer
+
+	Device::FramebufferID Device::framebuffer_create(RenderPassID p_render_pass, std::span<TextureID> p_attachments, uint32_t p_width, uint32_t p_height) {
+		RenderPassInfo* render_pass = (RenderPassInfo*)(p_render_pass.id);
+
+		uint32_t fragment_density_map_offsets_layers = 0;
+		std::vector< VkImageView> vk_img_vec(p_attachments.size());
+		VkImageView* vk_img_views = vk_img_vec.data();
+		for (uint32_t i = 0; i < p_attachments.size(); i++) {
+			const TextureInfo* texture = (const TextureInfo*)p_attachments[i].id;
+			vk_img_views[i] = texture->vk_view;
+		}
+
+		VkFramebufferCreateInfo framebuffer_create_info = {};
+		framebuffer_create_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+		framebuffer_create_info.renderPass = render_pass->vk_render_pass;
+		framebuffer_create_info.attachmentCount = p_attachments.size();
+		framebuffer_create_info.pAttachments = vk_img_views;
+		framebuffer_create_info.width = p_width;
+		framebuffer_create_info.height = p_height;
+		framebuffer_create_info.layers = 1;
+
+		VkFramebuffer vk_framebuffer = VK_NULL_HANDLE;
+		VkResult err = vkCreateFramebuffer(vk_device, &framebuffer_create_info, nullptr, &vk_framebuffer);
+		ERR_FAIL_COND_V_MSG(err, FramebufferID(), std::format("vkCreateFramebuffer failed with error %s .", std::to_string(err)));
+
+#if PRINT_NATIVE_COMMANDS
+		LOGI(std::format("vkCreateFramebuffer 0x%uX with %d attachments", uint64_t(vk_framebuffer), p_attachments.size()));
+		for (uint32_t i = 0; i < p_attachments.size(); i++) {
+			const TextureInfo* attachment_info = (const TextureInfo*)p_attachments[i].id;
+			LOGI(std::format("  Attachment #%d: IMAGE 0x%uX VIEW 0x%uX", i, uint64_t(attachment_info->vk_view_create_info.image), uint64_t(attachment_info->vk_view)));
+		}
+#endif
+
+		Framebuffer* framebuffer = new Framebuffer;
+		framebuffer->vk_framebuffer = vk_framebuffer;
+		framebuffer->fragment_density_map_offsets_layers = fragment_density_map_offsets_layers;
+		return FramebufferID(framebuffer);
+	}
+
+	void Device::framebuffer_free(FramebufferID p_framebuffer) {
+		Framebuffer* framebuffer = (Framebuffer*)(p_framebuffer.id);
+		vkDestroyFramebuffer(vk_device, framebuffer->vk_framebuffer, nullptr);
+		delete framebuffer;
+	}
+
+#pragma endregion
+
+#pragma region Rendering
+
+	void Device::render_pass_free(RenderPassID p_render_pass) {
+		RenderPassInfo* render_pass = (RenderPassInfo*)(p_render_pass.id);
+		vkDestroyRenderPass(vk_device, render_pass->vk_render_pass, nullptr);
+		delete render_pass;
+	}
+
+#pragma endregion
 
 }
