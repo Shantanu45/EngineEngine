@@ -14,6 +14,7 @@ add_subdirectory(application_entry)
 
 find_package(SDL3 REQUIRED)
 
+
 set(INCLUDES 
 	"${PROJECT_SOURCE_DIR}/src"
 	"${PROJECT_SOURCE_DIR}/third_party"

@@ -500,7 +500,7 @@ namespace Vulkan
 	public:
 		Device(Context* p_context_driver);
 		Error initialize(uint32_t p_device_index, uint32_t p_frame_count);
-		virtual ~Device();
+		virtual ~Device() = default;
 
 	private:
 		void _register_requested_device_extension(const std::string& p_extension_name, bool p_required);

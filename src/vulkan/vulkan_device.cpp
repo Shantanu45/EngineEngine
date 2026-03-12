@@ -859,6 +859,12 @@ namespace Vulkan
 		if (buffer_device_address_support) {
 			allocator_info.flags |= VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
 		}
+
+		VmaVulkanFunctions vulkanFunctions{};
+		vulkanFunctions.vkGetInstanceProcAddr = vkGetInstanceProcAddr;
+		vulkanFunctions.vkGetDeviceProcAddr = vkGetDeviceProcAddr;
+		allocator_info.pVulkanFunctions = &vulkanFunctions;
+
 		VkResult err = vmaCreateAllocator(&allocator_info, &allocator);
 		std::string msg = "vmaCreateAllocator failed with error " + std::to_string(err) + ".";
 		ERR_FAIL_COND_V_MSG(err, ERR_CANT_CREATE, msg);

@@ -5,7 +5,7 @@
 namespace EE
 {
 
-	bool CreateConsole() {
+	static bool CreateConsole() {
 		// 1. Attempt to allocate a console
 		if (!AllocConsole()) {
 			return false;
@@ -58,6 +58,8 @@ namespace EE
 	bool Application::init_wsi()
 	{
 		vulkan_context.initialize();
+		vulkan_device_ptr = std::make_unique<Vulkan::Device>(&vulkan_context);
+		vulkan_device_ptr->initialize(0, 2);
 		return true;
 	}
 

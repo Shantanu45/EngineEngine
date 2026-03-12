@@ -3,6 +3,7 @@
 #include <string>
 #include "util/logger.h"
 #include "vulkan/vulkan_context.h"
+#include "vulkan/vulkan_device.h"
 
 
 namespace EE
@@ -68,5 +69,6 @@ namespace EE
 		std::unique_ptr<::Util::Logger> logger = nullptr;
 
 		Vulkan::Context vulkan_context;
+		std::unique_ptr<Vulkan::Device> vulkan_device_ptr = nullptr;
 	};
 }
