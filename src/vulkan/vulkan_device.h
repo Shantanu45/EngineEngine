@@ -61,7 +61,7 @@ namespace Vulkan
 		DEFINE_ID(QueryPool);
 		DEFINE_ID(Fence);
 		DEFINE_ID(Semaphore);
-
+		DEFINE_ID(AccelerationStructure);
 
 	private:
 
@@ -150,6 +150,76 @@ namespace Vulkan
 		};
 
 	public:
+		enum PipelineStageBits {
+			PIPELINE_STAGE_TOP_OF_PIPE_BIT = (1 << 0),
+			PIPELINE_STAGE_DRAW_INDIRECT_BIT = (1 << 1),
+			PIPELINE_STAGE_VERTEX_INPUT_BIT = (1 << 2),
+			PIPELINE_STAGE_VERTEX_SHADER_BIT = (1 << 3),
+			PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT = (1 << 4),
+			PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT = (1 << 5),
+			PIPELINE_STAGE_GEOMETRY_SHADER_BIT = (1 << 6),
+			PIPELINE_STAGE_FRAGMENT_SHADER_BIT = (1 << 7),
+			PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT = (1 << 8),
+			PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT = (1 << 9),
+			PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT = (1 << 10),
+			PIPELINE_STAGE_COMPUTE_SHADER_BIT = (1 << 11),
+			PIPELINE_STAGE_COPY_BIT = (1 << 12),
+			PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT = (1 << 13),
+			PIPELINE_STAGE_RESOLVE_BIT = (1 << 14),
+			PIPELINE_STAGE_ALL_GRAPHICS_BIT = (1 << 15),
+			PIPELINE_STAGE_ALL_COMMANDS_BIT = (1 << 16),
+			PIPELINE_STAGE_CLEAR_STORAGE_BIT = (1 << 17),
+			PIPELINE_STAGE_RAY_TRACING_SHADER_BIT = (1 << 21),
+			PIPELINE_STAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT = (1 << 22),
+			PIPELINE_STAGE_FRAGMENT_DENSITY_PROCESS_BIT = (1 << 23),
+			PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT = (1 << 25),
+		};
+
+		enum TextureLayout {
+			TEXTURE_LAYOUT_UNDEFINED,
+			TEXTURE_LAYOUT_GENERAL,
+			TEXTURE_LAYOUT_STORAGE_OPTIMAL,
+			TEXTURE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+			TEXTURE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+			TEXTURE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL,
+			TEXTURE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			TEXTURE_LAYOUT_COPY_SRC_OPTIMAL,
+			TEXTURE_LAYOUT_COPY_DST_OPTIMAL,
+			TEXTURE_LAYOUT_RESOLVE_SRC_OPTIMAL,
+			TEXTURE_LAYOUT_RESOLVE_DST_OPTIMAL,
+			TEXTURE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL,
+			TEXTURE_LAYOUT_FRAGMENT_DENSITY_MAP_ATTACHMENT_OPTIMAL,
+			TEXTURE_LAYOUT_MAX
+		};
+
+		enum BarrierAccessBits {
+			BARRIER_ACCESS_INDIRECT_COMMAND_READ_BIT = (1 << 0),
+			BARRIER_ACCESS_INDEX_READ_BIT = (1 << 1),
+			BARRIER_ACCESS_VERTEX_ATTRIBUTE_READ_BIT = (1 << 2),
+			BARRIER_ACCESS_UNIFORM_READ_BIT = (1 << 3),
+			BARRIER_ACCESS_INPUT_ATTACHMENT_READ_BIT = (1 << 4),
+			BARRIER_ACCESS_SHADER_READ_BIT = (1 << 5),
+			BARRIER_ACCESS_SHADER_WRITE_BIT = (1 << 6),
+			BARRIER_ACCESS_COLOR_ATTACHMENT_READ_BIT = (1 << 7),
+			BARRIER_ACCESS_COLOR_ATTACHMENT_WRITE_BIT = (1 << 8),
+			BARRIER_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT = (1 << 9),
+			BARRIER_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT = (1 << 10),
+			BARRIER_ACCESS_COPY_READ_BIT = (1 << 11),
+			BARRIER_ACCESS_COPY_WRITE_BIT = (1 << 12),
+			BARRIER_ACCESS_HOST_READ_BIT = (1 << 13),
+			BARRIER_ACCESS_HOST_WRITE_BIT = (1 << 14),
+			BARRIER_ACCESS_MEMORY_READ_BIT = (1 << 15),
+			BARRIER_ACCESS_MEMORY_WRITE_BIT = (1 << 16),
+			BARRIER_ACCESS_ACCELERATION_STRUCTURE_READ_BIT = (1 << 21),
+			BARRIER_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT = (1 << 22),
+			BARRIER_ACCESS_FRAGMENT_SHADING_RATE_ATTACHMENT_READ_BIT = (1 << 23),
+			BARRIER_ACCESS_FRAGMENT_DENSITY_MAP_ATTACHMENT_READ_BIT = (1 << 24),
+			BARRIER_ACCESS_RESOLVE_READ_BIT = (1 << 25),
+			BARRIER_ACCESS_RESOLVE_WRITE_BIT = (1 << 26),
+			BARRIER_ACCESS_STORAGE_CLEAR_BIT = (1 << 27),
+		};
+
+
 		enum CommandQueueFamilyBits {
 			COMMAND_QUEUE_FAMILY_GRAPHICS_BIT = 0x1,
 			COMMAND_QUEUE_FAMILY_COMPUTE_BIT = 0x2,
@@ -438,6 +508,37 @@ namespace Vulkan
 			std::vector<CommandBufferInfo*> command_buffers_created;
 		};
 
+		// https://github.com/godotengine/godot/pull/110360 - "MemoryBarrier" conflicts with Windows header defines
+		struct MemoryAccessBarrier {
+			BitField<BarrierAccessBits> src_access = {};
+			BitField<BarrierAccessBits> dst_access = {};
+		};
+
+		struct BufferBarrier {
+			BufferID buffer;
+			BitField<BarrierAccessBits> src_access = {};
+			BitField<BarrierAccessBits> dst_access = {};
+			uint64_t offset = 0;
+			uint64_t size = 0;
+		};
+
+		struct TextureBarrier {
+			TextureID texture;
+			BitField<BarrierAccessBits> src_access = {};
+			BitField<BarrierAccessBits> dst_access = {};
+			TextureLayout prev_layout = TEXTURE_LAYOUT_UNDEFINED;
+			TextureLayout next_layout = TEXTURE_LAYOUT_UNDEFINED;
+			TextureSubresourceRange subresources;
+		};
+
+		struct AccelerationStructureBarrier {
+			AccelerationStructureID acceleration_structure;
+			BitField<BarrierAccessBits> src_access;
+			BitField<BarrierAccessBits> dst_access;
+			uint64_t offset = 0;
+			uint64_t size = 0;
+		};
+
 	public:
 
 		static const bool command_pool_reset_enabled = true;
@@ -504,6 +605,8 @@ namespace Vulkan
 		void sampler_free(SamplerID p_sampler);
 
 		bool sampler_is_format_supported_for_filter(DataFormat p_format, SamplerFilter p_filter);
+
+		void command_pipeline_barrier(CommandBufferID p_cmd_buffer, BitField<PipelineStageBits> p_src_stages, BitField<PipelineStageBits> p_dst_stages, std::span<MemoryAccessBarrier> p_memory_barriers, std::span<BufferBarrier> p_buffer_barriers, std::span<TextureBarrier> p_texture_barriers, std::span<AccelerationStructureBarrier> p_acceleration_structure_barriers);
 		
 		Device::SwapChainID swap_chain_create(Context::SurfaceID p_surface);
 

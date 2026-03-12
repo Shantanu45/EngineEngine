@@ -257,6 +257,65 @@ namespace Vulkan
 		return ret;
 	}
 
+	static VkAccessFlags _rd_to_vk_access_flags(BitField<Device::BarrierAccessBits> p_access) {
+		VkAccessFlags vk_flags = 0;
+		if (p_access.has_flag(Device::BARRIER_ACCESS_COPY_READ_BIT) || p_access.has_flag(Device::BARRIER_ACCESS_RESOLVE_READ_BIT)) {
+			vk_flags |= VK_ACCESS_TRANSFER_READ_BIT;
+			p_access.clear_flag(Device::BARRIER_ACCESS_COPY_READ_BIT);
+			p_access.clear_flag(Device::BARRIER_ACCESS_RESOLVE_READ_BIT);
+		}
+
+		if (p_access.has_flag(Device::BARRIER_ACCESS_COPY_WRITE_BIT) || p_access.has_flag(Device::BARRIER_ACCESS_RESOLVE_WRITE_BIT)) {
+			vk_flags |= VK_ACCESS_TRANSFER_WRITE_BIT;
+			p_access.clear_flag(Device::BARRIER_ACCESS_COPY_WRITE_BIT);
+			p_access.clear_flag(Device::BARRIER_ACCESS_RESOLVE_WRITE_BIT);
+		}
+
+		if (p_access.has_flag(Device::BARRIER_ACCESS_STORAGE_CLEAR_BIT)) {
+			// Vulkan should never use this as API_TRAIT_CLEAR_RESOURCES_WITH_VIEWS is not specified.
+			// Therefore, storage is never cleared with an explicit command.
+			p_access.clear_flag(Device::BARRIER_ACCESS_STORAGE_CLEAR_BIT);
+		}
+
+		// The rest of the flags have compatible numeric values with Vulkan.
+		return VkAccessFlags(p_access) | vk_flags;
+	}
+
+	static VkImageLayout RD_TO_VK_LAYOUT[Device::TEXTURE_LAYOUT_MAX] = {
+	VK_IMAGE_LAYOUT_UNDEFINED, // TEXTURE_LAYOUT_UNDEFINED
+	VK_IMAGE_LAYOUT_GENERAL, // TEXTURE_LAYOUT_GENERAL
+	VK_IMAGE_LAYOUT_GENERAL, // TEXTURE_LAYOUT_STORAGE_OPTIMAL
+	VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, // TEXTURE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+	VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, // TEXTURE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+	VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL, // TEXTURE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
+	VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, // TEXTURE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+	VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, // TEXTURE_LAYOUT_COPY_SRC_OPTIMAL
+	VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, // TEXTURE_LAYOUT_COPY_DST_OPTIMAL
+	VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, // TEXTURE_LAYOUT_RESOLVE_SRC_OPTIMAL
+	VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, // TEXTURE_LAYOUT_RESOLVE_DST_OPTIMAL
+	VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR, // TEXTURE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL
+	VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT, // TEXTURE_LAYOUT_FRAGMENT_DENSITY_MAP_ATTACHMENT_OPTIMAL
+	};
+
+	static VkPipelineStageFlags _rd_to_vk_pipeline_stages(BitField<Device::PipelineStageBits> p_stages) {
+		VkPipelineStageFlags vk_flags = 0;
+		if (p_stages.has_flag(Device::PIPELINE_STAGE_COPY_BIT) || p_stages.has_flag(Device::PIPELINE_STAGE_RESOLVE_BIT)) {
+			// Transfer has been split into copy and resolve bits. Clear them and merge them into one bit.
+			vk_flags |= VK_PIPELINE_STAGE_TRANSFER_BIT;
+			p_stages.clear_flag(Device::PIPELINE_STAGE_COPY_BIT);
+			p_stages.clear_flag(Device::PIPELINE_STAGE_RESOLVE_BIT);
+		}
+
+		if (p_stages.has_flag(Device::PIPELINE_STAGE_CLEAR_STORAGE_BIT)) {
+			// Vulkan should never use this as API_TRAIT_CLEAR_RESOURCES_WITH_VIEWS is not specified.
+			// Therefore, storage is never cleared with an explicit command.
+			p_stages.clear_flag(Device::PIPELINE_STAGE_CLEAR_STORAGE_BIT);
+		}
+
+		// The rest of the flags have compatible numeric values with Vulkan.
+		return VkPipelineStageFlags(p_stages) | vk_flags;
+	}
+
 
 #pragma endregion
 
@@ -2500,6 +2559,142 @@ namespace Vulkan
 	}
 
 #pragma endregion
+
+#pragma region Barriers
+	void Device::command_pipeline_barrier(
+		CommandBufferID p_cmd_buffer,
+		BitField<PipelineStageBits> p_src_stages,
+		BitField<PipelineStageBits> p_dst_stages,
+		std::span<MemoryAccessBarrier> p_memory_barriers,
+		std::span<BufferBarrier> p_buffer_barriers,
+		std::span<TextureBarrier> p_texture_barriers,
+		std::span<AccelerationStructureBarrier> p_acceleration_structure_barriers) {
+
+		std::vector<VkMemoryBarrier> vk_mem_barrier_vec(p_memory_barriers.size());
+		VkMemoryBarrier* vk_memory_barriers = vk_mem_barrier_vec.data();
+		for (uint32_t i = 0; i < p_memory_barriers.size(); i++) {
+			vk_memory_barriers[i] = {};
+			vk_memory_barriers[i].sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+			vk_memory_barriers[i].srcAccessMask = _rd_to_vk_access_flags(p_memory_barriers[i].src_access) & ~VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR;
+			vk_memory_barriers[i].dstAccessMask = _rd_to_vk_access_flags(p_memory_barriers[i].dst_access) & ~VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR;
+		}
+		std::vector<VkBufferMemoryBarrier> vk_buffer_vec(p_buffer_barriers.size());
+		VkBufferMemoryBarrier* vk_buffer_barriers = vk_buffer_vec.data();
+		for (uint32_t i = 0; i < p_buffer_barriers.size(); i++) {
+			vk_buffer_barriers[i] = {};
+			vk_buffer_barriers[i].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+			vk_buffer_barriers[i].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			vk_buffer_barriers[i].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			vk_buffer_barriers[i].srcAccessMask = _rd_to_vk_access_flags(p_buffer_barriers[i].src_access) & ~VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR;
+			vk_buffer_barriers[i].dstAccessMask = _rd_to_vk_access_flags(p_buffer_barriers[i].dst_access) & ~VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR;
+			vk_buffer_barriers[i].buffer = ((const BufferInfo*)p_buffer_barriers[i].buffer.id)->vk_buffer;
+			vk_buffer_barriers[i].offset = p_buffer_barriers[i].offset;
+			vk_buffer_barriers[i].size = p_buffer_barriers[i].size;
+		}
+
+		std::vector<VkImageMemoryBarrier> vk_image_barrier_vec(p_texture_barriers.size());
+
+		VkImageMemoryBarrier* vk_image_barriers = vk_image_barrier_vec.data();
+		for (uint32_t i = 0; i < p_texture_barriers.size(); i++) {
+			const TextureInfo* tex_info = (const TextureInfo*)p_texture_barriers[i].texture.id;
+			vk_image_barriers[i] = {};
+			vk_image_barriers[i].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+			vk_image_barriers[i].srcAccessMask = _rd_to_vk_access_flags(p_texture_barriers[i].src_access);
+			vk_image_barriers[i].dstAccessMask = _rd_to_vk_access_flags(p_texture_barriers[i].dst_access);
+			vk_image_barriers[i].oldLayout = RD_TO_VK_LAYOUT[p_texture_barriers[i].prev_layout];
+			vk_image_barriers[i].newLayout = RD_TO_VK_LAYOUT[p_texture_barriers[i].next_layout];
+			vk_image_barriers[i].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			vk_image_barriers[i].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			vk_image_barriers[i].image = tex_info->vk_view_create_info.image;
+			vk_image_barriers[i].subresourceRange.aspectMask = (VkImageAspectFlags)p_texture_barriers[i].subresources.aspect;
+			vk_image_barriers[i].subresourceRange.baseMipLevel = p_texture_barriers[i].subresources.base_mipmap;
+			vk_image_barriers[i].subresourceRange.levelCount = p_texture_barriers[i].subresources.mipmap_count;
+			vk_image_barriers[i].subresourceRange.baseArrayLayer = p_texture_barriers[i].subresources.base_layer;
+			vk_image_barriers[i].subresourceRange.layerCount = p_texture_barriers[i].subresources.layer_count;
+		}
+
+		VkPipelineStageFlags src_stage_flags = _rd_to_vk_pipeline_stages(p_src_stages);
+		VkPipelineStageFlags dst_stage_flags = _rd_to_vk_pipeline_stages(p_dst_stages);
+		VkPipelineStageFlags accel_src_stages = src_stage_flags;
+		VkPipelineStageFlags accel_dst_stages = dst_stage_flags;
+
+		// TODO: acceleration barriers
+		//std::vector<VkBufferMemoryBarrier> vk_accel_barrier_vec(p_acceleration_structure_barriers.size());
+		//VkBufferMemoryBarrier* vk_accel_barriers = vk_accel_barrier_vec.data();
+		//for (uint32_t i = 0; i < p_acceleration_structure_barriers.size(); i++) {
+		//	// If the rayQuery feature is not enabled and a memory barrier srcAccessMask includes
+		//	// VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR, srcStageMask must not include any of the
+		//	// VK_PIPELINE_STAGE_*_SHADER_BIT stages except VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR
+		//	VkAccessFlags src_access = _rd_to_vk_access_flags(p_acceleration_structure_barriers[i].src_access);
+		//	if ((src_access & VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR) != 0) {
+		//		accel_src_stages &= ~(VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+		//	}
+
+		//	// If the rayQuery feature is not enabled and a memory barrier dstAccessMask includes
+		//	// VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR, dstStageMask must not include any of the
+		//	// VK_PIPELINE_STAGE_*_SHADER_BIT stages except VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR
+		//	VkAccessFlags dst_access = _rd_to_vk_access_flags(p_acceleration_structure_barriers[i].dst_access);
+		//	if ((dst_access & VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR) != 0) {
+		//		accel_dst_stages &= ~(VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+		//	}
+
+		//	const AccelerationStructureInfo* accel_info = (const AccelerationStructureInfo*)p_acceleration_structure_barriers[i].acceleration_structure.id;
+		//	vk_accel_barriers[i] = {};
+		//	vk_accel_barriers[i].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+		//	vk_accel_barriers[i].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		//	vk_accel_barriers[i].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		//	vk_accel_barriers[i].srcAccessMask = src_access;
+		//	vk_accel_barriers[i].dstAccessMask = dst_access;
+		//	vk_accel_barriers[i].buffer = ((const BufferInfo*)accel_info->buffer.id)->vk_buffer;
+		//	vk_accel_barriers[i].offset = p_acceleration_structure_barriers[i].offset;
+		//	vk_accel_barriers[i].size = p_acceleration_structure_barriers[i].size;
+		//}
+
+#if PRINT_NATIVE_COMMANDS
+		LOGI(std::format("vkCmdPipelineBarrier MEMORY %d BUFFER %d TEXTURE %d ACCELERATION STRUCTURE %d", p_memory_barriers.size(), p_buffer_barriers.size(), p_texture_barriers.size(), p_acceleration_structure_barriers.size()));
+		for (uint32_t i = 0; i < p_memory_barriers.size(); i++) {
+			LOGI(std::format("  VkMemoryBarrier #%d src 0x%uX dst 0x%uX", i, vk_memory_barriers[i].srcAccessMask, vk_memory_barriers[i].dstAccessMask));
+		}
+
+		for (uint32_t i = 0; i < p_buffer_barriers.size(); i++) {
+			LOGI(std::format("  VkBufferMemoryBarrier #%d src 0x%uX dst 0x%uX buffer 0x%ux", i, vk_buffer_barriers[i].srcAccessMask, vk_buffer_barriers[i].dstAccessMask, uint64_t(vk_buffer_barriers[i].buffer)));
+		}
+
+		for (uint32_t i = 0; i < p_texture_barriers.size(); i++) {
+			LOGI(std::format("  VkImageMemoryBarrier #%d src 0x%uX dst 0x%uX image 0x%ux old %d new %d (%d %d %d %d)", i, vk_image_barriers[i].srcAccessMask, vk_image_barriers[i].dstAccessMask,
+				uint64_t(vk_image_barriers[i].image), vk_image_barriers[i].oldLayout, vk_image_barriers[i].newLayout, vk_image_barriers[i].subresourceRange.baseMipLevel, vk_image_barriers[i].subresourceRange.levelCount,
+				vk_image_barriers[i].subresourceRange.baseArrayLayer, vk_image_barriers[i].subresourceRange.layerCount));
+		}
+
+		for (uint32_t i = 0; i < p_acceleration_structure_barriers.size(); i++) {
+			LOGI(std::format("  VkBufferMemoryBarrier #%d src 0x%uX dst 0x%uX acceleration structure buffer 0x%ux", i, vk_accel_barriers[i].srcAccessMask, vk_accel_barriers[i].dstAccessMask, uint64_t(vk_accel_barriers[i].buffer)));
+		}
+#endif
+
+		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
+		vkCmdPipelineBarrier(
+			command_buffer->vk_command_buffer,
+			src_stage_flags,
+			dst_stage_flags,
+			0,
+			p_memory_barriers.size(), vk_memory_barriers,
+			p_buffer_barriers.size(), vk_buffer_barriers,
+			p_texture_barriers.size(), vk_image_barriers);
+
+		/*if (p_acceleration_structure_barriers.size() > 0) {
+			vkCmdPipelineBarrier(
+				command_buffer->vk_command_buffer,
+				accel_src_stages,
+				accel_dst_stages,
+				0,
+				0, nullptr,
+				p_acceleration_structure_barriers.size(), vk_accel_barriers,
+				0, nullptr);
+		}*/
+	}
+
+#pragma endregion
+
 
 #pragma region Command
 
