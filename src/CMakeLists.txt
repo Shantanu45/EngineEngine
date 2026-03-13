@@ -19,13 +19,14 @@ add_subdirectory(application)
 add_subdirectory(event)
 add_subdirectory(input)
 add_subdirectory(vulkan)
+add_subdirectory(math)
 
 setup_msvc_options(${PROJECT_NAME})
 
 find_package(SDL3 REQUIRED)
 find_package(VulkanMemoryAllocator REQUIRED)
 find_package(glm REQUIRED)
-
+find_package(xxHash REQUIRED)
 
 set(INCLUDES 
 	"${PROJECT_SOURCE_DIR}/src"
@@ -49,6 +50,7 @@ set(ADDITIONAL_LIBRARY_DEPENDENCIES
 	vulkan
 	GPUOpen::VulkanMemoryAllocator
 	glm::glm
+	xxHash::xxhash
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE "${ADDITIONAL_LIBRARY_DEPENDENCIES}")

@@ -5,6 +5,9 @@
 #include "vma/vk_mem_alloc.h"
 #include "util/typedefs.h"
 #include "util/bit_field.h"
+#include "re-spirv/re-spirv.h"
+#include "math/rect2i.h"
+
 
 namespace Vulkan
 {
@@ -143,10 +146,160 @@ namespace Vulkan
 			SAMPLER_BORDER_COLOR_MAX
 		};
 
-
 		enum CommandBufferType {
 			COMMAND_BUFFER_TYPE_PRIMARY,
 			COMMAND_BUFFER_TYPE_SECONDARY,
+		};
+
+		enum AttachmentLoadOp {
+			ATTACHMENT_LOAD_OP_LOAD = 0,
+			ATTACHMENT_LOAD_OP_CLEAR = 1,
+			ATTACHMENT_LOAD_OP_DONT_CARE = 2,
+		};
+
+		enum AttachmentStoreOp {
+			ATTACHMENT_STORE_OP_STORE = 0,
+			ATTACHMENT_STORE_OP_DONT_CARE = 1,
+		};
+
+		enum PolygonCullMode {
+			POLYGON_CULL_DISABLED,
+			POLYGON_CULL_FRONT,
+			POLYGON_CULL_BACK,
+			POLYGON_CULL_MAX
+		};
+
+		enum PolygonFrontFace {
+			POLYGON_FRONT_FACE_CLOCKWISE,
+			POLYGON_FRONT_FACE_COUNTER_CLOCKWISE,
+		};
+
+		enum StencilOperation {
+			STENCIL_OP_KEEP,
+			STENCIL_OP_ZERO,
+			STENCIL_OP_REPLACE,
+			STENCIL_OP_INCREMENT_AND_CLAMP,
+			STENCIL_OP_DECREMENT_AND_CLAMP,
+			STENCIL_OP_INVERT,
+			STENCIL_OP_INCREMENT_AND_WRAP,
+			STENCIL_OP_DECREMENT_AND_WRAP,
+			STENCIL_OP_MAX
+		};
+
+		enum LogicOperation {
+			LOGIC_OP_CLEAR,
+			LOGIC_OP_AND,
+			LOGIC_OP_AND_REVERSE,
+			LOGIC_OP_COPY,
+			LOGIC_OP_AND_INVERTED,
+			LOGIC_OP_NO_OP,
+			LOGIC_OP_XOR,
+			LOGIC_OP_OR,
+			LOGIC_OP_NOR,
+			LOGIC_OP_EQUIVALENT,
+			LOGIC_OP_INVERT,
+			LOGIC_OP_OR_REVERSE,
+			LOGIC_OP_COPY_INVERTED,
+			LOGIC_OP_OR_INVERTED,
+			LOGIC_OP_NAND,
+			LOGIC_OP_SET,
+			LOGIC_OP_MAX
+		};
+
+		enum BlendFactor {
+			BLEND_FACTOR_ZERO,
+			BLEND_FACTOR_ONE,
+			BLEND_FACTOR_SRC_COLOR,
+			BLEND_FACTOR_ONE_MINUS_SRC_COLOR,
+			BLEND_FACTOR_DST_COLOR,
+			BLEND_FACTOR_ONE_MINUS_DST_COLOR,
+			BLEND_FACTOR_SRC_ALPHA,
+			BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+			BLEND_FACTOR_DST_ALPHA,
+			BLEND_FACTOR_ONE_MINUS_DST_ALPHA,
+			BLEND_FACTOR_CONSTANT_COLOR,
+			BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR,
+			BLEND_FACTOR_CONSTANT_ALPHA,
+			BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA,
+			BLEND_FACTOR_SRC_ALPHA_SATURATE,
+			BLEND_FACTOR_SRC1_COLOR,
+			BLEND_FACTOR_ONE_MINUS_SRC1_COLOR,
+			BLEND_FACTOR_SRC1_ALPHA,
+			BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA,
+			BLEND_FACTOR_MAX
+		};
+
+		enum BlendOperation {
+			BLEND_OP_ADD,
+			BLEND_OP_SUBTRACT,
+			BLEND_OP_REVERSE_SUBTRACT,
+			BLEND_OP_MINIMUM,
+			BLEND_OP_MAXIMUM, // Yes, this one is an actual operator.
+			BLEND_OP_MAX
+		};
+
+		enum PipelineDynamicStateFlags {
+			DYNAMIC_STATE_LINE_WIDTH = (1 << 0),
+			DYNAMIC_STATE_DEPTH_BIAS = (1 << 1),
+			DYNAMIC_STATE_BLEND_CONSTANTS = (1 << 2),
+			DYNAMIC_STATE_DEPTH_BOUNDS = (1 << 3),
+			DYNAMIC_STATE_STENCIL_COMPARE_MASK = (1 << 4),
+			DYNAMIC_STATE_STENCIL_WRITE_MASK = (1 << 5),
+			DYNAMIC_STATE_STENCIL_REFERENCE = (1 << 6),
+		};
+
+		enum PipelineSpecializationConstantType {
+			PIPELINE_SPECIALIZATION_CONSTANT_TYPE_BOOL,
+			PIPELINE_SPECIALIZATION_CONSTANT_TYPE_INT,
+			PIPELINE_SPECIALIZATION_CONSTANT_TYPE_FLOAT,
+		};
+
+		enum ShaderStage {
+			SHADER_STAGE_VERTEX,
+			SHADER_STAGE_FRAGMENT,
+			SHADER_STAGE_TESSELATION_CONTROL,
+			SHADER_STAGE_TESSELATION_EVALUATION,
+			SHADER_STAGE_COMPUTE,
+			SHADER_STAGE_RAYGEN,
+			SHADER_STAGE_ANY_HIT,
+			SHADER_STAGE_CLOSEST_HIT,
+			SHADER_STAGE_MISS,
+			SHADER_STAGE_INTERSECTION,
+			SHADER_STAGE_MAX,
+			SHADER_STAGE_VERTEX_BIT = (1 << SHADER_STAGE_VERTEX),
+			SHADER_STAGE_FRAGMENT_BIT = (1 << SHADER_STAGE_FRAGMENT),
+			SHADER_STAGE_TESSELATION_CONTROL_BIT = (1 << SHADER_STAGE_TESSELATION_CONTROL),
+			SHADER_STAGE_TESSELATION_EVALUATION_BIT = (1 << SHADER_STAGE_TESSELATION_EVALUATION),
+			SHADER_STAGE_COMPUTE_BIT = (1 << SHADER_STAGE_COMPUTE),
+			SHADER_STAGE_RAYGEN_BIT = (1 << SHADER_STAGE_RAYGEN),
+			SHADER_STAGE_ANY_HIT_BIT = (1 << SHADER_STAGE_ANY_HIT),
+			SHADER_STAGE_CLOSEST_HIT_BIT = (1 << SHADER_STAGE_CLOSEST_HIT),
+			SHADER_STAGE_MISS_BIT = (1 << SHADER_STAGE_MISS),
+			SHADER_STAGE_INTERSECTION_BIT = (1 << SHADER_STAGE_INTERSECTION),
+		};
+
+		enum ShaderLanguage {
+			SHADER_LANGUAGE_GLSL,
+			SHADER_LANGUAGE_HLSL,
+		};
+
+		enum ShaderLanguageVersion {
+			SHADER_LANGUAGE_VULKAN_VERSION_1_0 = (1 << 22),
+			SHADER_LANGUAGE_VULKAN_VERSION_1_1 = (1 << 22) | (1 << 12),
+			SHADER_LANGUAGE_VULKAN_VERSION_1_2 = (1 << 22) | (2 << 12),
+			SHADER_LANGUAGE_VULKAN_VERSION_1_3 = (1 << 22) | (3 << 12),
+			SHADER_LANGUAGE_VULKAN_VERSION_1_4 = (1 << 22) | (4 << 12),
+			SHADER_LANGUAGE_OPENGL_VERSION_4_5_0 = 450,
+		};
+
+		enum ShaderSpirvVersion {
+			SHADER_SPIRV_VERSION_1_0 = (1 << 16),
+			SHADER_SPIRV_VERSION_1_1 = (1 << 16) | (1 << 8),
+			SHADER_SPIRV_VERSION_1_2 = (1 << 16) | (2 << 8),
+			SHADER_SPIRV_VERSION_1_3 = (1 << 16) | (3 << 8),
+			SHADER_SPIRV_VERSION_1_4 = (1 << 16) | (4 << 8),
+			SHADER_SPIRV_VERSION_1_5 = (1 << 16) | (5 << 8),
+			SHADER_SPIRV_VERSION_1_6 = (1 << 16) | (6 << 8),
 		};
 
 	public:
@@ -224,6 +377,21 @@ namespace Vulkan
 			COMMAND_QUEUE_FAMILY_GRAPHICS_BIT = 0x1,
 			COMMAND_QUEUE_FAMILY_COMPUTE_BIT = 0x2,
 			COMMAND_QUEUE_FAMILY_TRANSFER_BIT = 0x4
+		};
+
+		enum RenderPrimitive {
+			RENDER_PRIMITIVE_POINTS,
+			RENDER_PRIMITIVE_LINES,
+			RENDER_PRIMITIVE_LINES_WITH_ADJACENCY,
+			RENDER_PRIMITIVE_LINESTRIPS,
+			RENDER_PRIMITIVE_LINESTRIPS_WITH_ADJACENCY,
+			RENDER_PRIMITIVE_TRIANGLES,
+			RENDER_PRIMITIVE_TRIANGLES_WITH_ADJACENCY,
+			RENDER_PRIMITIVE_TRIANGLE_STRIPS,
+			RENDER_PRIMITIVE_TRIANGLE_STRIPS_WITH_AJACENCY, // TODO: Fix typo in "ADJACENCY" (in 5.0).
+			RENDER_PRIMITIVE_TRIANGLE_STRIPS_WITH_RESTART_INDEX,
+			RENDER_PRIMITIVE_TESSELATION_PATCH,
+			RENDER_PRIMITIVE_MAX
 		};
 
 	private:
@@ -539,9 +707,205 @@ namespace Vulkan
 			uint64_t size = 0;
 		};
 
+		struct ShaderInfo {
+			std::string name;
+			VkShaderStageFlags vk_push_constant_stages = 0;
+			std::vector<VkPipelineShaderStageCreateInfo> vk_stages_create_info;
+			std::vector<VkRayTracingShaderGroupCreateInfoKHR> vk_groups_create_info;
+			std::vector<VkDescriptorSetLayout> vk_descriptor_set_layouts;
+			std::vector<respv::Shader> respv_stage_shaders;
+			std::vector<std::vector<uint8_t>> spirv_stage_bytes;
+			std::vector<uint64_t> original_stage_size;
+			VkPipelineLayout vk_pipeline_layout = VK_NULL_HANDLE;
+			// Used to update the shader binding table buffer.
+			//RaytracingShaderRegionCount region_count;
+		};
+
+		struct Attachment {
+			DataFormat format = DATA_FORMAT_MAX;
+			TextureSamples samples = TEXTURE_SAMPLES_MAX;
+			AttachmentLoadOp load_op = ATTACHMENT_LOAD_OP_DONT_CARE;
+			AttachmentStoreOp store_op = ATTACHMENT_STORE_OP_DONT_CARE;
+			AttachmentLoadOp stencil_load_op = ATTACHMENT_LOAD_OP_DONT_CARE;
+			AttachmentStoreOp stencil_store_op = ATTACHMENT_STORE_OP_DONT_CARE;
+			TextureLayout initial_layout = TEXTURE_LAYOUT_UNDEFINED;
+			TextureLayout final_layout = TEXTURE_LAYOUT_UNDEFINED;
+		};
+
+		struct ShaderStageSPIRVData {
+			ShaderStage shader_stage = SHADER_STAGE_MAX;
+			std::vector<uint8_t> spirv;
+			std::vector<uint64_t> dynamic_buffers;
+		};
+
+		struct VertexFormatInfo {
+			std::vector<VkVertexInputBindingDescription> vk_bindings;
+			std::vector<VkVertexInputAttributeDescription> vk_attributes;
+			VkPipelineVertexInputStateCreateInfo vk_create_info = {};
+		};
+
+		union RenderPassClearValue {
+			Color color = {};
+			struct {
+				float depth;
+				uint32_t stencil;
+			};
+
+			RenderPassClearValue() {}
+		};
+
+		struct AttachmentClear {
+			BitField<TextureAspectBits> aspect = {};
+			uint32_t color_attachment = 0xffffffff;
+			RenderPassClearValue value;
+		};
+	public:
+
+		struct AttachmentReference {
+			static constexpr uint32_t UNUSED = 0xffffffff;
+			uint32_t attachment = UNUSED;
+			TextureLayout layout = TEXTURE_LAYOUT_UNDEFINED;
+			BitField<TextureAspectBits> aspect = {};
+		};
+
+	private:
+
+		struct Subpass {
+			std::vector<AttachmentReference> input_references;
+			std::vector<AttachmentReference> color_references;
+			AttachmentReference depth_stencil_reference;
+			AttachmentReference depth_resolve_reference;
+			std::vector<AttachmentReference> resolve_references;
+			std::vector<uint32_t> preserve_attachments;
+			AttachmentReference fragment_shading_rate_reference;
+			Size2i fragment_shading_rate_texel_size;
+		};
+
+		struct SubpassDependency {
+			uint32_t src_subpass = 0xffffffff;
+			uint32_t dst_subpass = 0xffffffff;
+			BitField<PipelineStageBits> src_stages = {};
+			BitField<PipelineStageBits> dst_stages = {};
+			BitField<BarrierAccessBits> src_access = {};
+			BitField<BarrierAccessBits> dst_access = {};
+		};
+
+		struct PipelineRasterizationState {
+			bool enable_depth_clamp = false;
+			bool discard_primitives = false;
+			bool wireframe = false;
+			PolygonCullMode cull_mode = POLYGON_CULL_DISABLED;
+			PolygonFrontFace front_face = POLYGON_FRONT_FACE_CLOCKWISE;
+			bool depth_bias_enabled = false;
+			float depth_bias_constant_factor = 0.0f;
+			float depth_bias_clamp = 0.0f;
+			float depth_bias_slope_factor = 0.0f;
+			float line_width = 1.0f;
+			uint32_t patch_control_points = 1;
+		};
+
+		struct PipelineMultisampleState {
+			TextureSamples sample_count = TEXTURE_SAMPLES_1;
+			bool enable_sample_shading = false;
+			float min_sample_shading = 0.0f;
+			std::vector<uint32_t> sample_mask;
+			bool enable_alpha_to_coverage = false;
+			bool enable_alpha_to_one = false;
+		};
+
+		struct PipelineDepthStencilState {
+			bool enable_depth_test = false;
+			bool enable_depth_write = false;
+			CompareOperator depth_compare_operator = COMPARE_OP_ALWAYS;
+			bool enable_depth_range = false;
+			float depth_range_min = 0;
+			float depth_range_max = 0;
+			bool enable_stencil = false;
+
+			struct StencilOperationState {
+				StencilOperation fail = STENCIL_OP_ZERO;
+				StencilOperation pass = STENCIL_OP_ZERO;
+				StencilOperation depth_fail = STENCIL_OP_ZERO;
+				CompareOperator compare = COMPARE_OP_ALWAYS;
+				uint32_t compare_mask = 0;
+				uint32_t write_mask = 0;
+				uint32_t reference = 0;
+			};
+
+			StencilOperationState front_op;
+			StencilOperationState back_op;
+		};
+
+		struct PipelineColorBlendState {
+			bool enable_logic_op = false;
+			LogicOperation logic_op = LOGIC_OP_CLEAR;
+
+			struct Attachment {
+				bool enable_blend = false;
+				BlendFactor src_color_blend_factor = BLEND_FACTOR_ZERO;
+				BlendFactor dst_color_blend_factor = BLEND_FACTOR_ZERO;
+				BlendOperation color_blend_op = BLEND_OP_ADD;
+				BlendFactor src_alpha_blend_factor = BLEND_FACTOR_ZERO;
+				BlendFactor dst_alpha_blend_factor = BLEND_FACTOR_ZERO;
+				BlendOperation alpha_blend_op = BLEND_OP_ADD;
+				bool write_r = true;
+				bool write_g = true;
+				bool write_b = true;
+				bool write_a = true;
+			};
+
+			static PipelineColorBlendState create_disabled(int p_attachments = 1) {
+				PipelineColorBlendState bs;
+				for (int i = 0; i < p_attachments; i++) {
+					bs.attachments.push_back(Attachment());
+				}
+				return bs;
+			}
+
+			static PipelineColorBlendState create_blend(int p_attachments = 1) {
+				PipelineColorBlendState bs;
+				for (int i = 0; i < p_attachments; i++) {
+					Attachment ba;
+					ba.enable_blend = true;
+					ba.src_color_blend_factor = BLEND_FACTOR_SRC_ALPHA;
+					ba.dst_color_blend_factor = BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+					ba.src_alpha_blend_factor = BLEND_FACTOR_SRC_ALPHA;
+					ba.dst_alpha_blend_factor = BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+
+					bs.attachments.push_back(ba);
+				}
+				return bs;
+			}
+
+			std::vector<Attachment> attachments; // One per render target texture.
+			Color blend_constant;
+		};
+
+		struct PipelineSpecializationConstant {
+			PipelineSpecializationConstantType type = {};
+			uint32_t constant_id = 0xffffffff;
+			union {
+				uint32_t int_value = 0;
+				float float_value;
+				bool bool_value;
+			};
+		};
+
+		struct ShaderSpecializationConstant : public PipelineSpecializationConstant {
+			BitField<ShaderStage> stages = {};
+
+			bool operator<(const ShaderSpecializationConstant& p_other) const { return constant_id < p_other.constant_id; }
+		};
+
+
+
 	public:
 
 		static const bool command_pool_reset_enabled = true;
+
+		static int caching_instance_count;
+
+		static const int32_t ATTACHMENT_UNUSED = -1;
 
 		Device(Context* p_context_driver);
 		virtual ~Device() = default;
@@ -664,7 +1028,27 @@ namespace Vulkan
 
 		void framebuffer_free(FramebufferID p_framebuffer);
 
+		void pipeline_free(PipelineID p_pipeline);
+
+		void command_bind_push_constants(CommandBufferID p_cmd_buffer, ShaderID p_shader, uint32_t p_dst_first_index, std::span<uint32_t> p_data);
+
+		bool pipeline_cache_create(const std::vector<uint8_t>& p_data);
+
+		void pipeline_cache_free();
+
+		size_t pipeline_cache_query_size();
+
+		std::vector<uint8_t> pipeline_cache_serialize();
+
+		Device::RenderPassID render_pass_create(std::span<Attachment> p_attachments, std::span<Subpass> p_subpasses, std::span<SubpassDependency> p_subpass_dependencies, uint32_t p_view_count, AttachmentReference p_fragment_density_map_attachment);
+
 		void render_pass_free(RenderPassID p_render_pass);
+
+		void command_begin_render_pass(CommandBufferID p_cmd_buffer, RenderPassID p_render_pass, FramebufferID p_framebuffer, CommandBufferType p_cmd_buffer_type, const Rect2i& p_rect, std::vector<RenderPassClearValue> p_clear_values);
+
+		void command_end_render_pass(CommandBufferID p_cmd_buffer);
+
+		Device::PipelineID render_pipeline_create(ShaderID p_shader, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, PipelineRasterizationState p_rasterization_state, PipelineMultisampleState p_multisample_state, PipelineDepthStencilState p_depth_stencil_state, PipelineColorBlendState p_blend_state, std::span<int32_t> p_color_attachments, BitField<PipelineDynamicStateFlags> p_dynamic_state, RenderPassID p_render_pass, uint32_t p_render_subpass, std::span<PipelineSpecializationConstant> p_specialization_constants);
 
 		void print_lost_device_info();
 

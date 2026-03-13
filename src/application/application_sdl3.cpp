@@ -7,7 +7,6 @@
 #include "util/timer.h"
 #include "volk.h"
 #include "input/input.h"
-#include "vulkan/vulkan_context.h"
 #include "vulkan/wsi.h"
 
 namespace EE
@@ -33,6 +32,8 @@ namespace EE
 
 		bool init(const std::string& name, unsigned width_, unsigned height_)
 		{
+			request_tear_down.store(false);
+
 			width = width_;
 			height = height_;
 
@@ -111,7 +112,20 @@ namespace EE
 				break;
 			}
 
+			if (input->just_released(Key::Escape))
+			{
+				SDL_Event quit_event;
+				quit_event.type = SDL_EVENT_QUIT;
+				SDL_PushEvent(&quit_event);
+			}
+
 			return true;
+		}
+
+		void poll_input() override
+		{
+			if (/*!options.threaded && */!iterate_message_loop())
+				request_tear_down = true;
 		}
 
 		void run_message_loop()
@@ -148,7 +162,7 @@ namespace EE
 
 		void run_loop(Application* app)
 		{
-			run_message_loop();
+			thread_main(app);
 		}
 
 		std::vector<const char*> get_instance_extensions() override
@@ -181,11 +195,33 @@ namespace EE
 		{
 			return height;
 		}
+
+		void thread_main(Application* app/*, Global::GlobalManagersHandle ctx*/)
+		{
+			while (app->poll())
+				app->run_frame();
+		}
+
+		bool alive(Vulkan::WSI&) override
+		{
+			//std::lock_guard<std::mutex> holder{ get_input_tracker().get_lock() };
+			//flush_deferred_input_events();
+			//process_events_async_thread();
+			//process_events_async_thread_non_pollable();
+			return !request_tear_down.load();
+		}
+
+		void notify_close()
+		{
+			request_tear_down.store(true);
+		}
 	
 	private:
 		std::unique_ptr<InputSystem> input;
 		uint32_t wake_event_type = 0;
 		bool async_loop_alive = true;  // TODO:
+
+		std::atomic_bool request_tear_down;
 
 		SDL_Window* window = nullptr;
 		unsigned width = 0;

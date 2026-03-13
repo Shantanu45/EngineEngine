@@ -114,6 +114,7 @@ find_package(libassert REQUIRED)
 add_subdirectory(src)
 add_subdirectory(test)
 add_subdirectory(${PROJECT_SOURCE_DIR}/third_party/volk)
+add_subdirectory(${PROJECT_SOURCE_DIR}/third_party/re-spirv)
 
 ################################################################################
 # Set startup project

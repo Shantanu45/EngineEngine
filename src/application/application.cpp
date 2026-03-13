@@ -83,11 +83,18 @@ namespace EE
 
 	bool Application::poll()
 	{
-		return false;
+		auto& wsi = get_wsi();
+		if (!get_platform().alive(wsi))
+			return false;
+		return true;
 	}
 
 	void Application::run_frame()
 	{
+		if (!application_wsi.begin_frame())
+		{
+			return;
+		}
 	}
 
 	void Application::check_initialization_progress()

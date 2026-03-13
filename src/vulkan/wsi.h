@@ -6,6 +6,8 @@
 
 namespace Vulkan
 {
+	class WSI;
+
 	class WSIPlatform
 	{
 	public:
@@ -20,6 +22,8 @@ namespace Vulkan
 
 		virtual uint32_t get_surface_width() = 0;
 		virtual uint32_t get_surface_height() = 0;
+		virtual bool alive(WSI& wsi) = 0;
+		virtual void poll_input() = 0;
 
 	protected:
 		unsigned current_swapchain_width = 0;
@@ -35,6 +39,8 @@ namespace Vulkan
 
 		bool init_context();
 		bool init_device();
+		bool begin_frame();
+		bool end_frame();
 
 	private:
 		WSIPlatform* platform = nullptr;
@@ -43,6 +49,8 @@ namespace Vulkan
 		std::unique_ptr<Device> device_ptr = nullptr;
 
 		Context::SurfaceID surface;
+
+		uint32_t frame_count = 0;
 
 	};
 }

@@ -15,6 +15,8 @@ add_definitions(-DNOMINMAX)
 find_package(SDL3 REQUIRED)
 find_package(glm REQUIRED)
 find_package(VulkanMemoryAllocator REQUIRED)
+find_package(shaderc REQUIRED)
+find_package(xxHash REQUIRED)
 
 set(INCLUDES 
 	"${PROJECT_SOURCE_DIR}/src"
@@ -29,6 +31,9 @@ set(ADDITIONAL_LIBRARY_DEPENDENCIES
 	glm::glm
 	volk::volk
 	GPUOpen::VulkanMemoryAllocator
+	shaderc::shaderc
+	re-spirv
+	xxHash::xxhash
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE ${ADDITIONAL_LIBRARY_DEPENDENCIES})

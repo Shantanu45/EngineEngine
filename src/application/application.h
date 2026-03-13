@@ -2,8 +2,6 @@
 #include <memory>
 #include <string>
 #include "util/logger.h"
-#include "vulkan/vulkan_context.h"
-#include "vulkan/vulkan_device.h"
 #include "vulkan/wsi.h"
 
 namespace EE
@@ -42,6 +40,16 @@ namespace EE
 		virtual unsigned get_default_height()
 		{
 			return 720;
+		}
+
+		Vulkan::WSI& get_wsi()
+		{
+			return application_wsi;
+		}
+
+		Vulkan::WSIPlatform& get_platform()
+		{
+			return *platform;
 		}
 
 		bool poll();
