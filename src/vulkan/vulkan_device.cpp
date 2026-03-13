@@ -2560,6 +2560,47 @@ namespace Vulkan
 
 #pragma endregion
 
+#pragma region Vertex Arrays
+
+	Device::VertexFormatID Device::vertex_format_create(std::span<VertexAttribute> p_vertex_attribs, const VertexAttributeBindingsMap& p_vertex_bindings) {
+		// Pre-bookkeep.
+		VertexFormatInfo* vf_info = new VertexFormatInfo;
+
+		vf_info->vk_bindings.reserve(p_vertex_bindings.size());
+		for (const auto& E : p_vertex_bindings) {
+			const VertexAttributeBinding& binding = E.second;
+			VkVertexInputBindingDescription vk_binding = {};
+			vk_binding.binding = E.first;
+			vk_binding.stride = binding.stride;
+			vk_binding.inputRate = binding.frequency == VERTEX_FREQUENCY_INSTANCE ? VK_VERTEX_INPUT_RATE_INSTANCE : VK_VERTEX_INPUT_RATE_VERTEX;
+			vf_info->vk_bindings.push_back(vk_binding);
+		}
+		vf_info->vk_attributes.resize(p_vertex_attribs.size());
+		for (uint32_t i = 0; i < p_vertex_attribs.size(); i++) {
+			vf_info->vk_attributes[i] = {};
+			vf_info->vk_attributes[i].binding = p_vertex_attribs[i].binding;
+			vf_info->vk_attributes[i].location = p_vertex_attribs[i].location;
+			vf_info->vk_attributes[i].format = RD_TO_VK_FORMAT[p_vertex_attribs[i].format];
+			vf_info->vk_attributes[i].offset = p_vertex_attribs[i].offset;
+		}
+
+		vf_info->vk_create_info = {};
+		vf_info->vk_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+		vf_info->vk_create_info.vertexBindingDescriptionCount = vf_info->vk_bindings.size();
+		vf_info->vk_create_info.pVertexBindingDescriptions = vf_info->vk_bindings.data();
+		vf_info->vk_create_info.vertexAttributeDescriptionCount = vf_info->vk_attributes.size();
+		vf_info->vk_create_info.pVertexAttributeDescriptions = vf_info->vk_attributes.data();
+
+		return VertexFormatID(vf_info);
+	}
+
+	void Device::vertex_format_free(VertexFormatID p_vertex_format) {
+		VertexFormatInfo* vf_info = (VertexFormatInfo*)p_vertex_format.id;
+		delete vf_info;
+	}
+
+#pragma endregion
+
 #pragma region Barriers
 
 	void Device::command_pipeline_barrier(

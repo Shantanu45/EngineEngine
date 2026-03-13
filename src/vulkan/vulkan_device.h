@@ -297,6 +297,16 @@ namespace Vulkan
 			SHADER_SPIRV_VERSION_1_6 = (1 << 16) | (6 << 8),
 		};
 
+		enum IndexBufferFormat {
+			INDEX_BUFFER_FORMAT_UINT16,
+			INDEX_BUFFER_FORMAT_UINT32,
+		};
+
+		enum VertexFrequency {
+			VERTEX_FREQUENCY_VERTEX,
+			VERTEX_FREQUENCY_INSTANCE,
+		};
+
 	public:
 		enum CommandBufferType {
 			COMMAND_BUFFER_TYPE_PRIMARY,
@@ -394,7 +404,49 @@ namespace Vulkan
 			RENDER_PRIMITIVE_MAX
 		};
 
+		static const uint32_t MAX_UNIFORM_SETS = 16;
+
+		// Keep the enum values in sync with the `SHADER_UNIFORM_NAMES` values (file rendering_device.cpp).
+		enum UniformType {
+			UNIFORM_TYPE_SAMPLER, // For sampling only (sampler GLSL type).
+			UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, // For sampling only, but includes a texture, (samplerXX GLSL type), first a sampler then a texture.
+			UNIFORM_TYPE_TEXTURE, // Only texture, (textureXX GLSL type).
+			UNIFORM_TYPE_IMAGE, // Storage image (imageXX GLSL type), for compute mostly.
+			UNIFORM_TYPE_TEXTURE_BUFFER, // Buffer texture (or TBO, textureBuffer type).
+			UNIFORM_TYPE_SAMPLER_WITH_TEXTURE_BUFFER, // Buffer texture with a sampler(or TBO, samplerBuffer type).
+			UNIFORM_TYPE_IMAGE_BUFFER, // Texel buffer, (imageBuffer type), for compute mostly.
+			UNIFORM_TYPE_UNIFORM_BUFFER, // Regular uniform buffer (or UBO).
+			UNIFORM_TYPE_STORAGE_BUFFER, // Storage buffer ("buffer" qualifier) like UBO, but supports storage, for compute mostly.
+			UNIFORM_TYPE_INPUT_ATTACHMENT, // Used for sub-pass read/write, for mobile mostly.
+			UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC, // Same as UNIFORM but created with BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT.
+			UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC, // Same as STORAGE but created with BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT.
+			UNIFORM_TYPE_ACCELERATION_STRUCTURE, // Bounding Volume Hierarchy (Top + Bottom Level acceleration structures), for raytracing only.
+			UNIFORM_TYPE_MAX
+		};
+
 	private:
+
+		struct VertexAttribute {
+			uint32_t binding = UINT32_MAX; // Attribute buffer binding index. When set to UINT32_MAX, it uses the index of the attribute in the layout.
+			uint32_t location = 0; // Shader location.
+			uint32_t offset = 0;
+			DataFormat format = DATA_FORMAT_MAX;
+			uint32_t stride = 0;
+			VertexFrequency frequency = VERTEX_FREQUENCY_VERTEX;
+		};
+
+		struct VertexAttributeBinding {
+			uint32_t stride = 0;
+			VertexFrequency frequency = VERTEX_FREQUENCY_VERTEX;
+
+			VertexAttributeBinding() = default;
+			VertexAttributeBinding(uint32_t p_stride, VertexFrequency p_frequency) :
+				stride(p_stride),
+				frequency(p_frequency) {
+			}
+		};
+
+		using VertexAttributeBindingsMap = std::unordered_map<uint32_t, VertexAttributeBinding>;
 
 		struct ShaderCapabilities {
 			bool shader_float16_is_supported = false;
@@ -898,7 +950,25 @@ namespace Vulkan
 			bool operator<(const ShaderSpecializationConstant& p_other) const { return constant_id < p_other.constant_id; }
 		};
 
+		struct ImmutableSampler {
+			UniformType type = UNIFORM_TYPE_MAX;
+			uint32_t binding = 0xffffffff; // Binding index as specified in shader.
+			std::vector<ID> ids;
+		};
 
+		struct ShaderInfo {
+			std::string name;
+			VkShaderStageFlags vk_push_constant_stages = 0;
+			std::vector<VkPipelineShaderStageCreateInfo> vk_stages_create_info;
+			//std::vector<VkRayTracingShaderGroupCreateInfoKHR> vk_groups_create_info;
+			std::vector<VkDescriptorSetLayout> vk_descriptor_set_layouts;
+			std::vector<respv::Shader> respv_stage_shaders;
+			std::vector<std::vector<uint8_t>> spirv_stage_bytes;
+			std::vector<uint64_t> original_stage_size;
+			VkPipelineLayout vk_pipeline_layout = VK_NULL_HANDLE;
+			// Used to update the shader binding table buffer.
+			//RaytracingShaderRegionCount region_count;
+		};
 
 	public:
 
@@ -970,6 +1040,10 @@ namespace Vulkan
 		void sampler_free(SamplerID p_sampler);
 
 		bool sampler_is_format_supported_for_filter(DataFormat p_format, SamplerFilter p_filter);
+
+		Device::VertexFormatID vertex_format_create(std::span<VertexAttribute> p_vertex_attribs, const VertexAttributeBindingsMap& p_vertex_bindings);
+
+		void vertex_format_free(VertexFormatID p_vertex_format);
 
 		void command_pipeline_barrier(CommandBufferID p_cmd_buffer, BitField<PipelineStageBits> p_src_stages, BitField<PipelineStageBits> p_dst_stages, std::span<MemoryAccessBarrier> p_memory_barriers, std::span<BufferBarrier> p_buffer_barriers, std::span<TextureBarrier> p_texture_barriers, std::span<AccelerationStructureBarrier> p_acceleration_structure_barriers);
 

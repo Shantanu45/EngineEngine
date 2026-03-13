@@ -95,6 +95,10 @@ namespace EE
 		{
 			return;
 		}
+
+		render_frame(0, 0);
+
+		application_wsi.end_frame();
 	}
 
 	void Application::check_initialization_progress()
