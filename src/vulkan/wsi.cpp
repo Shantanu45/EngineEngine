@@ -109,11 +109,8 @@ namespace Vulkan
 			device_ptr->command_end_render_pass(command_buffer);
 			device_ptr->command_buffer_end(command_buffer);
 
-			std::vector<Device::SemaphoreID> wait_semaphores = { frames[curr_frame].semaphore };
-			std::vector<Device::SwapChainID> swapchains = { swapchain };
-			std::vector<Device::CommandBufferID> commandbuffers = { command_buffer };
-			device_ptr->command_queue_execute_and_present(main_queue, {}, commandbuffers, {}, frames[curr_frame].fence, swapchains);
-			// swap_chain_acquire_framebuffer
+			device_ptr->command_queue_execute_and_present(main_queue, {}, { &command_buffer, 1 }, {}, frames[curr_frame].fence, { &swapchain, 1 });
+
 			if (result >= 0)
 			{
 				platform->poll_input();
