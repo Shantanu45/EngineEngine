@@ -146,11 +146,6 @@ namespace Vulkan
 			SAMPLER_BORDER_COLOR_MAX
 		};
 
-		enum CommandBufferType {
-			COMMAND_BUFFER_TYPE_PRIMARY,
-			COMMAND_BUFFER_TYPE_SECONDARY,
-		};
-
 		enum AttachmentLoadOp {
 			ATTACHMENT_LOAD_OP_LOAD = 0,
 			ATTACHMENT_LOAD_OP_CLEAR = 1,
@@ -303,6 +298,11 @@ namespace Vulkan
 		};
 
 	public:
+		enum CommandBufferType {
+			COMMAND_BUFFER_TYPE_PRIMARY,
+			COMMAND_BUFFER_TYPE_SECONDARY,
+		};
+
 		enum PipelineStageBits {
 			PIPELINE_STAGE_TOP_OF_PIPE_BIT = (1 << 0),
 			PIPELINE_STAGE_DRAW_INDIRECT_BIT = (1 << 1),
@@ -470,6 +470,8 @@ namespace Vulkan
 			CommandQueue* queue_signaled_from = nullptr;
 		};
 
+		//TODO: temporrily public
+		public:
 		struct SwapChain {
 			VkSwapchainKHR vk_swapchain = VK_NULL_HANDLE;
 			Context::SurfaceID surface = Context::SurfaceID();
@@ -488,7 +490,7 @@ namespace Vulkan
 			uint32_t image_index = 0;
 
 		};
-		
+		private:
 		struct RenderPassInfo {
 			VkRenderPass vk_render_pass = VK_NULL_HANDLE;
 			bool uses_fragment_density_map = false;
@@ -744,6 +746,7 @@ namespace Vulkan
 			VkPipelineVertexInputStateCreateInfo vk_create_info = {};
 		};
 
+	public:
 		union RenderPassClearValue {
 			Color color = {};
 			struct {
@@ -754,13 +757,6 @@ namespace Vulkan
 			RenderPassClearValue() {}
 		};
 
-		struct AttachmentClear {
-			BitField<TextureAspectBits> aspect = {};
-			uint32_t color_attachment = 0xffffffff;
-			RenderPassClearValue value;
-		};
-	public:
-
 		struct AttachmentReference {
 			static constexpr uint32_t UNUSED = 0xffffffff;
 			uint32_t attachment = UNUSED;
@@ -768,6 +764,11 @@ namespace Vulkan
 			BitField<TextureAspectBits> aspect = {};
 		};
 
+		struct AttachmentClear {
+			BitField<TextureAspectBits> aspect = {};
+			uint32_t color_attachment = 0xffffffff;
+			RenderPassClearValue value;
+		};
 	private:
 
 		struct Subpass {
@@ -901,7 +902,7 @@ namespace Vulkan
 
 	public:
 
-		static const bool command_pool_reset_enabled = true;
+		static const bool command_pool_reset_enabled = false;		//TODO; chose correct option
 
 		static int caching_instance_count;
 

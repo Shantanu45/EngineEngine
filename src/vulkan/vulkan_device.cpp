@@ -2839,7 +2839,12 @@ namespace Vulkan
 		return CommandQueueID(command_queue);
 	}
 
-	Error Device::command_queue_execute_and_present(CommandQueueID p_cmd_queue, std::span<SemaphoreID> p_wait_semaphores, std::span<CommandBufferID> p_cmd_buffers, std::span<SemaphoreID> p_cmd_semaphores, FenceID p_cmd_fence, std::span<SwapChainID> p_swap_chains) {
+	Error Device::command_queue_execute_and_present(CommandQueueID p_cmd_queue, 
+								std::span<SemaphoreID> p_wait_semaphores, 
+								std::span<CommandBufferID> p_cmd_buffers, 
+								std::span<SemaphoreID> p_cmd_semaphores, 
+								FenceID p_cmd_fence, 
+								std::span<SwapChainID> p_swap_chains) {
 		DEV_ASSERT(p_cmd_queue.id != 0);
 
 		VkResult err;

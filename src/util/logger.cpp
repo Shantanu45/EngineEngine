@@ -263,7 +263,7 @@ namespace Util
 		}
 	}
 
-	static thread_local Logger* logger_iface = nullptr;
+	static Logger* logger_iface = nullptr;
 
 	void set_logger_iface(Logger* iface)
 	{
