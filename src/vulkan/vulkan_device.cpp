@@ -2714,12 +2714,12 @@ namespace Vulkan
 	Error Device::fence_wait(FenceID p_fence) {
 		Fence* fence = (Fence*)(p_fence.id);
 		VkResult fence_status = vkGetFenceStatus(vk_device, fence->vk_fence);
-		if (fence_status == VK_NOT_READY) {
+		if (fence_status == VK_NOT_READY) {		// fence is unsignaled (GPU still working)
 			VkResult err = vkWaitForFences(vk_device, 1, &fence->vk_fence, VK_TRUE, UINT64_MAX);
 			ERR_FAIL_COND_V(err != VK_SUCCESS, FAILED);
 		}
-
-		VkResult err = vkResetFences(vk_device, 1, &fence->vk_fence);
+		// when signaled
+		VkResult err = vkResetFences(vk_device, 1, &fence->vk_fence); // set to unsignaled again
 		ERR_FAIL_COND_V(err != VK_SUCCESS, FAILED);
 
 		if (fence->queue_signaled_from != nullptr) {
@@ -2914,10 +2914,10 @@ namespace Vulkan
 			submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 			submit_info.waitSemaphoreCount = wait_semaphores.size();
 			submit_info.pWaitSemaphores = wait_semaphores.data();
-			submit_info.pWaitDstStageMask = wait_semaphores_stages.data();
+			submit_info.pWaitDstStageMask = wait_semaphores_stages.data();		// wait for these simaphores
 			submit_info.commandBufferCount = command_buffers.size();
 			submit_info.pCommandBuffers = command_buffers.data();
-			submit_info.signalSemaphoreCount = signal_semaphores.size();
+			submit_info.signalSemaphoreCount = signal_semaphores.size();		// signal these when done
 			submit_info.pSignalSemaphores = signal_semaphores.data();
 
 			device_queue.submit_mutex.lock();
