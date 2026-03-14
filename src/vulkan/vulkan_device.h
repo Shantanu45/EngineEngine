@@ -7,6 +7,7 @@
 #include "util/bit_field.h"
 #include "re-spirv/re-spirv.h"
 #include "math/rect2i.h"
+#include <map>
 
 
 namespace Vulkan
@@ -424,6 +425,8 @@ namespace Vulkan
 			UNIFORM_TYPE_MAX
 		};
 
+		static const uint32_t MAX_UNIFORM_POOL_ELEMENT = 65535;
+
 	private:
 
 		struct VertexAttribute {
@@ -798,6 +801,37 @@ namespace Vulkan
 			VkPipelineVertexInputStateCreateInfo vk_create_info = {};
 		};
 
+		struct DescriptorSetPoolKey {
+			uint16_t uniform_type[UNIFORM_TYPE_MAX] = {};
+
+			bool operator<(const DescriptorSetPoolKey& p_other) const {
+				return memcmp(uniform_type, p_other.uniform_type, sizeof(uniform_type)) < 0;
+			}
+		};
+
+		using DescriptorSetPools = std::map<DescriptorSetPoolKey, std::unordered_map<VkDescriptorPool, uint32_t>>;
+
+		struct BoundUniform {
+			UniformType type = UNIFORM_TYPE_MAX;
+			uint32_t binding = 0xffffffff; // Binding index as specified in shader.
+			std::vector<ID> ids;
+			// Flag to indicate  that this is an immutable sampler so it is skipped when creating uniform
+			// sets, as it would be set previously when creating the pipeline layout.
+			bool immutable_sampler = false;
+
+			_FORCE_INLINE_ bool is_dynamic() const {
+				return type == UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC || type == UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC;
+			}
+		};
+
+		struct UniformSetInfo {
+			VkDescriptorSet vk_descriptor_set = VK_NULL_HANDLE;
+			VkDescriptorPool vk_descriptor_pool = VK_NULL_HANDLE;
+			VkDescriptorPool vk_linear_descriptor_pool = VK_NULL_HANDLE;
+			DescriptorSetPools::iterator pool_sets_it;
+			std::vector<BufferInfo const*/*, uint32_t*/> dynamic_buffers;
+		};
+
 	public:
 		union RenderPassClearValue {
 			Color color = {};
@@ -954,20 +988,6 @@ namespace Vulkan
 			UniformType type = UNIFORM_TYPE_MAX;
 			uint32_t binding = 0xffffffff; // Binding index as specified in shader.
 			std::vector<ID> ids;
-		};
-
-		struct ShaderInfo {
-			std::string name;
-			VkShaderStageFlags vk_push_constant_stages = 0;
-			std::vector<VkPipelineShaderStageCreateInfo> vk_stages_create_info;
-			//std::vector<VkRayTracingShaderGroupCreateInfoKHR> vk_groups_create_info;
-			std::vector<VkDescriptorSetLayout> vk_descriptor_set_layouts;
-			std::vector<respv::Shader> respv_stage_shaders;
-			std::vector<std::vector<uint8_t>> spirv_stage_bytes;
-			std::vector<uint64_t> original_stage_size;
-			VkPipelineLayout vk_pipeline_layout = VK_NULL_HANDLE;
-			// Used to update the shader binding table buffer.
-			//RaytracingShaderRegionCount region_count;
 		};
 
 	public:
@@ -1129,6 +1149,15 @@ namespace Vulkan
 
 		std::string get_vulkan_result(VkResult err);
 
+		Device::UniformSetID uniform_set_create(std::span<BoundUniform> p_uniforms, ShaderID p_shader, uint32_t p_set_index, int p_linear_pool_index);
+
+		void uniform_set_free(UniformSetID p_uniform_set);
+
+		bool uniform_sets_have_linear_pools() const;
+
+		uint32_t uniform_sets_get_dynamic_offsets(std::span<UniformSetID> p_uniform_sets, ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count) const;
+
+		void linear_uniform_set_pools_reset(int p_linear_pool_index);
 
 	private:
 		void _register_requested_device_extension(const std::string& p_extension_name, bool p_required);
@@ -1146,12 +1175,13 @@ namespace Vulkan
 		bool _determine_swap_chain_format(Context::SurfaceID p_surface, VkFormat& r_format, VkColorSpaceKHR& r_color_space);
 		void _swap_chain_release(SwapChain* p_swap_chain);
 		VmaPool _find_or_create_small_allocs_pool(uint32_t p_mem_type_index);
+		VkDescriptorPool _descriptor_set_pool_create(const DescriptorSetPoolKey& p_key, bool p_linear_pool);
+		void _descriptor_set_pool_unreference(DescriptorSetPools::iterator p_pool_sets_it, VkDescriptorPool p_vk_descriptor_pool, int p_linear_pool_index);
 
 	private:
 		VkDevice vk_device = VK_NULL_HANDLE;
 		Context* context_driver = nullptr;
 		Context::Device context_device = {};
-		uint32_t max_descriptor_sets_per_pool = 0;
 		uint32_t frame_count = 1;
 
 		VkPhysicalDevice physical_device = VK_NULL_HANDLE;
@@ -1174,6 +1204,16 @@ namespace Vulkan
 		bool pipeline_cache_control_support = false;
 		bool device_fault_support = false;
 		PendingFlushes pending_flushes;
+
+		bool linear_descriptor_pools_enabled = true;
+
+		DescriptorSetPools descriptor_set_pools;
+		uint32_t max_descriptor_sets_per_pool = 0;
+		std::unordered_map<int, DescriptorSetPools> linear_descriptor_set_pools;
+
+		// Global flag to toggle usage of immutable sampler when creating pipeline layouts.
+		// It cannot change after creating the PSOs, since we need to skipping samplers when creating uniform sets.
+		bool immutable_samplers_enabled = true;
 
 	};
 }
