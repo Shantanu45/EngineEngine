@@ -999,7 +999,7 @@ namespace Vulkan
 		static const int32_t ATTACHMENT_UNUSED = -1;
 
 		Device(Context* p_context_driver);
-		virtual ~Device() = default;
+		virtual ~Device();
 
 		Error initialize(uint32_t p_device_index, uint32_t p_frame_count);
 
@@ -1149,6 +1149,22 @@ namespace Vulkan
 
 		std::string get_vulkan_result(VkResult err);
 
+		Device::QueryPoolID timestamp_query_pool_create(uint32_t p_query_count);
+
+		void timestamp_query_pool_free(QueryPoolID p_pool_id);
+
+		void timestamp_query_pool_get_results(QueryPoolID p_pool_id, uint32_t p_query_count, uint64_t* r_results);
+
+		uint64_t timestamp_query_result_to_time(uint64_t p_result);
+
+		void command_timestamp_query_pool_reset(CommandBufferID p_cmd_buffer, QueryPoolID p_pool_id, uint32_t p_query_count);
+
+		void command_timestamp_write(CommandBufferID p_cmd_buffer, QueryPoolID p_pool_id, uint32_t p_index);
+
+		void command_begin_label(CommandBufferID p_cmd_buffer, const char* p_label_name, const Color& p_color);
+
+		void command_end_label(CommandBufferID p_cmd_buffer);
+
 		Device::UniformSetID uniform_set_create(std::span<BoundUniform> p_uniforms, ShaderID p_shader, uint32_t p_set_index, int p_linear_pool_index);
 
 		void uniform_set_free(UniformSetID p_uniform_set);
@@ -1158,6 +1174,8 @@ namespace Vulkan
 		uint32_t uniform_sets_get_dynamic_offsets(std::span<UniformSetID> p_uniform_sets, ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count) const;
 
 		void linear_uniform_set_pools_reset(int p_linear_pool_index);
+
+		void command_uniform_set_prepare_for_use(CommandBufferID p_cmd_buffer, UniformSetID p_uniform_set, ShaderID p_shader, uint32_t p_set_index);
 
 	private:
 		void _register_requested_device_extension(const std::string& p_extension_name, bool p_required);

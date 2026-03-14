@@ -4331,6 +4331,11 @@ namespace Vulkan
 			}
 		}
 	}
+
+	// ----- COMMANDS -----
+
+	void Device::command_uniform_set_prepare_for_use(CommandBufferID p_cmd_buffer, UniformSetID p_uniform_set, ShaderID p_shader, uint32_t p_set_index) {
+	}
 #pragma endregion
 
 
@@ -5281,5 +5286,145 @@ namespace Vulkan
 	}
 #pragma endregion
 
+#pragma region Queries
 
+	Device::QueryPoolID Device::timestamp_query_pool_create(uint32_t p_query_count) {
+		VkQueryPoolCreateInfo query_pool_create_info = {};
+		query_pool_create_info.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+		query_pool_create_info.queryType = VK_QUERY_TYPE_TIMESTAMP;
+		query_pool_create_info.queryCount = p_query_count;
+
+		VkQueryPool vk_query_pool = VK_NULL_HANDLE;
+		vkCreateQueryPool(vk_device, &query_pool_create_info, nullptr, &vk_query_pool);
+		return Device::QueryPoolID(vk_query_pool);
+	}
+
+	void Device::timestamp_query_pool_free(QueryPoolID p_pool_id) {
+		vkDestroyQueryPool(vk_device, (VkQueryPool)p_pool_id.id, nullptr);
+	}
+
+	void Device::timestamp_query_pool_get_results(QueryPoolID p_pool_id, uint32_t p_query_count, uint64_t* r_results) {
+		vkGetQueryPoolResults(vk_device, (VkQueryPool)p_pool_id.id, 0, p_query_count, sizeof(uint64_t) * p_query_count, r_results, sizeof(uint64_t), VK_QUERY_RESULT_64_BIT);
+	}
+
+	uint64_t Device::timestamp_query_result_to_time(uint64_t p_result) {
+		// This sucks because timestampPeriod multiplier is a float, while the timestamp is 64 bits nanosecs.
+		// So, in cases like nvidia which give you enormous numbers and 1 as multiplier, multiplying is next to impossible.
+		// Need to do 128 bits fixed point multiplication to get the right value.
+
+		auto mult64to128 = [](uint64_t u, uint64_t v, uint64_t& h, uint64_t& l) {
+			uint64_t u1 = (u & 0xffffffff);
+			uint64_t v1 = (v & 0xffffffff);
+			uint64_t t = (u1 * v1);
+			uint64_t w3 = (t & 0xffffffff);
+			uint64_t k = (t >> 32);
+
+			u >>= 32;
+			t = (u * v1) + k;
+			k = (t & 0xffffffff);
+			uint64_t w1 = (t >> 32);
+
+			v >>= 32;
+			t = (u1 * v) + k;
+			k = (t >> 32);
+
+			h = (u * v) + w1 + k;
+			l = (t << 32) + w3;
+			};
+
+		uint64_t shift_bits = 16;
+		uint64_t h = 0, l = 0;
+		mult64to128(p_result, uint64_t(double(physical_device_properties.limits.timestampPeriod) * double(1 << shift_bits)), h, l);
+		l >>= shift_bits;
+		l |= h << (64 - shift_bits);
+
+		return l;
+	}
+
+	void Device::command_timestamp_query_pool_reset(CommandBufferID p_cmd_buffer, QueryPoolID p_pool_id, uint32_t p_query_count) {
+		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
+		vkCmdResetQueryPool(command_buffer->vk_command_buffer, (VkQueryPool)p_pool_id.id, 0, p_query_count);
+	}
+
+	void Device::command_timestamp_write(CommandBufferID p_cmd_buffer, QueryPoolID p_pool_id, uint32_t p_index) {
+		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
+		vkCmdWriteTimestamp(command_buffer->vk_command_buffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, (VkQueryPool)p_pool_id.id, p_index);
+	}
+
+#pragma endregion
+
+#pragma region Lables
+
+	void Device::command_begin_label(CommandBufferID p_cmd_buffer, const char* p_label_name, const Color& p_color) {
+		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
+		
+		if (!vkCmdBeginDebugUtilsLabelEXT) {
+			if (vkCmdDebugMarkerBeginEXT) {
+				// Debug marker extensions.
+				VkDebugMarkerMarkerInfoEXT marker;
+				marker.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;
+				marker.pNext = nullptr;
+				marker.pMarkerName = p_label_name;
+				marker.color[0] = p_color[0];
+				marker.color[1] = p_color[1];
+				marker.color[2] = p_color[2];
+				marker.color[3] = p_color[3];
+				vkCmdDebugMarkerBeginEXT(command_buffer->vk_command_buffer, &marker);
+			}
+			return;
+		}
+		VkDebugUtilsLabelEXT label;
+		label.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;
+		label.pNext = nullptr;
+		label.pLabelName = p_label_name;
+		label.color[0] = p_color[0];
+		label.color[1] = p_color[1];
+		label.color[2] = p_color[2];
+		label.color[3] = p_color[3];
+		vkCmdBeginDebugUtilsLabelEXT(command_buffer->vk_command_buffer, &label);
+	}
+
+	void Device::command_end_label(CommandBufferID p_cmd_buffer) {
+		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
+		
+		if (!vkCmdEndDebugUtilsLabelEXT) {
+			if (vkCmdDebugMarkerEndEXT) {
+				// Debug marker extensions.
+				vkCmdDebugMarkerEndEXT(command_buffer->vk_command_buffer);
+			}
+			return;
+		}
+		vkCmdEndDebugUtilsLabelEXT(command_buffer->vk_command_buffer);
+	}
+
+#pragma endregion
+
+	Device::~Device()
+	{
+#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+		if (breadcrumb_buffer != BufferID()) {
+			buffer_free(breadcrumb_buffer);
+		}
+#endif
+
+		while (small_allocs_pools.size()) {
+			std::unordered_map<uint32_t, VmaPool>::iterator E = small_allocs_pools.begin();
+			vmaDestroyPool(allocator, E->second);
+			small_allocs_pools.erase(E);
+		}
+		vmaDestroyAllocator(allocator);
+
+		// Destroy linearly allocated descriptor pools.
+		for (std::pair<int, DescriptorSetPools> pool_map : linear_descriptor_set_pools) {
+			for (std::pair<DescriptorSetPoolKey, std::unordered_map<VkDescriptorPool, uint32_t>> pools : pool_map.second) {
+				for (std::pair<VkDescriptorPool, uint32_t> descriptor_pool : pools.second) {
+					vkDestroyDescriptorPool(vk_device, descriptor_pool.first, nullptr);
+				}
+			}
+		}
+
+		if (vk_device != VK_NULL_HANDLE) {
+			vkDestroyDevice(vk_device, nullptr);
+		}
+	}
 }
