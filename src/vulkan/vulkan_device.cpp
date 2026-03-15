@@ -3799,6 +3799,367 @@ namespace Vulkan
 
 #pragma endregion
 
+#pragma region Shader
+
+	static VkShaderStageFlagBits RD_STAGE_TO_VK_SHADER_STAGE_BITS[SHADER_STAGE_MAX] = {
+	VK_SHADER_STAGE_VERTEX_BIT,
+	VK_SHADER_STAGE_FRAGMENT_BIT,
+	VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,
+	VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT,
+	VK_SHADER_STAGE_COMPUTE_BIT,
+	VK_SHADER_STAGE_RAYGEN_BIT_KHR,
+	VK_SHADER_STAGE_ANY_HIT_BIT_KHR,
+	VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
+	VK_SHADER_STAGE_MISS_BIT_KHR,
+	VK_SHADER_STAGE_INTERSECTION_BIT_KHR,
+	};
+
+	Device::ShaderID Device::shader_create_from_container(const RenderingShaderContainer* p_shader_container, const std::vector<ImmutableSampler>& p_immutable_samplers) {
+		ShaderReflection shader_refl = p_shader_container->get_shader_reflection();
+		ShaderInfo shader_info;
+		shader_info.name = p_shader_container->shader_name;
+
+		for (uint32_t i = 0; i < SHADER_STAGE_MAX; i++) {
+			if (shader_refl.push_constant_stages.has_flag((ShaderStage)(1 << i))) {
+				shader_info.vk_push_constant_stages |= RD_STAGE_TO_VK_SHADER_STAGE_BITS[i];
+			}
+		}
+
+		// Set bindings.
+		std::vector<std::vector<VkDescriptorSetLayoutBinding>> vk_set_bindings;
+		vk_set_bindings.resize(shader_refl.uniform_sets.size());
+		for (uint32_t i = 0; i < shader_refl.uniform_sets.size(); i++) {
+			for (uint32_t j = 0; j < shader_refl.uniform_sets[i].size(); j++) {
+				const ShaderUniform& uniform = shader_refl.uniform_sets[i][j];
+				VkDescriptorSetLayoutBinding layout_binding = {};
+				layout_binding.binding = uniform.binding;
+				layout_binding.descriptorCount = 1;
+				for (uint32_t k = 0; k < SHADER_STAGE_MAX; k++) {
+					if ((uniform.stages.has_flag(ShaderStage(1U << k)))) {
+						layout_binding.stageFlags |= RD_STAGE_TO_VK_SHADER_STAGE_BITS[k];
+					}
+				}
+
+				switch (uniform.type) {
+				case UNIFORM_TYPE_SAMPLER: {
+					layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+					layout_binding.descriptorCount = uniform.length;
+					// Immutable samplers: here they get set in the layoutbinding, given that they will not be changed later.
+					int immutable_bind_index = -1;
+					if (immutable_samplers_enabled && p_immutable_samplers.size() > 0) {
+						for (int k = 0; k < p_immutable_samplers.size(); k++) {
+							if (p_immutable_samplers[k].binding == layout_binding.binding) {
+								immutable_bind_index = k;
+								break;
+							}
+						}
+						if (immutable_bind_index >= 0) {
+							layout_binding.pImmutableSamplers = (VkSampler*)&p_immutable_samplers[immutable_bind_index].ids[0].id;
+						}
+					}
+				} break;
+				case UNIFORM_TYPE_SAMPLER_WITH_TEXTURE: {
+					layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+					layout_binding.descriptorCount = uniform.length;
+				} break;
+				case UNIFORM_TYPE_TEXTURE: {
+					layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+					layout_binding.descriptorCount = uniform.length;
+				} break;
+				case UNIFORM_TYPE_IMAGE: {
+					layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+					layout_binding.descriptorCount = uniform.length;
+				} break;
+				case UNIFORM_TYPE_TEXTURE_BUFFER: {
+					layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+					layout_binding.descriptorCount = uniform.length;
+				} break;
+				case UNIFORM_TYPE_IMAGE_BUFFER: {
+					layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
+				} break;
+				case UNIFORM_TYPE_UNIFORM_BUFFER: {
+					layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+				} break;
+				case UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC: {
+					layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+				} break;
+				case UNIFORM_TYPE_STORAGE_BUFFER: {
+					layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+				} break;
+				case UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC: {
+					layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
+				} break;
+				case UNIFORM_TYPE_INPUT_ATTACHMENT: {
+					layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+				} break;
+				case UNIFORM_TYPE_ACCELERATION_STRUCTURE: {
+					layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+				} break;
+				default: {
+					DEV_ASSERT(false);
+				}
+				}
+
+				vk_set_bindings.write[i].push_back(layout_binding);
+			}
+		}
+
+		// Modules.
+		VkResult res;
+		String error_text;
+		std::vector<uint8_t> decompressed_code;
+		VkShaderModule vk_module;
+		PackedByteArray decoded_spirv;
+		const bool use_respv = RESPV_ENABLED && !shader_container_format.get_debug_info_enabled();
+		const bool store_respv = use_respv && !shader_refl.specialization_constants.is_empty();
+		const int64_t stage_count = shader_refl.stages_vector.size();
+		shader_info.vk_stages_create_info.reserve(stage_count);
+		shader_info.original_stage_size.reserve(stage_count);
+
+#if RECORD_PIPELINE_STATISTICS
+		shader_info.spirv_stage_bytes.reserve(stage_count);
+#endif
+
+		if (store_respv) {
+			shader_info.respv_stage_shaders.reserve(stage_count);
+		}
+
+		// AnyHit and ClosestHit go in the same group.
+		uint32_t hit_group_index = UINT32_MAX;
+
+		for (int i = 0; i < stage_count; i++) {
+			const RenderingShaderContainer::Shader& shader = p_shader_container->shaders[i];
+			bool requires_decompression = (shader.code_decompressed_size > 0);
+			if (requires_decompression) {
+				decompressed_code.resize(shader.code_decompressed_size);
+				bool decompressed = p_shader_container->decompress_code(shader.code_compressed_bytes.ptr(), shader.code_compressed_bytes.size(), shader.code_compression_flags, decompressed_code.ptrw(), decompressed_code.size());
+				if (!decompressed) {
+					error_text = vformat("Failed to decompress code on shader stage %s.", String(SHADER_STAGE_NAMES[shader_refl.stages_vector[i]]));
+					break;
+				}
+			}
+
+			const uint8_t* smolv_input = requires_decompression ? decompressed_code.ptr() : shader.code_compressed_bytes.ptr();
+			uint32_t smolv_input_size = requires_decompression ? decompressed_code.size() : shader.code_compressed_bytes.size();
+			if (shader.code_compression_flags & RenderingShaderContainerVulkan::COMPRESSION_FLAG_SMOLV) {
+				decoded_spirv.resize(smolv::GetDecodedBufferSize(smolv_input, smolv_input_size));
+				if (decoded_spirv.is_empty()) {
+					error_text = vformat("Malformed smolv input on shader stage %s.", String(SHADER_STAGE_NAMES[shader_refl.stages_vector[i]]));
+					break;
+				}
+
+				if (!smolv::Decode(smolv_input, smolv_input_size, decoded_spirv.ptrw(), decoded_spirv.size())) {
+					error_text = vformat("Malformed smolv input on shader stage %s.", String(SHADER_STAGE_NAMES[shader_refl.stages_vector[i]]));
+					break;
+				}
+			}
+			else {
+				decoded_spirv.resize(smolv_input_size);
+				memcpy(decoded_spirv.ptrw(), smolv_input, decoded_spirv.size());
+			}
+
+			shader_info.original_stage_size.push_back(decoded_spirv.size());
+
+			if (use_respv) {
+				const bool inline_data = store_respv || !RESPV_ONLY_INLINE_SHADERS_WITH_SPEC_CONSTANTS;
+				respv::Shader respv_shader(decoded_spirv.ptr(), decoded_spirv.size(), inline_data);
+				if (respv_shader.empty()) {
+#if RESPV_VERBOSE
+					print_line("re-spirv failed to parse the shader, skipping optimization.");
+#endif
+					if (store_respv) {
+						shader_info.respv_stage_shaders.push_back(respv::Shader());
+					}
+				}
+				else if (store_respv) {
+					shader_info.respv_stage_shaders.push_back(respv_shader);
+				}
+				else {
+					std::vector<uint8_t> respv_optimized_data;
+					if (respv::Optimizer::run(respv_shader, nullptr, 0, respv_optimized_data)) {
+#if RESPV_VERBOSE
+						print_line(vformat("re-spirv transformed the shader from %d bytes to %d bytes.", decoded_spirv.size(), respv_optimized_data.size()));
+#endif
+						decoded_spirv.resize(respv_optimized_data.size());
+						memcpy(decoded_spirv.ptrw(), respv_optimized_data.data(), respv_optimized_data.size());
+					}
+					else {
+#if RESPV_VERBOSE
+						print_line("re-spirv failed to optimize the shader.");
+#endif
+					}
+				}
+			}
+
+#if RECORD_PIPELINE_STATISTICS
+			shader_info.spirv_stage_bytes.push_back(decoded_spirv);
+#endif
+
+			VkShaderModuleCreateInfo shader_module_create_info = {};
+			shader_module_create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+			shader_module_create_info.codeSize = decoded_spirv.size();
+			shader_module_create_info.pCode = (const uint32_t*)(decoded_spirv.data());
+
+			res = vkCreateShaderModule(vk_device, &shader_module_create_info, nullptr, &vk_module);
+			if (res != VK_SUCCESS) {
+				error_text = vformat("Error (%d) creating module for shader stage %s.", res, String(SHADER_STAGE_NAMES[shader_refl.stages_vector[i]]));
+				break;
+			}
+
+			VkPipelineShaderStageCreateInfo create_info = {};
+			create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+			create_info.stage = RD_STAGE_TO_VK_SHADER_STAGE_BITS[shader_refl.stages_vector[i]];
+			create_info.module = vk_module;
+			create_info.pName = "main";
+			shader_info.vk_stages_create_info.push_back(create_info);
+
+			ShaderStage stage = shader_refl.stages_vector[i];
+
+			if (stage == ShaderStage::SHADER_STAGE_RAYGEN || stage == ShaderStage::SHADER_STAGE_MISS) {
+				VkRayTracingShaderGroupCreateInfoKHR group_info = {};
+				group_info.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+				group_info.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
+				group_info.anyHitShader = VK_SHADER_UNUSED_KHR;
+				group_info.closestHitShader = VK_SHADER_UNUSED_KHR;
+				group_info.intersectionShader = VK_SHADER_UNUSED_KHR;
+				group_info.generalShader = i;
+
+				shader_info.vk_groups_create_info.push_back(group_info);
+			}
+			if (stage == ShaderStage::SHADER_STAGE_ANY_HIT || stage == ShaderStage::SHADER_STAGE_CLOSEST_HIT) {
+				if (hit_group_index == UINT32_MAX) {
+					VkRayTracingShaderGroupCreateInfoKHR group_info = {};
+					group_info.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+					group_info.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
+					group_info.anyHitShader = VK_SHADER_UNUSED_KHR;
+					group_info.closestHitShader = VK_SHADER_UNUSED_KHR;
+					group_info.intersectionShader = VK_SHADER_UNUSED_KHR;
+					group_info.generalShader = VK_SHADER_UNUSED_KHR;
+
+					hit_group_index = shader_info.vk_groups_create_info.size();
+					shader_info.vk_groups_create_info.push_back(group_info);
+				}
+
+				VkRayTracingShaderGroupCreateInfoKHR& group_info = shader_info.vk_groups_create_info[hit_group_index];
+				if (stage == ShaderStage::SHADER_STAGE_ANY_HIT) {
+					group_info.anyHitShader = i;
+				}
+				else if (stage == ShaderStage::SHADER_STAGE_CLOSEST_HIT) {
+					group_info.closestHitShader = i;
+				}
+			}
+			if (stage == ShaderStage::SHADER_STAGE_INTERSECTION) {
+				VkRayTracingShaderGroupCreateInfoKHR group_info = {};
+				group_info.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+				group_info.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_PROCEDURAL_HIT_GROUP_KHR;
+				group_info.anyHitShader = VK_SHADER_UNUSED_KHR;
+				group_info.closestHitShader = VK_SHADER_UNUSED_KHR;
+				group_info.intersectionShader = i;
+				group_info.generalShader = VK_SHADER_UNUSED_KHR;
+
+				shader_info.vk_groups_create_info.push_back(group_info);
+			}
+		}
+
+		// Descriptor sets.
+		if (error_text.is_empty()) {
+			// For Adreno 5XX driver bug.
+			VkDescriptorSetLayoutBinding placeholder_binding = {};
+			placeholder_binding.binding = 0;
+			placeholder_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			placeholder_binding.descriptorCount = 1;
+			placeholder_binding.stageFlags = VK_SHADER_STAGE_ALL;
+
+			for (uint32_t i = 0; i < shader_refl.uniform_sets.size(); i++) {
+				// Empty ones are fine if they were not used according to spec (binding count will be 0).
+				VkDescriptorSetLayoutCreateInfo layout_create_info = {};
+				layout_create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+				layout_create_info.bindingCount = vk_set_bindings[i].size();
+				layout_create_info.pBindings = vk_set_bindings[i].ptr();
+
+				// ...not so fine on Adreno 5XX.
+				if (adreno_5xx_empty_descriptor_set_layout_workaround && layout_create_info.bindingCount == 0) {
+					layout_create_info.bindingCount = 1;
+					layout_create_info.pBindings = &placeholder_binding;
+				}
+
+				VkDescriptorSetLayout layout = VK_NULL_HANDLE;
+				res = vkCreateDescriptorSetLayout(vk_device, &layout_create_info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT), &layout);
+				if (res) {
+					error_text = vformat("Error (%d) creating descriptor set layout for set %d.", res, i);
+					break;
+				}
+
+				shader_info.vk_descriptor_set_layouts.push_back(layout);
+			}
+		}
+
+		if (error_text.is_empty()) {
+			// Pipeline layout.
+			VkPipelineLayoutCreateInfo pipeline_layout_create_info = {};
+			pipeline_layout_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+			pipeline_layout_create_info.setLayoutCount = shader_info.vk_descriptor_set_layouts.size();
+			pipeline_layout_create_info.pSetLayouts = shader_info.vk_descriptor_set_layouts.ptr();
+
+			if (shader_refl.push_constant_size > 0) {
+				VkPushConstantRange* push_constant_range = ALLOCA_SINGLE(VkPushConstantRange);
+				*push_constant_range = {};
+				push_constant_range->stageFlags = shader_info.vk_push_constant_stages;
+				push_constant_range->size = shader_refl.push_constant_size;
+				pipeline_layout_create_info.pushConstantRangeCount = 1;
+				pipeline_layout_create_info.pPushConstantRanges = push_constant_range;
+			}
+
+			res = vkCreatePipelineLayout(vk_device, &pipeline_layout_create_info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_PIPELINE_LAYOUT), &shader_info.vk_pipeline_layout);
+			if (res != VK_SUCCESS) {
+				error_text = vformat("Error (%d) creating pipeline layout.", res);
+			}
+		}
+
+		if (!error_text.is_empty()) {
+			// Clean up if failed.
+			for (uint32_t i = 0; i < shader_info.vk_stages_create_info.size(); i++) {
+				vkDestroyShaderModule(vk_device, shader_info.vk_stages_create_info[i].module, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_SHADER_MODULE));
+			}
+			for (uint32_t i = 0; i < shader_info.vk_descriptor_set_layouts.size(); i++) {
+				vkDestroyDescriptorSetLayout(vk_device, shader_info.vk_descriptor_set_layouts[i], VKC::get_allocation_callbacks(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT));
+			}
+
+			ERR_FAIL_V_MSG(ShaderID(), error_text);
+		}
+
+		if (shader_refl.pipeline_type == PIPELINE_TYPE_RAYTRACING) {
+			// Regions
+
+			for (ShaderStage stage : shader_refl.stages_vector) {
+				switch (stage) {
+				case ShaderStage::SHADER_STAGE_RAYGEN:
+					shader_info.region_count.raygen_count += 1;
+					break;
+				case ShaderStage::SHADER_STAGE_ANY_HIT:
+				case ShaderStage::SHADER_STAGE_CLOSEST_HIT:
+					shader_info.region_count.hit_count += 1;
+					break;
+				case ShaderStage::SHADER_STAGE_MISS:
+					shader_info.region_count.miss_count += 1;
+					break;
+				default:
+					// nothing
+					break;
+				}
+			}
+
+			shader_info.region_count.group_count = shader_info.region_count.raygen_count + shader_info.region_count.hit_count + shader_info.region_count.miss_count;
+		}
+
+		// Bookkeep.
+		ShaderInfo* shader_info_ptr = VersatileResource::allocate<ShaderInfo>(resources_allocator);
+		*shader_info_ptr = shader_info;
+		return ShaderID(shader_info_ptr);
+	}
+#pragma endregion
+
+
 #pragma region Uniform Set
 
 	VkDescriptorPool Device::_descriptor_set_pool_create(const DescriptorSetPoolKey& p_key, bool p_linear_pool) {
@@ -4338,6 +4699,206 @@ namespace Vulkan
 	}
 #pragma endregion
 
+#pragma region Transfer
+
+	static void _texture_subresource_range_to_vk(const Device::TextureSubresourceRange& p_subresources, VkImageSubresourceRange* r_vk_subreources) {
+		*r_vk_subreources = {};
+		r_vk_subreources->aspectMask = (VkImageAspectFlags)p_subresources.aspect;
+		r_vk_subreources->baseMipLevel = p_subresources.base_mipmap;
+		r_vk_subreources->levelCount = p_subresources.mipmap_count;
+		r_vk_subreources->baseArrayLayer = p_subresources.base_layer;
+		r_vk_subreources->layerCount = p_subresources.layer_count;
+	}
+
+	static void _texture_subresource_layers_to_vk(const Device::TextureSubresourceLayers& p_subresources, VkImageSubresourceLayers* r_vk_subreources) {
+		*r_vk_subreources = {};
+		r_vk_subreources->aspectMask = (VkImageAspectFlags)p_subresources.aspect;
+		r_vk_subreources->mipLevel = p_subresources.mipmap;
+		r_vk_subreources->baseArrayLayer = p_subresources.base_layer;
+		r_vk_subreources->layerCount = p_subresources.layer_count;
+	}
+
+	static void _buffer_texture_copy_region_to_vk(const Device::BufferTextureCopyRegion& p_copy_region, uint32_t p_buffer_row_length, VkBufferImageCopy* r_vk_copy_region) {
+		*r_vk_copy_region = {};
+		r_vk_copy_region->bufferOffset = p_copy_region.buffer_offset;
+		r_vk_copy_region->bufferRowLength = p_buffer_row_length;
+		r_vk_copy_region->imageSubresource.aspectMask = (VkImageAspectFlags)(1 << p_copy_region.texture_subresource.aspect);
+		r_vk_copy_region->imageSubresource.mipLevel = p_copy_region.texture_subresource.mipmap;
+		r_vk_copy_region->imageSubresource.baseArrayLayer = p_copy_region.texture_subresource.layer;
+		r_vk_copy_region->imageSubresource.layerCount = 1;
+		r_vk_copy_region->imageOffset.x = p_copy_region.texture_offset.x;
+		r_vk_copy_region->imageOffset.y = p_copy_region.texture_offset.y;
+		r_vk_copy_region->imageOffset.z = p_copy_region.texture_offset.z;
+		r_vk_copy_region->imageExtent.width = p_copy_region.texture_region_size.x;
+		r_vk_copy_region->imageExtent.height = p_copy_region.texture_region_size.y;
+		r_vk_copy_region->imageExtent.depth = p_copy_region.texture_region_size.z;
+	}
+
+	static void _texture_copy_region_to_vk(const Device::TextureCopyRegion& p_copy_region, VkImageCopy* r_vk_copy_region) {
+		*r_vk_copy_region = {};
+		_texture_subresource_layers_to_vk(p_copy_region.src_subresources, &r_vk_copy_region->srcSubresource);
+		r_vk_copy_region->srcOffset.x = p_copy_region.src_offset.x;
+		r_vk_copy_region->srcOffset.y = p_copy_region.src_offset.y;
+		r_vk_copy_region->srcOffset.z = p_copy_region.src_offset.z;
+		_texture_subresource_layers_to_vk(p_copy_region.dst_subresources, &r_vk_copy_region->dstSubresource);
+		r_vk_copy_region->dstOffset.x = p_copy_region.dst_offset.x;
+		r_vk_copy_region->dstOffset.y = p_copy_region.dst_offset.y;
+		r_vk_copy_region->dstOffset.z = p_copy_region.dst_offset.z;
+		r_vk_copy_region->extent.width = p_copy_region.size.x;
+		r_vk_copy_region->extent.height = p_copy_region.size.y;
+		r_vk_copy_region->extent.depth = p_copy_region.size.z;
+	}
+
+	void Device::command_clear_buffer(CommandBufferID p_cmd_buffer, BufferID p_buffer, uint64_t p_offset, uint64_t p_size) {
+		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
+		const BufferInfo* buf_info = (const BufferInfo*)p_buffer.id;
+		vkCmdFillBuffer(command_buffer->vk_command_buffer, buf_info->vk_buffer, p_offset, p_size, 0);
+	}
+
+	void Device::command_copy_buffer(CommandBufferID p_cmd_buffer, BufferID p_src_buffer, BufferID p_dst_buffer, std::span<BufferCopyRegion> p_regions) {
+		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
+		const BufferInfo* src_buf_info = (const BufferInfo*)p_src_buffer.id;
+		const BufferInfo* dst_buf_info = (const BufferInfo*)p_dst_buffer.id;
+		vkCmdCopyBuffer(command_buffer->vk_command_buffer, src_buf_info->vk_buffer, dst_buf_info->vk_buffer, p_regions.size(), (const VkBufferCopy*)p_regions.data());
+	}
+
+	void Device::command_copy_texture(CommandBufferID p_cmd_buffer, TextureID p_src_texture, TextureLayout p_src_texture_layout, TextureID p_dst_texture, TextureLayout p_dst_texture_layout, std::span<TextureCopyRegion> p_regions) {
+		std::vector<VkImageCopy> vk_copy_regions_vec(p_regions.size());
+		VkImageCopy* vk_copy_regions = vk_copy_regions_vec.data();
+		for (uint32_t i = 0; i < p_regions.size(); i++) {
+			_texture_copy_region_to_vk(p_regions[i], &vk_copy_regions[i]);
+		}
+
+		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
+		const TextureInfo* src_tex_info = (const TextureInfo*)p_src_texture.id;
+		const TextureInfo* dst_tex_info = (const TextureInfo*)p_dst_texture.id;
+
+#ifdef DEBUG_ENABLED
+		if (src_tex_info->transient) {
+			ERR_PRINT("TEXTURE_USAGE_TRANSIENT_BIT p_src_texture must not be used in command_copy_texture.");
+		}
+		if (dst_tex_info->transient) {
+			ERR_PRINT("TEXTURE_USAGE_TRANSIENT_BIT p_dst_texture must not be used in command_copy_texture.");
+		}
+#endif
+
+		vkCmdCopyImage(command_buffer->vk_command_buffer, src_tex_info->vk_view_create_info.image, RD_TO_VK_LAYOUT[p_src_texture_layout], dst_tex_info->vk_view_create_info.image, RD_TO_VK_LAYOUT[p_dst_texture_layout], p_regions.size(), vk_copy_regions);
+	}
+
+	void Device::command_resolve_texture(CommandBufferID p_cmd_buffer, TextureID p_src_texture, TextureLayout p_src_texture_layout, uint32_t p_src_layer, uint32_t p_src_mipmap, TextureID p_dst_texture, TextureLayout p_dst_texture_layout, uint32_t p_dst_layer, uint32_t p_dst_mipmap) {
+		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
+		const TextureInfo* src_tex_info = (const TextureInfo*)p_src_texture.id;
+		const TextureInfo* dst_tex_info = (const TextureInfo*)p_dst_texture.id;
+
+		VkImageResolve vk_resolve = {};
+		vk_resolve.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		vk_resolve.srcSubresource.mipLevel = p_src_mipmap;
+		vk_resolve.srcSubresource.baseArrayLayer = p_src_layer;
+		vk_resolve.srcSubresource.layerCount = 1;
+		vk_resolve.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		vk_resolve.dstSubresource.mipLevel = p_dst_mipmap;
+		vk_resolve.dstSubresource.baseArrayLayer = p_dst_layer;
+		vk_resolve.dstSubresource.layerCount = 1;
+		vk_resolve.extent.width = MAX(1u, src_tex_info->vk_create_info.extent.width >> p_src_mipmap);
+		vk_resolve.extent.height = MAX(1u, src_tex_info->vk_create_info.extent.height >> p_src_mipmap);
+		vk_resolve.extent.depth = MAX(1u, src_tex_info->vk_create_info.extent.depth >> p_src_mipmap);
+
+#ifdef DEBUG_ENABLED
+		if (src_tex_info->transient) {
+			ERR_PRINT("TEXTURE_USAGE_TRANSIENT_BIT p_src_texture must not be used in command_resolve_texture. Use a resolve store action pass instead.");
+		}
+		if (dst_tex_info->transient) {
+			ERR_PRINT("TEXTURE_USAGE_TRANSIENT_BIT p_dst_texture must not be used in command_resolve_texture.");
+		}
+#endif
+
+		vkCmdResolveImage(command_buffer->vk_command_buffer, src_tex_info->vk_view_create_info.image, RD_TO_VK_LAYOUT[p_src_texture_layout], dst_tex_info->vk_view_create_info.image, RD_TO_VK_LAYOUT[p_dst_texture_layout], 1, &vk_resolve);
+	}
+
+	void Device::command_clear_color_texture(CommandBufferID p_cmd_buffer, TextureID p_texture, TextureLayout p_texture_layout, const Color& p_color, const TextureSubresourceRange& p_subresources) {
+		VkClearColorValue vk_color = {};
+		memcpy(&vk_color.float32, glm::value_ptr(p_color), sizeof(VkClearColorValue::float32));
+
+		VkImageSubresourceRange vk_subresources = {};
+		_texture_subresource_range_to_vk(p_subresources, &vk_subresources);
+
+		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
+		const TextureInfo* tex_info = (const TextureInfo*)p_texture.id;
+#ifdef DEBUG_ENABLED
+		if (tex_info->transient) {
+			ERR_PRINT("TEXTURE_USAGE_TRANSIENT_BIT p_texture must not be used in command_clear_color_texture. Use a clear store action pass instead.");
+		}
+#endif
+		vkCmdClearColorImage(command_buffer->vk_command_buffer, tex_info->vk_view_create_info.image, RD_TO_VK_LAYOUT[p_texture_layout], &vk_color, 1, &vk_subresources);
+	}
+
+	void Device::command_clear_depth_stencil_texture(CommandBufferID p_cmd_buffer, TextureID p_texture, TextureLayout p_texture_layout, float p_depth, uint8_t p_stencil, const TextureSubresourceRange& p_subresources) {
+		VkClearDepthStencilValue vk_depth_stencil = {};
+		vk_depth_stencil.depth = p_depth;
+		vk_depth_stencil.stencil = p_stencil;
+
+		VkImageSubresourceRange vk_subresources = {};
+		_texture_subresource_range_to_vk(p_subresources, &vk_subresources);
+
+		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
+		const TextureInfo* tex_info = (const TextureInfo*)p_texture.id;
+#ifdef DEBUG_ENABLED
+		if (tex_info->transient) {
+			ERR_PRINT("TEXTURE_USAGE_TRANSIENT_BIT p_texture must not be used in command_clear_depth_stencil_texture. Use a clear store action pass instead.");
+		}
+#endif
+		vkCmdClearDepthStencilImage(command_buffer->vk_command_buffer, tex_info->vk_view_create_info.image, RD_TO_VK_LAYOUT[p_texture_layout], &vk_depth_stencil, 1, &vk_subresources);
+	}
+
+	void Device::command_copy_buffer_to_texture(CommandBufferID p_cmd_buffer, BufferID p_src_buffer, TextureID p_dst_texture, TextureLayout p_dst_texture_layout, std::span<BufferTextureCopyRegion> p_regions) {
+		const TextureInfo* tex_info = (const TextureInfo*)p_dst_texture.id;
+
+		uint32_t pixel_size = get_image_format_pixel_size(tex_info->rd_format);
+		uint32_t block_size = get_compressed_image_format_block_byte_size(tex_info->rd_format);
+		uint32_t block_w, block_h;
+		get_compressed_image_format_block_dimensions(tex_info->rd_format, block_w, block_h);
+
+		std::vector<VkBufferImageCopy> vk_copy_regions_vec(p_regions.size());
+		VkBufferImageCopy* vk_copy_regions = vk_copy_regions_vec.data();
+		for (uint32_t i = 0; i < p_regions.size(); i++) {
+			_buffer_texture_copy_region_to_vk(p_regions[i], p_regions[i].row_pitch * block_w / (pixel_size * block_size), &vk_copy_regions[i]);
+		}
+
+		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
+		const BufferInfo* buf_info = (const BufferInfo*)p_src_buffer.id;
+#ifdef DEBUG_ENABLED
+		if (tex_info->transient) {
+			ERR_PRINT("TEXTURE_USAGE_TRANSIENT_BIT p_dst_texture must not be used in command_copy_buffer_to_texture.");
+		}
+#endif
+		vkCmdCopyBufferToImage(command_buffer->vk_command_buffer, buf_info->vk_buffer, tex_info->vk_view_create_info.image, RD_TO_VK_LAYOUT[p_dst_texture_layout], p_regions.size(), vk_copy_regions);
+	}
+
+	void Device::command_copy_texture_to_buffer(CommandBufferID p_cmd_buffer, TextureID p_src_texture, TextureLayout p_src_texture_layout, BufferID p_dst_buffer, std::span<BufferTextureCopyRegion> p_regions) {
+		const TextureInfo* tex_info = (const TextureInfo*)p_src_texture.id;
+
+		uint32_t pixel_size = get_image_format_pixel_size(tex_info->rd_format);
+		uint32_t block_size = get_compressed_image_format_block_byte_size(tex_info->rd_format);
+		uint32_t block_w, block_h;
+		get_compressed_image_format_block_dimensions(tex_info->rd_format, block_w, block_h);
+
+		std::vector<VkBufferImageCopy> vk_copy_regions_vec(p_regions.size());
+		VkBufferImageCopy* vk_copy_regions = vk_copy_regions_vec.data();
+		for (uint32_t i = 0; i < p_regions.size(); i++) {
+			_buffer_texture_copy_region_to_vk(p_regions[i], p_regions[i].row_pitch * block_w / (pixel_size * block_size), &vk_copy_regions[i]);
+		}
+
+		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
+		const BufferInfo* buf_info = (const BufferInfo*)p_dst_buffer.id;
+#ifdef DEBUG_ENABLED
+		if (tex_info->transient) {
+			ERR_PRINT("TEXTURE_USAGE_TRANSIENT_BIT p_src_texture must not be used in command_copy_texture_to_buffer.");
+		}
+#endif
+		vkCmdCopyImageToBuffer(command_buffer->vk_command_buffer, tex_info->vk_view_create_info.image, RD_TO_VK_LAYOUT[p_src_texture_layout], buf_info->vk_buffer, p_regions.size(), vk_copy_regions);
+	}
+
+#pragma endregion
 
 #pragma region Pipeline
 
@@ -4731,6 +5292,174 @@ namespace Vulkan
 #if PRINT_NATIVE_COMMANDS
 		LOGI("vkCmdEndRenderPass");
 #endif
+	}
+
+	void Device::command_next_render_subpass(CommandBufferID p_cmd_buffer, CommandBufferType p_cmd_buffer_type) {
+		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
+		VkSubpassContents vk_subpass_contents = p_cmd_buffer_type == COMMAND_BUFFER_TYPE_PRIMARY ? VK_SUBPASS_CONTENTS_INLINE : VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS;
+		vkCmdNextSubpass(command_buffer->vk_command_buffer, vk_subpass_contents);
+	}
+
+	void Device::command_render_set_viewport(CommandBufferID p_cmd_buffer, std::span<Rect2i> p_viewports) {
+		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
+
+		std::vector<VkViewport> vk_viewports_vec(p_viewports.size());
+		VkViewport* vk_viewports = vk_viewports_vec.data();
+		for (uint32_t i = 0; i < p_viewports.size(); i++) {
+			vk_viewports[i] = {};
+			vk_viewports[i].x = p_viewports[i].position.x;
+			vk_viewports[i].y = p_viewports[i].position.y;
+			vk_viewports[i].width = p_viewports[i].size.x;
+			vk_viewports[i].height = p_viewports[i].size.y;
+			vk_viewports[i].minDepth = 0.0f;
+			vk_viewports[i].maxDepth = 1.0f;
+		}
+		vkCmdSetViewport(command_buffer->vk_command_buffer, 0, p_viewports.size(), vk_viewports);
+	}
+
+	void Device::command_render_set_scissor(CommandBufferID p_cmd_buffer, std::span<Rect2i> p_scissors) {
+		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
+		vkCmdSetScissor(command_buffer->vk_command_buffer, 0, p_scissors.size(), (VkRect2D*)p_scissors.data());
+	}
+
+	void Device::command_render_clear_attachments(CommandBufferID p_cmd_buffer, std::span<AttachmentClear> p_attachment_clears, std::span<Rect2i> p_rects) {
+		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
+
+		std::vector<VkClearAttachment> vk_clears_vec(p_attachment_clears.size());
+		VkClearAttachment* vk_clears = vk_clears_vec.data();
+		for (uint32_t i = 0; i < p_attachment_clears.size(); i++) {
+			vk_clears[i] = {};
+			memcpy(&vk_clears[i].clearValue, &p_attachment_clears[i].value, sizeof(VkClearValue));
+			vk_clears[i].colorAttachment = p_attachment_clears[i].color_attachment;
+			vk_clears[i].aspectMask = p_attachment_clears[i].aspect;
+		}
+
+		std::vector<VkClearRect> vk_rects_vec(p_rects.size());
+		VkClearRect* vk_rects = vk_rects_vec.data();
+		for (uint32_t i = 0; i < p_rects.size(); i++) {
+			vk_rects[i] = {};
+			vk_rects[i].rect.offset.x = p_rects[i].position.x;
+			vk_rects[i].rect.offset.y = p_rects[i].position.y;
+			vk_rects[i].rect.extent.width = p_rects[i].size.x;
+			vk_rects[i].rect.extent.height = p_rects[i].size.y;
+			vk_rects[i].baseArrayLayer = 0;
+			vk_rects[i].layerCount = 1;
+		}
+
+		vkCmdClearAttachments(command_buffer->vk_command_buffer, p_attachment_clears.size(), vk_clears, p_rects.size(), vk_rects);
+	}
+
+	void Device::command_bind_render_pipeline(CommandBufferID p_cmd_buffer, PipelineID p_pipeline) {
+		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
+		vkCmdBindPipeline(command_buffer->vk_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, (VkPipeline)p_pipeline.id);
+	}
+
+	void Device::command_bind_render_uniform_sets(CommandBufferID p_cmd_buffer, std::span<UniformSetID> p_uniform_sets, ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count, uint32_t p_dynamic_offsets) {
+		if (p_set_count == 0) {
+			return;
+		}
+
+		thread_local std::vector<VkDescriptorSet> sets;
+		sets.clear();
+		sets.resize(p_set_count);
+
+		uint32_t dynamic_offsets[MAX_DYNAMIC_BUFFERS];
+		uint32_t shift = 0u;
+		uint32_t curr_dynamic_offset = 0u;
+
+		for (uint32_t i = 0; i < p_set_count; i++) {
+			const UniformSetInfo* usi = (const UniformSetInfo*)p_uniform_sets[i].id;
+
+			sets[i] = usi->vk_descriptor_set;
+
+			// At this point this assert should already have been validated.
+			DEV_ASSERT(curr_dynamic_offset + usi->dynamic_buffers.size() <= MAX_DYNAMIC_BUFFERS);
+
+			const uint32_t dynamic_offset_count = usi->dynamic_buffers.size();
+			for (uint32_t j = 0u; j < dynamic_offset_count; ++j) {
+				const uint32_t frame_idx = (p_dynamic_offsets >> shift) & 0xFu;
+				shift += 4u;
+				dynamic_offsets[curr_dynamic_offset++] = uint32_t(frame_idx * usi->dynamic_buffers[j]->size);
+			}
+		}
+
+		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
+		const ShaderInfo* shader_info = (const ShaderInfo*)p_shader.id;
+		vkCmdBindDescriptorSets(command_buffer->vk_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shader_info->vk_pipeline_layout, p_first_set_index, p_set_count, &sets[0], curr_dynamic_offset, dynamic_offsets);
+	}
+
+	void Device::command_render_draw(CommandBufferID p_cmd_buffer, uint32_t p_vertex_count, uint32_t p_instance_count, uint32_t p_base_vertex, uint32_t p_first_instance) {
+		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
+		vkCmdDraw(command_buffer->vk_command_buffer, p_vertex_count, p_instance_count, p_base_vertex, p_first_instance);
+	}
+
+	void Device::command_render_draw_indexed(CommandBufferID p_cmd_buffer, uint32_t p_index_count, uint32_t p_instance_count, uint32_t p_first_index, int32_t p_vertex_offset, uint32_t p_first_instance) {
+		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
+		vkCmdDrawIndexed(command_buffer->vk_command_buffer, p_index_count, p_instance_count, p_first_index, p_vertex_offset, p_first_instance);
+	}
+
+	void Device::command_render_draw_indexed_indirect(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset, uint32_t p_draw_count, uint32_t p_stride) {
+		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
+		const BufferInfo* buf_info = (const BufferInfo*)p_indirect_buffer.id;
+		vkCmdDrawIndexedIndirect(command_buffer->vk_command_buffer, buf_info->vk_buffer, p_offset, p_draw_count, p_stride);
+	}
+
+	void Device::command_render_draw_indexed_indirect_count(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset, BufferID p_count_buffer, uint64_t p_count_buffer_offset, uint32_t p_max_draw_count, uint32_t p_stride) {
+		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
+		const BufferInfo* indirect_buf_info = (const BufferInfo*)p_indirect_buffer.id;
+		const BufferInfo* count_buf_info = (const BufferInfo*)p_count_buffer.id;
+		vkCmdDrawIndexedIndirectCount(command_buffer->vk_command_buffer, indirect_buf_info->vk_buffer, p_offset, count_buf_info->vk_buffer, p_count_buffer_offset, p_max_draw_count, p_stride);
+	}
+
+	void Device::command_render_draw_indirect(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset, uint32_t p_draw_count, uint32_t p_stride) {
+		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
+		const BufferInfo* buf_info = (const BufferInfo*)p_indirect_buffer.id;
+		vkCmdDrawIndirect(command_buffer->vk_command_buffer, buf_info->vk_buffer, p_offset, p_draw_count, p_stride);
+	}
+
+	void Device::command_render_draw_indirect_count(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset, BufferID p_count_buffer, uint64_t p_count_buffer_offset, uint32_t p_max_draw_count, uint32_t p_stride) {
+		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
+		const BufferInfo* indirect_buf_info = (const BufferInfo*)p_indirect_buffer.id;
+		const BufferInfo* count_buf_info = (const BufferInfo*)p_count_buffer.id;
+		vkCmdDrawIndirectCount(command_buffer->vk_command_buffer, indirect_buf_info->vk_buffer, p_offset, count_buf_info->vk_buffer, p_count_buffer_offset, p_max_draw_count, p_stride);
+	}
+
+
+	void Device::command_render_bind_vertex_buffers(CommandBufferID p_cmd_buffer, uint32_t p_binding_count, const BufferID* p_buffers, const uint64_t* p_offsets, uint64_t p_dynamic_offsets) {
+		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
+
+		std::vector<VkBuffer> vk_buffers_vec(p_binding_count);
+		VkBuffer* vk_buffers = vk_buffers_vec.data();
+		std::vector<uint64_t> vk_offsets_vec(p_binding_count);
+		uint64_t* vk_offsets = vk_offsets_vec.data();
+		for (uint32_t i = 0; i < p_binding_count; i++) {
+			const BufferInfo* buf_info = (const BufferInfo*)p_buffers[i].id;
+			uint64_t offset = p_offsets[i];
+			if (buf_info->is_dynamic()) {
+				uint64_t frame_idx = p_dynamic_offsets & 0x3; // Assuming max 4 frames.
+				p_dynamic_offsets >>= 2;
+				offset += frame_idx * buf_info->size;
+			}
+			vk_buffers[i] = ((const BufferInfo*)p_buffers[i].id)->vk_buffer;
+			vk_offsets[i] = offset;
+		}
+		vkCmdBindVertexBuffers(command_buffer->vk_command_buffer, 0, p_binding_count, vk_buffers, vk_offsets);
+	}
+
+	void Device::command_render_bind_index_buffer(CommandBufferID p_cmd_buffer, BufferID p_buffer, IndexBufferFormat p_format, uint64_t p_offset) {
+		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
+		const BufferInfo* buf_info = (const BufferInfo*)p_buffer.id;
+		vkCmdBindIndexBuffer(command_buffer->vk_command_buffer, buf_info->vk_buffer, p_offset, p_format == INDEX_BUFFER_FORMAT_UINT16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32);
+	}
+
+	void Device::command_render_set_blend_constants(CommandBufferID p_cmd_buffer, const Color& p_constants) {
+		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
+		vkCmdSetBlendConstants(command_buffer->vk_command_buffer, glm::value_ptr(p_constants));
+	}
+
+	void Device::command_render_set_line_width(CommandBufferID p_cmd_buffer, float p_width) {
+		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
+		vkCmdSetLineWidth(command_buffer->vk_command_buffer, p_width);
 	}
 
 	// ----- PIPELINE -----

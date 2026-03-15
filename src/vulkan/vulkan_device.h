@@ -1,14 +1,14 @@
 #pragma once
 #include <mutex>
 #include <span>
+#include <map>
 #include "vulkan_context.h"
 #include "vma/vk_mem_alloc.h"
 #include "util/typedefs.h"
 #include "util/bit_field.h"
 #include "re-spirv/re-spirv.h"
 #include "math/rect2i.h"
-#include <map>
-
+#include "shader_container.h"
 
 namespace Vulkan
 {
@@ -244,35 +244,7 @@ namespace Vulkan
 			DYNAMIC_STATE_STENCIL_REFERENCE = (1 << 6),
 		};
 
-		enum PipelineSpecializationConstantType {
-			PIPELINE_SPECIALIZATION_CONSTANT_TYPE_BOOL,
-			PIPELINE_SPECIALIZATION_CONSTANT_TYPE_INT,
-			PIPELINE_SPECIALIZATION_CONSTANT_TYPE_FLOAT,
-		};
 
-		enum ShaderStage {
-			SHADER_STAGE_VERTEX,
-			SHADER_STAGE_FRAGMENT,
-			SHADER_STAGE_TESSELATION_CONTROL,
-			SHADER_STAGE_TESSELATION_EVALUATION,
-			SHADER_STAGE_COMPUTE,
-			SHADER_STAGE_RAYGEN,
-			SHADER_STAGE_ANY_HIT,
-			SHADER_STAGE_CLOSEST_HIT,
-			SHADER_STAGE_MISS,
-			SHADER_STAGE_INTERSECTION,
-			SHADER_STAGE_MAX,
-			SHADER_STAGE_VERTEX_BIT = (1 << SHADER_STAGE_VERTEX),
-			SHADER_STAGE_FRAGMENT_BIT = (1 << SHADER_STAGE_FRAGMENT),
-			SHADER_STAGE_TESSELATION_CONTROL_BIT = (1 << SHADER_STAGE_TESSELATION_CONTROL),
-			SHADER_STAGE_TESSELATION_EVALUATION_BIT = (1 << SHADER_STAGE_TESSELATION_EVALUATION),
-			SHADER_STAGE_COMPUTE_BIT = (1 << SHADER_STAGE_COMPUTE),
-			SHADER_STAGE_RAYGEN_BIT = (1 << SHADER_STAGE_RAYGEN),
-			SHADER_STAGE_ANY_HIT_BIT = (1 << SHADER_STAGE_ANY_HIT),
-			SHADER_STAGE_CLOSEST_HIT_BIT = (1 << SHADER_STAGE_CLOSEST_HIT),
-			SHADER_STAGE_MISS_BIT = (1 << SHADER_STAGE_MISS),
-			SHADER_STAGE_INTERSECTION_BIT = (1 << SHADER_STAGE_INTERSECTION),
-		};
 
 		enum ShaderLanguage {
 			SHADER_LANGUAGE_GLSL,
@@ -309,6 +281,43 @@ namespace Vulkan
 		};
 
 	public:
+		enum ShaderStage {
+			SHADER_STAGE_VERTEX,
+			SHADER_STAGE_FRAGMENT,
+			SHADER_STAGE_TESSELATION_CONTROL,
+			SHADER_STAGE_TESSELATION_EVALUATION,
+			SHADER_STAGE_COMPUTE,
+			SHADER_STAGE_RAYGEN,
+			SHADER_STAGE_ANY_HIT,
+			SHADER_STAGE_CLOSEST_HIT,
+			SHADER_STAGE_MISS,
+			SHADER_STAGE_INTERSECTION,
+			SHADER_STAGE_MAX,
+			SHADER_STAGE_VERTEX_BIT = (1 << SHADER_STAGE_VERTEX),
+			SHADER_STAGE_FRAGMENT_BIT = (1 << SHADER_STAGE_FRAGMENT),
+			SHADER_STAGE_TESSELATION_CONTROL_BIT = (1 << SHADER_STAGE_TESSELATION_CONTROL),
+			SHADER_STAGE_TESSELATION_EVALUATION_BIT = (1 << SHADER_STAGE_TESSELATION_EVALUATION),
+			SHADER_STAGE_COMPUTE_BIT = (1 << SHADER_STAGE_COMPUTE),
+			SHADER_STAGE_RAYGEN_BIT = (1 << SHADER_STAGE_RAYGEN),
+			SHADER_STAGE_ANY_HIT_BIT = (1 << SHADER_STAGE_ANY_HIT),
+			SHADER_STAGE_CLOSEST_HIT_BIT = (1 << SHADER_STAGE_CLOSEST_HIT),
+			SHADER_STAGE_MISS_BIT = (1 << SHADER_STAGE_MISS),
+			SHADER_STAGE_INTERSECTION_BIT = (1 << SHADER_STAGE_INTERSECTION),
+		};
+
+
+		struct ShaderStageSPIRVData {
+			ShaderStage shader_stage = SHADER_STAGE_MAX;
+			std::vector<uint8_t> spirv;
+			std::vector<uint64_t> dynamic_buffers;
+		};
+
+		enum PipelineSpecializationConstantType {
+			PIPELINE_SPECIALIZATION_CONSTANT_TYPE_BOOL,
+			PIPELINE_SPECIALIZATION_CONSTANT_TYPE_INT,
+			PIPELINE_SPECIALIZATION_CONSTANT_TYPE_FLOAT,
+		};
+
 		enum CommandBufferType {
 			COMMAND_BUFFER_TYPE_PRIMARY,
 			COMMAND_BUFFER_TYPE_SECONDARY,
@@ -427,6 +436,13 @@ namespace Vulkan
 
 		static const uint32_t MAX_UNIFORM_POOL_ELEMENT = 65535;
 
+		enum PipelineType : uint32_t {
+			PIPELINE_TYPE_RASTERIZATION,
+			PIPELINE_TYPE_COMPUTE,
+			PIPELINE_TYPE_RAYTRACING,
+		};
+
+		
 	private:
 
 		struct VertexAttribute {
@@ -677,21 +693,6 @@ namespace Vulkan
 			uint32_t mipmap = 0;
 		};
 
-		struct TextureSubresourceLayers {
-			BitField<TextureAspectBits> aspect = {};
-			uint32_t mipmap = 0;
-			uint32_t base_layer = 0;
-			uint32_t layer_count = 0;
-		};
-
-		struct TextureSubresourceRange {
-			BitField<TextureAspectBits> aspect = {};
-			uint32_t base_mipmap = 0;
-			uint32_t mipmap_count = 0;
-			uint32_t base_layer = 0;
-			uint32_t layer_count = 0;
-		};
-
 		struct TextureCopyableLayout {
 			uint64_t size = 0;
 			uint64_t row_pitch = 0;
@@ -747,14 +748,6 @@ namespace Vulkan
 			uint64_t size = 0;
 		};
 
-		struct TextureBarrier {
-			TextureID texture;
-			BitField<BarrierAccessBits> src_access = {};
-			BitField<BarrierAccessBits> dst_access = {};
-			TextureLayout prev_layout = TEXTURE_LAYOUT_UNDEFINED;
-			TextureLayout next_layout = TEXTURE_LAYOUT_UNDEFINED;
-			TextureSubresourceRange subresources;
-		};
 
 		struct AccelerationStructureBarrier {
 			AccelerationStructureID acceleration_structure;
@@ -787,12 +780,6 @@ namespace Vulkan
 			AttachmentStoreOp stencil_store_op = ATTACHMENT_STORE_OP_DONT_CARE;
 			TextureLayout initial_layout = TEXTURE_LAYOUT_UNDEFINED;
 			TextureLayout final_layout = TEXTURE_LAYOUT_UNDEFINED;
-		};
-
-		struct ShaderStageSPIRVData {
-			ShaderStage shader_stage = SHADER_STAGE_MAX;
-			std::vector<uint8_t> spirv;
-			std::vector<uint64_t> dynamic_buffers;
 		};
 
 		struct VertexFormatInfo {
@@ -855,6 +842,116 @@ namespace Vulkan
 			uint32_t color_attachment = 0xffffffff;
 			RenderPassClearValue value;
 		};
+
+		struct TextureSubresourceRange {
+			BitField<TextureAspectBits> aspect = {};
+			uint32_t base_mipmap = 0;
+			uint32_t mipmap_count = 0;
+			uint32_t base_layer = 0;
+			uint32_t layer_count = 0;
+		};
+
+		struct TextureBarrier {
+			TextureID texture;
+			BitField<BarrierAccessBits> src_access = {};
+			BitField<BarrierAccessBits> dst_access = {};
+			TextureLayout prev_layout = TEXTURE_LAYOUT_UNDEFINED;
+			TextureLayout next_layout = TEXTURE_LAYOUT_UNDEFINED;
+			TextureSubresourceRange subresources;
+		};
+
+		struct TextureSubresourceLayers {
+			BitField<TextureAspectBits> aspect = {};
+			uint32_t mipmap = 0;
+			uint32_t base_layer = 0;
+			uint32_t layer_count = 0;
+		};
+
+		struct BufferTextureCopyRegion {
+			uint64_t buffer_offset = 0;
+			uint64_t row_pitch = 0;
+			TextureSubresource texture_subresource;
+			Vector3i texture_offset;
+			Vector3i texture_region_size;
+		};
+
+		struct TextureCopyRegion {
+			TextureSubresourceLayers src_subresources;
+			Vector3i src_offset;
+			TextureSubresourceLayers dst_subresources;
+			Vector3i dst_offset;
+			Vector3i size;
+		};
+
+		struct BufferCopyRegion {
+			uint64_t src_offset = 0;
+			uint64_t dst_offset = 0;
+			uint64_t size = 0;
+		};
+
+		struct PipelineSpecializationConstant {
+			PipelineSpecializationConstantType type = {};
+			uint32_t constant_id = 0xffffffff;
+			union {
+				uint32_t int_value = 0;
+				float float_value;
+				bool bool_value;
+			};
+		};
+
+		struct ShaderUniform {
+			UniformType type = UniformType::UNIFORM_TYPE_MAX;
+			bool writable = false;
+			uint32_t binding = 0;
+			BitField<ShaderStage> stages = {};
+			uint32_t length = 0; // Size of arrays (in total elements), or ubos (in bytes * total elements).
+
+			bool operator!=(const ShaderUniform& p_other) const {
+				return binding != p_other.binding || type != p_other.type || writable != p_other.writable || stages != p_other.stages || length != p_other.length;
+			}
+
+			bool operator<(const ShaderUniform& p_other) const {
+				if (binding != p_other.binding) {
+					return binding < p_other.binding;
+				}
+				if (type != p_other.type) {
+					return type < p_other.type;
+				}
+				if (writable != p_other.writable) {
+					return writable < p_other.writable;
+				}
+				if (stages != p_other.stages) {
+					return stages < p_other.stages;
+				}
+				if (length != p_other.length) {
+					return length < p_other.length;
+				}
+				return false;
+			}
+		};
+
+		struct ShaderSpecializationConstant : public PipelineSpecializationConstant {
+			BitField<ShaderStage> stages = {};
+
+			bool operator<(const ShaderSpecializationConstant& p_other) const { return constant_id < p_other.constant_id; }
+		};
+
+		struct ShaderReflection {
+			uint64_t vertex_input_mask = 0;
+			uint32_t fragment_output_mask = 0;
+			PipelineType pipeline_type = PIPELINE_TYPE_RASTERIZATION;
+			bool has_multiview = false;
+			bool has_dynamic_buffers = false;
+			uint32_t compute_local_size[3] = {};
+			uint32_t push_constant_size = 0;
+
+			std::vector<std::vector<ShaderUniform>> uniform_sets;
+			std::vector<ShaderSpecializationConstant> specialization_constants;
+			std::vector<ShaderStage> stages_vector;
+			BitField<ShaderStage> stages_bits = {};
+			BitField<ShaderStage> push_constant_stages = {};
+		};
+
 	private:
 
 		struct Subpass {
@@ -968,27 +1065,15 @@ namespace Vulkan
 			Color blend_constant;
 		};
 
-		struct PipelineSpecializationConstant {
-			PipelineSpecializationConstantType type = {};
-			uint32_t constant_id = 0xffffffff;
-			union {
-				uint32_t int_value = 0;
-				float float_value;
-				bool bool_value;
-			};
-		};
 
-		struct ShaderSpecializationConstant : public PipelineSpecializationConstant {
-			BitField<ShaderStage> stages = {};
-
-			bool operator<(const ShaderSpecializationConstant& p_other) const { return constant_id < p_other.constant_id; }
-		};
 
 		struct ImmutableSampler {
 			UniformType type = UNIFORM_TYPE_MAX;
 			uint32_t binding = 0xffffffff; // Binding index as specified in shader.
 			std::vector<ID> ids;
 		};
+
+		
 
 	public:
 
@@ -1123,6 +1208,22 @@ namespace Vulkan
 
 		void framebuffer_free(FramebufferID p_framebuffer);
 
+		void command_clear_buffer(CommandBufferID p_cmd_buffer, BufferID p_buffer, uint64_t p_offset, uint64_t p_size);
+
+		void command_copy_buffer(CommandBufferID p_cmd_buffer, BufferID p_src_buffer, BufferID p_dst_buffer, std::span<BufferCopyRegion> p_regions);
+
+		void command_copy_texture(CommandBufferID p_cmd_buffer, TextureID p_src_texture, TextureLayout p_src_texture_layout, TextureID p_dst_texture, TextureLayout p_dst_texture_layout, std::span<TextureCopyRegion> p_regions);
+
+		void command_resolve_texture(CommandBufferID p_cmd_buffer, TextureID p_src_texture, TextureLayout p_src_texture_layout, uint32_t p_src_layer, uint32_t p_src_mipmap, TextureID p_dst_texture, TextureLayout p_dst_texture_layout, uint32_t p_dst_layer, uint32_t p_dst_mipmap);
+
+		void command_clear_color_texture(CommandBufferID p_cmd_buffer, TextureID p_texture, TextureLayout p_texture_layout, const Color& p_color, const TextureSubresourceRange& p_subresources);
+
+		void command_clear_depth_stencil_texture(CommandBufferID p_cmd_buffer, TextureID p_texture, TextureLayout p_texture_layout, float p_depth, uint8_t p_stencil, const TextureSubresourceRange& p_subresources);
+
+		void command_copy_buffer_to_texture(CommandBufferID p_cmd_buffer, BufferID p_src_buffer, TextureID p_dst_texture, TextureLayout p_dst_texture_layout, std::span<BufferTextureCopyRegion> p_regions);
+
+		void command_copy_texture_to_buffer(CommandBufferID p_cmd_buffer, TextureID p_src_texture, TextureLayout p_src_texture_layout, BufferID p_dst_buffer, std::span<BufferTextureCopyRegion> p_regions);
+
 		void pipeline_free(PipelineID p_pipeline);
 
 		void command_bind_push_constants(CommandBufferID p_cmd_buffer, ShaderID p_shader, uint32_t p_dst_first_index, std::span<uint32_t> p_data);
@@ -1142,6 +1243,38 @@ namespace Vulkan
 		void command_begin_render_pass(CommandBufferID p_cmd_buffer, RenderPassID p_render_pass, FramebufferID p_framebuffer, CommandBufferType p_cmd_buffer_type, const Rect2i& p_rect, std::vector<RenderPassClearValue> p_clear_values);
 
 		void command_end_render_pass(CommandBufferID p_cmd_buffer);
+
+		void command_next_render_subpass(CommandBufferID p_cmd_buffer, CommandBufferType p_cmd_buffer_type);
+
+		void command_render_set_viewport(CommandBufferID p_cmd_buffer, std::span<Rect2i> p_viewports);
+
+		void command_render_set_scissor(CommandBufferID p_cmd_buffer, std::span<Rect2i> p_scissors);
+
+		void command_render_clear_attachments(CommandBufferID p_cmd_buffer, std::span<AttachmentClear> p_attachment_clears, std::span<Rect2i> p_rects);
+
+		void command_bind_render_pipeline(CommandBufferID p_cmd_buffer, PipelineID p_pipeline);
+
+		void command_bind_render_uniform_sets(CommandBufferID p_cmd_buffer, std::span<UniformSetID> p_uniform_sets, ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count, uint32_t p_dynamic_offsets);
+
+		void command_render_draw(CommandBufferID p_cmd_buffer, uint32_t p_vertex_count, uint32_t p_instance_count, uint32_t p_base_vertex, uint32_t p_first_instance);
+
+		void command_render_draw_indexed(CommandBufferID p_cmd_buffer, uint32_t p_index_count, uint32_t p_instance_count, uint32_t p_first_index, int32_t p_vertex_offset, uint32_t p_first_instance);
+
+		void command_render_draw_indexed_indirect(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset, uint32_t p_draw_count, uint32_t p_stride);
+
+		void command_render_draw_indexed_indirect_count(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset, BufferID p_count_buffer, uint64_t p_count_buffer_offset, uint32_t p_max_draw_count, uint32_t p_stride);
+
+		void command_render_draw_indirect(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset, uint32_t p_draw_count, uint32_t p_stride);
+
+		void command_render_draw_indirect_count(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset, BufferID p_count_buffer, uint64_t p_count_buffer_offset, uint32_t p_max_draw_count, uint32_t p_stride);
+
+		void command_render_bind_vertex_buffers(CommandBufferID p_cmd_buffer, uint32_t p_binding_count, const BufferID* p_buffers, const uint64_t* p_offsets, uint64_t p_dynamic_offsets);
+
+		void command_render_bind_index_buffer(CommandBufferID p_cmd_buffer, BufferID p_buffer, IndexBufferFormat p_format, uint64_t p_offset);
+
+		void command_render_set_blend_constants(CommandBufferID p_cmd_buffer, const Color& p_constants);
+
+		void command_render_set_line_width(CommandBufferID p_cmd_buffer, float p_width);
 
 		Device::PipelineID render_pipeline_create(ShaderID p_shader, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, PipelineRasterizationState p_rasterization_state, PipelineMultisampleState p_multisample_state, PipelineDepthStencilState p_depth_stencil_state, PipelineColorBlendState p_blend_state, std::span<int32_t> p_color_attachments, BitField<PipelineDynamicStateFlags> p_dynamic_state, RenderPassID p_render_pass, uint32_t p_render_subpass, std::span<PipelineSpecializationConstant> p_specialization_constants);
 
@@ -1193,6 +1326,7 @@ namespace Vulkan
 		bool _determine_swap_chain_format(Context::SurfaceID p_surface, VkFormat& r_format, VkColorSpaceKHR& r_color_space);
 		void _swap_chain_release(SwapChain* p_swap_chain);
 		VmaPool _find_or_create_small_allocs_pool(uint32_t p_mem_type_index);
+		Device::ShaderID shader_create_from_container(const RenderingShaderContainer* p_shader_container, const std::vector<ImmutableSampler>& p_immutable_samplers);
 		VkDescriptorPool _descriptor_set_pool_create(const DescriptorSetPoolKey& p_key, bool p_linear_pool);
 		void _descriptor_set_pool_unreference(DescriptorSetPools::iterator p_pool_sets_it, VkDescriptorPool p_vk_descriptor_pool, int p_linear_pool_index);
 

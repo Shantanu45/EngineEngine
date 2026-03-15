@@ -1,6 +1,7 @@
 #pragma once
 
 #include "glm/glm.hpp"
+#include <glm/gtc/type_ptr.hpp>
 
 using Color = glm::vec4;
 using Point2i = glm::ivec2;
@@ -9,6 +10,8 @@ using Size2i = glm::ivec2;
 using Size2 = glm::vec2;
 using Vector2i = glm::ivec2;
 using Vector2 = glm::vec2;
+using Vector3i = glm::ivec3;
+using Vector3 = glm::vec3;
 
 enum Side {
 	SIDE_LEFT,
