@@ -33,6 +33,7 @@ set(INCLUDES
 	"${PROJECT_SOURCE_DIR}/third_party"
 	"${PROJECT_SOURCE_DIR}/third_party/Vulkan-Headers/include"
 	"${PROJECT_SOURCE_DIR}/third_party/volk"
+	"$ENV{VULKAN_SDK}/Include"
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${INCLUDES})

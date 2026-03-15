@@ -2,7 +2,6 @@
 #include <cstdint>
 #include "vulkan_device.h"
 
-
 using PackedByteArray = std::vector<uint8_t>;
 
 namespace Vulkan
@@ -107,7 +106,7 @@ namespace Vulkan
 
 		template <class T>
 		struct ReflectSymbol {
-			static constexpr uint32_t STAGE_INDEX[RDC::SHADER_STAGE_MAX] = {
+			static constexpr uint32_t STAGE_INDEX[SHADER_STAGE_MAX] = {
 				0, // SHADER_STAGE_VERTEX
 				1, // SHADER_STAGE_FRAGMENT
 				0, // SHADER_STAGE_TESSELATION_CONTROL
@@ -121,12 +120,12 @@ namespace Vulkan
 			const T* _spv_reflect[2] = { nullptr };
 
 		public:
-			_FORCE_INLINE_ constexpr uint32_t get_index_for_stage(RDC::ShaderStage p_stage) const {
+			_FORCE_INLINE_ constexpr uint32_t get_index_for_stage(Device::ShaderStage p_stage) const {
 				DEV_ASSERT(stages.has_flag((1 << p_stage)));
 				return STAGE_INDEX[p_stage];
 			}
 
-			const T& get_spv_reflect(RDC::ShaderStage p_stage) const;
+			const T& get_spv_reflect(ShaderStage p_stage) const;
 
 			/*! Returns the first valid stage if multiple stages are set.
 			 *

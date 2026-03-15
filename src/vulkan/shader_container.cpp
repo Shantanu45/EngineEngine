@@ -1,5 +1,4 @@
 #include "shader_container.h"
-#include ""
 
 namespace Vulkan
 {
@@ -94,6 +93,7 @@ namespace Vulkan
 
 			shader.shader_stage = p_spirv[i].shader_stage;
 		}
+		return true;
 	}
 
 	void RenderingShaderContainer::set_from_shader_reflection(const ReflectShader& p_reflection)

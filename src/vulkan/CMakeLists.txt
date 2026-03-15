@@ -21,6 +21,7 @@ find_package(xxHash REQUIRED)
 set(INCLUDES 
 	"${PROJECT_SOURCE_DIR}/src"
 	"${PROJECT_SOURCE_DIR}/third_party"
+	"$ENV{VULKAN_SDK}/Include"
 )
 target_include_directories(${PROJECT_NAME} PRIVATE ${INCLUDES})
 
