@@ -381,7 +381,6 @@ class RenderingShaderContainerFormatVulkan;
 			RENDER_PRIMITIVE_MAX
 		};
 
-		static const uint32_t MAX_UNIFORM_SETS = 16;
 
 		// Keep the enum values in sync with the `SHADER_UNIFORM_NAMES` values (file rendering_device.cpp).
 		
@@ -391,15 +390,6 @@ class RenderingShaderContainerFormatVulkan;
 
 		
 	private:
-
-		const char* SHADER_STAGE_NAMES[SHADER_STAGE_MAX] = {
-			"Vertex",
-			"Fragment",
-			"TesselationControl",
-			"TesselationEvaluation",
-			"Compute",
-				};
-
 
 		struct VertexAttribute {
 			uint32_t binding = UINT32_MAX; // Attribute buffer binding index. When set to UINT32_MAX, it uses the index of the attribute in the layout.

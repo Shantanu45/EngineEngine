@@ -9,11 +9,11 @@
 
 using PackedByteArray = std::vector<uint8_t>;
 
+struct SpvReflectShaderModule;
+struct SpvReflectDescriptorBinding;
+struct SpvReflectSpecializationConstant;
 namespace Vulkan
 {
-	struct SpvReflectShaderModule;
-	struct SpvReflectDescriptorBinding;
-	struct SpvReflectSpecializationConstant;
 
 	enum UniformType {
 		UNIFORM_TYPE_SAMPLER, // For sampling only (sampler GLSL type).
@@ -109,6 +109,14 @@ namespace Vulkan
 		BitField<ShaderStage> push_constant_stages = {};
 	};
 
+	const char* SHADER_STAGE_NAMES[SHADER_STAGE_MAX] = {
+	"Vertex",
+	"Fragment",
+	"TesselationControl",
+	"TesselationEvaluation",
+	"Compute",
+	};
+
 	class RenderingShaderContainer 
 	{
 
@@ -116,6 +124,8 @@ namespace Vulkan
 		static const uint32_t CONTAINER_MAGIC_NUMBER = 0x43535247;
 		static const uint32_t CONTAINER_VERSION = 2;
 		static const uint32_t FORMAT_VERSION;
+		static const uint32_t MAX_UNIFORM_SETS = 16;
+
 
 		bool debug_info_enabled = false;
 

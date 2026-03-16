@@ -1,4 +1,4 @@
-set(PROJECT_NAME vulkan)
+set(PROJECT_NAME compiler)
 
 file(GLOB SOURCES CONFIGURE_DEPENDS "*.cpp")
 file(GLOB HEADERS CONFIGURE_DEPENDS "*.h")
@@ -10,32 +10,24 @@ ${HEADERS}
 
 setup_msvc_options(${PROJECT_NAME})
 
-add_definitions(-DNOMINMAX) 
-
-find_package(SDL3 REQUIRED)
-find_package(glm REQUIRED)
-find_package(VulkanMemoryAllocator REQUIRED)
 find_package(shaderc REQUIRED)
 find_package(xxHash REQUIRED)
 find_package(spirv-reflect-static REQUIRED)
+
+# allows us to use std::max when Windows.h is included
+add_definitions(-DNOMINMAX) 
 
 
 set(INCLUDES 
 	"${PROJECT_SOURCE_DIR}/src"
 	"${PROJECT_SOURCE_DIR}/third_party"
-	"$ENV{VULKAN_SDK}/Include"
 )
 target_include_directories(${PROJECT_NAME} PRIVATE ${INCLUDES})
 
 set(ADDITIONAL_LIBRARY_DEPENDENCIES
-	spdlog::spdlog
 	libassert::assert
-	sdl::sdl
-	glm::glm
-	volk::volk
-	GPUOpen::VulkanMemoryAllocator
 	shaderc::shaderc
-	re-spirv
+	spirv-tools::spirv-tools
 	xxHash::xxhash
 	spirv-reflect-static
 )
