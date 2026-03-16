@@ -491,7 +491,7 @@ class RenderingShaderContainerFormatVulkan;
 		public:
 		struct SwapChain {
 			VkSwapchainKHR vk_swapchain = VK_NULL_HANDLE;
-			Context::SurfaceID surface = Context::SurfaceID();
+			RenderingContextDriverVulkan::SurfaceID surface = RenderingContextDriverVulkan::SurfaceID();
 			VkFormat format = VK_FORMAT_UNDEFINED;
 			VkColorSpaceKHR color_space = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
 			std::vector<VkImage> images;
@@ -970,7 +970,7 @@ class RenderingShaderContainerFormatVulkan;
 
 		static const int32_t ATTACHMENT_UNUSED = -1;
 
-		Device(Context* p_context_driver);
+		Device(RenderingContextDriverVulkan* p_context_driver);
 		virtual ~Device();
 
 		Error initialize(uint32_t p_device_index, uint32_t p_frame_count);
@@ -1051,7 +1051,7 @@ class RenderingShaderContainerFormatVulkan;
 
 		void semaphore_free(SemaphoreID p_semaphore);
 		
-		Device::SwapChainID swap_chain_create(Context::SurfaceID p_surface);
+		Device::SwapChainID swap_chain_create(RenderingContextDriverVulkan::SurfaceID p_surface);
 
 		Error swap_chain_resize(CommandQueueID p_cmd_queue, SwapChainID p_swap_chain, uint32_t p_desired_framebuffer_count);
 
@@ -1069,7 +1069,7 @@ class RenderingShaderContainerFormatVulkan;
 
 		void swap_chain_free(SwapChainID p_swap_chain);
 
-		Device::CommandQueueFamilyID command_queue_family_get(BitField<Device::CommandQueueFamilyBits> p_cmd_queue_family_bits, Context::SurfaceID p_surface);
+		Device::CommandQueueFamilyID command_queue_family_get(BitField<Device::CommandQueueFamilyBits> p_cmd_queue_family_bits, RenderingContextDriverVulkan::SurfaceID p_surface);
 
 		Device::CommandQueueID command_queue_create(CommandQueueFamilyID p_cmd_queue_family, bool p_identify_as_main_queue);
 
@@ -1214,7 +1214,7 @@ class RenderingShaderContainerFormatVulkan;
 		bool _release_image_semaphore(CommandQueue* p_command_queue, uint32_t p_semaphore_index, bool p_release_on_swap_chain);
 		bool _recreate_image_semaphore(CommandQueue* p_command_queue, uint32_t p_semaphore_index, bool p_release_on_swap_chain);
 		VkDebugReportObjectTypeEXT _convert_to_debug_report_objectType(VkObjectType p_object_type);
-		bool _determine_swap_chain_format(Context::SurfaceID p_surface, VkFormat& r_format, VkColorSpaceKHR& r_color_space);
+		bool _determine_swap_chain_format(RenderingContextDriverVulkan::SurfaceID p_surface, VkFormat& r_format, VkColorSpaceKHR& r_color_space);
 		void _swap_chain_release(SwapChain* p_swap_chain);
 		VmaPool _find_or_create_small_allocs_pool(uint32_t p_mem_type_index);
 		//Device::ShaderID shader_create_from_container(const RenderingShaderContainer* p_shader_container, const std::vector<ImmutableSampler>& p_immutable_samplers);
@@ -1223,8 +1223,8 @@ class RenderingShaderContainerFormatVulkan;
 
 	private:
 		VkDevice vk_device = VK_NULL_HANDLE;
-		Context* context_driver = nullptr;
-		Context::Device context_device = {};
+		RenderingContextDriverVulkan* context_driver = nullptr;
+		RenderingContextDriverVulkan::Device context_device = {};
 		uint32_t frame_count = 1;
 
 		VkPhysicalDevice physical_device = VK_NULL_HANDLE;

@@ -14,13 +14,13 @@ namespace Vulkan
 	};
 
 	using namespace ::Rendering;
-	class Context : public RenderingContextDriver
+	class RenderingContextDriverVulkan : public RenderingContextDriver
 	{
 	public:
 		typedef uint64_t SurfaceID;
 
-		Context();
-		virtual ~Context();
+		RenderingContextDriverVulkan();
+		virtual ~RenderingContextDriverVulkan();
 
 		virtual Error initialize() override;
 		virtual SurfaceID surface_create(const void* p_platform_data) override;
@@ -50,7 +50,7 @@ namespace Vulkan
 		virtual void driver_free(RenderingDeviceDriver* p_driver) override;
 
 
-		Context::SurfaceID set_surface(VkSurfaceKHR vk_surface);
+		RenderingContextDriverVulkan::SurfaceID set_surface(VkSurfaceKHR vk_surface);
 
 		static bool init_loader(PFN_vkGetInstanceProcAddr addr, bool force_reload = false);
 

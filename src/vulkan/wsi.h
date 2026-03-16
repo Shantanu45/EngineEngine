@@ -83,10 +83,10 @@ namespace Vulkan
 		void free_pending_resources(int p_frame);
 		WSIPlatform* platform = nullptr;
 
-		Context context;
+		RenderingContextDriverVulkan context;
 		std::unique_ptr<Device> device_ptr = nullptr;
 
-		Context::SurfaceID surface;
+		RenderingContextDriverVulkan::SurfaceID surface;
 		Device::SwapChainID swapchain;
 
 		uint32_t frame_count = 0;

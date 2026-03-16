@@ -327,7 +327,7 @@ namespace Vulkan
 #pragma endregion
 
 #pragma region Device
-	Device::Device(Context* p_context_driver)
+	Device::Device(RenderingContextDriverVulkan* p_context_driver)
 	{
 		DEBUG_ASSERT(p_context_driver != nullptr);
 
@@ -2825,7 +2825,7 @@ namespace Vulkan
 #pragma region Command
 
 	// ----- QUEUE FAMILY -----
-	Device::CommandQueueFamilyID Device::command_queue_family_get(BitField<Device::CommandQueueFamilyBits> p_cmd_queue_family_bits, Context::SurfaceID p_surface) {
+	Device::CommandQueueFamilyID Device::command_queue_family_get(BitField<Device::CommandQueueFamilyBits> p_cmd_queue_family_bits, RenderingContextDriverVulkan::SurfaceID p_surface) {
 		// Pick the queue with the least amount of bits that can fulfill the requirements.
 		VkQueueFlags picked_queue_flags = VK_QUEUE_FLAG_BITS_MAX_ENUM;
 		uint32_t picked_family_index = UINT_MAX;
@@ -3227,10 +3227,10 @@ namespace Vulkan
 		VkColorSpaceKHR colorspace;
 	};
 
-	bool Device::_determine_swap_chain_format(Context::SurfaceID p_surface, VkFormat& r_format, VkColorSpaceKHR& r_color_space) {
+	bool Device::_determine_swap_chain_format(RenderingContextDriverVulkan::SurfaceID p_surface, VkFormat& r_format, VkColorSpaceKHR& r_color_space) {
 		DEV_ASSERT(p_surface != 0);
 
-		Context::Surface* surface = (Context::Surface*)(p_surface);
+		RenderingContextDriverVulkan::Surface* surface = (RenderingContextDriverVulkan::Surface*)(p_surface);
 
 		// Retrieve the formats supported by the surface.
 		uint32_t format_count = 0;
@@ -3335,7 +3335,7 @@ namespace Vulkan
 		swap_chain->present_semaphores.clear();
 	}
 
-	Device::SwapChainID Device::swap_chain_create(Context::SurfaceID p_surface) {
+	Device::SwapChainID Device::swap_chain_create(RenderingContextDriverVulkan::SurfaceID p_surface) {
 		DEV_ASSERT(p_surface != 0);
 
 		// Create an empty swap chain until it is resized.
@@ -3361,7 +3361,7 @@ namespace Vulkan
 		}
 
 		// Retrieve the surface's capabilities.
-		Context::Surface* surface = (Context::Surface*)(swap_chain->surface);
+		RenderingContextDriverVulkan::Surface* surface = (RenderingContextDriverVulkan::Surface*)(swap_chain->surface);
 		VkSurfaceCapabilitiesKHR surface_capabilities = {};
 		VkResult err = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device, surface->vk_surface, &surface_capabilities);
 		ERR_FAIL_COND_V(err != VK_SUCCESS, ERR_CANT_CREATE);

@@ -55,7 +55,7 @@ namespace EE
 				return false;
 			}
 
-			if (!Vulkan::Context::init_loader(
+			if (!Vulkan::RenderingContextDriverVulkan::init_loader(
 				reinterpret_cast<PFN_vkGetInstanceProcAddr>(SDL_Vulkan_GetVkGetInstanceProcAddr())))
 			{
 				LOGE("Failed to initialize Vulkan loader.\n");

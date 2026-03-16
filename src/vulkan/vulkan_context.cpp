@@ -12,7 +12,7 @@ namespace Vulkan
 	static bool loader_init_once;
 	static PFN_vkGetInstanceProcAddr instance_proc_addr;
 
-    bool Context::init_loader(PFN_vkGetInstanceProcAddr addr, bool force_reload)
+    bool RenderingContextDriverVulkan::init_loader(PFN_vkGetInstanceProcAddr addr, bool force_reload)
     {
 		std::lock_guard<std::mutex> holder(loader_init_lock);
 
@@ -47,7 +47,7 @@ namespace Vulkan
 		return true;
     }
 
-	VkApplicationInfo Context::get_promoted_application_info() const
+	VkApplicationInfo RenderingContextDriverVulkan::get_promoted_application_info() const
 	{
 		VkInstanceCreateInfo* inherit_info = nullptr;		// TODO:
 		VkApplicationInfo app_info = {
@@ -65,7 +65,7 @@ namespace Vulkan
 		return app_info;
 	}
 
-	bool Context::device_supports_present(uint32_t p_device_index, SurfaceID p_surface) const
+	bool RenderingContextDriverVulkan::device_supports_present(uint32_t p_device_index, SurfaceID p_surface) const
 	{
 		DEBUG_ASSERT(p_device_index < physical_devices.size());
 
@@ -81,7 +81,7 @@ namespace Vulkan
 		return false;
 	}
 
-	bool Context::queue_family_supports_present(VkPhysicalDevice p_physical_device, uint32_t p_queue_family_index, SurfaceID p_surface) const
+	bool RenderingContextDriverVulkan::queue_family_supports_present(VkPhysicalDevice p_physical_device, uint32_t p_queue_family_index, SurfaceID p_surface) const
 	{
 		DEBUG_ASSERT(p_physical_device != VK_NULL_HANDLE);
 		DEBUG_ASSERT(p_surface != 0);
@@ -91,7 +91,7 @@ namespace Vulkan
 		return err == VK_SUCCESS && present_supported;
 	}
 
-	Error Context::_initialize_instance() {
+	Error RenderingContextDriverVulkan::_initialize_instance() {
 
 		Error err;
 		std::vector<const char*> enabled_extension_names;
@@ -177,7 +177,7 @@ namespace Vulkan
 		return OK;
 	}
 
-	Error Context::_initialize_devices() {
+	Error RenderingContextDriverVulkan::_initialize_devices() {
 		uint32_t physical_device_count = 0;
 		VkResult err = vkEnumeratePhysicalDevices(instance, &physical_device_count, nullptr);
 		ERR_FAIL_COND_V(err != VK_SUCCESS, ERR_CANT_CREATE);
@@ -215,7 +215,7 @@ namespace Vulkan
 		return OK;
 	}
 
-	Error Context::_initialize_vulkan_version() {
+	Error RenderingContextDriverVulkan::_initialize_vulkan_version() {
 		// https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkApplicationInfo.html#_description
 		// For Vulkan 1.0 vkEnumerateInstanceVersion is not available, including not in the loader we compile against on Android.
 		typedef VkResult(VKAPI_PTR* _vkEnumerateInstanceVersion)(uint32_t*);
@@ -240,7 +240,7 @@ namespace Vulkan
 		return OK;
 	}
 
-	VKAPI_ATTR VkBool32 VKAPI_CALL Context::_debug_messenger_callback(VkDebugUtilsMessageSeverityFlagBitsEXT p_message_severity, VkDebugUtilsMessageTypeFlagsEXT p_message_type, const VkDebugUtilsMessengerCallbackDataEXT* p_callback_data, void* p_user_data) {
+	VKAPI_ATTR VkBool32 VKAPI_CALL RenderingContextDriverVulkan::_debug_messenger_callback(VkDebugUtilsMessageSeverityFlagBitsEXT p_message_severity, VkDebugUtilsMessageTypeFlagsEXT p_message_type, const VkDebugUtilsMessengerCallbackDataEXT* p_callback_data, void* p_user_data) {
 		// This error needs to be ignored because the AMD allocator will mix up memory types on IGP processors.
 		if (strstr(p_callback_data->pMessage, "Mapping an image with layout") != nullptr && strstr(p_callback_data->pMessage, "can result in undefined behavior if this memory is used by the device") != nullptr) {
 			return VK_FALSE;
@@ -342,7 +342,7 @@ namespace Vulkan
 		return VK_FALSE;
 	}
 
-	VKAPI_ATTR VkBool32 VKAPI_CALL Context::_debug_report_callback(VkDebugReportFlagsEXT p_flags, VkDebugReportObjectTypeEXT p_object_type, uint64_t p_object, size_t p_location, int32_t p_message_code, const char* p_layer_prefix, const char* p_message, void* p_user_data)
+	VKAPI_ATTR VkBool32 VKAPI_CALL RenderingContextDriverVulkan::_debug_report_callback(VkDebugReportFlagsEXT p_flags, VkDebugReportObjectTypeEXT p_object_type, uint64_t p_object, size_t p_location, int32_t p_message_code, const char* p_layer_prefix, const char* p_message, void* p_user_data)
 	{
 		std::string debug_message = std::string("Vulkan Debug Report: object - ") + std::to_string(p_object) + "\n" + p_message;
 
@@ -363,7 +363,7 @@ namespace Vulkan
 		return VK_FALSE;
 	}
 
-	Error Context::_find_validation_layers(std::vector<const char*>& r_layer_names) const {
+	Error RenderingContextDriverVulkan::_find_validation_layers(std::vector<const char*>& r_layer_names) const {
 		r_layer_names.clear();
 
 		uint32_t instance_layer_count = 0;
@@ -416,7 +416,7 @@ namespace Vulkan
 		return OK;
 	}
 
-	Error Context::_create_vulkan_instance(const VkInstanceCreateInfo* p_create_info, VkInstance* r_instance)
+	Error RenderingContextDriverVulkan::_create_vulkan_instance(const VkInstanceCreateInfo* p_create_info, VkInstance* r_instance)
 	{
 
 		VkResult err = vkCreateInstance(p_create_info, nullptr, r_instance);
@@ -436,16 +436,16 @@ namespace Vulkan
 		return OK;
 	}
 
-	bool Context::_use_validation_layers() const {
+	bool RenderingContextDriverVulkan::_use_validation_layers() const {
 		return true;
 	}
 
-	void Context::_register_requested_instance_extension(const std::string& p_extension_name, bool p_required)
+	void RenderingContextDriverVulkan::_register_requested_instance_extension(const std::string& p_extension_name, bool p_required)
 	{
 		requested_instance_extensions[p_extension_name] = p_required;
 	}
 
-	Error Context::_initialize_instance_extensions()
+	Error RenderingContextDriverVulkan::_initialize_instance_extensions()
 	{
 		enabled_instance_extension_names.clear();
 
@@ -525,11 +525,11 @@ namespace Vulkan
 		return OK;
 	}
 
-	Context::Context()
+	RenderingContextDriverVulkan::RenderingContextDriverVulkan()
 	{
 	}
 
-	Context::~Context()
+	RenderingContextDriverVulkan::~RenderingContextDriverVulkan()
 	{
 		if (debug_messenger != VK_NULL_HANDLE) {
 			vkDestroyDebugUtilsMessengerEXT(instance, debug_messenger, nullptr);
@@ -544,7 +544,7 @@ namespace Vulkan
 		}
 	}
 
-	Error Context::initialize()
+	Error RenderingContextDriverVulkan::initialize()
 	{
 		Error err;
 
@@ -569,13 +569,13 @@ namespace Vulkan
 		return OK;
 	}
 
-	Context::SurfaceID Context::set_surface(VkSurfaceKHR vk_surface) {
+	RenderingContextDriverVulkan::SurfaceID RenderingContextDriverVulkan::set_surface(VkSurfaceKHR vk_surface) {
 		Surface* surface = new Surface;
 		surface->vk_surface = vk_surface;
 		return SurfaceID(surface);
 	}
 
-	Context::SurfaceID Context::surface_create(const void* p_platform_data) {
+	RenderingContextDriverVulkan::SurfaceID RenderingContextDriverVulkan::surface_create(const void* p_platform_data) {
 		const WindowPlatformData* wpd = (const WindowPlatformData*)(p_platform_data);
 
 		VkWin32SurfaceCreateInfoKHR create_info = {};
@@ -592,139 +592,139 @@ namespace Vulkan
 		return SurfaceID(surface);
 	}
 
-	void Context::surface_set_size(SurfaceID p_surface, uint32_t p_width, uint32_t p_height) {
+	void RenderingContextDriverVulkan::surface_set_size(SurfaceID p_surface, uint32_t p_width, uint32_t p_height) {
 		Surface* surface = (Surface*)(p_surface);
 		surface->width = p_width;
 		surface->height = p_height;
 		surface->needs_resize = true;
 	}
 
-	void Context::surface_set_vsync_mode(SurfaceID p_surface, DisplayServerEnums::VSyncMode p_vsync_mode)
+	void RenderingContextDriverVulkan::surface_set_vsync_mode(SurfaceID p_surface, DisplayServerEnums::VSyncMode p_vsync_mode)
 	{
 		Surface* surface = (Surface*)(p_surface);
 		surface->vsync_mode = p_vsync_mode;
 		surface->needs_resize = true;
 	}
 
-	DisplayServerEnums::VSyncMode Context::surface_get_vsync_mode(SurfaceID p_surface) const
+	DisplayServerEnums::VSyncMode RenderingContextDriverVulkan::surface_get_vsync_mode(SurfaceID p_surface) const
 	{
 		Surface* surface = (Surface*)(p_surface);
 		return surface->vsync_mode;
 	}
 
-	void Context::surface_set_hdr_output_enabled(SurfaceID p_surface, bool p_enabled) {
+	void RenderingContextDriverVulkan::surface_set_hdr_output_enabled(SurfaceID p_surface, bool p_enabled) {
 		Surface* surface = (Surface*)(p_surface);
 		surface->hdr_output = p_enabled;
 		surface->needs_resize = true;
 	}
 
-	bool Context::surface_get_hdr_output_enabled(SurfaceID p_surface) const {
+	bool RenderingContextDriverVulkan::surface_get_hdr_output_enabled(SurfaceID p_surface) const {
 		Surface* surface = (Surface*)(p_surface);
 		return surface->hdr_output;
 	}
 
-	void Context::surface_set_hdr_output_reference_luminance(SurfaceID p_surface, float p_reference_luminance) {
+	void RenderingContextDriverVulkan::surface_set_hdr_output_reference_luminance(SurfaceID p_surface, float p_reference_luminance) {
 		Surface* surface = (Surface*)(p_surface);
 		surface->hdr_reference_luminance = p_reference_luminance;
 	}
 
-	float Context::surface_get_hdr_output_reference_luminance(SurfaceID p_surface) const {
+	float RenderingContextDriverVulkan::surface_get_hdr_output_reference_luminance(SurfaceID p_surface) const {
 		Surface* surface = (Surface*)(p_surface);
 		return surface->hdr_reference_luminance;
 	}
 
-	void Context::surface_set_hdr_output_max_luminance(SurfaceID p_surface, float p_max_luminance) {
+	void RenderingContextDriverVulkan::surface_set_hdr_output_max_luminance(SurfaceID p_surface, float p_max_luminance) {
 		Surface* surface = (Surface*)(p_surface);
 		surface->hdr_max_luminance = p_max_luminance;
 	}
 
-	float Context::surface_get_hdr_output_max_luminance(SurfaceID p_surface) const {
+	float RenderingContextDriverVulkan::surface_get_hdr_output_max_luminance(SurfaceID p_surface) const {
 		Surface* surface = (Surface*)(p_surface);
 		return surface->hdr_max_luminance;
 	}
 
-	void Context::surface_set_hdr_output_linear_luminance_scale(SurfaceID p_surface, float p_linear_luminance_scale) {
+	void RenderingContextDriverVulkan::surface_set_hdr_output_linear_luminance_scale(SurfaceID p_surface, float p_linear_luminance_scale) {
 		Surface* surface = (Surface*)(p_surface);
 		surface->hdr_linear_luminance_scale = p_linear_luminance_scale;
 	}
 
-	float Context::surface_get_hdr_output_linear_luminance_scale(SurfaceID p_surface) const {
+	float RenderingContextDriverVulkan::surface_get_hdr_output_linear_luminance_scale(SurfaceID p_surface) const {
 		Surface* surface = (Surface*)(p_surface);
 		return surface->hdr_linear_luminance_scale;
 	}
 
-	float Context::surface_get_hdr_output_max_value(SurfaceID p_surface) const {
+	float RenderingContextDriverVulkan::surface_get_hdr_output_max_value(SurfaceID p_surface) const {
 		Surface* surface = (Surface*)(p_surface);
 		return std::fmax(surface->hdr_max_luminance / std::fmax(surface->hdr_reference_luminance, 1.0f), 1.0f);
 	}
 
-	uint32_t Context::surface_get_width(SurfaceID p_surface) const {
+	uint32_t RenderingContextDriverVulkan::surface_get_width(SurfaceID p_surface) const {
 		Surface* surface = (Surface*)(p_surface);
 		return surface->width;
 	}
 
-	uint32_t Context::surface_get_height(SurfaceID p_surface) const {
+	uint32_t RenderingContextDriverVulkan::surface_get_height(SurfaceID p_surface) const {
 		Surface* surface = (Surface*)(p_surface);
 		return surface->height;
 	}
 
-	void Context::surface_set_needs_resize(SurfaceID p_surface, bool p_needs_resize) {
+	void RenderingContextDriverVulkan::surface_set_needs_resize(SurfaceID p_surface, bool p_needs_resize) {
 		Surface* surface = (Surface*)(p_surface);
 		surface->needs_resize = p_needs_resize;
 	}
 
-	bool Context::surface_get_needs_resize(SurfaceID p_surface) const {
+	bool RenderingContextDriverVulkan::surface_get_needs_resize(SurfaceID p_surface) const {
 		Surface* surface = (Surface*)(p_surface);
 		return surface->needs_resize;
 	}
 
-	void Context::surface_destroy(SurfaceID p_surface) {
+	void RenderingContextDriverVulkan::surface_destroy(SurfaceID p_surface) {
 		Surface* surface = (Surface*)(p_surface);
 		vkDestroySurfaceKHR(instance, surface->vk_surface, nullptr);
 		delete surface;
 	}
 
-	RenderingDeviceDriver* Context::driver_create()
+	RenderingDeviceDriver* RenderingContextDriverVulkan::driver_create()
 	{
 		return nullptr;
 	}
 
-	void Context::driver_free(RenderingDeviceDriver* p_driver)
+	void RenderingContextDriverVulkan::driver_free(RenderingDeviceDriver* p_driver)
 	{
 	}
 
-	const Context::Device& Context::device_get(uint32_t p_device_index) const {
+	const RenderingContextDriverVulkan::Device& RenderingContextDriverVulkan::device_get(uint32_t p_device_index) const {
 		DEBUG_ASSERT(p_device_index < driver_devices.size());
 		return driver_devices[p_device_index];
 	}
 
-	uint32_t Context::device_get_count() const {
+	uint32_t RenderingContextDriverVulkan::device_get_count() const {
 		return driver_devices.size();
 	}
 
-	bool Context::is_debug_utils_enabled() const {
+	bool RenderingContextDriverVulkan::is_debug_utils_enabled() const {
 		return enabled_instance_extension_names.contains(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 	}
 
-	bool Context::is_colorspace_supported() const {
+	bool RenderingContextDriverVulkan::is_colorspace_supported() const {
 		return enabled_instance_extension_names.contains(VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME);
 	}
 
-	VkInstance Context::instance_get() const {
+	VkInstance RenderingContextDriverVulkan::instance_get() const {
 		return instance;
 	}
 
-	VkPhysicalDevice Context::physical_device_get(uint32_t p_device_index) const {
+	VkPhysicalDevice RenderingContextDriverVulkan::physical_device_get(uint32_t p_device_index) const {
 		DEBUG_ASSERT(p_device_index < physical_devices.size());
 		return physical_devices[p_device_index];
 	}
 
-	uint32_t Context::queue_family_get_count(uint32_t p_device_index) const {
+	uint32_t RenderingContextDriverVulkan::queue_family_get_count(uint32_t p_device_index) const {
 		DEBUG_ASSERT(p_device_index < physical_devices.size());
 		return device_queue_families[p_device_index].properties.size();
 	}
 
-	VkQueueFamilyProperties Context::queue_family_get(uint32_t p_device_index, uint32_t p_queue_family_index) const {
+	VkQueueFamilyProperties RenderingContextDriverVulkan::queue_family_get(uint32_t p_device_index, uint32_t p_queue_family_index) const {
 		DEBUG_ASSERT(p_device_index < physical_devices.size());
 		DEBUG_ASSERT(p_queue_family_index < queue_family_get_count(p_device_index));
 		return device_queue_families[p_device_index].properties[p_queue_family_index];

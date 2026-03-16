@@ -74,7 +74,7 @@ namespace EE
 
 		std::unique_ptr<::Util::Logger> logger = nullptr;
 
-		Vulkan::Context vulkan_context;
+		Vulkan::RenderingContextDriverVulkan vulkan_context;
 		std::unique_ptr<Vulkan::Device> vulkan_device_ptr = nullptr;
 
 		std::unique_ptr<Vulkan::WSIPlatform> platform;
