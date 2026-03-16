@@ -54,8 +54,14 @@ namespace Vulkan
 		// No compressiong support yet.
 		return true;
 	}
+
 	RenderingShaderContainer::RenderingShaderContainer()
 	{
+	}
+
+	ShaderReflection RenderingShaderContainer::get_shader_reflection() const
+	{
+		return ShaderReflection{};
 	}
 
 	void RenderingShaderContainer::_set_from_shader_reflection_post(const ReflectShader& p_shader)

@@ -382,7 +382,7 @@ namespace Vulkan
 		bool decompress_code(const uint8_t* p_compressed_bytes, uint32_t p_compressed_size, uint32_t p_compressed_flags, uint8_t* p_decompressed_bytes, uint32_t p_decompressed_size) const;
 		RenderingShaderContainer();
 		RenderingShaderContainer(bool p_debug_info_enabled);
-		virtual ~RenderingShaderContainer();
+		virtual ~RenderingShaderContainer() = default;
 	};
 
 	class RenderingShaderContainerFormatVulkan {
