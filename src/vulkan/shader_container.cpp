@@ -803,4 +803,37 @@ namespace Vulkan
 		return OK;
 
 	}
+
+	template <class T>
+	const T& RenderingShaderContainer::ReflectSymbol<T>::get_spv_reflect(ShaderStage p_stage) const {
+		const T* info = _spv_reflect[get_index_for_stage(p_stage)];
+		DEV_ASSERT(info != nullptr); // Caller is expected to specify valid shader stages
+		return *info;
+	}
+
+	template <class T>
+	void RenderingShaderContainer::ReflectSymbol<T>::set_spv_reflect(ShaderStage p_stage, const T* p_spv) {
+		stages.set_flag(1 << p_stage);
+		_spv_reflect[get_index_for_stage(p_stage)] = p_spv;
+	}
+
+	RenderingShaderContainer::ReflectShaderStage::ReflectShaderStage() {
+		_module = new SpvReflectShaderModule;
+		memset(_module, 0, sizeof(SpvReflectShaderModule));
+	}
+
+	RenderingShaderContainer::ReflectShaderStage::~ReflectShaderStage() {
+		spvReflectDestroyShaderModule(_module);
+		delete _module;
+		_module = nullptr;
+	}
+
+	const SpvReflectShaderModule& RenderingShaderContainer::ReflectShaderStage::module() const {
+		return *_module;
+	}
+
+	const std::span<const uint32_t> RenderingShaderContainer::ReflectShaderStage::spirv() const {
+		return { reinterpret_cast<const uint32_t*>(_spirv_data.data()),
+				 _spirv_data.size() / sizeof(uint32_t) };
+	}
 }

@@ -109,7 +109,7 @@ namespace Vulkan
 		BitField<ShaderStage> push_constant_stages = {};
 	};
 
-	const char* SHADER_STAGE_NAMES[SHADER_STAGE_MAX] = {
+	inline const char* SHADER_STAGE_NAMES[SHADER_STAGE_MAX] = {
 	"Vertex",
 	"Fragment",
 	"TesselationControl",
@@ -300,14 +300,14 @@ namespace Vulkan
 		class ReflectShaderStage {
 			friend class RenderingShaderContainer;
 
-			std::vector<uint8_t> _spirv_data;
+			PackedByteArray _spirv_data;
 			SpvReflectShaderModule* _module = nullptr;
 
 		public:
 			ShaderStage shader_stage = SHADER_STAGE_MAX;
 			const SpvReflectShaderModule& module() const;
-			const std::span<uint32_t> spirv() const;
-			const std::vector<uint8_t> spirv_data() const { return _spirv_data; }
+			const std::span<const uint32_t> spirv() const;
+			const PackedByteArray spirv_data() const { return _spirv_data; }
 
 			ReflectShaderStage();
 			~ReflectShaderStage();
