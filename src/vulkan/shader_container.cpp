@@ -804,6 +804,12 @@ namespace Vulkan
 
 	}
 
+	bool RenderingShaderContainer::set_code_from_spirv(const std::string& p_shader_name, std::span<ShaderStageSPIRVData> p_spirv) {
+		ReflectShader shader;
+		ERR_FAIL_COND_V(reflect_spirv(p_shader_name, p_spirv, shader) != OK, false);
+		return _set_code_from_spirv(shader);
+	}
+
 	template <class T>
 	const T& RenderingShaderContainer::ReflectSymbol<T>::get_spv_reflect(ShaderStage p_stage) const {
 		const T* info = _spv_reflect[get_index_for_stage(p_stage)];

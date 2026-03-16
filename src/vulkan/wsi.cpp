@@ -1,5 +1,7 @@
 #include "wsi.h"
 #include "libassert/assert.hpp"
+#include "filesystem/filesystem.h"
+#include "compiler/compiler.h"
 
 namespace Vulkan
 {
@@ -18,6 +20,19 @@ namespace Vulkan
 		surface = context.set_surface(surface_khr);
 		return true;
 	}
+
+	static std::vector<uint8_t> byte_data_from_shader_file( Compiler::GLSLCompiler* compiler, std::string path, Compiler::Stage stage)
+	{
+		compiler->set_source_from_file(path, stage);
+		compiler->preprocess();
+		std::string error_message;
+
+		std::vector<uint32_t> spirv_compiled = compiler->compile(error_message, {});
+		std::vector<uint8_t> bytes_spirv(spirv_compiled.size() * sizeof(uint32_t));
+		std::memcpy(bytes_spirv.data(), spirv_compiled.data(), bytes_spirv.size());
+		return bytes_spirv;
+	};
+
 
 	bool WSI::init_device()
 	{
@@ -90,6 +105,57 @@ namespace Vulkan
 
 		device_ptr->swap_chain_resize(main_queue, swapchain, frame_count);
 
+
+
+		auto fs = new FileSystem::Filesystem;
+		FileSystem::Filesystem::setup_default_filesystem(fs, "D:/DXProjects/EngineEngine/assets");
+		auto compiler = std::make_unique<Compiler::GLSLCompiler>(*fs);
+		compiler->set_target(Compiler::Target::Vulkan13);
+		std::string path = "assets://shaders/vert.glsl";
+
+		auto bytes_spirv_vs = byte_data_from_shader_file(compiler.get(), "assets://shaders/vert.glsl", Compiler::Stage::Vertex);
+		auto bytes_spirv_ps = byte_data_from_shader_file(compiler.get(), "assets://shaders/frag.glsl", Compiler::Stage::Fragment);
+		/*compiler->set_source_from_file(path);
+		compiler->preprocess();
+		std::string error_message;
+
+		std::vector<uint32_t> spirv_compiled = compiler->compile(error_message, {});
+		std::vector<uint8_t> bytes_spirv(spirv_compiled.size() * sizeof(uint32_t));
+		std::memcpy(bytes_spirv.data(), spirv_compiled.data(), bytes_spirv.size());*/
+
+		const RenderingShaderContainerFormatVulkan& container_format_vs = RenderingShaderContainerFormatVulkan();
+		RenderingShaderContainer* shader_container_vs = container_format_vs.create_container();
+		std::vector<ShaderStageSPIRVData> spirv_vec;
+		ShaderStageSPIRVData data1;
+		data1.shader_stage = SHADER_STAGE_VERTEX;
+		data1.spirv = bytes_spirv_vs;
+
+		const RenderingShaderContainerFormatVulkan& container_format_ps = RenderingShaderContainerFormatVulkan();
+		RenderingShaderContainer* shader_container_ps = container_format_ps.create_container();
+		std::vector<ShaderStageSPIRVData> spirv_vec_ps;
+		ShaderStageSPIRVData data2;
+		data2.shader_stage = SHADER_STAGE_FRAGMENT;
+		data2.spirv = bytes_spirv_ps;
+		spirv_vec.push_back(data1);
+		spirv_vec.push_back(data2);
+
+		bool code_compiled_vs = shader_container_vs->set_code_from_spirv("solidcolor", spirv_vec);
+		DEBUG_ASSERT(code_compiled_vs);
+		auto shader = device_ptr->shader_create_from_container(shader_container_vs, {});
+
+		//const RenderingShaderContainerFormatVulkan& container_format_ps = RenderingShaderContainerFormatVulkan();
+		//RenderingShaderContainer* shader_container_ps = container_format_ps.create_container();
+		//std::vector<ShaderStageSPIRVData> spirv_vec_ps;
+		//ShaderStageSPIRVData data2;
+		//data2.shader_stage = SHADER_STAGE_FRAGMENT;
+		//data2.spirv = bytes_spirv_ps;
+		//spirv_vec.push_back(data2);
+		//bool code_compiled_ps = shader_container_ps->set_code_from_spirv("solidcolor_ps", spirv_vec_ps);
+		//DEBUG_ASSERT(code_compiled_ps);
+		//device_ptr->shader_create_from_container(shader_container_ps, {});
+		auto vertex = device_ptr->vertex_format_create({}, {});
+		std::vector<int32_t> subpasses{ 1 };
+		pipeline = device_ptr->render_pipeline_create(shader, vertex, Device::RenderPrimitive::RENDER_PRIMITIVE_TRIANGLE_STRIPS, {}, {}, {}, Device::PipelineColorBlendState::create_blend(), subpasses, {}, device_ptr->swap_chain_get_render_pass(swapchain), 0);
 		return true;
 	}
 
@@ -105,7 +171,13 @@ namespace Vulkan
 			device_ptr->command_buffer_begin(command_buffer);
 			Device::RenderPassClearValue val;
 			val.color = Color{ 1.0 , 0.0 , 0.0 , 0.0 };
-			device_ptr->command_begin_render_pass(command_buffer, render_pass, framebuffer, Device::COMMAND_BUFFER_TYPE_PRIMARY, Rect2i{ 0, 0, (int)platform->get_surface_width(), (int)platform->get_surface_height() }, { val });
+			std::vector<Rect2i> frame_rects = { Rect2i{ 0, 0, (int)platform->get_surface_width(), (int)platform->get_surface_height() } };
+			device_ptr->command_begin_render_pass(command_buffer, render_pass, framebuffer, Device::COMMAND_BUFFER_TYPE_PRIMARY, frame_rects[0], {val});
+			device_ptr->command_bind_render_pipeline(command_buffer, pipeline);
+			device_ptr->command_render_set_viewport(command_buffer, frame_rects);
+			device_ptr->command_render_set_scissor(command_buffer, frame_rects);
+			device_ptr->command_render_draw(command_buffer, 3, 1, 0, 0);
+
 			device_ptr->command_end_render_pass(command_buffer);
 			device_ptr->command_buffer_end(command_buffer);
 

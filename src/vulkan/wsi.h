@@ -86,7 +86,7 @@ namespace Vulkan
 		std::vector<Frame> frames;
 		uint32_t curr_frame = 0;
 		Device::CommandQueueID main_queue;
-
+		Device::PipelineID pipeline;
 
 	};
 }

@@ -127,7 +127,7 @@ namespace Vulkan
 		static const uint32_t MAX_UNIFORM_SETS = 16;
 
 
-		bool debug_info_enabled = false;
+		bool debug_info_enabled = true;
 
 		enum CompressionFlagsVulkan {
 			COMPRESSION_FLAG_SMOLV = 0x10000,
@@ -384,7 +384,7 @@ namespace Vulkan
 		std::string shader_name;
 		std::vector<Shader> shaders;
 
-		bool set_code_from_spirv(const std::string& p_shader_name, std::vector<ShaderStageSPIRVData> p_spirv);
+		bool set_code_from_spirv(const std::string& p_shader_name, std::span<ShaderStageSPIRVData> p_spirv);
 		ShaderReflection get_shader_reflection() const;
 		bool from_bytes(const PackedByteArray& p_bytes);
 		PackedByteArray to_bytes() const;
@@ -397,7 +397,7 @@ namespace Vulkan
 
 	class RenderingShaderContainerFormatVulkan {
 	private:
-		bool debug_info_enabled = false;
+		bool debug_info_enabled = true;
 
 	public:
 		virtual RenderingShaderContainer* create_container() const;

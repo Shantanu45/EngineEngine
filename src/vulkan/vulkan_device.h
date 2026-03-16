@@ -836,6 +836,50 @@ class RenderingShaderContainerFormatVulkan;
 		};
 
 
+		struct PipelineColorBlendState {
+			bool enable_logic_op = false;
+			LogicOperation logic_op = LOGIC_OP_CLEAR;
+
+			struct Attachment {
+				bool enable_blend = false;
+				BlendFactor src_color_blend_factor = BLEND_FACTOR_ZERO;
+				BlendFactor dst_color_blend_factor = BLEND_FACTOR_ZERO;
+				BlendOperation color_blend_op = BLEND_OP_ADD;
+				BlendFactor src_alpha_blend_factor = BLEND_FACTOR_ZERO;
+				BlendFactor dst_alpha_blend_factor = BLEND_FACTOR_ZERO;
+				BlendOperation alpha_blend_op = BLEND_OP_ADD;
+				bool write_r = true;
+				bool write_g = true;
+				bool write_b = true;
+				bool write_a = true;
+			};
+
+			static PipelineColorBlendState create_disabled(int p_attachments = 1) {
+				PipelineColorBlendState bs;
+				for (int i = 0; i < p_attachments; i++) {
+					bs.attachments.push_back(Attachment());
+				}
+				return bs;
+			}
+
+			static PipelineColorBlendState create_blend(int p_attachments = 1) {
+				PipelineColorBlendState bs;
+				for (int i = 0; i < p_attachments; i++) {
+					Attachment ba;
+					ba.enable_blend = true;
+					ba.src_color_blend_factor = BLEND_FACTOR_SRC_ALPHA;
+					ba.dst_color_blend_factor = BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+					ba.src_alpha_blend_factor = BLEND_FACTOR_SRC_ALPHA;
+					ba.dst_alpha_blend_factor = BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+
+					bs.attachments.push_back(ba);
+				}
+				return bs;
+			}
+
+			std::vector<Attachment> attachments; // One per render target texture.
+			Color blend_constant;
+		};
 
 		
 
@@ -907,50 +951,6 @@ class RenderingShaderContainerFormatVulkan;
 			StencilOperationState back_op;
 		};
 
-		struct PipelineColorBlendState {
-			bool enable_logic_op = false;
-			LogicOperation logic_op = LOGIC_OP_CLEAR;
-
-			struct Attachment {
-				bool enable_blend = false;
-				BlendFactor src_color_blend_factor = BLEND_FACTOR_ZERO;
-				BlendFactor dst_color_blend_factor = BLEND_FACTOR_ZERO;
-				BlendOperation color_blend_op = BLEND_OP_ADD;
-				BlendFactor src_alpha_blend_factor = BLEND_FACTOR_ZERO;
-				BlendFactor dst_alpha_blend_factor = BLEND_FACTOR_ZERO;
-				BlendOperation alpha_blend_op = BLEND_OP_ADD;
-				bool write_r = true;
-				bool write_g = true;
-				bool write_b = true;
-				bool write_a = true;
-			};
-
-			static PipelineColorBlendState create_disabled(int p_attachments = 1) {
-				PipelineColorBlendState bs;
-				for (int i = 0; i < p_attachments; i++) {
-					bs.attachments.push_back(Attachment());
-				}
-				return bs;
-			}
-
-			static PipelineColorBlendState create_blend(int p_attachments = 1) {
-				PipelineColorBlendState bs;
-				for (int i = 0; i < p_attachments; i++) {
-					Attachment ba;
-					ba.enable_blend = true;
-					ba.src_color_blend_factor = BLEND_FACTOR_SRC_ALPHA;
-					ba.dst_color_blend_factor = BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-					ba.src_alpha_blend_factor = BLEND_FACTOR_SRC_ALPHA;
-					ba.dst_alpha_blend_factor = BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-
-					bs.attachments.push_back(ba);
-				}
-				return bs;
-			}
-
-			std::vector<Attachment> attachments; // One per render target texture.
-			Color blend_constant;
-		};
 
 
 
@@ -1163,8 +1163,7 @@ class RenderingShaderContainerFormatVulkan;
 
 		void command_render_set_line_width(CommandBufferID p_cmd_buffer, float p_width);
 
-		Device::PipelineID render_pipeline_create(ShaderID p_shader, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, PipelineRasterizationState p_rasterization_state, PipelineMultisampleState p_multisample_state, PipelineDepthStencilState p_depth_stencil_state, PipelineColorBlendState p_blend_state, std::span<int32_t> p_color_attachments, BitField<PipelineDynamicStateFlags> p_dynamic_state, RenderPassID p_render_pass, uint32_t p_render_subpass, std::span<PipelineSpecializationConstant> p_specialization_constants);
-
+		Device::PipelineID render_pipeline_create(ShaderID p_shader, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, PipelineRasterizationState p_rasterization_state, PipelineMultisampleState p_multisample_state, PipelineDepthStencilState p_depth_stencil_state, PipelineColorBlendState p_blend_state, std::span<int32_t> p_color_attachments, BitField<PipelineDynamicStateFlags> p_dynamic_state, RenderPassID p_render_pass, uint32_t p_render_subpass, std::span<PipelineSpecializationConstant> p_specialization_constants = std::span<PipelineSpecializationConstant>());
 		void print_lost_device_info();
 
 		std::string get_vulkan_result(VkResult err);
@@ -1197,6 +1196,9 @@ class RenderingShaderContainerFormatVulkan;
 
 		void command_uniform_set_prepare_for_use(CommandBufferID p_cmd_buffer, UniformSetID p_uniform_set, ShaderID p_shader, uint32_t p_set_index);
 
+		ShaderID shader_create_from_container(const RenderingShaderContainer* p_shader_container, const std::vector<ImmutableSampler>& p_immutable_samplers);
+		void shader_free(ShaderID p_shader);
+		void shader_destroy_modules(ShaderID p_shader);
 	private:
 		void _register_requested_device_extension(const std::string& p_extension_name, bool p_required);
 		Error _initialize_device_extensions();
@@ -1213,7 +1215,6 @@ class RenderingShaderContainerFormatVulkan;
 		bool _determine_swap_chain_format(Context::SurfaceID p_surface, VkFormat& r_format, VkColorSpaceKHR& r_color_space);
 		void _swap_chain_release(SwapChain* p_swap_chain);
 		VmaPool _find_or_create_small_allocs_pool(uint32_t p_mem_type_index);
-		ShaderID shader_create_from_container(const RenderingShaderContainer* p_shader_container, const std::vector<ImmutableSampler>& p_immutable_samplers);
 		//Device::ShaderID shader_create_from_container(const RenderingShaderContainer* p_shader_container, const std::vector<ImmutableSampler>& p_immutable_samplers);
 		VkDescriptorPool _descriptor_set_pool_create(const DescriptorSetPoolKey& p_key, bool p_linear_pool);
 		void _descriptor_set_pool_unreference(DescriptorSetPools::iterator p_pool_sets_it, VkDescriptorPool p_vk_descriptor_pool, int p_linear_pool_index);

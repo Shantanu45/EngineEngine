@@ -4,7 +4,7 @@
 #include <array>
 
 // Enable the use of re-spirv for optimizing shaders after applying specialization constants.
-#define RESPV_ENABLED 1
+#define RESPV_ENABLED 0
 
 // Only enable function inlining for re-spirv when dealing with a shader that uses specialization constants.
 #define RESPV_ONLY_INLINE_SHADERS_WITH_SPEC_CONSTANTS 1
@@ -4166,6 +4166,32 @@ namespace Vulkan
 		ShaderInfo* shader_info_ptr = new ShaderInfo;
 		*shader_info_ptr = shader_info;
 		return ShaderID(shader_info_ptr);
+	}
+
+	void Device::shader_free(ShaderID p_shader) {
+		ShaderInfo* shader_info = (ShaderInfo*)p_shader.id;
+
+		for (uint32_t i = 0; i < shader_info->vk_descriptor_set_layouts.size(); i++) {
+			vkDestroyDescriptorSetLayout(vk_device, shader_info->vk_descriptor_set_layouts[i], nullptr);
+		}
+
+		vkDestroyPipelineLayout(vk_device, shader_info->vk_pipeline_layout, nullptr);
+
+		shader_destroy_modules(p_shader);
+
+		delete shader_info;
+	}
+
+	void Device::shader_destroy_modules(ShaderID p_shader) {
+		ShaderInfo* si = (ShaderInfo*)p_shader.id;
+
+		for (uint32_t i = 0; i < si->vk_stages_create_info.size(); i++) {
+			if (si->vk_stages_create_info[i].module) {
+				vkDestroyShaderModule(vk_device, si->vk_stages_create_info[i].module, nullptr);
+				si->vk_stages_create_info[i].module = VK_NULL_HANDLE;
+			}
+		}
+		si->vk_stages_create_info.clear();
 	}
 #pragma endregion
 

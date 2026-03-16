@@ -38,6 +38,8 @@ set(ADDITIONAL_LIBRARY_DEPENDENCIES
 	re-spirv
 	xxHash::xxhash
 	spirv-reflect-static
+	filesystem
+	compiler
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE ${ADDITIONAL_LIBRARY_DEPENDENCIES})
