@@ -140,9 +140,9 @@ namespace Vulkan
 			reflection_specialization_data.push_back(specialization_data);
 		}
 
-		for (uint32_t i = 0; i < RDC::SHADER_STAGE_MAX; i++) {
-			if (p_reflection.stages_bits.has_flag(RDC::ShaderStage(1U << i))) {
-				reflection_shader_stages.push_back(RDC::ShaderStage(i));
+		for (uint32_t i = 0; i < SHADER_STAGE_MAX; i++) {
+			if (p_reflection.stages_bits.has_flag(ShaderStage(1U << i))) {
+				reflection_shader_stages.push_back(ShaderStage(i));
 			}
 		}
 

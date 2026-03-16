@@ -1,7 +1,14 @@
 #include "vulkan_device.h"
 #include "libassert/assert.hpp"
 #include "util/error_macros.h"
+#include "shader_container.h"
 #include <array>
+
+// Enable the use of re-spirv for optimizing shaders after applying specialization constants.
+#define RESPV_ENABLED 1
+
+// Only enable function inlining for re-spirv when dealing with a shader that uses specialization constants.
+#define RESPV_ONLY_INLINE_SHADERS_WITH_SPEC_CONSTANTS 1
 
 namespace Vulkan
 {
@@ -3814,7 +3821,352 @@ namespace Vulkan
 	VK_SHADER_STAGE_INTERSECTION_BIT_KHR,
 	};
 
-	
+	Device::ShaderID Device::shader_create_from_container(const RenderingShaderContainer* p_shader_container, const std::vector<ImmutableSampler>& p_immutable_samplers) {
+		ShaderReflection shader_refl = p_shader_container->get_shader_reflection();
+		ShaderInfo shader_info;
+		shader_info.name = p_shader_container->shader_name;
+
+		for (uint32_t i = 0; i < SHADER_STAGE_MAX; i++) {
+			if (shader_refl.push_constant_stages.has_flag((ShaderStage)(1 << i))) {
+				shader_info.vk_push_constant_stages |= RD_STAGE_TO_VK_SHADER_STAGE_BITS[i];
+			}
+		}
+
+		// Set bindings.
+		std::vector<std::vector<VkDescriptorSetLayoutBinding>> vk_set_bindings;
+		vk_set_bindings.resize(shader_refl.uniform_sets.size());
+		for (uint32_t i = 0; i < shader_refl.uniform_sets.size(); i++) {
+			for (uint32_t j = 0; j < shader_refl.uniform_sets[i].size(); j++) {
+				const ShaderUniform& uniform = shader_refl.uniform_sets[i][j];
+				VkDescriptorSetLayoutBinding layout_binding = {};
+				layout_binding.binding = uniform.binding;
+				layout_binding.descriptorCount = 1;
+				for (uint32_t k = 0; k < SHADER_STAGE_MAX; k++) {
+					if ((uniform.stages.has_flag(ShaderStage(1U << k)))) {
+						layout_binding.stageFlags |= RD_STAGE_TO_VK_SHADER_STAGE_BITS[k];
+					}
+				}
+
+				switch (uniform.type) {
+				case UNIFORM_TYPE_SAMPLER: {
+					layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+					layout_binding.descriptorCount = uniform.length;
+					// Immutable samplers: here they get set in the layoutbinding, given that they will not be changed later.
+					int immutable_bind_index = -1;
+					if (immutable_samplers_enabled && p_immutable_samplers.size() > 0) {
+						for (int k = 0; k < p_immutable_samplers.size(); k++) {
+							if (p_immutable_samplers[k].binding == layout_binding.binding) {
+								immutable_bind_index = k;
+								break;
+							}
+						}
+						if (immutable_bind_index >= 0) {
+							layout_binding.pImmutableSamplers = (VkSampler*)&p_immutable_samplers[immutable_bind_index].ids[0].id;
+						}
+					}
+				} break;
+				case UNIFORM_TYPE_SAMPLER_WITH_TEXTURE: {
+					layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+					layout_binding.descriptorCount = uniform.length;
+				} break;
+				case UNIFORM_TYPE_TEXTURE: {
+					layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+					layout_binding.descriptorCount = uniform.length;
+				} break;
+				case UNIFORM_TYPE_IMAGE: {
+					layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+					layout_binding.descriptorCount = uniform.length;
+				} break;
+				case UNIFORM_TYPE_TEXTURE_BUFFER: {
+					layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+					layout_binding.descriptorCount = uniform.length;
+				} break;
+				case UNIFORM_TYPE_IMAGE_BUFFER: {
+					layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
+				} break;
+				case UNIFORM_TYPE_UNIFORM_BUFFER: {
+					layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+				} break;
+				case UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC: {
+					layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+				} break;
+				case UNIFORM_TYPE_STORAGE_BUFFER: {
+					layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+				} break;
+				case UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC: {
+					layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
+				} break;
+				case UNIFORM_TYPE_INPUT_ATTACHMENT: {
+					layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+				} break;
+				case UNIFORM_TYPE_ACCELERATION_STRUCTURE: {
+					layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+				} break;
+				default: {
+					DEV_ASSERT(false);
+				}
+				}
+
+				vk_set_bindings[i].push_back(layout_binding);
+			}
+		}
+
+		// Modules.
+		VkResult res;
+		std::string error_text;
+		std::vector<uint8_t> decompressed_code;
+		VkShaderModule vk_module;
+		PackedByteArray decoded_spirv;
+		const bool use_respv = RESPV_ENABLED && !shader_container_format.get_debug_info_enabled();
+		const bool store_respv = use_respv && !shader_refl.specialization_constants.empty();
+		const int64_t stage_count = shader_refl.stages_vector.size();
+		shader_info.vk_stages_create_info.reserve(stage_count);
+		shader_info.original_stage_size.reserve(stage_count);
+
+#if RECORD_PIPELINE_STATISTICS
+		shader_info.spirv_stage_bytes.reserve(stage_count);
+#endif
+
+		if (store_respv) {
+			shader_info.respv_stage_shaders.reserve(stage_count);
+		}
+
+		// AnyHit and ClosestHit go in the same group.
+		uint32_t hit_group_index = UINT32_MAX;
+
+		for (int i = 0; i < stage_count; i++) {
+			const RenderingShaderContainer::Shader& shader = p_shader_container->shaders[i];
+			bool requires_decompression = (shader.code_decompressed_size > 0);
+			if (requires_decompression) {
+				decompressed_code.resize(shader.code_decompressed_size);
+				bool decompressed = p_shader_container->decompress_code(shader.code_compressed_bytes.data(), shader.code_compressed_bytes.size(), shader.code_compression_flags, decompressed_code.data(), decompressed_code.size());
+				if (!decompressed) {
+					error_text = std::format("Failed to decompress code on shader stage %s.", std::string(SHADER_STAGE_NAMES[shader_refl.stages_vector[i]]));
+					break;
+				}
+			}
+
+			const uint8_t* smolv_input = requires_decompression ? decompressed_code.data() : shader.code_compressed_bytes.data();
+			uint32_t smolv_input_size = requires_decompression ? decompressed_code.size() : shader.code_compressed_bytes.size();
+			// TODO: shader compression
+			//if (shader.code_compression_flags & RenderingShaderContainerVulkan::COMPRESSION_FLAG_SMOLV) {
+			//	decoded_spirv.resize(smolv::GetDecodedBufferSize(smolv_input, smolv_input_size));
+			//	if (decoded_spirv.is_empty()) {
+			//		error_text = vformat("Malformed smolv input on shader stage %s.", String(SHADER_STAGE_NAMES[shader_refl.stages_vector[i]]));
+			//		break;
+			//	}
+
+			//	if (!smolv::Decode(smolv_input, smolv_input_size, decoded_spirv.ptrw(), decoded_spirv.size())) {
+			//		error_text = vformat("Malformed smolv input on shader stage %s.", String(SHADER_STAGE_NAMES[shader_refl.stages_vector[i]]));
+			//		break;
+			//	}
+			//}
+			//else {
+				decoded_spirv.resize(smolv_input_size);
+				memcpy(decoded_spirv.data(), smolv_input, decoded_spirv.size());
+			//}
+
+			shader_info.original_stage_size.push_back(decoded_spirv.size());
+
+			if (use_respv) {
+				const bool inline_data = store_respv || !RESPV_ONLY_INLINE_SHADERS_WITH_SPEC_CONSTANTS;
+				respv::Shader respv_shader(decoded_spirv.data(), decoded_spirv.size(), inline_data);
+				if (respv_shader.empty()) {
+#if RESPV_VERBOSE
+					print_line("re-spirv failed to parse the shader, skipping optimization.");
+#endif
+					if (store_respv) {
+						shader_info.respv_stage_shaders.push_back(respv::Shader());
+					}
+				}
+				else if (store_respv) {
+					shader_info.respv_stage_shaders.push_back(respv_shader);
+				}
+				else {
+					std::vector<uint8_t> respv_optimized_data;
+					if (respv::Optimizer::run(respv_shader, nullptr, 0, respv_optimized_data)) {
+#if RESPV_VERBOSE
+						print_line(vformat("re-spirv transformed the shader from %d bytes to %d bytes.", decoded_spirv.size(), respv_optimized_data.size()));
+#endif
+						decoded_spirv.resize(respv_optimized_data.size());
+						memcpy(decoded_spirv.data(), respv_optimized_data.data(), respv_optimized_data.size());
+					}
+					else {
+#if RESPV_VERBOSE
+						print_line("re-spirv failed to optimize the shader.");
+#endif
+					}
+				}
+			}
+
+#if RECORD_PIPELINE_STATISTICS
+			shader_info.spirv_stage_bytes.push_back(decoded_spirv);
+#endif
+
+			VkShaderModuleCreateInfo shader_module_create_info = {};
+			shader_module_create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+			shader_module_create_info.codeSize = decoded_spirv.size();
+			shader_module_create_info.pCode = (const uint32_t*)(decoded_spirv.data());
+
+			res = vkCreateShaderModule(vk_device, &shader_module_create_info, nullptr, &vk_module);
+			if (res != VK_SUCCESS) {
+				error_text = std::format("Error (%d) creating module for shader stage %s.", res, std::string(SHADER_STAGE_NAMES[shader_refl.stages_vector[i]]));
+				break;
+			}
+
+			VkPipelineShaderStageCreateInfo create_info = {};
+			create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+			create_info.stage = RD_STAGE_TO_VK_SHADER_STAGE_BITS[shader_refl.stages_vector[i]];
+			create_info.module = vk_module;
+			create_info.pName = "main";
+			shader_info.vk_stages_create_info.push_back(create_info);
+
+			ShaderStage stage = shader_refl.stages_vector[i];
+
+			if (stage == ShaderStage::SHADER_STAGE_RAYGEN || stage == ShaderStage::SHADER_STAGE_MISS) {
+				VkRayTracingShaderGroupCreateInfoKHR group_info = {};
+				group_info.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+				group_info.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
+				group_info.anyHitShader = VK_SHADER_UNUSED_KHR;
+				group_info.closestHitShader = VK_SHADER_UNUSED_KHR;
+				group_info.intersectionShader = VK_SHADER_UNUSED_KHR;
+				group_info.generalShader = i;
+
+				shader_info.vk_groups_create_info.push_back(group_info);
+			}
+			if (stage == ShaderStage::SHADER_STAGE_ANY_HIT || stage == ShaderStage::SHADER_STAGE_CLOSEST_HIT) {
+				if (hit_group_index == UINT32_MAX) {
+					VkRayTracingShaderGroupCreateInfoKHR group_info = {};
+					group_info.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+					group_info.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
+					group_info.anyHitShader = VK_SHADER_UNUSED_KHR;
+					group_info.closestHitShader = VK_SHADER_UNUSED_KHR;
+					group_info.intersectionShader = VK_SHADER_UNUSED_KHR;
+					group_info.generalShader = VK_SHADER_UNUSED_KHR;
+
+					hit_group_index = shader_info.vk_groups_create_info.size();
+					shader_info.vk_groups_create_info.push_back(group_info);
+				}
+
+				VkRayTracingShaderGroupCreateInfoKHR& group_info = shader_info.vk_groups_create_info[hit_group_index];
+				if (stage == ShaderStage::SHADER_STAGE_ANY_HIT) {
+					group_info.anyHitShader = i;
+				}
+				else if (stage == ShaderStage::SHADER_STAGE_CLOSEST_HIT) {
+					group_info.closestHitShader = i;
+				}
+			}
+			if (stage == ShaderStage::SHADER_STAGE_INTERSECTION) {
+				VkRayTracingShaderGroupCreateInfoKHR group_info = {};
+				group_info.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+				group_info.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_PROCEDURAL_HIT_GROUP_KHR;
+				group_info.anyHitShader = VK_SHADER_UNUSED_KHR;
+				group_info.closestHitShader = VK_SHADER_UNUSED_KHR;
+				group_info.intersectionShader = i;
+				group_info.generalShader = VK_SHADER_UNUSED_KHR;
+
+				shader_info.vk_groups_create_info.push_back(group_info);
+			}
+		}
+
+		// Descriptor sets.
+		if (error_text.empty()) {
+			// For Adreno 5XX driver bug.
+			VkDescriptorSetLayoutBinding placeholder_binding = {};
+			placeholder_binding.binding = 0;
+			placeholder_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			placeholder_binding.descriptorCount = 1;
+			placeholder_binding.stageFlags = VK_SHADER_STAGE_ALL;
+
+			for (uint32_t i = 0; i < shader_refl.uniform_sets.size(); i++) {
+				// Empty ones are fine if they were not used according to spec (binding count will be 0).
+				VkDescriptorSetLayoutCreateInfo layout_create_info = {};
+				layout_create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+				layout_create_info.bindingCount = vk_set_bindings[i].size();
+				layout_create_info.pBindings = vk_set_bindings[i].data();
+
+				// ...not so fine on Adreno 5XX.
+				//if (adreno_5xx_empty_descriptor_set_layout_workaround && layout_create_info.bindingCount == 0) {
+				//	layout_create_info.bindingCount = 1;
+				//	layout_create_info.pBindings = &placeholder_binding;
+				//}
+
+				VkDescriptorSetLayout layout = VK_NULL_HANDLE;
+				res = vkCreateDescriptorSetLayout(vk_device, &layout_create_info, nullptr, &layout);
+				if (res) {
+					error_text = std::format("Error (%d) creating descriptor set layout for set %d.", res, i);
+					break;
+				}
+
+				shader_info.vk_descriptor_set_layouts.push_back(layout);
+			}
+		}
+
+		if (error_text.empty()) {
+			// Pipeline layout.
+			VkPipelineLayoutCreateInfo pipeline_layout_create_info = {};
+			pipeline_layout_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+			pipeline_layout_create_info.setLayoutCount = shader_info.vk_descriptor_set_layouts.size();
+			pipeline_layout_create_info.pSetLayouts = shader_info.vk_descriptor_set_layouts.data();
+
+			if (shader_refl.push_constant_size > 0) {
+				std::vector<VkPushConstantRange> push_constant_range_vec;
+				VkPushConstantRange* push_constant_range = push_constant_range_vec.data();
+				*push_constant_range = {};
+				push_constant_range->stageFlags = shader_info.vk_push_constant_stages;
+				push_constant_range->size = shader_refl.push_constant_size;
+				pipeline_layout_create_info.pushConstantRangeCount = 1;
+				pipeline_layout_create_info.pPushConstantRanges = push_constant_range;
+			}
+
+			res = vkCreatePipelineLayout(vk_device, &pipeline_layout_create_info, nullptr, &shader_info.vk_pipeline_layout);
+			if (res != VK_SUCCESS) {
+				error_text = std::format("Error (%d) creating pipeline layout.", res);
+			}
+		}
+
+		if (!error_text.empty()) {
+			// Clean up if failed.
+			for (uint32_t i = 0; i < shader_info.vk_stages_create_info.size(); i++) {
+				vkDestroyShaderModule(vk_device, shader_info.vk_stages_create_info[i].module, nullptr);
+			}
+			for (uint32_t i = 0; i < shader_info.vk_descriptor_set_layouts.size(); i++) {
+				vkDestroyDescriptorSetLayout(vk_device, shader_info.vk_descriptor_set_layouts[i], nullptr);
+			}
+
+			ERR_FAIL_V_MSG(ShaderID(), error_text);
+		}
+
+		// TODO: Raytracing
+		//if (shader_refl.pipeline_type == PIPELINE_TYPE_RAYTRACING) {
+		//	// Regions
+
+		//	for (ShaderStage stage : shader_refl.stages_vector) {
+		//		switch (stage) {
+		//		case ShaderStage::SHADER_STAGE_RAYGEN:
+		//			shader_info.region_count.raygen_count += 1;
+		//			break;
+		//		case ShaderStage::SHADER_STAGE_ANY_HIT:
+		//		case ShaderStage::SHADER_STAGE_CLOSEST_HIT:
+		//			shader_info.region_count.hit_count += 1;
+		//			break;
+		//		case ShaderStage::SHADER_STAGE_MISS:
+		//			shader_info.region_count.miss_count += 1;
+		//			break;
+		//		default:
+		//			// nothing
+		//			break;
+		//		}
+		//	}
+
+		//	shader_info.region_count.group_count = shader_info.region_count.raygen_count + shader_info.region_count.hit_count + shader_info.region_count.miss_count;
+		//}
+
+		// Bookkeep.
+		ShaderInfo* shader_info_ptr = new ShaderInfo;
+		*shader_info_ptr = shader_info;
+		return ShaderID(shader_info_ptr);
+	}
 #pragma endregion
 
 

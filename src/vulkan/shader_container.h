@@ -1,5 +1,7 @@
 #pragma once
 #include <cstdint>
+#include <vector>
+#include "vulkan_common.h"
 #include "vulkan_device.h"
 
 using PackedByteArray = std::vector<uint8_t>;
@@ -25,7 +27,7 @@ namespace Vulkan
 		};
 
 	protected:
-		using RDC = Device;
+		//using Device = Device;
 
 		struct ContainerHeader {
 			uint32_t magic_number = 0;
@@ -80,7 +82,7 @@ namespace Vulkan
 		std::vector<uint32_t> reflection_binding_set_uniforms_count;
 		std::vector<ReflectionBindingData> reflection_binding_set_uniforms_data;
 		std::vector<ReflectionSpecializationData> reflection_specialization_data;
-		std::vector<Device::ShaderStage> reflection_shader_stages;
+		std::vector<ShaderStage> reflection_shader_stages;
 
 		virtual uint32_t _format() const;
 		virtual uint32_t _format_version() const;
@@ -114,13 +116,13 @@ namespace Vulkan
 				0, // SHADER_STAGE_COMPUTE
 			};
 
-			BitField<RDC::ShaderStage> stages = {};
+			BitField<ShaderStage> stages = {};
 
 		private:
 			const T* _spv_reflect[2] = { nullptr };
 
 		public:
-			_FORCE_INLINE_ constexpr uint32_t get_index_for_stage(Device::ShaderStage p_stage) const {
+			_FORCE_INLINE_ constexpr uint32_t get_index_for_stage(ShaderStage p_stage) const {
 				DEV_ASSERT(stages.has_flag((1 << p_stage)));
 				return STAGE_INDEX[p_stage];
 			}
@@ -139,7 +141,7 @@ namespace Vulkan
 				}
 				CRASH_NOW_MSG("No stages set in ReflectSymbol");
 			}
-			void set_spv_reflect(RDC::ShaderStage p_stage, const T* p_spv);
+			void set_spv_reflect(ShaderStage p_stage, const T* p_spv);
 		};
 
 		struct ReflectImageTraits {
@@ -147,7 +149,7 @@ namespace Vulkan
 		};
 
 		struct ReflectUniform : ReflectSymbol<SpvReflectDescriptorBinding> {
-			RDC::UniformType type = RDC::UniformType::UNIFORM_TYPE_MAX;
+			Device::UniformType type = Device::UniformType::UNIFORM_TYPE_MAX;
 			uint32_t binding = 0;
 
 			ReflectImageTraits image;
@@ -194,7 +196,7 @@ namespace Vulkan
 			SpvReflectShaderModule* _module = nullptr;
 
 		public:
-			RDC::ShaderStage shader_stage = RDC::SHADER_STAGE_MAX;
+			ShaderStage shader_stage = SHADER_STAGE_MAX;
 			const SpvReflectShaderModule& module() const;
 			const std::span<uint32_t> spirv() const;
 			const std::vector<uint8_t> spirv_data() const { return _spirv_data; }
@@ -212,19 +214,19 @@ namespace Vulkan
 			uint32_t push_constant_size = 0;
 			bool has_multiview = false;
 			bool has_dynamic_buffers = false;
-			RDC::PipelineType pipeline_type = RDC::PIPELINE_TYPE_RASTERIZATION;
+			PipelineType pipeline_type = PIPELINE_TYPE_RASTERIZATION;
 
 			std::vector<ReflectShaderStage> shader_stages;
 			std::vector<ReflectDescriptorSet> uniform_sets;
 			std::vector<ReflectSymbol<SpvReflectDescriptorBinding>> reflect_uniforms;
 			std::vector<ReflectSpecializationConstant> specialization_constants;
 			std::vector<ReflectSymbol<SpvReflectSpecializationConstant>> reflect_specialization_constants;
-			std::vector<RDC::ShaderStage> stages_vector;
-			BitField<RDC::ShaderStage> stages_bits = {};
-			BitField<RDC::ShaderStage> push_constant_stages = {};
+			std::vector<ShaderStage> stages_vector;
+			BitField<ShaderStage> stages_bits = {};
+			BitField<ShaderStage> push_constant_stages = {};
 
 			_FORCE_INLINE_ bool is_compute() const {
-				return stages_bits.has_flag(RDC::SHADER_STAGE_COMPUTE_BIT);
+				return stages_bits.has_flag(SHADER_STAGE_COMPUTE_BIT);
 			}
 
 			/*! Returns the uniform at the specified global index.
@@ -265,7 +267,7 @@ namespace Vulkan
 		};
 
 		struct Shader {
-			RDC::ShaderStage shader_stage = RDC::SHADER_STAGE_MAX;
+			ShaderStage shader_stage = SHADER_STAGE_MAX;
 			PackedByteArray code_compressed_bytes;
 			uint32_t code_compression_flags = 0;
 			uint32_t code_decompressed_size = 0;

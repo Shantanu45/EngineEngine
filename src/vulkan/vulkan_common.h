@@ -380,3 +380,9 @@ enum ShaderSpirvVersion {
 	SHADER_SPIRV_VERSION_1_5 = (1 << 16) | (5 << 8),
 	SHADER_SPIRV_VERSION_1_6 = (1 << 16) | (6 << 8),
 };
+
+enum PipelineType : uint32_t {
+	PIPELINE_TYPE_RASTERIZATION,
+	PIPELINE_TYPE_COMPUTE,
+	PIPELINE_TYPE_RAYTRACING,
+};

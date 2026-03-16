@@ -8,10 +8,12 @@
 #include "util/bit_field.h"
 #include "re-spirv/re-spirv.h"
 #include "math/rect2i.h"
-//#include "shader_container.h"
+
 
 namespace Vulkan
 {
+class RenderingShaderContainer;
+class RenderingShaderContainerFormatVulkan;
 	class Device
 	{
 	public:
@@ -281,30 +283,6 @@ namespace Vulkan
 		};
 
 	public:
-		enum ShaderStage {
-			SHADER_STAGE_VERTEX,
-			SHADER_STAGE_FRAGMENT,
-			SHADER_STAGE_TESSELATION_CONTROL,
-			SHADER_STAGE_TESSELATION_EVALUATION,
-			SHADER_STAGE_COMPUTE,
-			SHADER_STAGE_RAYGEN,
-			SHADER_STAGE_ANY_HIT,
-			SHADER_STAGE_CLOSEST_HIT,
-			SHADER_STAGE_MISS,
-			SHADER_STAGE_INTERSECTION,
-			SHADER_STAGE_MAX,
-			SHADER_STAGE_VERTEX_BIT = (1 << SHADER_STAGE_VERTEX),
-			SHADER_STAGE_FRAGMENT_BIT = (1 << SHADER_STAGE_FRAGMENT),
-			SHADER_STAGE_TESSELATION_CONTROL_BIT = (1 << SHADER_STAGE_TESSELATION_CONTROL),
-			SHADER_STAGE_TESSELATION_EVALUATION_BIT = (1 << SHADER_STAGE_TESSELATION_EVALUATION),
-			SHADER_STAGE_COMPUTE_BIT = (1 << SHADER_STAGE_COMPUTE),
-			SHADER_STAGE_RAYGEN_BIT = (1 << SHADER_STAGE_RAYGEN),
-			SHADER_STAGE_ANY_HIT_BIT = (1 << SHADER_STAGE_ANY_HIT),
-			SHADER_STAGE_CLOSEST_HIT_BIT = (1 << SHADER_STAGE_CLOSEST_HIT),
-			SHADER_STAGE_MISS_BIT = (1 << SHADER_STAGE_MISS),
-			SHADER_STAGE_INTERSECTION_BIT = (1 << SHADER_STAGE_INTERSECTION),
-		};
-
 
 		struct ShaderStageSPIRVData {
 			ShaderStage shader_stage = SHADER_STAGE_MAX;
@@ -436,14 +414,19 @@ namespace Vulkan
 
 		static const uint32_t MAX_UNIFORM_POOL_ELEMENT = 65535;
 
-		enum PipelineType : uint32_t {
-			PIPELINE_TYPE_RASTERIZATION,
-			PIPELINE_TYPE_COMPUTE,
-			PIPELINE_TYPE_RAYTRACING,
-		};
+
 
 		
 	private:
+
+		const char* SHADER_STAGE_NAMES[SHADER_STAGE_MAX] = {
+			"Vertex",
+			"Fragment",
+			"TesselationControl",
+			"TesselationEvaluation",
+			"Compute",
+				};
+
 
 		struct VertexAttribute {
 			uint32_t binding = UINT32_MAX; // Attribute buffer binding index. When set to UINT32_MAX, it uses the index of the attribute in the layout.
@@ -1326,6 +1309,7 @@ namespace Vulkan
 		bool _determine_swap_chain_format(Context::SurfaceID p_surface, VkFormat& r_format, VkColorSpaceKHR& r_color_space);
 		void _swap_chain_release(SwapChain* p_swap_chain);
 		VmaPool _find_or_create_small_allocs_pool(uint32_t p_mem_type_index);
+		ShaderID shader_create_from_container(const RenderingShaderContainer* p_shader_container, const std::vector<ImmutableSampler>& p_immutable_samplers);
 		//Device::ShaderID shader_create_from_container(const RenderingShaderContainer* p_shader_container, const std::vector<ImmutableSampler>& p_immutable_samplers);
 		VkDescriptorPool _descriptor_set_pool_create(const DescriptorSetPoolKey& p_key, bool p_linear_pool);
 		void _descriptor_set_pool_unreference(DescriptorSetPools::iterator p_pool_sets_it, VkDescriptorPool p_vk_descriptor_pool, int p_linear_pool_index);
@@ -1366,6 +1350,7 @@ namespace Vulkan
 		// Global flag to toggle usage of immutable sampler when creating pipeline layouts.
 		// It cannot change after creating the PSOs, since we need to skipping samplers when creating uniform sets.
 		bool immutable_samplers_enabled = true;
+		RenderingShaderContainerFormatVulkan shader_container_format;
 
 	};
 }
