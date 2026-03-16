@@ -3935,19 +3935,20 @@ namespace Vulkan
 
 		for (int i = 0; i < stage_count; i++) {
 			const RenderingShaderContainer::Shader& shader = p_shader_container->shaders[i];
-			bool requires_decompression = (shader.code_decompressed_size > 0);
-			if (requires_decompression) {
-				decompressed_code.resize(shader.code_decompressed_size);
-				bool decompressed = p_shader_container->decompress_code(shader.code_compressed_bytes.data(), shader.code_compressed_bytes.size(), shader.code_compression_flags, decompressed_code.data(), decompressed_code.size());
-				if (!decompressed) {
-					error_text = std::format("Failed to decompress code on shader stage %s.", std::string(SHADER_STAGE_NAMES[shader_refl.stages_vector[i]]));
-					break;
-				}
-			}
+			bool requires_decompression = false;// (shader.code_decompressed_size > 0);
+			// TODO: shader compression
+
+			//if (requires_decompression) {
+			//	decompressed_code.resize(shader.code_decompressed_size);
+			//	bool decompressed = p_shader_container->decompress_code(shader.code_compressed_bytes.data(), shader.code_compressed_bytes.size(), shader.code_compression_flags, decompressed_code.data(), decompressed_code.size());
+			//	if (!decompressed) {
+			//		error_text = std::format("Failed to decompress code on shader stage %s.", std::string(SHADER_STAGE_NAMES[shader_refl.stages_vector[i]]));
+			//		break;
+			//	}
+			//}
 
 			const uint8_t* smolv_input = requires_decompression ? decompressed_code.data() : shader.code_compressed_bytes.data();
 			uint32_t smolv_input_size = requires_decompression ? decompressed_code.size() : shader.code_compressed_bytes.size();
-			// TODO: shader compression
 			//if (shader.code_compression_flags & RenderingShaderContainerVulkan::COMPRESSION_FLAG_SMOLV) {
 			//	decoded_spirv.resize(smolv::GetDecodedBufferSize(smolv_input, smolv_input_size));
 			//	if (decoded_spirv.is_empty()) {

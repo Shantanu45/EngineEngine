@@ -20,6 +20,7 @@ add_subdirectory(event)
 add_subdirectory(input)
 add_subdirectory(vulkan)
 add_subdirectory(math)
+add_subdirectory(filesystem)
 
 setup_msvc_options(${PROJECT_NAME})
 
@@ -52,6 +53,7 @@ set(ADDITIONAL_LIBRARY_DEPENDENCIES
 	GPUOpen::VulkanMemoryAllocator
 	glm::glm
 	xxHash::xxhash
+	filesystem
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE "${ADDITIONAL_LIBRARY_DEPENDENCIES}")

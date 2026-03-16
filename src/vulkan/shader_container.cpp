@@ -43,6 +43,17 @@ namespace Vulkan
 	{
 		return FORMAT_VERSION;
 	}
+	bool RenderingShaderContainer::compress_code(const uint8_t* p_decompressed_bytes, uint32_t p_decompressed_size, uint8_t* p_compressed_bytes, uint32_t* r_compressed_size, uint32_t* r_compressed_flags) const
+	{
+		// No compressiong support yet.
+
+		return true;
+	}
+	bool RenderingShaderContainer::decompress_code(const uint8_t* p_compressed_bytes, uint32_t p_compressed_size, uint32_t p_compressed_flags, uint8_t* p_decompressed_bytes, uint32_t p_decompressed_size) const
+	{
+		// No compressiong support yet.
+		return true;
+	}
 	RenderingShaderContainer::RenderingShaderContainer()
 	{
 	}

@@ -186,23 +186,23 @@ namespace Vulkan
 		virtual uint32_t _format_version() const;
 
 		// These methods will always be called with a valid pointer.
-		virtual uint32_t _from_bytes_header_extra_data(const uint8_t* p_bytes);
-		virtual uint32_t _from_bytes_reflection_extra_data(const uint8_t* p_bytes);
-		virtual uint32_t _from_bytes_reflection_binding_uniform_extra_data_start(const uint8_t* p_bytes);
-		virtual uint32_t _from_bytes_reflection_binding_uniform_extra_data(const uint8_t* p_bytes, uint32_t p_index);
-		virtual uint32_t _from_bytes_reflection_specialization_extra_data_start(const uint8_t* p_bytes);
-		virtual uint32_t _from_bytes_reflection_specialization_extra_data(const uint8_t* p_bytes, uint32_t p_index);
-		virtual uint32_t _from_bytes_shader_extra_data_start(const uint8_t* p_bytes);
-		virtual uint32_t _from_bytes_shader_extra_data(const uint8_t* p_bytes, uint32_t p_index);
-		virtual uint32_t _from_bytes_footer_extra_data(const uint8_t* p_bytes);
+		//virtual uint32_t _from_bytes_header_extra_data(const uint8_t* p_bytes);
+		//virtual uint32_t _from_bytes_reflection_extra_data(const uint8_t* p_bytes);
+		//virtual uint32_t _from_bytes_reflection_binding_uniform_extra_data_start(const uint8_t* p_bytes);
+		//virtual uint32_t _from_bytes_reflection_binding_uniform_extra_data(const uint8_t* p_bytes, uint32_t p_index);
+		//virtual uint32_t _from_bytes_reflection_specialization_extra_data_start(const uint8_t* p_bytes);
+		//virtual uint32_t _from_bytes_reflection_specialization_extra_data(const uint8_t* p_bytes, uint32_t p_index);
+		//virtual uint32_t _from_bytes_shader_extra_data_start(const uint8_t* p_bytes);
+		//virtual uint32_t _from_bytes_shader_extra_data(const uint8_t* p_bytes, uint32_t p_index);
+		//virtual uint32_t _from_bytes_footer_extra_data(const uint8_t* p_bytes);
 
 		// These methods will be called with a nullptr to retrieve the size of the data.
-		virtual uint32_t _to_bytes_header_extra_data(uint8_t* p_bytes) const;
-		virtual uint32_t _to_bytes_reflection_extra_data(uint8_t* p_bytes) const;
-		virtual uint32_t _to_bytes_reflection_binding_uniform_extra_data(uint8_t* p_bytes, uint32_t p_index) const;
-		virtual uint32_t _to_bytes_reflection_specialization_extra_data(uint8_t* p_bytes, uint32_t p_index) const;
-		virtual uint32_t _to_bytes_shader_extra_data(uint8_t* p_bytes, uint32_t p_index) const;
-		virtual uint32_t _to_bytes_footer_extra_data(uint8_t* p_bytes) const;
+		//virtual uint32_t _to_bytes_header_extra_data(uint8_t* p_bytes) const;
+		//virtual uint32_t _to_bytes_reflection_extra_data(uint8_t* p_bytes) const;
+		//virtual uint32_t _to_bytes_reflection_binding_uniform_extra_data(uint8_t* p_bytes, uint32_t p_index) const;
+		//virtual uint32_t _to_bytes_reflection_specialization_extra_data(uint8_t* p_bytes, uint32_t p_index) const;
+		//virtual uint32_t _to_bytes_shader_extra_data(uint8_t* p_bytes, uint32_t p_index) const;
+		//virtual uint32_t _to_bytes_footer_extra_data(uint8_t* p_bytes) const;
 
 		template <class T>
 		struct ReflectSymbol {
