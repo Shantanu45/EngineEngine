@@ -22,6 +22,7 @@ add_subdirectory(vulkan)
 add_subdirectory(math)
 add_subdirectory(filesystem)
 add_subdirectory(compiler)
+add_subdirectory(rendering)
 
 setup_msvc_options(${PROJECT_NAME})
 
