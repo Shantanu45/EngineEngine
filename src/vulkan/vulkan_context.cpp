@@ -599,6 +599,19 @@ namespace Vulkan
 		surface->needs_resize = true;
 	}
 
+	void Context::surface_set_vsync_mode(SurfaceID p_surface, DisplayServerEnums::VSyncMode p_vsync_mode)
+	{
+		Surface* surface = (Surface*)(p_surface);
+		surface->vsync_mode = p_vsync_mode;
+		surface->needs_resize = true;
+	}
+
+	DisplayServerEnums::VSyncMode Context::surface_get_vsync_mode(SurfaceID p_surface) const
+	{
+		Surface* surface = (Surface*)(p_surface);
+		return surface->vsync_mode;
+	}
+
 	void Context::surface_set_hdr_output_enabled(SurfaceID p_surface, bool p_enabled) {
 		Surface* surface = (Surface*)(p_surface);
 		surface->hdr_output = p_enabled;
@@ -669,6 +682,15 @@ namespace Vulkan
 		Surface* surface = (Surface*)(p_surface);
 		vkDestroySurfaceKHR(instance, surface->vk_surface, nullptr);
 		delete surface;
+	}
+
+	RenderingDeviceDriver* Context::driver_create()
+	{
+		return nullptr;
+	}
+
+	void Context::driver_free(RenderingDeviceDriver* p_driver)
+	{
 	}
 
 	const Context::Device& Context::device_get(uint32_t p_device_index) const {

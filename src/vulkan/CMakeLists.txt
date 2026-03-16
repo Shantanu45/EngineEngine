@@ -40,6 +40,7 @@ set(ADDITIONAL_LIBRARY_DEPENDENCIES
 	spirv-reflect-static
 	filesystem
 	compiler
+	rendering
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE ${ADDITIONAL_LIBRARY_DEPENDENCIES})

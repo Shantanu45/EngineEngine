@@ -3419,19 +3419,19 @@ namespace Vulkan
 		VkPresentModeKHR present_mode = VkPresentModeKHR::VK_PRESENT_MODE_FIFO_KHR;
 		std::string present_mode_name = "Enabled";
 		switch (surface->vsync_mode) {
-		case Context::VSyncMode::VSYNC_MAILBOX:
+		case DisplayServerEnums::VSyncMode::VSYNC_MAILBOX:
 			present_mode = VK_PRESENT_MODE_MAILBOX_KHR;
 			present_mode_name = "Mailbox";
 			break;
-		case Context::VSyncMode::VSYNC_ADAPTIVE:
+		case DisplayServerEnums::VSyncMode::VSYNC_ADAPTIVE:
 			present_mode = VK_PRESENT_MODE_FIFO_RELAXED_KHR;
 			present_mode_name = "Adaptive";
 			break;
-		case Context::VSyncMode::VSYNC_ENABLED:
+		case DisplayServerEnums::VSyncMode::VSYNC_ENABLED:
 			present_mode = VK_PRESENT_MODE_FIFO_KHR;
 			present_mode_name = "Enabled";
 			break;
-		case Context::VSyncMode::VSYNC_DISABLED:
+		case DisplayServerEnums::VSyncMode::VSYNC_DISABLED:
 			present_mode = VK_PRESENT_MODE_IMMEDIATE_KHR;
 			present_mode_name = "Disabled";
 			break;
@@ -3441,7 +3441,7 @@ namespace Vulkan
 		if (!present_mode_available) {
 			// Present mode is not available, fall back to FIFO which is guaranteed to be supported.
 			WARN_PRINT(std::format("The requested V-Sync mode %s is not available. Falling back to V-Sync mode Enabled.", present_mode_name));
-			surface->vsync_mode = Context::VSyncMode::VSYNC_ENABLED;
+			surface->vsync_mode = DisplayServerEnums::VSyncMode::VSYNC_ENABLED;
 			present_mode = VkPresentModeKHR::VK_PRESENT_MODE_FIFO_KHR;
 		}
 
