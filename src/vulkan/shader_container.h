@@ -2,7 +2,10 @@
 #include <cstdint>
 #include <vector>
 #include "vulkan_common.h"
-#include "vulkan_device.h"
+#include "util/bit_field.h"
+#include "util/error_macros.h"
+#include <span>
+#include <string>
 
 using PackedByteArray = std::vector<uint8_t>;
 
@@ -11,6 +14,100 @@ namespace Vulkan
 	struct SpvReflectShaderModule;
 	struct SpvReflectDescriptorBinding;
 	struct SpvReflectSpecializationConstant;
+
+	enum UniformType {
+		UNIFORM_TYPE_SAMPLER, // For sampling only (sampler GLSL type).
+		UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, // For sampling only, but includes a texture, (samplerXX GLSL type), first a sampler then a texture.
+		UNIFORM_TYPE_TEXTURE, // Only texture, (textureXX GLSL type).
+		UNIFORM_TYPE_IMAGE, // Storage image (imageXX GLSL type), for compute mostly.
+		UNIFORM_TYPE_TEXTURE_BUFFER, // Buffer texture (or TBO, textureBuffer type).
+		UNIFORM_TYPE_SAMPLER_WITH_TEXTURE_BUFFER, // Buffer texture with a sampler(or TBO, samplerBuffer type).
+		UNIFORM_TYPE_IMAGE_BUFFER, // Texel buffer, (imageBuffer type), for compute mostly.
+		UNIFORM_TYPE_UNIFORM_BUFFER, // Regular uniform buffer (or UBO).
+		UNIFORM_TYPE_STORAGE_BUFFER, // Storage buffer ("buffer" qualifier) like UBO, but supports storage, for compute mostly.
+		UNIFORM_TYPE_INPUT_ATTACHMENT, // Used for sub-pass read/write, for mobile mostly.
+		UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC, // Same as UNIFORM but created with BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT.
+		UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC, // Same as STORAGE but created with BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT.
+		UNIFORM_TYPE_ACCELERATION_STRUCTURE, // Bounding Volume Hierarchy (Top + Bottom Level acceleration structures), for raytracing only.
+		UNIFORM_TYPE_MAX
+	};
+
+
+	struct ShaderStageSPIRVData {
+		ShaderStage shader_stage = SHADER_STAGE_MAX;
+		std::vector<uint8_t> spirv;
+		std::vector<uint64_t> dynamic_buffers;
+	};
+
+
+	struct ShaderUniform {
+		UniformType type = UniformType::UNIFORM_TYPE_MAX;
+		bool writable = false;
+		uint32_t binding = 0;
+		BitField<ShaderStage> stages = {};
+		uint32_t length = 0; // Size of arrays (in total elements), or ubos (in bytes * total elements).
+
+		bool operator!=(const ShaderUniform& p_other) const {
+			return binding != p_other.binding || type != p_other.type || writable != p_other.writable || stages != p_other.stages || length != p_other.length;
+		}
+
+		bool operator<(const ShaderUniform& p_other) const {
+			if (binding != p_other.binding) {
+				return binding < p_other.binding;
+			}
+			if (type != p_other.type) {
+				return type < p_other.type;
+			}
+			if (writable != p_other.writable) {
+				return writable < p_other.writable;
+			}
+			if (stages != p_other.stages) {
+				return stages < p_other.stages;
+			}
+			if (length != p_other.length) {
+				return length < p_other.length;
+			}
+			return false;
+		}
+	};
+
+	enum PipelineSpecializationConstantType {
+		PIPELINE_SPECIALIZATION_CONSTANT_TYPE_BOOL,
+		PIPELINE_SPECIALIZATION_CONSTANT_TYPE_INT,
+		PIPELINE_SPECIALIZATION_CONSTANT_TYPE_FLOAT,
+	};
+
+	struct PipelineSpecializationConstant {
+		PipelineSpecializationConstantType type = {};
+		uint32_t constant_id = 0xffffffff;
+		union {
+			uint32_t int_value = 0;
+			float float_value;
+			bool bool_value;
+		};
+	};
+
+	struct ShaderSpecializationConstant : public PipelineSpecializationConstant {
+		BitField<ShaderStage> stages = {};
+
+		bool operator<(const ShaderSpecializationConstant& p_other) const { return constant_id < p_other.constant_id; }
+	};
+
+	struct ShaderReflection {
+		uint64_t vertex_input_mask = 0;
+		uint32_t fragment_output_mask = 0;
+		PipelineType pipeline_type = PIPELINE_TYPE_RASTERIZATION;
+		bool has_multiview = false;
+		bool has_dynamic_buffers = false;
+		uint32_t compute_local_size[3] = {};
+		uint32_t push_constant_size = 0;
+
+		std::vector<std::vector<ShaderUniform>> uniform_sets;
+		std::vector<ShaderSpecializationConstant> specialization_constants;
+		std::vector<ShaderStage> stages_vector;
+		BitField<ShaderStage> stages_bits = {};
+		BitField<ShaderStage> push_constant_stages = {};
+	};
 
 	class RenderingShaderContainer 
 	{
@@ -26,6 +123,7 @@ namespace Vulkan
 			COMPRESSION_FLAG_SMOLV = 0x10000,
 		};
 
+		
 	protected:
 		//using Device = Device;
 
@@ -41,7 +139,7 @@ namespace Vulkan
 			uint64_t vertex_input_mask = 0;
 			uint32_t fragment_output_mask = 0;
 			uint32_t specialization_constants_count = 0;
-			Device::PipelineType pipeline_type = Device::PIPELINE_TYPE_RASTERIZATION;
+			PipelineType pipeline_type = PIPELINE_TYPE_RASTERIZATION;
 			uint32_t has_multiview = 0;
 			uint32_t has_dynamic_buffers = 0;
 			uint32_t compute_local_size[3] = {};
@@ -149,7 +247,7 @@ namespace Vulkan
 		};
 
 		struct ReflectUniform : ReflectSymbol<SpvReflectDescriptorBinding> {
-			Device::UniformType type = Device::UniformType::UNIFORM_TYPE_MAX;
+			UniformType type = UniformType::UNIFORM_TYPE_MAX;
 			uint32_t binding = 0;
 
 			ReflectImageTraits image;
@@ -178,7 +276,7 @@ namespace Vulkan
 		};
 
 		struct ReflectSpecializationConstant : ReflectSymbol<SpvReflectSpecializationConstant> {
-			Device::PipelineSpecializationConstantType type = {};
+			PipelineSpecializationConstantType type = {};
 			uint32_t constant_id = 0xffffffff;
 			union {
 				uint32_t int_value = 0;
@@ -259,7 +357,7 @@ namespace Vulkan
 		virtual bool _set_code_from_spirv(const ReflectShader& p_shader);
 
 		void set_from_shader_reflection(const ReflectShader& p_reflection);
-		Error reflect_spirv(const String& p_shader_name, std::span<Device::ShaderStageSPIRVData> p_spirv, ReflectShader& r_shader);
+		Error reflect_spirv(const std::string& p_shader_name, std::span<ShaderStageSPIRVData> p_spirv, ReflectShader& r_shader);
 
 	public:
 		enum CompressionFlags {
@@ -276,8 +374,8 @@ namespace Vulkan
 		std::string shader_name;
 		std::vector<Shader> shaders;
 
-		bool set_code_from_spirv(const String& p_shader_name, std::vector<Device::ShaderStageSPIRVData> p_spirv);
-		Device::ShaderReflection get_shader_reflection() const;
+		bool set_code_from_spirv(const std::string& p_shader_name, std::vector<ShaderStageSPIRVData> p_spirv);
+		ShaderReflection get_shader_reflection() const;
 		bool from_bytes(const PackedByteArray& p_bytes);
 		PackedByteArray to_bytes() const;
 		bool compress_code(const uint8_t* p_decompressed_bytes, uint32_t p_decompressed_size, uint8_t* p_compressed_bytes, uint32_t* r_compressed_size, uint32_t* r_compressed_flags) const;

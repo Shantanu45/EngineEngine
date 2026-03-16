@@ -1,7 +1,6 @@
 #include "vulkan_device.h"
 #include "libassert/assert.hpp"
 #include "util/error_macros.h"
-#include "shader_container.h"
 #include <array>
 
 // Enable the use of re-spirv for optimizing shaders after applying specialization constants.
@@ -4010,7 +4009,7 @@ namespace Vulkan
 
 			res = vkCreateShaderModule(vk_device, &shader_module_create_info, nullptr, &vk_module);
 			if (res != VK_SUCCESS) {
-				error_text = std::format("Error (%d) creating module for shader stage %s.", res, std::string(SHADER_STAGE_NAMES[shader_refl.stages_vector[i]]));
+				error_text = std::format("Error (%d) creating module for shader stage %s.", std::to_string(res), std::string(SHADER_STAGE_NAMES[shader_refl.stages_vector[i]]));
 				break;
 			}
 
@@ -4094,7 +4093,7 @@ namespace Vulkan
 				VkDescriptorSetLayout layout = VK_NULL_HANDLE;
 				res = vkCreateDescriptorSetLayout(vk_device, &layout_create_info, nullptr, &layout);
 				if (res) {
-					error_text = std::format("Error (%d) creating descriptor set layout for set %d.", res, i);
+					error_text = std::format("Error (%d) creating descriptor set layout for set %d.", std::to_string(res), i);
 					break;
 				}
 
@@ -4121,7 +4120,7 @@ namespace Vulkan
 
 			res = vkCreatePipelineLayout(vk_device, &pipeline_layout_create_info, nullptr, &shader_info.vk_pipeline_layout);
 			if (res != VK_SUCCESS) {
-				error_text = std::format("Error (%d) creating pipeline layout.", res);
+				error_text = std::format("Error (%d) creating pipeline layout.", std::to_string(res));
 			}
 		}
 

@@ -151,7 +151,7 @@ namespace Vulkan
 		_set_from_shader_reflection_post(p_reflection);
 	}
 
-	Error RenderingShaderContainer::reflect_spirv(const String& p_shader_name, std::span<Device::ShaderStageSPIRVData> p_spirv, ReflectShader& r_shader)
+	Error RenderingShaderContainer::reflect_spirv(const std::string& p_shader_name, std::span<ShaderStageSPIRVData> p_spirv, ReflectShader& r_shader)
 	{
 		return Error();
 	}
