@@ -374,6 +374,11 @@ namespace Vulkan
 
 	}
 
+	void Device::finalize()
+	{
+		//TODO:
+	}
+
 	void Device::_register_requested_device_extension(const std::string& p_extension_name, bool p_required) {
 		ERR_FAIL_COND(requested_device_extensions.contains(p_extension_name));
 		requested_device_extensions[p_extension_name] = p_required;

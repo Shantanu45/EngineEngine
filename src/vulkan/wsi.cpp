@@ -200,4 +200,139 @@ namespace Vulkan
 	{
 		return true;
 	}
+
+	void WSI::free_pending_resources(int p_frame) {
+		//while (frames[p_frame].render_pipelines_to_dispose_of.front()) {
+		//	Device::RenderPipeline* pipeline = &frames[p_frame].render_pipelines_to_dispose_of.front()->get();
+
+		//	device_ptr->pipeline_free(pipeline->driver_id);
+
+		//	frames[p_frame].render_pipelines_to_dispose_of.pop_front();
+		//}
+
+		//while (frames[p_frame].compute_pipelines_to_dispose_of.front()) {
+		//	ComputePipeline* pipeline = &frames[p_frame].compute_pipelines_to_dispose_of.front()->get();
+
+		//	device_ptr->pipeline_free(pipeline->driver_id);
+
+		//	frames[p_frame].compute_pipelines_to_dispose_of.pop_front();
+		//}
+
+		//while (frames[p_frame].raytracing_pipelines_to_dispose_of.front()) {
+		//	RaytracingPipeline* pipeline = &frames[p_frame].raytracing_pipelines_to_dispose_of.front()->get();
+
+		//	device_ptr->raytracing_pipeline_free(pipeline->driver_id);
+
+		//	frames[p_frame].raytracing_pipelines_to_dispose_of.pop_front();
+		//}
+
+		//// Acceleration structures.
+		//while (frames[p_frame].acceleration_structures_to_dispose_of.front()) {
+		//	AccelerationStructure& acceleration_structure = frames[p_frame].acceleration_structures_to_dispose_of.front()->get();
+
+		//	device_ptr->acceleration_structure_free(acceleration_structure.driver_id);
+
+		//	if (acceleration_structure.scratch_buffer) {
+		//		size_t scratch_size = device_ptr->buffer_get_allocation_size(acceleration_structure.scratch_buffer);
+		//		_THREAD_SAFE_LOCK_
+		//			buffer_memory -= scratch_size;
+		//		_THREAD_SAFE_UNLOCK_
+
+		//			device_ptr->buffer_free(acceleration_structure.scratch_buffer);
+		//	}
+
+		//	frames[p_frame].acceleration_structures_to_dispose_of.pop_front();
+		//}
+
+		//// Uniform sets.
+		//while (frames[p_frame].uniform_sets_to_dispose_of.front()) {
+		//	UniformSet* uniform_set = &frames[p_frame].uniform_sets_to_dispose_of.front()->get();
+
+		//	device_ptr->uniform_set_free(uniform_set->driver_id);
+
+		//	frames[p_frame].uniform_sets_to_dispose_of.pop_front();
+		//}
+
+		//// Shaders.
+		//while (frames[p_frame].shaders_to_dispose_of.front()) {
+		//	Shader* shader = &frames[p_frame].shaders_to_dispose_of.front()->get();
+
+		//	device_ptr->shader_free(shader->driver_id);
+
+		//	frames[p_frame].shaders_to_dispose_of.pop_front();
+		//}
+
+		//// Samplers.
+		//while (frames[p_frame].samplers_to_dispose_of.front()) {
+		//	RDD::SamplerID sampler = frames[p_frame].samplers_to_dispose_of.front()->get();
+
+		//	device_ptr->sampler_free(sampler);
+
+		//	frames[p_frame].samplers_to_dispose_of.pop_front();
+		//}
+
+		//// Framebuffers.
+		//while (frames[p_frame].framebuffers_to_dispose_of.front()) {
+		//	Framebuffer* framebuffer = &frames[p_frame].framebuffers_to_dispose_of.front()->get();
+		//	draw_graph.framebuffer_cache_free(device_ptr, framebuffer->framebuffer_cache);
+		//	frames[p_frame].framebuffers_to_dispose_of.pop_front();
+		//}
+
+		//// Textures.
+		//while (frames[p_frame].textures_to_dispose_of.front()) {
+		//	Texture* texture = &frames[p_frame].textures_to_dispose_of.front()->get();
+		//	if (texture->bound) {
+		//		WARN_PRINT("Deleted a texture while it was bound.");
+		//	}
+
+		//	_texture_free_shared_fallback(texture);
+
+		//	texture_memory -= device_ptr->texture_get_allocation_size(texture->driver_id);
+		//	device_ptr->texture_free(texture->driver_id);
+
+		//	frames[p_frame].textures_to_dispose_of.pop_front();
+		//}
+
+		//// Buffers.
+		//while (frames[p_frame].buffers_to_dispose_of.front()) {
+		//	Buffer& buffer = frames[p_frame].buffers_to_dispose_of.front()->get();
+		//	device_ptr->buffer_free(buffer.driver_id);
+		//	buffer_memory -= buffer.size;
+
+		//	frames[p_frame].buffers_to_dispose_of.pop_front();
+		//}
+
+		//if (frames_pending_resources_for_processing > 0u) {
+		//	--frames_pending_resources_for_processing;
+		//}
+	}
+
+	void WSI::teardown()
+	{
+		if (platform)
+			platform->release_resources();
+		int frame = 0;
+		for (uint32_t i = 0; i < frames.size(); i++) {
+			int f = (frame + i) % frames.size();
+			free_pending_resources(f);
+			device_ptr->command_pool_free(frames[i].command_pool);
+			//device_ptr->timestamp_query_pool_free(frames[i].timestamp_pool);
+			device_ptr->semaphore_free(frames[i].semaphore);
+			device_ptr->fence_free(frames[i].fence);
+
+			//Device::CommandBufferPool& buffer_pool = frames[i].command_buffer_pool;
+			//for (uint32_t j = 0; j < buffer_pool.buffers.size(); j++) {
+			//	device_ptr->semaphore_free(buffer_pool.semaphores[j]);
+			//}
+
+			//for (uint32_t j = 0; j < frames[i].transfer_worker_semaphores.size(); j++) {
+			//	device_ptr->semaphore_free(frames[i].transfer_worker_semaphores[j]);
+			//}
+		}
+
+		//if (pipeline_cache_enabled) {
+		//	update_pipeline_cache(true);
+		//	device_ptr->pipeline_cache_free();
+		//}
+	}
 }

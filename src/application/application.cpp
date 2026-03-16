@@ -48,6 +48,7 @@ namespace EE
 
 	Application::~Application()
 	{
+		teardown_wsi();
 		FreeConsole();
 	}
 
@@ -67,6 +68,9 @@ namespace EE
 
 	void Application::teardown_wsi()
 	{
+		application_wsi.teardown();
+		ready_modules = false;
+		ready_pipelines = false;
 	}
 
 	void Application::post_frame()

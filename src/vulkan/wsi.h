@@ -55,6 +55,10 @@ namespace Vulkan
 		virtual bool alive(WSI& wsi) = 0;
 		virtual void poll_input() = 0;
 
+		virtual void release_resources()
+		{
+		}
+
 	protected:
 		unsigned current_swapchain_width = 0;
 		unsigned current_swapchain_height = 0;
@@ -72,7 +76,11 @@ namespace Vulkan
 		bool begin_frame();
 		bool end_frame();
 
+		void teardown();
+
 	private:
+
+		void free_pending_resources(int p_frame);
 		WSIPlatform* platform = nullptr;
 
 		Context context;

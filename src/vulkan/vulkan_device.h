@@ -975,6 +975,8 @@ class RenderingShaderContainerFormatVulkan;
 
 		Error initialize(uint32_t p_device_index, uint32_t p_frame_count);
 
+		void finalize();
+
 		Device::BufferID buffer_create(uint64_t p_size, BitField<Device::BufferUsageBits> p_usage, Device::MemoryAllocationType p_allocation_type, uint64_t p_frames_drawn);
 
 		void buffer_free(BufferID p_buffer);
