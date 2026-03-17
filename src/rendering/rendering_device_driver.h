@@ -3,13 +3,14 @@
 #include "rendering_context_driver.h"
 #include "math/rect2i.h"
 
-class RenderingShaderContainer;
-class RenderingShaderContainerFormat;
 
 namespace Rendering
 {
+	class RenderingShaderContainer;
+	class RenderingShaderContainerFormat;
 	class RenderingDeviceDriver : public RenderingDeviceCommons
 	{
+	public:
 		struct ID {
 			uint64_t id = 0;
 			_ALWAYS_INLINE_ ID() = default;
@@ -645,16 +646,16 @@ namespace Rendering
 		// ----- COMMANDS -----
 
 		// Binding.
-		virtual void command_bind_compute_pipeline(CommandBufferID p_cmd_buffer, PipelineID p_pipeline) = 0;
-		virtual void command_bind_compute_uniform_sets(CommandBufferID p_cmd_buffer, std::span<UniformSetID> p_uniform_sets, ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count, uint32_t p_dynamic_offsets) = 0;
+		//virtual void command_bind_compute_pipeline(CommandBufferID p_cmd_buffer, PipelineID p_pipeline) = 0;
+		//virtual void command_bind_compute_uniform_sets(CommandBufferID p_cmd_buffer, std::span<UniformSetID> p_uniform_sets, ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count, uint32_t p_dynamic_offsets) = 0;
 
 		// Dispatching.
-		virtual void command_compute_dispatch(CommandBufferID p_cmd_buffer, uint32_t p_x_groups, uint32_t p_y_groups, uint32_t p_z_groups) = 0;
-		virtual void command_compute_dispatch_indirect(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset) = 0;
+		//virtual void command_compute_dispatch(CommandBufferID p_cmd_buffer, uint32_t p_x_groups, uint32_t p_y_groups, uint32_t p_z_groups) = 0;
+		//virtual void command_compute_dispatch_indirect(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset) = 0;
 
 		// ----- PIPELINE -----
 
-		virtual PipelineID compute_pipeline_create(ShaderID p_shader, std::span<PipelineSpecializationConstant> p_specialization_constants) = 0;
+		//virtual PipelineID compute_pipeline_create(ShaderID p_shader, std::span<PipelineSpecializationConstant> p_specialization_constants) = 0;
 
 		/********************/
 		/**** RAYTRACING ****/
@@ -682,15 +683,15 @@ namespace Rendering
 
 		// ----- PIPELINE -----
 
-		virtual RaytracingPipelineID raytracing_pipeline_create(ShaderID p_shader, std::span<PipelineSpecializationConstant> p_specialization_constants) = 0;
-		virtual void raytracing_pipeline_free(RaytracingPipelineID p_pipeline) = 0;
+		//virtual RaytracingPipelineID raytracing_pipeline_create(ShaderID p_shader, std::span<PipelineSpecializationConstant> p_specialization_constants) = 0;
+		//virtual void raytracing_pipeline_free(RaytracingPipelineID p_pipeline) = 0;
 
 		// ----- COMMANDS -----
 
-		virtual void command_build_acceleration_structure(CommandBufferID p_cmd_buffer, AccelerationStructureID p_acceleration_structure, BufferID p_scratch_buffer) = 0;
-		virtual void command_bind_raytracing_pipeline(CommandBufferID p_cmd_buffer, RaytracingPipelineID p_pipeline) = 0;
-		virtual void command_bind_raytracing_uniform_set(CommandBufferID p_cmd_buffer, UniformSetID p_uniform_set, ShaderID p_shader, uint32_t p_set_index) = 0;
-		virtual void command_trace_rays(CommandBufferID p_cmd_buffer, uint32_t p_width, uint32_t p_height) = 0;
+		//virtual void command_build_acceleration_structure(CommandBufferID p_cmd_buffer, AccelerationStructureID p_acceleration_structure, BufferID p_scratch_buffer) = 0;
+		//virtual void command_bind_raytracing_pipeline(CommandBufferID p_cmd_buffer, RaytracingPipelineID p_pipeline) = 0;
+		//virtual void command_bind_raytracing_uniform_set(CommandBufferID p_cmd_buffer, UniformSetID p_uniform_set, ShaderID p_shader, uint32_t p_set_index) = 0;
+		//virtual void command_trace_rays(CommandBufferID p_cmd_buffer, uint32_t p_width, uint32_t p_height) = 0;
 
 		/******************/
 		/**** CALLBACK ****/
@@ -724,14 +725,14 @@ namespace Rendering
 		/****************/
 		/**** DEBUG *****/
 		/****************/
-		virtual void command_insert_breadcrumb(CommandBufferID p_cmd_buffer, uint32_t p_data) = 0;
+		//virtual void command_insert_breadcrumb(CommandBufferID p_cmd_buffer, uint32_t p_data) = 0;
 
 		/********************/
 		/**** SUBMISSION ****/
 		/********************/
 
-		virtual void begin_segment(uint32_t p_frame_index, uint32_t p_frames_drawn) = 0;
-		virtual void end_segment() = 0;
+		//virtual void begin_segment(uint32_t p_frame_index, uint32_t p_frames_drawn) = 0;
+		//virtual void end_segment() = 0;
 
 		/**************/
 		/**** MISC ****/
@@ -810,23 +811,23 @@ namespace Rendering
 			uint32_t version_minor = 0;
 		};
 
-		virtual void set_object_name(ObjectType p_type, ID p_driver_id, const std::string& p_name) = 0;
-		virtual uint64_t get_resource_native_handle(DriverResource p_type, ID p_driver_id) = 0;
-		virtual uint64_t get_total_memory_used() = 0;
-		virtual uint64_t get_lazily_memory_used() = 0;
-		virtual uint64_t limit_get(Limit p_limit) = 0;
+		//virtual void set_object_name(ObjectType p_type, ID p_driver_id, const std::string& p_name) = 0;
+		//virtual uint64_t get_resource_native_handle(DriverResource p_type, ID p_driver_id) = 0;
+		//virtual uint64_t get_total_memory_used() = 0;
+		//virtual uint64_t get_lazily_memory_used() = 0;
+		//virtual uint64_t limit_get(Limit p_limit) = 0;
 		virtual uint64_t api_trait_get(ApiTrait p_trait);
-		virtual bool has_feature(Features p_feature) = 0;
-		virtual const MultiviewCapabilities& get_multiview_capabilities() = 0;
-		virtual const FragmentShadingRateCapabilities& get_fragment_shading_rate_capabilities() = 0;
-		virtual const FragmentDensityMapCapabilities& get_fragment_density_map_capabilities() = 0;
-		virtual std::string get_api_name() const = 0;
-		virtual std::string get_api_version() const = 0;
-		virtual std::string get_pipeline_cache_uuid() const = 0;
-		virtual const Capabilities& get_capabilities() const = 0;
-		virtual const RenderingShaderContainerFormat& get_shader_container_format() const = 0;
+		//virtual bool has_feature(Features p_feature) = 0;
+		//virtual const MultiviewCapabilities& get_multiview_capabilities() = 0;
+		//virtual const FragmentShadingRateCapabilities& get_fragment_shading_rate_capabilities() = 0;
+		//virtual const FragmentDensityMapCapabilities& get_fragment_density_map_capabilities() = 0;
+		//virtual std::string get_api_name() const = 0;
+		//virtual std::string get_api_version() const = 0;
+		//virtual std::string get_pipeline_cache_uuid() const = 0;
+		//virtual const Capabilities& get_capabilities() const = 0;
+		//virtual const RenderingShaderContainerFormat& get_shader_container_format() const = 0;
 
-		virtual bool is_composite_alpha_supported(CommandQueueID p_queue) const { return false; }
+		//virtual bool is_composite_alpha_supported(CommandQueueID p_queue) const { return false; }
 
 		/******************/
 

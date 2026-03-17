@@ -169,6 +169,10 @@ namespace Rendering
 	{
 	}
 
+	RenderingShaderContainer::~RenderingShaderContainer()
+	{
+	}
+
 	RenderingDeviceCommons::ShaderReflection RenderingShaderContainer::get_shader_reflection() const
 	{
 		RDC::ShaderReflection shader_refl;

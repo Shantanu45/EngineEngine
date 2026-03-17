@@ -25,6 +25,7 @@ set(INCLUDES
 target_include_directories(${PROJECT_NAME} PRIVATE ${INCLUDES})
 
 set(ADDITIONAL_LIBRARY_DEPENDENCIES
+	spdlog::spdlog
 	libassert::assert
 )
 

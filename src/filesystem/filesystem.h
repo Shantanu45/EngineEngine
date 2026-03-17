@@ -16,8 +16,7 @@
 #include <functional>
 #include <stdio.h>
 
-#define LOGI(...) printf(__VA_ARGS__)
-#define LOGE(...) printf(__VA_ARGS__)
+#include "util/logger.h"
 
 namespace FileSystem
 {

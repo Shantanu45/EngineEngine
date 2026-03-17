@@ -2,6 +2,7 @@
 #include "libassert/assert.hpp"
 #include "filesystem/filesystem.h"
 #include "compiler/compiler.h"
+#include "rendering/rendering_device_commons.h"
 
 namespace Vulkan
 {
@@ -125,16 +126,16 @@ namespace Vulkan
 
 		const RenderingShaderContainerFormatVulkan& container_format_vs = RenderingShaderContainerFormatVulkan();
 		RenderingShaderContainer* shader_container_vs = container_format_vs.create_container();
-		std::vector<ShaderStageSPIRVData> spirv_vec;
-		ShaderStageSPIRVData data1;
-		data1.shader_stage = SHADER_STAGE_VERTEX;
+		std::vector<RenderingDeviceCommons::ShaderStageSPIRVData> spirv_vec;
+		RenderingDeviceCommons::ShaderStageSPIRVData data1;
+		data1.shader_stage = RenderingDeviceCommons::SHADER_STAGE_VERTEX;
 		data1.spirv = bytes_spirv_vs;
 
 		const RenderingShaderContainerFormatVulkan& container_format_ps = RenderingShaderContainerFormatVulkan();
 		RenderingShaderContainer* shader_container_ps = container_format_ps.create_container();
-		std::vector<ShaderStageSPIRVData> spirv_vec_ps;
-		ShaderStageSPIRVData data2;
-		data2.shader_stage = SHADER_STAGE_FRAGMENT;
+		std::vector<RenderingDeviceCommons::ShaderStageSPIRVData> spirv_vec_ps;
+		RenderingDeviceCommons::ShaderStageSPIRVData data2;
+		data2.shader_stage = RenderingDeviceCommons::SHADER_STAGE_FRAGMENT;
 		data2.spirv = bytes_spirv_ps;
 		spirv_vec.push_back(data1);
 		spirv_vec.push_back(data2);
@@ -169,10 +170,10 @@ namespace Vulkan
 			auto command_buffer = frames[curr_frame].command_buffer;
 			auto render_pass = device_ptr->swap_chain_get_render_pass(swapchain);
 			device_ptr->command_buffer_begin(command_buffer);
-			Device::RenderPassClearValue val;
-			val.color = Color{ 1.0 , 0.0 , 0.0 , 0.0 };
+			std::array<RenderingDeviceDriver::RenderPassClearValue, 1> val;
+			val[0].color = Color{1.0 , 0.0 , 0.0 , 0.0};
 			std::vector<Rect2i> frame_rects = { Rect2i{ 0, 0, (int)platform->get_surface_width(), (int)platform->get_surface_height() } };
-			device_ptr->command_begin_render_pass(command_buffer, render_pass, framebuffer, Device::COMMAND_BUFFER_TYPE_PRIMARY, frame_rects[0], {val});
+			device_ptr->command_begin_render_pass(command_buffer, render_pass, framebuffer, Device::COMMAND_BUFFER_TYPE_PRIMARY, frame_rects[0], val);
 			device_ptr->command_bind_render_pipeline(command_buffer, pipeline);
 			device_ptr->command_render_set_viewport(command_buffer, frame_rects);
 			device_ptr->command_render_set_scissor(command_buffer, frame_rects);
