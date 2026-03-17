@@ -8,16 +8,6 @@
 
 namespace Vulkan
 {
-	struct WindowPlatformData {
-		enum class Platform { SDL3, Win32, Xlib, Wayland, Cocoa };
-		Platform platform;
-
-		union {
-			struct { void* window; void* instance; } sdl;   // SDL_Window*, hinstance for win32 fallback
-			struct { void* hwnd; void* hinstance; } win32;
-		};
-	};
-
 	using namespace ::Rendering;
 	class RenderingContextDriverVulkan : public RenderingContextDriver
 	{

@@ -88,7 +88,7 @@ namespace EE
 	bool Application::poll()
 	{
 		auto& wsi = get_wsi();
-		if (!get_platform().alive(wsi))
+		if (!get_platform().alive(/*wsi*/))
 			return false;
 		return true;
 	}

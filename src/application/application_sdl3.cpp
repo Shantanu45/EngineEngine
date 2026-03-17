@@ -8,10 +8,11 @@
 #include "volk.h"
 #include "input/input.h"
 #include "vulkan/wsi.h"
+#include "rendering/wsi_platform.h"
 
 namespace EE
 {
-	class WSIPlatformSDL : public Vulkan::WSIPlatform
+	class WSIPlatformSDL : public Rendering::WSIPlatform
 	{
 	public:
 		~WSIPlatformSDL()
@@ -173,11 +174,11 @@ namespace EE
 			return { ext, ext + count };
 		}
 
-		Vulkan::WindowPlatformData get_window_platform_data(DisplayServerEnums::WindowID p_window_id) override
+		WindowPlatformData get_window_platform_data(DisplayServerEnums::WindowID p_window_id) override
 		{
 			//WindowData& wd = windows[p_window_id];
-			Vulkan::WindowPlatformData platfform_data;
-			platfform_data.platform = Vulkan::WindowPlatformData::Platform::SDL3;
+			WindowPlatformData platfform_data;
+			platfform_data.platform = WindowPlatformData::Platform::SDL3;
 			platfform_data.sdl.window = window;
 
 			// TODO: move it from here
@@ -205,7 +206,7 @@ namespace EE
 				app->run_frame();
 		}
 
-		bool alive(Vulkan::WSI&) override
+		bool alive(/*Vulkan::WSI&*/) override
 		{
 			//std::lock_guard<std::mutex> holder{ get_input_tracker().get_lock() };
 			//flush_deferred_input_events();

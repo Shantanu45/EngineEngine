@@ -3,6 +3,7 @@
 #include "vulkan_common.h"
 #include "vulkan_context.h"
 #include "vulkan_device.h"
+#include "rendering/wsi_platform.h"
 
 namespace Vulkan
 {
@@ -36,44 +37,6 @@ namespace Vulkan
 		//Device::CommandBufferPool command_buffer_pool;
 
 		uint64_t index = 0;
-	};
-
-	struct SurfaceDescriptor {
-		enum class Platform { SDL3, Win32 };
-		Platform platform;
-
-		union {
-			struct { void* window; void* instance; } sdl;   // SDL_Window*, hinstance for win32 fallback
-			struct { void* hwnd; void* hinstance; } win32;
-		};
-	};
-
-	class WSIPlatform
-	{
-	public:
-		virtual ~WSIPlatform() = default;
-
-		virtual std::vector<const char*> get_instance_extensions() = 0;
-		virtual std::vector<const char*> get_device_extensions()
-		{
-			return { "VK_KHR_swapchain" };
-		}
-
-		virtual uint32_t get_surface_width() = 0;
-		virtual uint32_t get_surface_height() = 0;
-		virtual bool alive(WSI& wsi) = 0;
-		virtual void poll_input() = 0;
-
-		virtual WindowPlatformData get_window_platform_data(DisplayServerEnums::WindowID p_window_id) = 0;
-
-		virtual void release_resources()
-		{
-		}
-
-	protected:
-		unsigned current_swapchain_width = 0;
-		unsigned current_swapchain_height = 0;
-
 	};
 
 	struct WindowData {

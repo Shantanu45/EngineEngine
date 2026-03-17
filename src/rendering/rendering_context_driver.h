@@ -37,12 +37,23 @@ namespace DisplayServerEnums
 
 }
 
+struct WindowPlatformData {
+	enum class Platform { SDL3, Win32};
+	Platform platform;
+
+	union {
+		struct { void* window; void* instance; } sdl;   // SDL_Window*, hinstance for win32 fallback
+		struct { void* hwnd; void* hinstance; } win32;
+	};
+};
+
 namespace Rendering
 {
 	class RenderingDeviceDriver;
 	class RenderingContextDriver
 	{
 	public:
+
 		typedef uint64_t SurfaceID;
 	private:
 		std::unordered_map<DisplayServerEnums::WindowID, SurfaceID> window_surface_map;
