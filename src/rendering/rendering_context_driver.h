@@ -17,6 +17,24 @@ namespace DisplayServerEnums
 		VSYNC_MAILBOX
 	};
 
+	typedef int WindowID;
+
+	enum {
+		MAIN_WINDOW_ID = 0,
+		INVALID_WINDOW_ID = -1,
+		INVALID_INDICATOR_ID = -1
+	};
+
+
+	enum {
+		INVALID_SCREEN = -1,
+		SCREEN_WITH_MOUSE_FOCUS = -4,
+		SCREEN_WITH_KEYBOARD_FOCUS = -3,
+		SCREEN_PRIMARY = -2,
+		SCREEN_OF_MAIN_WINDOW = -1, // Note: for the main window, determine screen from position.
+	};
+
+
 }
 
 namespace Rendering

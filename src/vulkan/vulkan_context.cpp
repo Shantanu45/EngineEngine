@@ -5,6 +5,7 @@
 #include "util/logger.h"
 #include "libassert/assert.hpp"
 #include "util/error_macros.h"
+#include <SDL3/SDL_vulkan.h>
 
 namespace Vulkan
 {
@@ -577,14 +578,24 @@ namespace Vulkan
 
 	RenderingContextDriverVulkan::SurfaceID RenderingContextDriverVulkan::surface_create(const void* p_platform_data) {
 		const WindowPlatformData* wpd = (const WindowPlatformData*)(p_platform_data);
-
-		VkWin32SurfaceCreateInfoKHR create_info = {};
-		create_info.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
-		create_info.hinstance = wpd->instance;
-		create_info.hwnd = wpd->window;
-
 		VkSurfaceKHR vk_surface = VK_NULL_HANDLE;
-		VkResult err = vkCreateWin32SurfaceKHR(instance, &create_info, nullptr, &vk_surface);
+		VkResult err;
+		switch (wpd->platform) {
+		case WindowPlatformData::Platform::SDL3: {
+			auto* win = static_cast<SDL_Window*>(wpd->sdl.window);
+			auto result = SDL_Vulkan_CreateSurface(win, instance, nullptr, &vk_surface);
+			err = result ? VK_SUCCESS : VK_INCOMPLETE;
+			break;
+		}
+		case WindowPlatformData::Platform::Win32: {
+		}
+			VkWin32SurfaceCreateInfoKHR create_info = {};
+			create_info.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
+			create_info.hinstance = static_cast<HINSTANCE>(wpd->win32.hinstance);
+			create_info.hwnd = static_cast<HWND>(wpd->win32.hwnd);
+
+			err = vkCreateWin32SurfaceKHR(instance, &create_info, nullptr, &vk_surface);
+		}
 		ERR_FAIL_COND_V(err != VK_SUCCESS, SurfaceID());
 
 		Surface* surface = new Surface;

@@ -38,11 +38,20 @@ namespace Vulkan
 		uint64_t index = 0;
 	};
 
+	struct SurfaceDescriptor {
+		enum class Platform { SDL3, Win32 };
+		Platform platform;
+
+		union {
+			struct { void* window; void* instance; } sdl;   // SDL_Window*, hinstance for win32 fallback
+			struct { void* hwnd; void* hinstance; } win32;
+		};
+	};
+
 	class WSIPlatform
 	{
 	public:
 		virtual ~WSIPlatform() = default;
-		virtual VkSurfaceKHR create_surface(VkInstance instance, VkPhysicalDevice gpu) = 0;
 
 		virtual std::vector<const char*> get_instance_extensions() = 0;
 		virtual std::vector<const char*> get_device_extensions()
@@ -55,6 +64,8 @@ namespace Vulkan
 		virtual bool alive(WSI& wsi) = 0;
 		virtual void poll_input() = 0;
 
+		virtual WindowPlatformData get_window_platform_data(DisplayServerEnums::WindowID p_window_id) = 0;
+
 		virtual void release_resources()
 		{
 		}
@@ -63,6 +74,10 @@ namespace Vulkan
 		unsigned current_swapchain_width = 0;
 		unsigned current_swapchain_height = 0;
 
+	};
+
+	struct WindowData {
+		WindowPlatformData platfform_data;
 	};
 
 	class WSI
@@ -80,6 +95,9 @@ namespace Vulkan
 
 	private:
 
+		Error _create_rendering_context_window(DisplayServerEnums::WindowID p_window_id, const std::string& p_rendering_driver = "vulkan");
+		void _destroy_rendering_context_window(DisplayServerEnums::WindowID p_window_id);
+
 		void free_pending_resources(int p_frame);
 		WSIPlatform* platform = nullptr;
 
@@ -95,6 +113,8 @@ namespace Vulkan
 		uint32_t curr_frame = 0;
 		Device::CommandQueueID main_queue;
 		Device::PipelineID pipeline;
+
+		std::map<DisplayServerEnums::WindowID, WindowData> windows;
 
 	};
 }

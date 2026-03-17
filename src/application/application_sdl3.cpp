@@ -173,17 +173,20 @@ namespace EE
 			return { ext, ext + count };
 		}
 
-		VkSurfaceKHR create_surface(VkInstance instance, VkPhysicalDevice) override
+		Vulkan::WindowPlatformData get_window_platform_data(DisplayServerEnums::WindowID p_window_id) override
 		{
-			VkSurfaceKHR surface = VK_NULL_HANDLE;
-			if (!SDL_Vulkan_CreateSurface(window, instance, nullptr, &surface))
-				return VK_NULL_HANDLE;
+			//WindowData& wd = windows[p_window_id];
+			Vulkan::WindowPlatformData platfform_data;
+			platfform_data.platform = Vulkan::WindowPlatformData::Platform::SDL3;
+			platfform_data.sdl.window = window;
 
+			// TODO: move it from here
 			int actual_width, actual_height;
 			SDL_GetWindowSizeInPixels(window, &actual_width, &actual_height);
 			width = unsigned(actual_width);
 			height = unsigned(actual_height);
-			return surface;
+
+			return platfform_data;
 		}
 
 		uint32_t get_surface_width() override

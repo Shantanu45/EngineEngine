@@ -16,9 +16,8 @@ namespace Vulkan
 		frame_count = 2;
 		context.set_platform_surface_extension(platform->get_instance_extensions());
 		context.initialize();
-		auto surface_khr = platform->create_surface(context.instance_get(), context.physical_device_get(0));
-		DEBUG_ASSERT(surface_khr != VK_NULL_HANDLE);
-		surface = context.set_surface(surface_khr);
+		if(_create_rendering_context_window(DisplayServerEnums::MAIN_WINDOW_ID) != OK)
+			return false;
 		return true;
 	}
 
@@ -167,6 +166,8 @@ namespace Vulkan
 		{
 			bool resize_required;
 			Device::FramebufferID framebuffer = device_ptr->swap_chain_acquire_framebuffer(main_queue, swapchain, resize_required);
+
+
 			auto command_buffer = frames[curr_frame].command_buffer;
 			auto render_pass = device_ptr->swap_chain_get_render_pass(swapchain);
 			device_ptr->command_buffer_begin(command_buffer);
@@ -178,9 +179,9 @@ namespace Vulkan
 			device_ptr->command_render_set_viewport(command_buffer, frame_rects);
 			device_ptr->command_render_set_scissor(command_buffer, frame_rects);
 			device_ptr->command_render_draw(command_buffer, 3, 1, 0, 0);
-
 			device_ptr->command_end_render_pass(command_buffer);
 			device_ptr->command_buffer_end(command_buffer);
+
 
 			device_ptr->command_queue_execute_and_present(main_queue, {}, { &command_buffer, 1 }, {}, frames[curr_frame].fence, { &swapchain, 1 });
 
@@ -200,6 +201,18 @@ namespace Vulkan
 	bool WSI::end_frame()
 	{
 		return true;
+	}
+
+	Error WSI::_create_rendering_context_window(DisplayServerEnums::WindowID p_window_id, const std::string& p_rendering_driver)
+	{
+		WindowData& wd = windows[p_window_id];
+		wd.platfform_data = platform->get_window_platform_data(p_window_id);
+
+		Error err = context.window_create(p_window_id, &wd.platfform_data);
+		ERR_FAIL_COND_V_MSG(err != OK, err, std::format("Failed to create %s window.", p_rendering_driver));
+		context.window_set_size(p_window_id, platform->get_surface_width(), platform->get_surface_height());
+		surface = context.surface_get_from_window(p_window_id);
+		return OK;
 	}
 
 	void WSI::free_pending_resources(int p_frame) {
