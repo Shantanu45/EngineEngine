@@ -36,12 +36,12 @@ namespace Vulkan
 
 	bool WSI::init_device()
 	{
-		device_ptr = std::make_unique<Device>(&context);
+		device_ptr = std::make_unique<RenderingDeviceDriverVulkan>(&context);
 		device_ptr->initialize(0, 2);			//TODO: figure out the parameters
 		swapchain = device_ptr->swap_chain_create(surface);
 
-		BitField<Device::CommandQueueFamilyBits> main_queue_bits = {};
-		main_queue_bits.set_flag(Device::COMMAND_QUEUE_FAMILY_GRAPHICS_BIT);
+		BitField<RenderingDeviceDriverVulkan::CommandQueueFamilyBits> main_queue_bits = {};
+		main_queue_bits.set_flag(RenderingDeviceDriverVulkan::COMMAND_QUEUE_FAMILY_GRAPHICS_BIT);
 
 		auto main_queue_family = device_ptr->command_queue_family_get(main_queue_bits, surface);
 		ERR_FAIL_COND_V(!main_queue_family, FAILED);
@@ -55,7 +55,7 @@ namespace Vulkan
 		bool frame_failed = false;
 		for (uint32_t i = 0; i < frames.size(); i++) {
 			frames[i].index = 0;
-			frames[i].command_pool = device_ptr->command_pool_create(main_queue_family, Device::COMMAND_BUFFER_TYPE_PRIMARY);
+			frames[i].command_pool = device_ptr->command_pool_create(main_queue_family, RenderingDeviceDriverVulkan::COMMAND_BUFFER_TYPE_PRIMARY);
 			if (!frames[i].command_pool) {
 				frame_failed = true;
 				break;
@@ -155,7 +155,7 @@ namespace Vulkan
 		//device_ptr->shader_create_from_container(shader_container_ps, {});
 		auto vertex = device_ptr->vertex_format_create({}, {});
 		std::vector<int32_t> subpasses{ 1 };
-		pipeline = device_ptr->render_pipeline_create(shader, vertex, Device::RenderPrimitive::RENDER_PRIMITIVE_TRIANGLE_STRIPS, {}, {}, {}, Device::PipelineColorBlendState::create_blend(), subpasses, {}, device_ptr->swap_chain_get_render_pass(swapchain), 0);
+		pipeline = device_ptr->render_pipeline_create(shader, vertex, RenderingDeviceDriverVulkan::RenderPrimitive::RENDER_PRIMITIVE_TRIANGLE_STRIPS, {}, {}, {}, RenderingDeviceDriverVulkan::PipelineColorBlendState::create_blend(), subpasses, {}, device_ptr->swap_chain_get_render_pass(swapchain), 0);
 		return true;
 	}
 
@@ -165,7 +165,7 @@ namespace Vulkan
 		do
 		{
 			bool resize_required;
-			Device::FramebufferID framebuffer = device_ptr->swap_chain_acquire_framebuffer(main_queue, swapchain, resize_required);
+			RenderingDeviceDriverVulkan::FramebufferID framebuffer = device_ptr->swap_chain_acquire_framebuffer(main_queue, swapchain, resize_required);
 
 
 			auto command_buffer = frames[curr_frame].command_buffer;
@@ -174,7 +174,7 @@ namespace Vulkan
 			std::array<RenderingDeviceDriver::RenderPassClearValue, 1> val;
 			val[0].color = Color{1.0 , 0.0 , 0.0 , 0.0};
 			std::vector<Rect2i> frame_rects = { Rect2i{ 0, 0, (int)platform->get_surface_width(), (int)platform->get_surface_height() } };
-			device_ptr->command_begin_render_pass(command_buffer, render_pass, framebuffer, Device::COMMAND_BUFFER_TYPE_PRIMARY, frame_rects[0], val);
+			device_ptr->command_begin_render_pass(command_buffer, render_pass, framebuffer, RenderingDeviceDriverVulkan::COMMAND_BUFFER_TYPE_PRIMARY, frame_rects[0], val);
 			device_ptr->command_bind_render_pipeline(command_buffer, pipeline);
 			device_ptr->command_render_set_viewport(command_buffer, frame_rects);
 			device_ptr->command_render_set_scissor(command_buffer, frame_rects);

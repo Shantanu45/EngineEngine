@@ -11,26 +11,26 @@ namespace Vulkan
 
 	struct Frame {
 		// The command pool used by the command buffer.
-		Device::CommandPoolID command_pool;
+		RenderingDeviceDriverVulkan::CommandPoolID command_pool;
 
 		// The command buffer used by the main thread when recording the frame.
-		Device::CommandBufferID command_buffer;
+		RenderingDeviceDriverVulkan::CommandBufferID command_buffer;
 
 		// Signaled by the command buffer submission. Present must wait on this semaphore.
-		Device::SemaphoreID semaphore;
+		RenderingDeviceDriverVulkan::SemaphoreID semaphore;
 
 		// Signaled by the command buffer submission. Must wait on this fence before beginning command recording for the frame.
-		Device::FenceID fence;
+		RenderingDeviceDriverVulkan::FenceID fence;
 		bool fence_signaled = false;
 
 		// Semaphores the frame must wait on before executing the command buffer.
-		std::vector<Device::SemaphoreID> semaphores_to_wait_on;
+		std::vector<RenderingDeviceDriverVulkan::SemaphoreID> semaphores_to_wait_on;
 		//  Swap chains prepared for drawing during the frame that must be presented.
-		std::vector<Device::SwapChainID> swap_chains_to_present;
+		std::vector<RenderingDeviceDriverVulkan::SwapChainID> swap_chains_to_present;
 
 		// Semaphores the transfer workers can use to wait before rendering the frame.
 		// This must have the same size of the transfer worker pool.
-		std::vector<Device::SemaphoreID> transfer_worker_semaphores;
+		std::vector<RenderingDeviceDriverVulkan::SemaphoreID> transfer_worker_semaphores;
 
 		// Extra command buffer pool used for driver workarounds or to reduce GPU bubbles by
 		// splitting the final render pass to the swapchain into its own cmd buffer.
@@ -65,17 +65,17 @@ namespace Vulkan
 		WSIPlatform* platform = nullptr;
 
 		RenderingContextDriverVulkan context;
-		std::unique_ptr<Device> device_ptr = nullptr;
+		std::unique_ptr<RenderingDeviceDriverVulkan> device_ptr = nullptr;
 
 		RenderingContextDriverVulkan::SurfaceID surface;
-		Device::SwapChainID swapchain;
+		RenderingDeviceDriverVulkan::SwapChainID swapchain;
 
 		uint32_t frame_count = 0;
 
 		std::vector<Frame> frames;
 		uint32_t curr_frame = 0;
-		Device::CommandQueueID main_queue;
-		Device::PipelineID pipeline;
+		RenderingDeviceDriverVulkan::CommandQueueID main_queue;
+		RenderingDeviceDriverVulkan::PipelineID pipeline;
 
 		std::map<DisplayServerEnums::WindowID, WindowData> windows;
 

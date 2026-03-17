@@ -263,31 +263,31 @@ namespace Vulkan
 		return ret;
 	}
 
-	static VkAccessFlags _rd_to_vk_access_flags(BitField<Device::BarrierAccessBits> p_access) {
+	static VkAccessFlags _rd_to_vk_access_flags(BitField<RenderingDeviceDriverVulkan::BarrierAccessBits> p_access) {
 		VkAccessFlags vk_flags = 0;
-		if (p_access.has_flag(Device::BARRIER_ACCESS_COPY_READ_BIT) || p_access.has_flag(Device::BARRIER_ACCESS_RESOLVE_READ_BIT)) {
+		if (p_access.has_flag(RenderingDeviceDriverVulkan::BARRIER_ACCESS_COPY_READ_BIT) || p_access.has_flag(RenderingDeviceDriverVulkan::BARRIER_ACCESS_RESOLVE_READ_BIT)) {
 			vk_flags |= VK_ACCESS_TRANSFER_READ_BIT;
-			p_access.clear_flag(Device::BARRIER_ACCESS_COPY_READ_BIT);
-			p_access.clear_flag(Device::BARRIER_ACCESS_RESOLVE_READ_BIT);
+			p_access.clear_flag(RenderingDeviceDriverVulkan::BARRIER_ACCESS_COPY_READ_BIT);
+			p_access.clear_flag(RenderingDeviceDriverVulkan::BARRIER_ACCESS_RESOLVE_READ_BIT);
 		}
 
-		if (p_access.has_flag(Device::BARRIER_ACCESS_COPY_WRITE_BIT) || p_access.has_flag(Device::BARRIER_ACCESS_RESOLVE_WRITE_BIT)) {
+		if (p_access.has_flag(RenderingDeviceDriverVulkan::BARRIER_ACCESS_COPY_WRITE_BIT) || p_access.has_flag(RenderingDeviceDriverVulkan::BARRIER_ACCESS_RESOLVE_WRITE_BIT)) {
 			vk_flags |= VK_ACCESS_TRANSFER_WRITE_BIT;
-			p_access.clear_flag(Device::BARRIER_ACCESS_COPY_WRITE_BIT);
-			p_access.clear_flag(Device::BARRIER_ACCESS_RESOLVE_WRITE_BIT);
+			p_access.clear_flag(RenderingDeviceDriverVulkan::BARRIER_ACCESS_COPY_WRITE_BIT);
+			p_access.clear_flag(RenderingDeviceDriverVulkan::BARRIER_ACCESS_RESOLVE_WRITE_BIT);
 		}
 
-		if (p_access.has_flag(Device::BARRIER_ACCESS_STORAGE_CLEAR_BIT)) {
+		if (p_access.has_flag(RenderingDeviceDriverVulkan::BARRIER_ACCESS_STORAGE_CLEAR_BIT)) {
 			// Vulkan should never use this as API_TRAIT_CLEAR_RESOURCES_WITH_VIEWS is not specified.
 			// Therefore, storage is never cleared with an explicit command.
-			p_access.clear_flag(Device::BARRIER_ACCESS_STORAGE_CLEAR_BIT);
+			p_access.clear_flag(RenderingDeviceDriverVulkan::BARRIER_ACCESS_STORAGE_CLEAR_BIT);
 		}
 
 		// The rest of the flags have compatible numeric values with Vulkan.
 		return VkAccessFlags(p_access) | vk_flags;
 	}
 
-	static VkImageLayout RD_TO_VK_LAYOUT[Device::TEXTURE_LAYOUT_MAX] = {
+	static VkImageLayout RD_TO_VK_LAYOUT[RenderingDeviceDriverVulkan::TEXTURE_LAYOUT_MAX] = {
 	VK_IMAGE_LAYOUT_UNDEFINED, // TEXTURE_LAYOUT_UNDEFINED
 	VK_IMAGE_LAYOUT_GENERAL, // TEXTURE_LAYOUT_GENERAL
 	VK_IMAGE_LAYOUT_GENERAL, // TEXTURE_LAYOUT_STORAGE_OPTIMAL
@@ -303,19 +303,19 @@ namespace Vulkan
 	VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT, // TEXTURE_LAYOUT_FRAGMENT_DENSITY_MAP_ATTACHMENT_OPTIMAL
 	};
 
-	static VkPipelineStageFlags _rd_to_vk_pipeline_stages(BitField<Device::PipelineStageBits> p_stages) {
+	static VkPipelineStageFlags _rd_to_vk_pipeline_stages(BitField<RenderingDeviceDriverVulkan::PipelineStageBits> p_stages) {
 		VkPipelineStageFlags vk_flags = 0;
-		if (p_stages.has_flag(Device::PIPELINE_STAGE_COPY_BIT) || p_stages.has_flag(Device::PIPELINE_STAGE_RESOLVE_BIT)) {
+		if (p_stages.has_flag(RenderingDeviceDriverVulkan::PIPELINE_STAGE_COPY_BIT) || p_stages.has_flag(RenderingDeviceDriverVulkan::PIPELINE_STAGE_RESOLVE_BIT)) {
 			// Transfer has been split into copy and resolve bits. Clear them and merge them into one bit.
 			vk_flags |= VK_PIPELINE_STAGE_TRANSFER_BIT;
-			p_stages.clear_flag(Device::PIPELINE_STAGE_COPY_BIT);
-			p_stages.clear_flag(Device::PIPELINE_STAGE_RESOLVE_BIT);
+			p_stages.clear_flag(RenderingDeviceDriverVulkan::PIPELINE_STAGE_COPY_BIT);
+			p_stages.clear_flag(RenderingDeviceDriverVulkan::PIPELINE_STAGE_RESOLVE_BIT);
 		}
 
-		if (p_stages.has_flag(Device::PIPELINE_STAGE_CLEAR_STORAGE_BIT)) {
+		if (p_stages.has_flag(RenderingDeviceDriverVulkan::PIPELINE_STAGE_CLEAR_STORAGE_BIT)) {
 			// Vulkan should never use this as API_TRAIT_CLEAR_RESOURCES_WITH_VIEWS is not specified.
 			// Therefore, storage is never cleared with an explicit command.
-			p_stages.clear_flag(Device::PIPELINE_STAGE_CLEAR_STORAGE_BIT);
+			p_stages.clear_flag(RenderingDeviceDriverVulkan::PIPELINE_STAGE_CLEAR_STORAGE_BIT);
 		}
 
 		// The rest of the flags have compatible numeric values with Vulkan.
@@ -327,7 +327,7 @@ namespace Vulkan
 #pragma endregion
 
 #pragma region Device
-	Device::Device(RenderingContextDriverVulkan* p_context_driver)
+	RenderingDeviceDriverVulkan::RenderingDeviceDriverVulkan(RenderingContextDriverVulkan* p_context_driver)
 	{
 		DEBUG_ASSERT(p_context_driver != nullptr);
 
@@ -336,7 +336,7 @@ namespace Vulkan
 		max_descriptor_sets_per_pool = 3;
 	}
 
-	Error Device::initialize(uint32_t p_device_index, uint32_t p_frame_count)
+	Error RenderingDeviceDriverVulkan::initialize(uint32_t p_device_index, uint32_t p_frame_count)
 	{
 		context_device = context_driver->device_get(p_device_index);
 		physical_device = context_driver->physical_device_get(p_device_index);
@@ -374,17 +374,17 @@ namespace Vulkan
 
 	}
 
-	void Device::finalize()
+	void RenderingDeviceDriverVulkan::finalize()
 	{
 		//TODO:
 	}
 
-	void Device::_register_requested_device_extension(const std::string& p_extension_name, bool p_required) {
+	void RenderingDeviceDriverVulkan::_register_requested_device_extension(const std::string& p_extension_name, bool p_required) {
 		ERR_FAIL_COND(requested_device_extensions.contains(p_extension_name));
 		requested_device_extensions[p_extension_name] = p_required;
 	}
 
-	Error Device::_initialize_device_extensions() {
+	Error RenderingDeviceDriverVulkan::_initialize_device_extensions() {
 		enabled_device_extension_names.clear();
 
 		_register_requested_device_extension(VK_KHR_SWAPCHAIN_EXTENSION_NAME, true);
@@ -476,7 +476,7 @@ namespace Vulkan
 		return OK;
 	}
 
-	Error Device::_check_device_features() {
+	Error RenderingDeviceDriverVulkan::_check_device_features() {
 		vkGetPhysicalDeviceFeatures(physical_device, &physical_device_features);
 
 		// Check for required features.
@@ -578,7 +578,7 @@ namespace Vulkan
 		return OK;
 	}
 
-	Error Device::_check_device_capabilities() {
+	Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 		// Fill device family and version.
 		device_capabilities.device_family = DEVICE_VULKAN;
 		device_capabilities.version_major = VK_API_VERSION_MAJOR(physical_device_properties.apiVersion);
@@ -772,7 +772,7 @@ namespace Vulkan
 		return OK;
 	}
 
-	Error Device::_add_queue_create_info(std::vector<VkDeviceQueueCreateInfo>& r_queue_create_info) {
+	Error RenderingDeviceDriverVulkan::_add_queue_create_info(std::vector<VkDeviceQueueCreateInfo>& r_queue_create_info) {
 		uint32_t queue_family_count = queue_family_properties.size();
 		queue_families.resize(queue_family_count);
 
@@ -799,7 +799,7 @@ namespace Vulkan
 		return OK;
 	}
 
-	Error Device::_initialize_device(const std::vector<VkDeviceQueueCreateInfo>& p_queue_create_info) {
+	Error RenderingDeviceDriverVulkan::_initialize_device(const std::vector<VkDeviceQueueCreateInfo>& p_queue_create_info) {
 		std::vector<const char*> enabled_extension_names;
 		enabled_extension_names.reserve(enabled_device_extension_names.size());
 		for (const std::string& extension_name : enabled_device_extension_names) {
@@ -918,7 +918,7 @@ namespace Vulkan
 		return OK;
 	}
 
-	Error Device::_initialize_allocator() {
+	Error RenderingDeviceDriverVulkan::_initialize_allocator() {
 		VmaAllocatorCreateInfo allocator_info = {};
 		allocator_info.physicalDevice = physical_device;
 		allocator_info.device = vk_device;
@@ -952,7 +952,7 @@ namespace Vulkan
 		}
 	}
 
-	Error Device::_initialize_pipeline_cache() {
+	Error RenderingDeviceDriverVulkan::_initialize_pipeline_cache() {
 		pipelines_cache.buffer.resize(sizeof(PipelineCacheHeader));
 		PipelineCacheHeader* header = (PipelineCacheHeader*)(pipelines_cache.buffer.data());
 		*header = {};
@@ -969,7 +969,7 @@ namespace Vulkan
 		return OK;
 	}
 
-	VkResult Device::_create_render_pass(VkDevice p_device, const VkRenderPassCreateInfo2* p_create_info, const VkAllocationCallbacks* p_allocator, VkRenderPass* p_render_pass) {
+	VkResult RenderingDeviceDriverVulkan::_create_render_pass(VkDevice p_device, const VkRenderPassCreateInfo2* p_create_info, const VkAllocationCallbacks* p_allocator, VkRenderPass* p_render_pass) {
 		if (vkCreateRenderPass2KHR != nullptr) {
 			return vkCreateRenderPass2KHR(p_device, p_create_info, p_allocator, p_render_pass);
 		}
@@ -1054,7 +1054,7 @@ namespace Vulkan
 		}
 	}
 
-	bool Device::_release_image_semaphore(CommandQueue* p_command_queue, uint32_t p_semaphore_index, bool p_release_on_swap_chain) {
+	bool RenderingDeviceDriverVulkan::_release_image_semaphore(CommandQueue* p_command_queue, uint32_t p_semaphore_index, bool p_release_on_swap_chain) {
 		SwapChain* swap_chain = p_command_queue->image_semaphores_swap_chains[p_semaphore_index];
 		if (swap_chain != nullptr) {
 			// Clear the swap chain from the command queue's vector.
@@ -1077,7 +1077,7 @@ namespace Vulkan
 		return false;
 	}
 
-	bool Device::_recreate_image_semaphore(CommandQueue* p_command_queue, uint32_t p_semaphore_index, bool p_release_on_swap_chain) {
+	bool RenderingDeviceDriverVulkan::_recreate_image_semaphore(CommandQueue* p_command_queue, uint32_t p_semaphore_index, bool p_release_on_swap_chain) {
 		_release_image_semaphore(p_command_queue, p_semaphore_index, p_release_on_swap_chain);
 
 		VkSemaphore semaphore;
@@ -1095,7 +1095,7 @@ namespace Vulkan
 		return true;
 	}
 
-	VkDebugReportObjectTypeEXT Device::_convert_to_debug_report_objectType(VkObjectType p_object_type) {
+	VkDebugReportObjectTypeEXT RenderingDeviceDriverVulkan::_convert_to_debug_report_objectType(VkObjectType p_object_type) {
 		switch (p_object_type) {
 		case VK_OBJECT_TYPE_UNKNOWN:
 			return VK_DEBUG_REPORT_OBJECT_TYPE_UNKNOWN_EXT;
@@ -1187,7 +1187,7 @@ namespace Vulkan
 
 	static const uint32_t SMALL_ALLOCATION_MAX_SIZE = 4096;
 
-	VmaPool Device::_find_or_create_small_allocs_pool(uint32_t p_mem_type_index) {
+	VmaPool RenderingDeviceDriverVulkan::_find_or_create_small_allocs_pool(uint32_t p_mem_type_index) {
 		if (small_allocs_pools.contains(p_mem_type_index)) {
 			return small_allocs_pools[p_mem_type_index];
 		}
@@ -1216,7 +1216,7 @@ namespace Vulkan
 
 #pragma region Buffer
 
-	Device::BufferID Device::buffer_create(uint64_t p_size, BitField<Device::BufferUsageBits> p_usage, Device::MemoryAllocationType p_allocation_type, uint64_t p_frames_drawn) {
+	RenderingDeviceDriverVulkan::BufferID RenderingDeviceDriverVulkan::buffer_create(uint64_t p_size, BitField<RenderingDeviceDriverVulkan::BufferUsageBits> p_usage, RenderingDeviceDriverVulkan::MemoryAllocationType p_allocation_type, uint64_t p_frames_drawn) {
 		uint32_t alignment = 16u; // 16 bytes is reasonable.
 		if (p_usage.has_flag(BUFFER_USAGE_UNIFORM_BIT)) {
 			// Some GPUs (e.g. NVIDIA) have absurdly high alignments, like 256 bytes.
@@ -1326,7 +1326,7 @@ namespace Vulkan
 		return BufferID(buf_info);
 	}
 
-	void Device::buffer_free(BufferID p_buffer) {
+	void RenderingDeviceDriverVulkan::buffer_free(BufferID p_buffer) {
 		BufferInfo* buf_info = (BufferInfo*)p_buffer.id;
 		if (buf_info->vk_view) {
 			vkDestroyBufferView(vk_device, buf_info->vk_view, nullptr);
@@ -1352,7 +1352,7 @@ namespace Vulkan
 		}
 	}
 
-	bool Device::buffer_set_texel_format(BufferID p_buffer, DataFormat p_format) {
+	bool RenderingDeviceDriverVulkan::buffer_set_texel_format(BufferID p_buffer, DataFormat p_format) {
 		BufferInfo* buf_info = (BufferInfo*)p_buffer.id;
 
 		DEV_ASSERT(!buf_info->vk_view);
@@ -1369,12 +1369,12 @@ namespace Vulkan
 		return true;
 	}
 
-	uint64_t Device::buffer_get_allocation_size(BufferID p_buffer) {
+	uint64_t RenderingDeviceDriverVulkan::buffer_get_allocation_size(BufferID p_buffer) {
 		const BufferInfo* buf_info = (const BufferInfo*)p_buffer.id;
 		return buf_info->allocation.size;
 	}
 
-	uint8_t* Device::buffer_map(BufferID p_buffer) {
+	uint8_t* RenderingDeviceDriverVulkan::buffer_map(BufferID p_buffer) {
 		const BufferInfo* buf_info = (const BufferInfo*)p_buffer.id;
 		ERR_FAIL_COND_V_MSG(buf_info->is_dynamic(), nullptr, "Buffer must NOT have BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT. Use buffer_persistent_map_advance() instead.");
 		void* data_ptr = nullptr;
@@ -1383,12 +1383,12 @@ namespace Vulkan
 		return (uint8_t*)data_ptr;
 	}
 
-	void Device::buffer_unmap(BufferID p_buffer) {
+	void RenderingDeviceDriverVulkan::buffer_unmap(BufferID p_buffer) {
 		const BufferInfo* buf_info = (const BufferInfo*)p_buffer.id;
 		vmaUnmapMemory(allocator, buf_info->allocation.handle);
 	}
 
-	uint8_t* Device::buffer_persistent_map_advance(BufferID p_buffer, uint64_t p_frames_drawn) {
+	uint8_t* RenderingDeviceDriverVulkan::buffer_persistent_map_advance(BufferID p_buffer, uint64_t p_frames_drawn) {
 		BufferDynamicInfo* buf_info = (BufferDynamicInfo*)p_buffer.id;
 		ERR_FAIL_COND_V_MSG(!buf_info->is_dynamic(), nullptr, "Buffer must have BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT. Use buffer_map() instead.");
 #ifdef DEBUG_ENABLED
@@ -1399,7 +1399,7 @@ namespace Vulkan
 		return buf_info->persistent_ptr + buf_info->frame_idx * buf_info->size;
 	}
 
-	uint64_t Device::buffer_get_dynamic_offsets(std::span<BufferID> p_buffers) {
+	uint64_t RenderingDeviceDriverVulkan::buffer_get_dynamic_offsets(std::span<BufferID> p_buffers) {
 		uint64_t mask = 0u;
 		uint64_t shift = 0u;
 
@@ -1416,7 +1416,7 @@ namespace Vulkan
 		return mask;
 	}
 
-	void Device::buffer_flush(BufferID p_buffer) {
+	void RenderingDeviceDriverVulkan::buffer_flush(BufferID p_buffer) {
 		BufferDynamicInfo* buf_info = (BufferDynamicInfo*)p_buffer.id;
 
 		VkMemoryPropertyFlags mem_props_flags;
@@ -1438,7 +1438,7 @@ namespace Vulkan
 		}
 	}
 
-	uint64_t Device::buffer_get_device_address(BufferID p_buffer) {
+	uint64_t RenderingDeviceDriverVulkan::buffer_get_device_address(BufferID p_buffer) {
 		const BufferInfo* buf_info = (const BufferInfo*)p_buffer.id;
 		VkBufferDeviceAddressInfo address_info = {};
 		address_info.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
@@ -1471,7 +1471,7 @@ namespace Vulkan
 		VK_SAMPLE_COUNT_64_BIT,
 	};
 
-	VkSampleCountFlagBits Device::_ensure_supported_sample_count(TextureSamples p_requested_sample_count) {
+	VkSampleCountFlagBits RenderingDeviceDriverVulkan::_ensure_supported_sample_count(TextureSamples p_requested_sample_count) {
 		VkSampleCountFlags sample_count_flags = (physical_device_properties.limits.framebufferColorSampleCounts & physical_device_properties.limits.framebufferDepthSampleCounts);
 
 		if ((sample_count_flags & RD_TO_VK_SAMPLE_COUNT[p_requested_sample_count])) {
@@ -1491,7 +1491,7 @@ namespace Vulkan
 		return VK_SAMPLE_COUNT_1_BIT;
 	}
 
-	Device::TextureID Device::texture_create(const TextureFormat& p_format, const TextureView& p_view) {
+	RenderingDeviceDriverVulkan::TextureID RenderingDeviceDriverVulkan::texture_create(const TextureFormat& p_format, const TextureView& p_view) {
 		VkImageCreateInfo create_info = {};
 		create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 
@@ -1699,7 +1699,7 @@ namespace Vulkan
 		return TextureID(tex_info);
 	}
 
-	Device::TextureID Device::texture_create_from_extension(uint64_t p_native_texture, TextureType p_type, DataFormat p_format, uint32_t p_array_layers, bool p_depth_stencil, uint32_t p_mipmaps) {
+	RenderingDeviceDriverVulkan::TextureID RenderingDeviceDriverVulkan::texture_create_from_extension(uint64_t p_native_texture, TextureType p_type, DataFormat p_format, uint32_t p_array_layers, bool p_depth_stencil, uint32_t p_mipmaps) {
 		VkImage vk_image = (VkImage)p_native_texture;
 
 		// We only need to create a view into the already existing natively-provided texture.
@@ -1736,7 +1736,7 @@ namespace Vulkan
 		return TextureID(tex_info);
 	}
 
-	Device::TextureID Device::texture_create_shared(TextureID p_original_texture, const TextureView& p_view) {
+	RenderingDeviceDriverVulkan::TextureID RenderingDeviceDriverVulkan::texture_create_shared(TextureID p_original_texture, const TextureView& p_view) {
 		const TextureInfo* owner_tex_info = (const TextureInfo*)p_original_texture.id;
 #ifdef DEBUG_ENABLED
 		ERR_FAIL_COND_V(!owner_tex_info->allocation.handle && !owner_tex_info->created_from_extension, TextureID());
@@ -1793,7 +1793,7 @@ namespace Vulkan
 		return TextureID(tex_info);
 	}
 
-	Device::TextureID Device::texture_create_shared_from_slice(TextureID p_original_texture, const TextureView& p_view, TextureSliceType p_slice_type, uint32_t p_layer, uint32_t p_layers, uint32_t p_mipmap, uint32_t p_mipmaps) {
+	RenderingDeviceDriverVulkan::TextureID RenderingDeviceDriverVulkan::texture_create_shared_from_slice(TextureID p_original_texture, const TextureView& p_view, TextureSliceType p_slice_type, uint32_t p_layer, uint32_t p_layers, uint32_t p_mipmap, uint32_t p_mipmaps) {
 		const TextureInfo* owner_tex_info = (const TextureInfo*)p_original_texture.id;
 #ifdef DEBUG_ENABLED
 		ERR_FAIL_COND_V(!owner_tex_info->allocation.handle && !owner_tex_info->created_from_extension, TextureID());
@@ -1846,7 +1846,7 @@ namespace Vulkan
 		return TextureID(tex_info);
 	}
 
-	void Device::texture_free(TextureID p_texture) {
+	void RenderingDeviceDriverVulkan::texture_free(TextureID p_texture) {
 		TextureInfo* tex_info = (TextureInfo*)p_texture.id;
 		vkDestroyImageView(vk_device, tex_info->vk_view, nullptr);
 		if (tex_info->allocation.handle) {
@@ -1861,12 +1861,12 @@ namespace Vulkan
 		delete tex_info;
 	}
 
-	uint64_t Device::texture_get_allocation_size(TextureID p_texture) {
+	uint64_t RenderingDeviceDriverVulkan::texture_get_allocation_size(TextureID p_texture) {
 		const TextureInfo* tex_info = (const TextureInfo*)p_texture.id;
 		return tex_info->allocation.info.size;
 	}
 
-	void Device::texture_get_copyable_layout(TextureID p_texture, const TextureSubresource& p_subresource, TextureCopyableLayout* r_layout) {
+	void RenderingDeviceDriverVulkan::texture_get_copyable_layout(TextureID p_texture, const TextureSubresource& p_subresource, TextureCopyableLayout* r_layout) {
 		const TextureInfo* tex_info = (const TextureInfo*)p_texture.id;
 
 		uint32_t w = MAX(1u, tex_info->vk_create_info.extent.width >> p_subresource.mipmap);
@@ -1882,7 +1882,7 @@ namespace Vulkan
 		r_layout->row_pitch = r_layout->size / ((sbh / bh) * d);
 	}
 
-	std::vector<uint8_t> Device::texture_get_data(TextureID p_texture, uint32_t p_layer) {
+	std::vector<uint8_t> RenderingDeviceDriverVulkan::texture_get_data(TextureID p_texture, uint32_t p_layer) {
 		const TextureInfo* tex = (const TextureInfo*)p_texture.id;
 
 		DataFormat tex_format = tex->rd_format;
@@ -1957,7 +1957,7 @@ namespace Vulkan
 		return image_data;
 	}
 
-	BitField<RenderingDeviceCommons::TextureUsageBits> Device::texture_get_usages_supported_by_format(DataFormat p_format, bool p_cpu_readable) {
+	BitField<RenderingDeviceCommons::TextureUsageBits> RenderingDeviceDriverVulkan::texture_get_usages_supported_by_format(DataFormat p_format, bool p_cpu_readable) {
 		if (p_format >= DATA_FORMAT_ASTC_4x4_SFLOAT_BLOCK && p_format <= DATA_FORMAT_ASTC_12x12_SFLOAT_BLOCK && !enabled_device_extension_names.contains(VK_EXT_TEXTURE_COMPRESSION_ASTC_HDR_EXTENSION_NAME)) {
 			// Formats that were introduced later with extensions must not reach vkGetPhysicalDeviceFormatProperties if the extension isn't available. This means it's not supported.
 			return 0;
@@ -1993,7 +1993,7 @@ namespace Vulkan
 		return supported;
 	}
 
-	bool Device::texture_can_make_shared_with_format(TextureID p_texture, DataFormat p_format, bool& r_raw_reinterpretation) {
+	bool RenderingDeviceDriverVulkan::texture_can_make_shared_with_format(TextureID p_texture, DataFormat p_format, bool& r_raw_reinterpretation) {
 		r_raw_reinterpretation = false;
 		return true;
 	}
@@ -2002,7 +2002,7 @@ namespace Vulkan
 
 #pragma region Sampler
 
-	Device::SamplerID Device::sampler_create(const SamplerState& p_state) {
+	RenderingDeviceDriverVulkan::SamplerID RenderingDeviceDriverVulkan::sampler_create(const SamplerState& p_state) {
 		VkSamplerCreateInfo sampler_create_info = {};
 		sampler_create_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
 		sampler_create_info.pNext = nullptr;
@@ -2030,11 +2030,11 @@ namespace Vulkan
 		return SamplerID(vk_sampler);
 	}
 
-	void Device::sampler_free(SamplerID p_sampler) {
+	void RenderingDeviceDriverVulkan::sampler_free(SamplerID p_sampler) {
 		vkDestroySampler(vk_device, (VkSampler)p_sampler.id, nullptr);
 	}
 
-	bool Device::sampler_is_format_supported_for_filter(DataFormat p_format, SamplerFilter p_filter) {
+	bool RenderingDeviceDriverVulkan::sampler_is_format_supported_for_filter(DataFormat p_format, SamplerFilter p_filter) {
 		switch (p_filter) {
 		case SAMPLER_FILTER_NEAREST: {
 			return true;
@@ -2052,7 +2052,7 @@ namespace Vulkan
 
 #pragma region Vertex Arrays
 
-	Device::VertexFormatID Device::vertex_format_create(std::span<VertexAttribute> p_vertex_attribs, const VertexAttributeBindingsMap& p_vertex_bindings) {
+	RenderingDeviceDriverVulkan::VertexFormatID RenderingDeviceDriverVulkan::vertex_format_create(std::span<VertexAttribute> p_vertex_attribs, const VertexAttributeBindingsMap& p_vertex_bindings) {
 		// Pre-bookkeep.
 		VertexFormatInfo* vf_info = new VertexFormatInfo;
 
@@ -2084,7 +2084,7 @@ namespace Vulkan
 		return VertexFormatID(vf_info);
 	}
 
-	void Device::vertex_format_free(VertexFormatID p_vertex_format) {
+	void RenderingDeviceDriverVulkan::vertex_format_free(VertexFormatID p_vertex_format) {
 		VertexFormatInfo* vf_info = (VertexFormatInfo*)p_vertex_format.id;
 		delete vf_info;
 	}
@@ -2093,7 +2093,7 @@ namespace Vulkan
 
 #pragma region Barriers
 
-	void Device::command_pipeline_barrier(
+	void RenderingDeviceDriverVulkan::command_pipeline_barrier(
 		CommandBufferID p_cmd_buffer,
 		BitField<PipelineStageBits> p_src_stages,
 		BitField<PipelineStageBits> p_dst_stages,
@@ -2229,7 +2229,7 @@ namespace Vulkan
 
 #pragma region Fences
 
-	Device::FenceID Device::fence_create() {
+	RenderingDeviceDriverVulkan::FenceID RenderingDeviceDriverVulkan::fence_create() {
 		VkFence vk_fence = VK_NULL_HANDLE;
 		VkFenceCreateInfo create_info = {};
 		create_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
@@ -2242,7 +2242,7 @@ namespace Vulkan
 		return FenceID(fence);
 	}
 
-	Error Device::fence_wait(FenceID p_fence) {
+	Error RenderingDeviceDriverVulkan::fence_wait(FenceID p_fence) {
 		Fence* fence = (Fence*)(p_fence.id);
 		VkResult fence_status = vkGetFenceStatus(vk_device, fence->vk_fence);
 		if (fence_status == VK_NOT_READY) {		// fence is unsignaled (GPU still working)
@@ -2274,7 +2274,7 @@ namespace Vulkan
 		return OK;
 	}
 
-	void Device::fence_free(FenceID p_fence) {
+	void RenderingDeviceDriverVulkan::fence_free(FenceID p_fence) {
 		Fence* fence = (Fence*)(p_fence.id);
 		vkDestroyFence(vk_device, fence->vk_fence, nullptr);
 		delete fence;
@@ -2284,7 +2284,7 @@ namespace Vulkan
 
 #pragma region Semaphores
 
-	Device::SemaphoreID Device::semaphore_create() {
+	RenderingDeviceDriverVulkan::SemaphoreID RenderingDeviceDriverVulkan::semaphore_create() {
 		VkSemaphore semaphore = VK_NULL_HANDLE;
 		VkSemaphoreCreateInfo create_info = {};
 		create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -2294,7 +2294,7 @@ namespace Vulkan
 		return SemaphoreID(semaphore);
 	}
 
-	void Device::semaphore_free(SemaphoreID p_semaphore) {
+	void RenderingDeviceDriverVulkan::semaphore_free(SemaphoreID p_semaphore) {
 		vkDestroySemaphore(vk_device, VkSemaphore(p_semaphore.id), nullptr);
 	}
 
@@ -2303,7 +2303,7 @@ namespace Vulkan
 #pragma region Command
 
 	// ----- QUEUE FAMILY -----
-	Device::CommandQueueFamilyID Device::command_queue_family_get(BitField<Device::CommandQueueFamilyBits> p_cmd_queue_family_bits, RenderingContextDriverVulkan::SurfaceID p_surface) {
+	RenderingDeviceDriverVulkan::CommandQueueFamilyID RenderingDeviceDriverVulkan::command_queue_family_get(BitField<RenderingDeviceDriverVulkan::CommandQueueFamilyBits> p_cmd_queue_family_bits, RenderingContextDriverVulkan::SurfaceID p_surface) {
 		// Pick the queue with the least amount of bits that can fulfill the requirements.
 		VkQueueFlags picked_queue_flags = VK_QUEUE_FLAG_BITS_MAX_ENUM;
 		uint32_t picked_family_index = UINT_MAX;
@@ -2339,7 +2339,7 @@ namespace Vulkan
 
 	// ----- QUEUE -----
 
-	Device::CommandQueueID Device::command_queue_create(CommandQueueFamilyID p_cmd_queue_family, bool p_identify_as_main_queue) {
+	RenderingDeviceDriverVulkan::CommandQueueID RenderingDeviceDriverVulkan::command_queue_create(CommandQueueFamilyID p_cmd_queue_family, bool p_identify_as_main_queue) {
 		DEV_ASSERT(p_cmd_queue_family.id != 0);
 
 		// Make a virtual queue on top of a real queue. Use the queue from the family with the least amount of virtual queues created.
@@ -2370,7 +2370,7 @@ namespace Vulkan
 		return CommandQueueID(command_queue);
 	}
 
-	Error Device::command_queue_execute_and_present(CommandQueueID p_cmd_queue, 
+	Error RenderingDeviceDriverVulkan::command_queue_execute_and_present(CommandQueueID p_cmd_queue, 
 								std::span<SemaphoreID> p_wait_semaphores, 
 								std::span<CommandBufferID> p_cmd_buffers, 
 								std::span<SemaphoreID> p_cmd_semaphores, 
@@ -2547,7 +2547,7 @@ namespace Vulkan
 		return OK;
 	}
 
-	void Device::command_queue_free(CommandQueueID p_cmd_queue) {
+	void RenderingDeviceDriverVulkan::command_queue_free(CommandQueueID p_cmd_queue) {
 		DEV_ASSERT(p_cmd_queue);
 
 		CommandQueue* command_queue = (CommandQueue*)(p_cmd_queue.id);
@@ -2572,7 +2572,7 @@ namespace Vulkan
 
 	// ----- POOL -----
 
-	Device::CommandPoolID Device::command_pool_create(CommandQueueFamilyID p_cmd_queue_family, CommandBufferType p_cmd_buffer_type) {
+	RenderingDeviceDriverVulkan::CommandPoolID RenderingDeviceDriverVulkan::command_pool_create(CommandQueueFamilyID p_cmd_queue_family, CommandBufferType p_cmd_buffer_type) {
 		DEV_ASSERT(p_cmd_queue_family.id != 0);
 
 		uint32_t family_index = p_cmd_queue_family.id - 1;
@@ -2594,7 +2594,7 @@ namespace Vulkan
 		return CommandPoolID(command_pool);
 	}
 
-	bool Device::command_pool_reset(CommandPoolID p_cmd_pool) {
+	bool RenderingDeviceDriverVulkan::command_pool_reset(CommandPoolID p_cmd_pool) {
 		DEV_ASSERT(p_cmd_pool);
 
 		CommandPool* command_pool = (CommandPool*)(p_cmd_pool.id);
@@ -2604,7 +2604,7 @@ namespace Vulkan
 		return true;
 	}
 
-	void Device::command_pool_free(CommandPoolID p_cmd_pool) {
+	void RenderingDeviceDriverVulkan::command_pool_free(CommandPoolID p_cmd_pool) {
 		DEV_ASSERT(p_cmd_pool);
 
 		CommandPool* command_pool = (CommandPool*)(p_cmd_pool.id);
@@ -2618,7 +2618,7 @@ namespace Vulkan
 
 	// ----- BUFFER -----
 
-	Device::CommandBufferID Device::command_buffer_create(CommandPoolID p_cmd_pool) {
+	RenderingDeviceDriverVulkan::CommandBufferID RenderingDeviceDriverVulkan::command_buffer_create(CommandPoolID p_cmd_pool) {
 		DEV_ASSERT(p_cmd_pool);
 
 		CommandPool* command_pool = (CommandPool*)(p_cmd_pool.id);
@@ -2644,7 +2644,7 @@ namespace Vulkan
 		return CommandBufferID(command_buffer);
 	}
 
-	bool Device::command_buffer_begin(CommandBufferID p_cmd_buffer) {
+	bool RenderingDeviceDriverVulkan::command_buffer_begin(CommandBufferID p_cmd_buffer) {
 		CommandBufferInfo* command_buffer = (CommandBufferInfo*)(p_cmd_buffer.id);
 
 		VkCommandBufferBeginInfo cmd_buf_begin_info = {};
@@ -2657,7 +2657,7 @@ namespace Vulkan
 		return true;
 	}
 
-	bool Device::command_buffer_begin_secondary(CommandBufferID p_cmd_buffer, RenderPassID p_render_pass, uint32_t p_subpass, FramebufferID p_framebuffer) {
+	bool RenderingDeviceDriverVulkan::command_buffer_begin_secondary(CommandBufferID p_cmd_buffer, RenderPassID p_render_pass, uint32_t p_subpass, FramebufferID p_framebuffer) {
 		Framebuffer* framebuffer = (Framebuffer*)(p_framebuffer.id);
 		RenderPassInfo* render_pass = (RenderPassInfo*)(p_render_pass.id);
 		CommandBufferInfo* command_buffer = (CommandBufferInfo*)(p_cmd_buffer.id);
@@ -2679,12 +2679,12 @@ namespace Vulkan
 		return true;
 	}
 
-	void Device::command_buffer_end(CommandBufferID p_cmd_buffer) {
+	void RenderingDeviceDriverVulkan::command_buffer_end(CommandBufferID p_cmd_buffer) {
 		CommandBufferInfo* command_buffer = (CommandBufferInfo*)(p_cmd_buffer.id);
 		vkEndCommandBuffer(command_buffer->vk_command_buffer);
 	}
 
-	void Device::command_buffer_execute_secondary(CommandBufferID p_cmd_buffer, std::span<CommandBufferID> p_secondary_cmd_buffers) {
+	void RenderingDeviceDriverVulkan::command_buffer_execute_secondary(CommandBufferID p_cmd_buffer, std::span<CommandBufferID> p_secondary_cmd_buffers) {
 		thread_local std::vector<VkCommandBuffer> secondary_command_buffers;
 		CommandBufferInfo* command_buffer = (CommandBufferInfo*)(p_cmd_buffer.id);
 		secondary_command_buffers.resize(p_secondary_cmd_buffers.size());
@@ -2705,7 +2705,7 @@ namespace Vulkan
 		VkColorSpaceKHR colorspace;
 	};
 
-	bool Device::_determine_swap_chain_format(RenderingContextDriverVulkan::SurfaceID p_surface, VkFormat& r_format, VkColorSpaceKHR& r_color_space) {
+	bool RenderingDeviceDriverVulkan::_determine_swap_chain_format(RenderingContextDriverVulkan::SurfaceID p_surface, VkFormat& r_format, VkColorSpaceKHR& r_color_space) {
 		DEV_ASSERT(p_surface != 0);
 
 		RenderingContextDriverVulkan::Surface* surface = (RenderingContextDriverVulkan::Surface*)(p_surface);
@@ -2773,7 +2773,7 @@ namespace Vulkan
 		return found;
 	}
 
-	void Device::_swap_chain_release(SwapChain* swap_chain) {
+	void RenderingDeviceDriverVulkan::_swap_chain_release(SwapChain* swap_chain) {
 		// Destroy views and framebuffers associated to the swapchain's images.
 		for (FramebufferID framebuffer : swap_chain->framebuffers) {
 			framebuffer_free(framebuffer);
@@ -2813,7 +2813,7 @@ namespace Vulkan
 		swap_chain->present_semaphores.clear();
 	}
 
-	Device::SwapChainID Device::swap_chain_create(RenderingContextDriverVulkan::SurfaceID p_surface) {
+	RenderingDeviceDriverVulkan::SwapChainID RenderingDeviceDriverVulkan::swap_chain_create(RenderingContextDriverVulkan::SurfaceID p_surface) {
 		DEV_ASSERT(p_surface != 0);
 
 		// Create an empty swap chain until it is resized.
@@ -2822,7 +2822,7 @@ namespace Vulkan
 		return SwapChainID(swap_chain);
 	}
 
-	Error Device::swap_chain_resize(CommandQueueID p_cmd_queue, SwapChainID p_swap_chain, uint32_t p_desired_framebuffer_count) {
+	Error RenderingDeviceDriverVulkan::swap_chain_resize(CommandQueueID p_cmd_queue, SwapChainID p_swap_chain, uint32_t p_desired_framebuffer_count) {
 		DEV_ASSERT(p_cmd_queue.id != 0);
 		DEV_ASSERT(p_swap_chain.id != 0);
 
@@ -3088,7 +3088,7 @@ namespace Vulkan
 			framebuffer->vk_framebuffer = vk_framebuffer;
 			framebuffer->swap_chain_image = swap_chain->images[i];
 			framebuffer->swap_chain_image_subresource_range = view_create_info.subresourceRange;
-			swap_chain->framebuffers.push_back(Device::FramebufferID(framebuffer));
+			swap_chain->framebuffers.push_back(RenderingDeviceDriverVulkan::FramebufferID(framebuffer));
 		}
 
 		VkSemaphore vk_semaphore = VK_NULL_HANDLE;
@@ -3108,7 +3108,7 @@ namespace Vulkan
 		return OK;
 	}
 
-	Device::FramebufferID Device::swap_chain_acquire_framebuffer(CommandQueueID p_cmd_queue, SwapChainID p_swap_chain, bool& r_resize_required) {
+	RenderingDeviceDriverVulkan::FramebufferID RenderingDeviceDriverVulkan::swap_chain_acquire_framebuffer(CommandQueueID p_cmd_queue, SwapChainID p_swap_chain, bool& r_resize_required) {
 		DEV_ASSERT(p_cmd_queue);
 		DEV_ASSERT(p_swap_chain);
 
@@ -3175,21 +3175,21 @@ namespace Vulkan
 		return framebuffer_id;
 	}
 
-	Device::RenderPassID Device::swap_chain_get_render_pass(SwapChainID p_swap_chain) {
+	RenderingDeviceDriverVulkan::RenderPassID RenderingDeviceDriverVulkan::swap_chain_get_render_pass(SwapChainID p_swap_chain) {
 		DEV_ASSERT(p_swap_chain.id != 0);
 
 		SwapChain* swap_chain = (SwapChain*)(p_swap_chain.id);
 		return swap_chain->render_pass;
 	}
 
-	int Device::swap_chain_get_pre_rotation_degrees(SwapChainID p_swap_chain) {
+	int RenderingDeviceDriverVulkan::swap_chain_get_pre_rotation_degrees(SwapChainID p_swap_chain) {
 		DEV_ASSERT(p_swap_chain.id != 0);
 
 		SwapChain* swap_chain = (SwapChain*)(p_swap_chain.id);
 		return swap_chain->pre_transform_rotation_degrees;
 	}
 
-	RenderingDeviceCommons::DataFormat Device::swap_chain_get_format(SwapChainID p_swap_chain) {
+	RenderingDeviceCommons::DataFormat RenderingDeviceDriverVulkan::swap_chain_get_format(SwapChainID p_swap_chain) {
 		DEV_ASSERT(p_swap_chain.id != 0);
 
 		SwapChain* swap_chain = (SwapChain*)(p_swap_chain.id);
@@ -3210,7 +3210,7 @@ namespace Vulkan
 		}
 	}
 
-	RenderingDeviceCommons::ColorSpace Device::swap_chain_get_color_space(SwapChainID p_swap_chain) {
+	RenderingDeviceCommons::ColorSpace RenderingDeviceDriverVulkan::swap_chain_get_color_space(SwapChainID p_swap_chain) {
 		DEV_ASSERT(p_swap_chain.id != 0);
 
 		SwapChain* swap_chain = (SwapChain*)(p_swap_chain.id);
@@ -3225,12 +3225,12 @@ namespace Vulkan
 		}
 	}
 
-	void Device::swap_chain_set_max_fps(SwapChainID p_swap_chain, int p_max_fps) {
+	void RenderingDeviceDriverVulkan::swap_chain_set_max_fps(SwapChainID p_swap_chain, int p_max_fps) {
 		//TODO: SWAPPY_FRAME_PACING_ENABLED
 		DEV_ASSERT(p_swap_chain.id != 0);
 	}
 
-	void Device::swap_chain_free(SwapChainID p_swap_chain) {
+	void RenderingDeviceDriverVulkan::swap_chain_free(SwapChainID p_swap_chain) {
 		DEV_ASSERT(p_swap_chain.id != 0);
 
 		SwapChain* swap_chain = (SwapChain*)(p_swap_chain.id);
@@ -3242,7 +3242,7 @@ namespace Vulkan
 
 #pragma region Framebuffer
 
-	Device::FramebufferID Device::framebuffer_create(RenderPassID p_render_pass, std::span<TextureID> p_attachments, uint32_t p_width, uint32_t p_height) {
+	RenderingDeviceDriverVulkan::FramebufferID RenderingDeviceDriverVulkan::framebuffer_create(RenderPassID p_render_pass, std::span<TextureID> p_attachments, uint32_t p_width, uint32_t p_height) {
 		RenderPassInfo* render_pass = (RenderPassInfo*)(p_render_pass.id);
 
 		uint32_t fragment_density_map_offsets_layers = 0;
@@ -3280,7 +3280,7 @@ namespace Vulkan
 		return FramebufferID(framebuffer);
 	}
 
-	void Device::framebuffer_free(FramebufferID p_framebuffer) {
+	void RenderingDeviceDriverVulkan::framebuffer_free(FramebufferID p_framebuffer) {
 		Framebuffer* framebuffer = (Framebuffer*)(p_framebuffer.id);
 		vkDestroyFramebuffer(vk_device, framebuffer->vk_framebuffer, nullptr);
 		delete framebuffer;
@@ -3303,7 +3303,7 @@ namespace Vulkan
 	VK_SHADER_STAGE_INTERSECTION_BIT_KHR,
 	};
 
-	Device::ShaderID Device::shader_create_from_container(const RenderingShaderContainer* p_shader_container, const std::vector<ImmutableSampler>& p_immutable_samplers) {
+	RenderingDeviceDriverVulkan::ShaderID RenderingDeviceDriverVulkan::shader_create_from_container(const RenderingShaderContainer* p_shader_container, const std::vector<ImmutableSampler>& p_immutable_samplers) {
 		ShaderReflection shader_refl = p_shader_container->get_shader_reflection();
 		ShaderInfo shader_info;
 		shader_info.name = p_shader_container->shader_name;
@@ -3651,7 +3651,7 @@ namespace Vulkan
 		return ShaderID(shader_info_ptr);
 	}
 
-	void Device::shader_free(ShaderID p_shader) {
+	void RenderingDeviceDriverVulkan::shader_free(ShaderID p_shader) {
 		ShaderInfo* shader_info = (ShaderInfo*)p_shader.id;
 
 		for (uint32_t i = 0; i < shader_info->vk_descriptor_set_layouts.size(); i++) {
@@ -3665,7 +3665,7 @@ namespace Vulkan
 		delete shader_info;
 	}
 
-	void Device::shader_destroy_modules(ShaderID p_shader) {
+	void RenderingDeviceDriverVulkan::shader_destroy_modules(ShaderID p_shader) {
 		ShaderInfo* si = (ShaderInfo*)p_shader.id;
 
 		for (uint32_t i = 0; i < si->vk_stages_create_info.size(); i++) {
@@ -3681,7 +3681,7 @@ namespace Vulkan
 
 #pragma region Uniform Set
 
-	VkDescriptorPool Device::_descriptor_set_pool_create(const DescriptorSetPoolKey& p_key, bool p_linear_pool) {
+	VkDescriptorPool RenderingDeviceDriverVulkan::_descriptor_set_pool_create(const DescriptorSetPoolKey& p_key, bool p_linear_pool) {
 		// Here comes more vulkan API strangeness.
 		std::vector< VkDescriptorPoolSize> vk_sizes_vec(UNIFORM_TYPE_MAX);
 		VkDescriptorPoolSize* vk_sizes = vk_sizes_vec.data();
@@ -3796,7 +3796,7 @@ namespace Vulkan
 		return vk_pool;
 	}
 
-	void Device::_descriptor_set_pool_unreference(DescriptorSetPools::iterator p_pool_sets_it, VkDescriptorPool p_vk_descriptor_pool, int p_linear_pool_index) {
+	void RenderingDeviceDriverVulkan::_descriptor_set_pool_unreference(DescriptorSetPools::iterator p_pool_sets_it, VkDescriptorPool p_vk_descriptor_pool, int p_linear_pool_index) {
 		std::unordered_map<VkDescriptorPool, uint32_t>::iterator pool_rcs_it = p_pool_sets_it->second.find(p_vk_descriptor_pool);
 		pool_rcs_it->second--;
 		if (pool_rcs_it->second == 0) {
@@ -3814,7 +3814,7 @@ namespace Vulkan
 	}
 
 
-	Device::UniformSetID Device::uniform_set_create(std::span<BoundUniform> p_uniforms, ShaderID p_shader, uint32_t p_set_index, int p_linear_pool_index) {
+	RenderingDeviceDriverVulkan::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(std::span<BoundUniform> p_uniforms, ShaderID p_shader, uint32_t p_set_index, int p_linear_pool_index) {
 		if (!linear_descriptor_pools_enabled) {
 			p_linear_pool_index = -1;
 		}
@@ -4147,7 +4147,7 @@ namespace Vulkan
 		return UniformSetID(usi);
 	}
 
-	void Device::uniform_set_free(UniformSetID p_uniform_set) {
+	void RenderingDeviceDriverVulkan::uniform_set_free(UniformSetID p_uniform_set) {
 		UniformSetInfo* usi = (UniformSetInfo*)p_uniform_set.id;
 
 		if (usi->vk_linear_descriptor_pool) {
@@ -4166,11 +4166,11 @@ namespace Vulkan
 		delete usi;
 	}
 
-	bool Device::uniform_sets_have_linear_pools() const {
+	bool RenderingDeviceDriverVulkan::uniform_sets_have_linear_pools() const {
 		return true;
 	}
 
-	uint32_t Device::uniform_sets_get_dynamic_offsets(std::span<UniformSetID> p_uniform_sets, ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count) const {
+	uint32_t RenderingDeviceDriverVulkan::uniform_sets_get_dynamic_offsets(std::span<UniformSetID> p_uniform_sets, ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count) const {
 		uint32_t mask = 0u;
 		uint32_t shift = 0u;
 #ifdef DEV_ENABLED
@@ -4195,7 +4195,7 @@ namespace Vulkan
 		return mask;
 	}
 
-	void Device::linear_uniform_set_pools_reset(int p_linear_pool_index) {
+	void RenderingDeviceDriverVulkan::linear_uniform_set_pools_reset(int p_linear_pool_index) {
 		if (linear_descriptor_pools_enabled) {
 			DescriptorSetPools& pools_to_reset = linear_descriptor_set_pools[p_linear_pool_index];
 			DescriptorSetPools::iterator curr_pool = pools_to_reset.begin();
@@ -4214,13 +4214,13 @@ namespace Vulkan
 
 	// ----- COMMANDS -----
 
-	void Device::command_uniform_set_prepare_for_use(CommandBufferID p_cmd_buffer, UniformSetID p_uniform_set, ShaderID p_shader, uint32_t p_set_index) {
+	void RenderingDeviceDriverVulkan::command_uniform_set_prepare_for_use(CommandBufferID p_cmd_buffer, UniformSetID p_uniform_set, ShaderID p_shader, uint32_t p_set_index) {
 	}
 #pragma endregion
 
 #pragma region Transfer
 
-	static void _texture_subresource_range_to_vk(const Device::TextureSubresourceRange& p_subresources, VkImageSubresourceRange* r_vk_subreources) {
+	static void _texture_subresource_range_to_vk(const RenderingDeviceDriverVulkan::TextureSubresourceRange& p_subresources, VkImageSubresourceRange* r_vk_subreources) {
 		*r_vk_subreources = {};
 		r_vk_subreources->aspectMask = (VkImageAspectFlags)p_subresources.aspect;
 		r_vk_subreources->baseMipLevel = p_subresources.base_mipmap;
@@ -4229,7 +4229,7 @@ namespace Vulkan
 		r_vk_subreources->layerCount = p_subresources.layer_count;
 	}
 
-	static void _texture_subresource_layers_to_vk(const Device::TextureSubresourceLayers& p_subresources, VkImageSubresourceLayers* r_vk_subreources) {
+	static void _texture_subresource_layers_to_vk(const RenderingDeviceDriverVulkan::TextureSubresourceLayers& p_subresources, VkImageSubresourceLayers* r_vk_subreources) {
 		*r_vk_subreources = {};
 		r_vk_subreources->aspectMask = (VkImageAspectFlags)p_subresources.aspect;
 		r_vk_subreources->mipLevel = p_subresources.mipmap;
@@ -4237,7 +4237,7 @@ namespace Vulkan
 		r_vk_subreources->layerCount = p_subresources.layer_count;
 	}
 
-	static void _buffer_texture_copy_region_to_vk(const Device::BufferTextureCopyRegion& p_copy_region, uint32_t p_buffer_row_length, VkBufferImageCopy* r_vk_copy_region) {
+	static void _buffer_texture_copy_region_to_vk(const RenderingDeviceDriverVulkan::BufferTextureCopyRegion& p_copy_region, uint32_t p_buffer_row_length, VkBufferImageCopy* r_vk_copy_region) {
 		*r_vk_copy_region = {};
 		r_vk_copy_region->bufferOffset = p_copy_region.buffer_offset;
 		r_vk_copy_region->bufferRowLength = p_buffer_row_length;
@@ -4253,7 +4253,7 @@ namespace Vulkan
 		r_vk_copy_region->imageExtent.depth = p_copy_region.texture_region_size.z;
 	}
 
-	static void _texture_copy_region_to_vk(const Device::TextureCopyRegion& p_copy_region, VkImageCopy* r_vk_copy_region) {
+	static void _texture_copy_region_to_vk(const RenderingDeviceDriverVulkan::TextureCopyRegion& p_copy_region, VkImageCopy* r_vk_copy_region) {
 		*r_vk_copy_region = {};
 		_texture_subresource_layers_to_vk(p_copy_region.src_subresources, &r_vk_copy_region->srcSubresource);
 		r_vk_copy_region->srcOffset.x = p_copy_region.src_offset.x;
@@ -4268,20 +4268,20 @@ namespace Vulkan
 		r_vk_copy_region->extent.depth = p_copy_region.size.z;
 	}
 
-	void Device::command_clear_buffer(CommandBufferID p_cmd_buffer, BufferID p_buffer, uint64_t p_offset, uint64_t p_size) {
+	void RenderingDeviceDriverVulkan::command_clear_buffer(CommandBufferID p_cmd_buffer, BufferID p_buffer, uint64_t p_offset, uint64_t p_size) {
 		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
 		const BufferInfo* buf_info = (const BufferInfo*)p_buffer.id;
 		vkCmdFillBuffer(command_buffer->vk_command_buffer, buf_info->vk_buffer, p_offset, p_size, 0);
 	}
 
-	void Device::command_copy_buffer(CommandBufferID p_cmd_buffer, BufferID p_src_buffer, BufferID p_dst_buffer, std::span<BufferCopyRegion> p_regions) {
+	void RenderingDeviceDriverVulkan::command_copy_buffer(CommandBufferID p_cmd_buffer, BufferID p_src_buffer, BufferID p_dst_buffer, std::span<BufferCopyRegion> p_regions) {
 		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
 		const BufferInfo* src_buf_info = (const BufferInfo*)p_src_buffer.id;
 		const BufferInfo* dst_buf_info = (const BufferInfo*)p_dst_buffer.id;
 		vkCmdCopyBuffer(command_buffer->vk_command_buffer, src_buf_info->vk_buffer, dst_buf_info->vk_buffer, p_regions.size(), (const VkBufferCopy*)p_regions.data());
 	}
 
-	void Device::command_copy_texture(CommandBufferID p_cmd_buffer, TextureID p_src_texture, TextureLayout p_src_texture_layout, TextureID p_dst_texture, TextureLayout p_dst_texture_layout, std::span<TextureCopyRegion> p_regions) {
+	void RenderingDeviceDriverVulkan::command_copy_texture(CommandBufferID p_cmd_buffer, TextureID p_src_texture, TextureLayout p_src_texture_layout, TextureID p_dst_texture, TextureLayout p_dst_texture_layout, std::span<TextureCopyRegion> p_regions) {
 		std::vector<VkImageCopy> vk_copy_regions_vec(p_regions.size());
 		VkImageCopy* vk_copy_regions = vk_copy_regions_vec.data();
 		for (uint32_t i = 0; i < p_regions.size(); i++) {
@@ -4304,7 +4304,7 @@ namespace Vulkan
 		vkCmdCopyImage(command_buffer->vk_command_buffer, src_tex_info->vk_view_create_info.image, RD_TO_VK_LAYOUT[p_src_texture_layout], dst_tex_info->vk_view_create_info.image, RD_TO_VK_LAYOUT[p_dst_texture_layout], p_regions.size(), vk_copy_regions);
 	}
 
-	void Device::command_resolve_texture(CommandBufferID p_cmd_buffer, TextureID p_src_texture, TextureLayout p_src_texture_layout, uint32_t p_src_layer, uint32_t p_src_mipmap, TextureID p_dst_texture, TextureLayout p_dst_texture_layout, uint32_t p_dst_layer, uint32_t p_dst_mipmap) {
+	void RenderingDeviceDriverVulkan::command_resolve_texture(CommandBufferID p_cmd_buffer, TextureID p_src_texture, TextureLayout p_src_texture_layout, uint32_t p_src_layer, uint32_t p_src_mipmap, TextureID p_dst_texture, TextureLayout p_dst_texture_layout, uint32_t p_dst_layer, uint32_t p_dst_mipmap) {
 		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
 		const TextureInfo* src_tex_info = (const TextureInfo*)p_src_texture.id;
 		const TextureInfo* dst_tex_info = (const TextureInfo*)p_dst_texture.id;
@@ -4334,7 +4334,7 @@ namespace Vulkan
 		vkCmdResolveImage(command_buffer->vk_command_buffer, src_tex_info->vk_view_create_info.image, RD_TO_VK_LAYOUT[p_src_texture_layout], dst_tex_info->vk_view_create_info.image, RD_TO_VK_LAYOUT[p_dst_texture_layout], 1, &vk_resolve);
 	}
 
-	void Device::command_clear_color_texture(CommandBufferID p_cmd_buffer, TextureID p_texture, TextureLayout p_texture_layout, const Color& p_color, const TextureSubresourceRange& p_subresources) {
+	void RenderingDeviceDriverVulkan::command_clear_color_texture(CommandBufferID p_cmd_buffer, TextureID p_texture, TextureLayout p_texture_layout, const Color& p_color, const TextureSubresourceRange& p_subresources) {
 		VkClearColorValue vk_color = {};
 		memcpy(&vk_color.float32, glm::value_ptr(p_color), sizeof(VkClearColorValue::float32));
 
@@ -4351,7 +4351,7 @@ namespace Vulkan
 		vkCmdClearColorImage(command_buffer->vk_command_buffer, tex_info->vk_view_create_info.image, RD_TO_VK_LAYOUT[p_texture_layout], &vk_color, 1, &vk_subresources);
 	}
 
-	void Device::command_clear_depth_stencil_texture(CommandBufferID p_cmd_buffer, TextureID p_texture, TextureLayout p_texture_layout, float p_depth, uint8_t p_stencil, const TextureSubresourceRange& p_subresources) {
+	void RenderingDeviceDriverVulkan::command_clear_depth_stencil_texture(CommandBufferID p_cmd_buffer, TextureID p_texture, TextureLayout p_texture_layout, float p_depth, uint8_t p_stencil, const TextureSubresourceRange& p_subresources) {
 		VkClearDepthStencilValue vk_depth_stencil = {};
 		vk_depth_stencil.depth = p_depth;
 		vk_depth_stencil.stencil = p_stencil;
@@ -4369,7 +4369,7 @@ namespace Vulkan
 		vkCmdClearDepthStencilImage(command_buffer->vk_command_buffer, tex_info->vk_view_create_info.image, RD_TO_VK_LAYOUT[p_texture_layout], &vk_depth_stencil, 1, &vk_subresources);
 	}
 
-	void Device::command_copy_buffer_to_texture(CommandBufferID p_cmd_buffer, BufferID p_src_buffer, TextureID p_dst_texture, TextureLayout p_dst_texture_layout, std::span<BufferTextureCopyRegion> p_regions) {
+	void RenderingDeviceDriverVulkan::command_copy_buffer_to_texture(CommandBufferID p_cmd_buffer, BufferID p_src_buffer, TextureID p_dst_texture, TextureLayout p_dst_texture_layout, std::span<BufferTextureCopyRegion> p_regions) {
 		const TextureInfo* tex_info = (const TextureInfo*)p_dst_texture.id;
 
 		uint32_t pixel_size = get_image_format_pixel_size(tex_info->rd_format);
@@ -4393,7 +4393,7 @@ namespace Vulkan
 		vkCmdCopyBufferToImage(command_buffer->vk_command_buffer, buf_info->vk_buffer, tex_info->vk_view_create_info.image, RD_TO_VK_LAYOUT[p_dst_texture_layout], p_regions.size(), vk_copy_regions);
 	}
 
-	void Device::command_copy_texture_to_buffer(CommandBufferID p_cmd_buffer, TextureID p_src_texture, TextureLayout p_src_texture_layout, BufferID p_dst_buffer, std::span<BufferTextureCopyRegion> p_regions) {
+	void RenderingDeviceDriverVulkan::command_copy_texture_to_buffer(CommandBufferID p_cmd_buffer, TextureID p_src_texture, TextureLayout p_src_texture_layout, BufferID p_dst_buffer, std::span<BufferTextureCopyRegion> p_regions) {
 		const TextureInfo* tex_info = (const TextureInfo*)p_src_texture.id;
 
 		uint32_t pixel_size = get_image_format_pixel_size(tex_info->rd_format);
@@ -4421,13 +4421,13 @@ namespace Vulkan
 
 #pragma region Pipeline
 
-	void Device::pipeline_free(PipelineID p_pipeline) {
+	void RenderingDeviceDriverVulkan::pipeline_free(PipelineID p_pipeline) {
 		vkDestroyPipeline(vk_device, (VkPipeline)p_pipeline.id, nullptr);
 	}
 
 	// ----- BINDING -----
 
-	void Device::command_bind_push_constants(CommandBufferID p_cmd_buffer, ShaderID p_shader, uint32_t p_dst_first_index, std::span<uint32_t> p_data) {
+	void RenderingDeviceDriverVulkan::command_bind_push_constants(CommandBufferID p_cmd_buffer, ShaderID p_shader, uint32_t p_dst_first_index, std::span<uint32_t> p_data) {
 		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
 		const ShaderInfo* shader_info = (const ShaderInfo*)p_shader.id;
 		vkCmdPushConstants(command_buffer->vk_command_buffer, shader_info->vk_pipeline_layout, shader_info->vk_push_constant_stages, p_dst_first_index * sizeof(uint32_t), p_data.size() * sizeof(uint32_t), p_data.data());
@@ -4435,10 +4435,10 @@ namespace Vulkan
 
 	// ----- CACHE -----
 
-	int Device::caching_instance_count = 0;
+	int RenderingDeviceDriverVulkan::caching_instance_count = 0;
 
 
-	bool Device::pipeline_cache_create(const std::vector<uint8_t>& p_data) {
+	bool RenderingDeviceDriverVulkan::pipeline_cache_create(const std::vector<uint8_t>& p_data) {
 		if (caching_instance_count) {
 			WARN_PRINT("There's already a RenderingDeviceDriverVulkan instance doing PSO caching. Only one can at the same time. This one won't.");
 			return false;
@@ -4499,7 +4499,7 @@ namespace Vulkan
 		return true;
 	}
 
-	void Device::pipeline_cache_free() {
+	void RenderingDeviceDriverVulkan::pipeline_cache_free() {
 		DEV_ASSERT(pipelines_cache.vk_cache);
 
 		vkDestroyPipelineCache(vk_device, pipelines_cache.vk_cache, nullptr);
@@ -4509,7 +4509,7 @@ namespace Vulkan
 		caching_instance_count--;
 	}
 
-	size_t Device::pipeline_cache_query_size() {
+	size_t RenderingDeviceDriverVulkan::pipeline_cache_query_size() {
 		DEV_ASSERT(pipelines_cache.vk_cache);
 
 		// FIXME:
@@ -4521,7 +4521,7 @@ namespace Vulkan
 		return pipelines_cache.current_size;
 	}
 
-	std::vector<uint8_t> Device::pipeline_cache_serialize() {
+	std::vector<uint8_t> RenderingDeviceDriverVulkan::pipeline_cache_serialize() {
 		DEV_ASSERT(pipelines_cache.vk_cache);
 
 		pipelines_cache.buffer.resize(pipelines_cache.current_size + sizeof(PipelineCacheHeader));
@@ -4545,7 +4545,7 @@ namespace Vulkan
 
 	// ----- SUBPASS -----
 
-	static void _attachment_reference_to_vk(const Device::AttachmentReference& p_attachment_reference, VkAttachmentReference2KHR* r_vk_attachment_reference) {
+	static void _attachment_reference_to_vk(const RenderingDeviceDriverVulkan::AttachmentReference& p_attachment_reference, VkAttachmentReference2KHR* r_vk_attachment_reference) {
 		*r_vk_attachment_reference = {};
 		r_vk_attachment_reference->sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2_KHR;
 		r_vk_attachment_reference->attachment = p_attachment_reference.attachment;
@@ -4553,7 +4553,7 @@ namespace Vulkan
 		r_vk_attachment_reference->aspectMask = (VkImageAspectFlags)p_attachment_reference.aspect;
 	}
 
-	Device::RenderPassID Device::render_pass_create(std::span<Attachment> p_attachments, std::span<Subpass> p_subpasses, std::span<SubpassDependency> p_subpass_dependencies, uint32_t p_view_count, AttachmentReference p_fragment_density_map_attachment) {
+	RenderingDeviceDriverVulkan::RenderPassID RenderingDeviceDriverVulkan::render_pass_create(std::span<Attachment> p_attachments, std::span<Subpass> p_subpasses, std::span<SubpassDependency> p_subpass_dependencies, uint32_t p_view_count, AttachmentReference p_fragment_density_map_attachment) {
 		// These are only used if we use multiview but we need to define them in scope.
 		const uint32_t view_mask = (1 << p_view_count) - 1;
 		const uint32_t correlation_mask = (1 << p_view_count) - 1;
@@ -4724,7 +4724,7 @@ namespace Vulkan
 		return RenderPassID(render_pass);
 	}
 
-	void Device::render_pass_free(RenderPassID p_render_pass) {
+	void RenderingDeviceDriverVulkan::render_pass_free(RenderPassID p_render_pass) {
 		RenderPassInfo* render_pass = (RenderPassInfo*)(p_render_pass.id);
 		vkDestroyRenderPass(vk_device, render_pass->vk_render_pass, nullptr);
 		delete render_pass;
@@ -4732,7 +4732,7 @@ namespace Vulkan
 
 	// ----- COMMANDS -----
 
-	void Device::command_begin_render_pass(CommandBufferID p_cmd_buffer, RenderPassID p_render_pass, FramebufferID p_framebuffer, CommandBufferType p_cmd_buffer_type, const Rect2i& p_rect, std::span<RenderingDeviceDriver::RenderPassClearValue> p_clear_values) {
+	void RenderingDeviceDriverVulkan::command_begin_render_pass(CommandBufferID p_cmd_buffer, RenderPassID p_render_pass, FramebufferID p_framebuffer, CommandBufferType p_cmd_buffer_type, const Rect2i& p_rect, std::span<RenderingDeviceDriver::RenderPassClearValue> p_clear_values) {
 		CommandBufferInfo* command_buffer = (CommandBufferInfo*)(p_cmd_buffer.id);
 		RenderPassInfo* render_pass = (RenderPassInfo*)(p_render_pass.id);
 		Framebuffer* framebuffer = (Framebuffer*)(p_framebuffer.id);
@@ -4775,7 +4775,7 @@ namespace Vulkan
 #endif
 	}
 
-	void Device::command_end_render_pass(CommandBufferID p_cmd_buffer) {
+	void RenderingDeviceDriverVulkan::command_end_render_pass(CommandBufferID p_cmd_buffer) {
 		CommandBufferInfo* command_buffer = (CommandBufferInfo*)(p_cmd_buffer.id);
 		DEV_ASSERT(command_buffer->active_framebuffer != nullptr && "A framebuffer must be active.");
 		DEV_ASSERT(command_buffer->active_render_pass != nullptr && "A render pass must be active.");
@@ -4813,13 +4813,13 @@ namespace Vulkan
 #endif
 	}
 
-	void Device::command_next_render_subpass(CommandBufferID p_cmd_buffer, CommandBufferType p_cmd_buffer_type) {
+	void RenderingDeviceDriverVulkan::command_next_render_subpass(CommandBufferID p_cmd_buffer, CommandBufferType p_cmd_buffer_type) {
 		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
 		VkSubpassContents vk_subpass_contents = p_cmd_buffer_type == COMMAND_BUFFER_TYPE_PRIMARY ? VK_SUBPASS_CONTENTS_INLINE : VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS;
 		vkCmdNextSubpass(command_buffer->vk_command_buffer, vk_subpass_contents);
 	}
 
-	void Device::command_render_set_viewport(CommandBufferID p_cmd_buffer, std::span<Rect2i> p_viewports) {
+	void RenderingDeviceDriverVulkan::command_render_set_viewport(CommandBufferID p_cmd_buffer, std::span<Rect2i> p_viewports) {
 		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
 
 		std::vector<VkViewport> vk_viewports_vec(p_viewports.size());
@@ -4836,12 +4836,12 @@ namespace Vulkan
 		vkCmdSetViewport(command_buffer->vk_command_buffer, 0, p_viewports.size(), vk_viewports);
 	}
 
-	void Device::command_render_set_scissor(CommandBufferID p_cmd_buffer, std::span<Rect2i> p_scissors) {
+	void RenderingDeviceDriverVulkan::command_render_set_scissor(CommandBufferID p_cmd_buffer, std::span<Rect2i> p_scissors) {
 		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
 		vkCmdSetScissor(command_buffer->vk_command_buffer, 0, p_scissors.size(), (VkRect2D*)p_scissors.data());
 	}
 
-	void Device::command_render_clear_attachments(CommandBufferID p_cmd_buffer, std::span<AttachmentClear> p_attachment_clears, std::span<Rect2i> p_rects) {
+	void RenderingDeviceDriverVulkan::command_render_clear_attachments(CommandBufferID p_cmd_buffer, std::span<AttachmentClear> p_attachment_clears, std::span<Rect2i> p_rects) {
 		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
 
 		std::vector<VkClearAttachment> vk_clears_vec(p_attachment_clears.size());
@@ -4868,12 +4868,12 @@ namespace Vulkan
 		vkCmdClearAttachments(command_buffer->vk_command_buffer, p_attachment_clears.size(), vk_clears, p_rects.size(), vk_rects);
 	}
 
-	void Device::command_bind_render_pipeline(CommandBufferID p_cmd_buffer, PipelineID p_pipeline) {
+	void RenderingDeviceDriverVulkan::command_bind_render_pipeline(CommandBufferID p_cmd_buffer, PipelineID p_pipeline) {
 		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
 		vkCmdBindPipeline(command_buffer->vk_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, (VkPipeline)p_pipeline.id);
 	}
 
-	void Device::command_bind_render_uniform_sets(CommandBufferID p_cmd_buffer, std::span<UniformSetID> p_uniform_sets, ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count, uint32_t p_dynamic_offsets) {
+	void RenderingDeviceDriverVulkan::command_bind_render_uniform_sets(CommandBufferID p_cmd_buffer, std::span<UniformSetID> p_uniform_sets, ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count, uint32_t p_dynamic_offsets) {
 		if (p_set_count == 0) {
 			return;
 		}
@@ -4907,36 +4907,36 @@ namespace Vulkan
 		vkCmdBindDescriptorSets(command_buffer->vk_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shader_info->vk_pipeline_layout, p_first_set_index, p_set_count, &sets[0], curr_dynamic_offset, dynamic_offsets);
 	}
 
-	void Device::command_render_draw(CommandBufferID p_cmd_buffer, uint32_t p_vertex_count, uint32_t p_instance_count, uint32_t p_base_vertex, uint32_t p_first_instance) {
+	void RenderingDeviceDriverVulkan::command_render_draw(CommandBufferID p_cmd_buffer, uint32_t p_vertex_count, uint32_t p_instance_count, uint32_t p_base_vertex, uint32_t p_first_instance) {
 		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
 		vkCmdDraw(command_buffer->vk_command_buffer, p_vertex_count, p_instance_count, p_base_vertex, p_first_instance);
 	}
 
-	void Device::command_render_draw_indexed(CommandBufferID p_cmd_buffer, uint32_t p_index_count, uint32_t p_instance_count, uint32_t p_first_index, int32_t p_vertex_offset, uint32_t p_first_instance) {
+	void RenderingDeviceDriverVulkan::command_render_draw_indexed(CommandBufferID p_cmd_buffer, uint32_t p_index_count, uint32_t p_instance_count, uint32_t p_first_index, int32_t p_vertex_offset, uint32_t p_first_instance) {
 		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
 		vkCmdDrawIndexed(command_buffer->vk_command_buffer, p_index_count, p_instance_count, p_first_index, p_vertex_offset, p_first_instance);
 	}
 
-	void Device::command_render_draw_indexed_indirect(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset, uint32_t p_draw_count, uint32_t p_stride) {
+	void RenderingDeviceDriverVulkan::command_render_draw_indexed_indirect(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset, uint32_t p_draw_count, uint32_t p_stride) {
 		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
 		const BufferInfo* buf_info = (const BufferInfo*)p_indirect_buffer.id;
 		vkCmdDrawIndexedIndirect(command_buffer->vk_command_buffer, buf_info->vk_buffer, p_offset, p_draw_count, p_stride);
 	}
 
-	void Device::command_render_draw_indexed_indirect_count(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset, BufferID p_count_buffer, uint64_t p_count_buffer_offset, uint32_t p_max_draw_count, uint32_t p_stride) {
+	void RenderingDeviceDriverVulkan::command_render_draw_indexed_indirect_count(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset, BufferID p_count_buffer, uint64_t p_count_buffer_offset, uint32_t p_max_draw_count, uint32_t p_stride) {
 		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
 		const BufferInfo* indirect_buf_info = (const BufferInfo*)p_indirect_buffer.id;
 		const BufferInfo* count_buf_info = (const BufferInfo*)p_count_buffer.id;
 		vkCmdDrawIndexedIndirectCount(command_buffer->vk_command_buffer, indirect_buf_info->vk_buffer, p_offset, count_buf_info->vk_buffer, p_count_buffer_offset, p_max_draw_count, p_stride);
 	}
 
-	void Device::command_render_draw_indirect(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset, uint32_t p_draw_count, uint32_t p_stride) {
+	void RenderingDeviceDriverVulkan::command_render_draw_indirect(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset, uint32_t p_draw_count, uint32_t p_stride) {
 		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
 		const BufferInfo* buf_info = (const BufferInfo*)p_indirect_buffer.id;
 		vkCmdDrawIndirect(command_buffer->vk_command_buffer, buf_info->vk_buffer, p_offset, p_draw_count, p_stride);
 	}
 
-	void Device::command_render_draw_indirect_count(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset, BufferID p_count_buffer, uint64_t p_count_buffer_offset, uint32_t p_max_draw_count, uint32_t p_stride) {
+	void RenderingDeviceDriverVulkan::command_render_draw_indirect_count(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset, BufferID p_count_buffer, uint64_t p_count_buffer_offset, uint32_t p_max_draw_count, uint32_t p_stride) {
 		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
 		const BufferInfo* indirect_buf_info = (const BufferInfo*)p_indirect_buffer.id;
 		const BufferInfo* count_buf_info = (const BufferInfo*)p_count_buffer.id;
@@ -4944,7 +4944,7 @@ namespace Vulkan
 	}
 
 
-	void Device::command_render_bind_vertex_buffers(CommandBufferID p_cmd_buffer, uint32_t p_binding_count, const BufferID* p_buffers, const uint64_t* p_offsets, uint64_t p_dynamic_offsets) {
+	void RenderingDeviceDriverVulkan::command_render_bind_vertex_buffers(CommandBufferID p_cmd_buffer, uint32_t p_binding_count, const BufferID* p_buffers, const uint64_t* p_offsets, uint64_t p_dynamic_offsets) {
 		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
 
 		std::vector<VkBuffer> vk_buffers_vec(p_binding_count);
@@ -4965,25 +4965,25 @@ namespace Vulkan
 		vkCmdBindVertexBuffers(command_buffer->vk_command_buffer, 0, p_binding_count, vk_buffers, vk_offsets);
 	}
 
-	void Device::command_render_bind_index_buffer(CommandBufferID p_cmd_buffer, BufferID p_buffer, IndexBufferFormat p_format, uint64_t p_offset) {
+	void RenderingDeviceDriverVulkan::command_render_bind_index_buffer(CommandBufferID p_cmd_buffer, BufferID p_buffer, IndexBufferFormat p_format, uint64_t p_offset) {
 		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
 		const BufferInfo* buf_info = (const BufferInfo*)p_buffer.id;
 		vkCmdBindIndexBuffer(command_buffer->vk_command_buffer, buf_info->vk_buffer, p_offset, p_format == INDEX_BUFFER_FORMAT_UINT16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32);
 	}
 
-	void Device::command_render_set_blend_constants(CommandBufferID p_cmd_buffer, const Color& p_constants) {
+	void RenderingDeviceDriverVulkan::command_render_set_blend_constants(CommandBufferID p_cmd_buffer, const Color& p_constants) {
 		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
 		vkCmdSetBlendConstants(command_buffer->vk_command_buffer, glm::value_ptr(p_constants));
 	}
 
-	void Device::command_render_set_line_width(CommandBufferID p_cmd_buffer, float p_width) {
+	void RenderingDeviceDriverVulkan::command_render_set_line_width(CommandBufferID p_cmd_buffer, float p_width) {
 		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
 		vkCmdSetLineWidth(command_buffer->vk_command_buffer, p_width);
 	}
 
 	// ----- PIPELINE -----
 
-	static const VkPrimitiveTopology RD_TO_VK_PRIMITIVE[Device::RENDER_PRIMITIVE_MAX] = {
+	static const VkPrimitiveTopology RD_TO_VK_PRIMITIVE[RenderingDeviceDriverVulkan::RENDER_PRIMITIVE_MAX] = {
 	VK_PRIMITIVE_TOPOLOGY_POINT_LIST,
 	VK_PRIMITIVE_TOPOLOGY_LINE_LIST,
 	VK_PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY,
@@ -4997,7 +4997,7 @@ namespace Vulkan
 	VK_PRIMITIVE_TOPOLOGY_PATCH_LIST,
 	};
 
-	Device::PipelineID Device::render_pipeline_create(
+	RenderingDeviceDriverVulkan::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 								ShaderID p_shader,
 								VertexFormatID p_vertex_format,
 								RenderPrimitive p_render_primitive,
@@ -5389,7 +5389,7 @@ namespace Vulkan
 
 #pragma region Debug
 
-	void Device::print_lost_device_info() {
+	void RenderingDeviceDriverVulkan::print_lost_device_info() {
 #if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
 		{
 			String error_msg = "Printing last known breadcrumbs in reverse order (last executed first).";
@@ -5512,7 +5512,7 @@ namespace Vulkan
 	//on_device_lost();
 	}
 
-	inline std::string Device::get_vulkan_result(VkResult err) {
+	inline std::string RenderingDeviceDriverVulkan::get_vulkan_result(VkResult err) {
 #if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
 		if (err == VK_ERROR_OUT_OF_HOST_MEMORY) {
 			return "VK_ERROR_OUT_OF_HOST_MEMORY";
@@ -5536,7 +5536,7 @@ namespace Vulkan
 
 #pragma region Queries
 
-	Device::QueryPoolID Device::timestamp_query_pool_create(uint32_t p_query_count) {
+	RenderingDeviceDriverVulkan::QueryPoolID RenderingDeviceDriverVulkan::timestamp_query_pool_create(uint32_t p_query_count) {
 		VkQueryPoolCreateInfo query_pool_create_info = {};
 		query_pool_create_info.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
 		query_pool_create_info.queryType = VK_QUERY_TYPE_TIMESTAMP;
@@ -5544,18 +5544,18 @@ namespace Vulkan
 
 		VkQueryPool vk_query_pool = VK_NULL_HANDLE;
 		vkCreateQueryPool(vk_device, &query_pool_create_info, nullptr, &vk_query_pool);
-		return Device::QueryPoolID(vk_query_pool);
+		return RenderingDeviceDriverVulkan::QueryPoolID(vk_query_pool);
 	}
 
-	void Device::timestamp_query_pool_free(QueryPoolID p_pool_id) {
+	void RenderingDeviceDriverVulkan::timestamp_query_pool_free(QueryPoolID p_pool_id) {
 		vkDestroyQueryPool(vk_device, (VkQueryPool)p_pool_id.id, nullptr);
 	}
 
-	void Device::timestamp_query_pool_get_results(QueryPoolID p_pool_id, uint32_t p_query_count, uint64_t* r_results) {
+	void RenderingDeviceDriverVulkan::timestamp_query_pool_get_results(QueryPoolID p_pool_id, uint32_t p_query_count, uint64_t* r_results) {
 		vkGetQueryPoolResults(vk_device, (VkQueryPool)p_pool_id.id, 0, p_query_count, sizeof(uint64_t) * p_query_count, r_results, sizeof(uint64_t), VK_QUERY_RESULT_64_BIT);
 	}
 
-	uint64_t Device::timestamp_query_result_to_time(uint64_t p_result) {
+	uint64_t RenderingDeviceDriverVulkan::timestamp_query_result_to_time(uint64_t p_result) {
 		// This sucks because timestampPeriod multiplier is a float, while the timestamp is 64 bits nanosecs.
 		// So, in cases like nvidia which give you enormous numbers and 1 as multiplier, multiplying is next to impossible.
 		// Need to do 128 bits fixed point multiplication to get the right value.
@@ -5589,12 +5589,12 @@ namespace Vulkan
 		return l;
 	}
 
-	void Device::command_timestamp_query_pool_reset(CommandBufferID p_cmd_buffer, QueryPoolID p_pool_id, uint32_t p_query_count) {
+	void RenderingDeviceDriverVulkan::command_timestamp_query_pool_reset(CommandBufferID p_cmd_buffer, QueryPoolID p_pool_id, uint32_t p_query_count) {
 		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
 		vkCmdResetQueryPool(command_buffer->vk_command_buffer, (VkQueryPool)p_pool_id.id, 0, p_query_count);
 	}
 
-	void Device::command_timestamp_write(CommandBufferID p_cmd_buffer, QueryPoolID p_pool_id, uint32_t p_index) {
+	void RenderingDeviceDriverVulkan::command_timestamp_write(CommandBufferID p_cmd_buffer, QueryPoolID p_pool_id, uint32_t p_index) {
 		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
 		vkCmdWriteTimestamp(command_buffer->vk_command_buffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, (VkQueryPool)p_pool_id.id, p_index);
 	}
@@ -5603,7 +5603,7 @@ namespace Vulkan
 
 #pragma region Lables
 
-	void Device::command_begin_label(CommandBufferID p_cmd_buffer, const char* p_label_name, const Color& p_color) {
+	void RenderingDeviceDriverVulkan::command_begin_label(CommandBufferID p_cmd_buffer, const char* p_label_name, const Color& p_color) {
 		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
 		
 		if (!vkCmdBeginDebugUtilsLabelEXT) {
@@ -5632,7 +5632,7 @@ namespace Vulkan
 		vkCmdBeginDebugUtilsLabelEXT(command_buffer->vk_command_buffer, &label);
 	}
 
-	void Device::command_end_label(CommandBufferID p_cmd_buffer) {
+	void RenderingDeviceDriverVulkan::command_end_label(CommandBufferID p_cmd_buffer) {
 		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
 		
 		if (!vkCmdEndDebugUtilsLabelEXT) {
@@ -5647,7 +5647,7 @@ namespace Vulkan
 
 #pragma endregion
 
-	Device::~Device()
+	RenderingDeviceDriverVulkan::~RenderingDeviceDriverVulkan()
 	{
 #if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
 		if (breadcrumb_buffer != BufferID()) {

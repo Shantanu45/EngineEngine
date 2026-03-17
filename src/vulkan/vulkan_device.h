@@ -15,7 +15,7 @@ namespace Vulkan
 {
 
 	using namespace ::Rendering;
-	class Device : public Rendering::RenderingDeviceDriver
+	class RenderingDeviceDriverVulkan : public Rendering::RenderingDeviceDriver
 	{
 	
 		// Keep the enum values in sync with the `SHADER_UNIFORM_NAMES` values (file rendering_device.cpp).
@@ -282,14 +282,14 @@ namespace Vulkan
 
 		static const int32_t ATTACHMENT_UNUSED = -1;
 
-		Device(RenderingContextDriverVulkan* p_context_driver);
-		virtual ~Device();
+		RenderingDeviceDriverVulkan(RenderingContextDriverVulkan* p_context_driver);
+		virtual ~RenderingDeviceDriverVulkan();
 
 		Error initialize(uint32_t p_device_index, uint32_t p_frame_count) override;
 
 		void finalize() ;
 
-		BufferID buffer_create(uint64_t p_size, BitField<Device::BufferUsageBits> p_usage, Device::MemoryAllocationType p_allocation_type,
+		BufferID buffer_create(uint64_t p_size, BitField<RenderingDeviceDriverVulkan::BufferUsageBits> p_usage, RenderingDeviceDriverVulkan::MemoryAllocationType p_allocation_type,
 			uint64_t p_frames_drawn) override;
 
 		void buffer_free(BufferID p_buffer) override;
@@ -313,12 +313,12 @@ namespace Vulkan
 
 		TextureID texture_create(const TextureFormat& p_format, const TextureView& p_view) override;
 
-		Device::TextureID texture_create_from_extension(uint64_t p_native_texture, TextureType p_type, DataFormat p_format, uint32_t p_array_layers, 
+		RenderingDeviceDriverVulkan::TextureID texture_create_from_extension(uint64_t p_native_texture, TextureType p_type, DataFormat p_format, uint32_t p_array_layers, 
 			bool p_depth_stencil, uint32_t p_mipmaps) override;
 
-		Device::TextureID texture_create_shared(TextureID p_original_texture, const TextureView& p_view) override;
+		RenderingDeviceDriverVulkan::TextureID texture_create_shared(TextureID p_original_texture, const TextureView& p_view) override;
 
-		Device::TextureID texture_create_shared_from_slice(TextureID p_original_texture, const TextureView& p_view, TextureSliceType p_slice_type, 
+		RenderingDeviceDriverVulkan::TextureID texture_create_shared_from_slice(TextureID p_original_texture, const TextureView& p_view, TextureSliceType p_slice_type, 
 			uint32_t p_layer, uint32_t p_layers, uint32_t p_mipmap, uint32_t p_mipmaps) override;
 
 		void texture_free(TextureID p_texture) override;
@@ -333,13 +333,13 @@ namespace Vulkan
 
 		bool texture_can_make_shared_with_format(TextureID p_texture, DataFormat p_format, bool& r_raw_reinterpretation) override;
 
-		Device::SamplerID sampler_create(const SamplerState& p_state) override;
+		RenderingDeviceDriverVulkan::SamplerID sampler_create(const SamplerState& p_state) override;
 
 		void sampler_free(SamplerID p_sampler) override;
 
 		bool sampler_is_format_supported_for_filter(DataFormat p_format, SamplerFilter p_filter) override;
 
-		Device::VertexFormatID vertex_format_create(std::span<VertexAttribute> p_vertex_attribs, const VertexAttributeBindingsMap& p_vertex_bindings) override;
+		RenderingDeviceDriverVulkan::VertexFormatID vertex_format_create(std::span<VertexAttribute> p_vertex_attribs, const VertexAttributeBindingsMap& p_vertex_bindings) override;
 
 		void vertex_format_free(VertexFormatID p_vertex_format) override;
 
@@ -347,23 +347,23 @@ namespace Vulkan
 			std::span<MemoryAccessBarrier> p_memory_barriers, std::span<BufferBarrier> p_buffer_barriers, std::span<TextureBarrier> p_texture_barriers, 
 			std::span<AccelerationStructureBarrier> p_acceleration_structure_barriers) override;
 
-		Device::FenceID fence_create() override;
+		RenderingDeviceDriverVulkan::FenceID fence_create() override;
 
 		Error fence_wait(FenceID p_fence) override;
 
 		void fence_free(FenceID p_fence) override;
 
-		Device::SemaphoreID semaphore_create() override;
+		RenderingDeviceDriverVulkan::SemaphoreID semaphore_create() override;
 
 		void semaphore_free(SemaphoreID p_semaphore) override;
 		
-		Device::SwapChainID swap_chain_create(RenderingContextDriverVulkan::SurfaceID p_surface) override;
+		RenderingDeviceDriverVulkan::SwapChainID swap_chain_create(RenderingContextDriverVulkan::SurfaceID p_surface) override;
 
 		Error swap_chain_resize(CommandQueueID p_cmd_queue, SwapChainID p_swap_chain, uint32_t p_desired_framebuffer_count) override;
 
-		Device::FramebufferID swap_chain_acquire_framebuffer(CommandQueueID p_cmd_queue, SwapChainID p_swap_chain, bool& r_resize_required) override;
+		RenderingDeviceDriverVulkan::FramebufferID swap_chain_acquire_framebuffer(CommandQueueID p_cmd_queue, SwapChainID p_swap_chain, bool& r_resize_required) override;
 
-		Device::RenderPassID swap_chain_get_render_pass(SwapChainID p_swap_chain) override;
+		RenderingDeviceDriverVulkan::RenderPassID swap_chain_get_render_pass(SwapChainID p_swap_chain) override;
 
 		int swap_chain_get_pre_rotation_degrees(SwapChainID p_swap_chain) override;
 
@@ -375,10 +375,10 @@ namespace Vulkan
 
 		void swap_chain_free(SwapChainID p_swap_chain) override;
 
-		Device::CommandQueueFamilyID command_queue_family_get(BitField<Device::CommandQueueFamilyBits> p_cmd_queue_family_bits, 
+		RenderingDeviceDriverVulkan::CommandQueueFamilyID command_queue_family_get(BitField<RenderingDeviceDriverVulkan::CommandQueueFamilyBits> p_cmd_queue_family_bits, 
 			RenderingContextDriverVulkan::SurfaceID p_surface) override;
 
-		Device::CommandQueueID command_queue_create(CommandQueueFamilyID p_cmd_queue_family, bool p_identify_as_main_queue) override;
+		RenderingDeviceDriverVulkan::CommandQueueID command_queue_create(CommandQueueFamilyID p_cmd_queue_family, bool p_identify_as_main_queue) override;
 
 		Error command_queue_execute_and_present(CommandQueueID p_cmd_queue, std::span<SemaphoreID> p_wait_semaphores, 
 			std::span<CommandBufferID> p_cmd_buffers, std::span<SemaphoreID> p_cmd_semaphores, FenceID p_cmd_fence, 
@@ -386,13 +386,13 @@ namespace Vulkan
 
 		void command_queue_free(CommandQueueID p_cmd_queue) override;
 
-		Device::CommandPoolID command_pool_create(CommandQueueFamilyID p_cmd_queue_family, CommandBufferType p_cmd_buffer_type) override;
+		RenderingDeviceDriverVulkan::CommandPoolID command_pool_create(CommandQueueFamilyID p_cmd_queue_family, CommandBufferType p_cmd_buffer_type) override;
 
 		bool command_pool_reset(CommandPoolID p_cmd_pool) override;
 
 		void command_pool_free(CommandPoolID p_cmd_pool) override;
 
-		Device::CommandBufferID command_buffer_create(CommandPoolID p_cmd_pool) override;
+		RenderingDeviceDriverVulkan::CommandBufferID command_buffer_create(CommandPoolID p_cmd_pool) override;
 
 		bool command_buffer_begin(CommandBufferID p_cmd_buffer) override;
 
@@ -402,7 +402,7 @@ namespace Vulkan
 
 		void command_buffer_execute_secondary(CommandBufferID p_cmd_buffer, std::span<CommandBufferID> p_secondary_cmd_buffers) override;
 
-		Device::FramebufferID framebuffer_create(RenderPassID p_render_pass, std::span<TextureID> p_attachments, uint32_t p_width, uint32_t p_height) override;
+		RenderingDeviceDriverVulkan::FramebufferID framebuffer_create(RenderPassID p_render_pass, std::span<TextureID> p_attachments, uint32_t p_width, uint32_t p_height) override;
 
 		void framebuffer_free(FramebufferID p_framebuffer) override;
 
@@ -441,7 +441,7 @@ namespace Vulkan
 
 		std::vector<uint8_t> pipeline_cache_serialize() override;
 
-		Device::RenderPassID render_pass_create(std::span<Attachment> p_attachments, std::span<Subpass> p_subpasses,
+		RenderingDeviceDriverVulkan::RenderPassID render_pass_create(std::span<Attachment> p_attachments, std::span<Subpass> p_subpasses,
 			std::span<SubpassDependency> p_subpass_dependencies, uint32_t p_view_count, AttachmentReference p_fragment_density_map_attachment) override;
 
 		void render_pass_free(RenderPassID p_render_pass) override
@@ -492,7 +492,7 @@ namespace Vulkan
 
 		void command_render_set_line_width(CommandBufferID p_cmd_buffer, float p_width) override;
 
-		Device::PipelineID render_pipeline_create(ShaderID p_shader, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive,
+		RenderingDeviceDriverVulkan::PipelineID render_pipeline_create(ShaderID p_shader, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive,
 			PipelineRasterizationState p_rasterization_state, PipelineMultisampleState p_multisample_state, PipelineDepthStencilState p_depth_stencil_state, 
 			PipelineColorBlendState p_blend_state, std::span<int32_t> p_color_attachments, BitField<PipelineDynamicStateFlags> p_dynamic_state,
 			RenderPassID p_render_pass, uint32_t p_render_subpass, std::span<PipelineSpecializationConstant> p_specialization_constants = std::span<PipelineSpecializationConstant>()) override;
@@ -501,7 +501,7 @@ namespace Vulkan
 
 		std::string get_vulkan_result(VkResult err);
 
-		Device::QueryPoolID timestamp_query_pool_create(uint32_t p_query_count) override;
+		RenderingDeviceDriverVulkan::QueryPoolID timestamp_query_pool_create(uint32_t p_query_count) override;
 
 		void timestamp_query_pool_free(QueryPoolID p_pool_id) override;
 
@@ -517,7 +517,7 @@ namespace Vulkan
 
 		void command_end_label(CommandBufferID p_cmd_buffer) override;
 
-		Device::UniformSetID uniform_set_create(std::span<BoundUniform> p_uniforms, ShaderID p_shader, uint32_t p_set_index, int p_linear_pool_index) override;
+		RenderingDeviceDriverVulkan::UniformSetID uniform_set_create(std::span<BoundUniform> p_uniforms, ShaderID p_shader, uint32_t p_set_index, int p_linear_pool_index) override;
 
 		void uniform_set_free(UniformSetID p_uniform_set) override;
 

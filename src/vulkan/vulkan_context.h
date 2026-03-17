@@ -41,6 +41,7 @@ namespace Vulkan
 		virtual void surface_destroy(SurfaceID p_surface) override;
 		virtual bool is_debug_utils_enabled() const override;
 		virtual RenderingDeviceDriver* driver_create() override;
+		virtual void set_platform_surface_extension(std::vector<const char*> ext) override { surface_extension = ext; }
 
 		virtual void driver_free(RenderingDeviceDriver* p_driver) override;
 
@@ -77,7 +78,6 @@ namespace Vulkan
 		VkPhysicalDevice physical_device_get(uint32_t p_device_index) const;
 		uint32_t queue_family_get_count(uint32_t p_device_index) const;
 		VkQueueFamilyProperties queue_family_get(uint32_t p_device_index, uint32_t p_queue_family_index) const;
-		void set_platform_surface_extension(std::vector<const char*> ext) { surface_extension = ext; }
 
 	protected:
 		virtual Error _create_vulkan_instance(const VkInstanceCreateInfo* p_create_info, VkInstance* r_instance);

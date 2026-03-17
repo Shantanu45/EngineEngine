@@ -34,6 +34,18 @@ namespace DisplayServerEnums
 		SCREEN_OF_MAIN_WINDOW = -1, // Note: for the main window, determine screen from position.
 	};
 
+	enum WindowMode {
+		WINDOW_MODE_WINDOWED,
+		WINDOW_MODE_MINIMIZED,
+		WINDOW_MODE_MAXIMIZED,
+		WINDOW_MODE_FULLSCREEN,
+		WINDOW_MODE_EXCLUSIVE_FULLSCREEN,
+	};
+
+	enum Context {
+		CONTEXT_EDITOR,
+		CONTEXT_ENGINE,
+	};
 
 }
 
@@ -138,6 +150,7 @@ namespace Rendering
 		virtual bool surface_get_needs_resize(SurfaceID p_surface) const = 0;
 		virtual void surface_destroy(SurfaceID p_surface) = 0;
 		virtual bool is_debug_utils_enabled() const = 0;
+		virtual void set_platform_surface_extension(std::vector<const char*> ext) = 0;
 
 		std::string get_driver_and_device_memory_report() const;
 

@@ -70,12 +70,13 @@ namespace EE
 		// Ready state for deferred device initialization.
 		bool ready_modules = false;
 		bool ready_pipelines = false;
-		void check_initialization_progress();
+		void _check_initialization_progress();
+		void _draw();
 
 		std::unique_ptr<::Util::Logger> logger = nullptr;
 
 		Vulkan::RenderingContextDriverVulkan vulkan_context;
-		std::unique_ptr<Vulkan::Device> vulkan_device_ptr = nullptr;
+		std::unique_ptr<Vulkan::RenderingDeviceDriverVulkan> vulkan_device_ptr = nullptr;
 
 		std::unique_ptr<Vulkan::WSIPlatform> platform;
 		Vulkan::WSI application_wsi;

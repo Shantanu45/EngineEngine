@@ -21,6 +21,7 @@ namespace Rendering
 
 		void finalize();
 
+
 #pragma region Shader
 		std::vector<uint8_t> shader_compile_spirv_from_source(ShaderStage p_stage, const std::string& p_source_code, ShaderLanguage p_language = SHADER_LANGUAGE_GLSL, std::string* r_error = nullptr, bool p_allow_cache = true);
 		std::vector<uint8_t> shader_compile_binary_from_spirv(const std::vector<ShaderStageSPIRVData>& p_spirv, const std::string& p_shader_name = "");
@@ -49,6 +50,8 @@ namespace Rendering
 #pragma endregion
 
 	private:
+		uint32_t _get_swap_chain_desired_count() const;
+
 		struct Frame {
 			// The command pool used by the command buffer.
 			RenderingDeviceDriver::CommandPoolID command_pool;
@@ -124,6 +127,23 @@ namespace Rendering
 		RenderingDevice();
 		~RenderingDevice();
 
+		bool is_main_instance = false;
 
+		RenderingContextDriver* context = nullptr;
+		RenderingDeviceDriver* driver = nullptr;
+		RenderingContextDriver::Device device;
+
+		RDD::CommandQueueFamilyID main_queue_family;
+		RDD::CommandQueueFamilyID transfer_queue_family;
+		RDD::CommandQueueFamilyID present_queue_family;
+		RDD::CommandQueueID main_queue;
+		RDD::CommandQueueID transfer_queue;
+		RDD::CommandQueueID present_queue;
+
+		std::unordered_map<DisplayServerEnums::WindowID, RDD::SwapChainID> screen_swap_chains;
+		std::unordered_map<DisplayServerEnums::WindowID, RDD::FramebufferID> screen_framebuffers;
+
+		std::vector<Frame> frames;
+		int frame = 0;
 	};
 }

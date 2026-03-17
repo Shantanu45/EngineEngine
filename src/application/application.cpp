@@ -105,7 +105,11 @@ namespace EE
 		application_wsi.end_frame();
 	}
 
-	void Application::check_initialization_progress()
+	void Application::_check_initialization_progress()
+	{
+	}
+
+	void Application::_draw()
 	{
 	}
 }

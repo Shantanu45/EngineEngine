@@ -6,6 +6,7 @@
 #include "libassert/assert.hpp"
 #include "util/error_macros.h"
 #include <SDL3/SDL_vulkan.h>
+#include "vulkan_device.h"
 
 namespace Vulkan
 {
@@ -697,11 +698,12 @@ namespace Vulkan
 
 	RenderingDeviceDriver* RenderingContextDriverVulkan::driver_create()
 	{
-		return nullptr;
+		return new RenderingDeviceDriverVulkan(this);
 	}
 
 	void RenderingContextDriverVulkan::driver_free(RenderingDeviceDriver* p_driver)
 	{
+		delete p_driver;
 	}
 
 	const RenderingContextDriverVulkan::Device& RenderingContextDriverVulkan::device_get(uint32_t p_device_index) const {
