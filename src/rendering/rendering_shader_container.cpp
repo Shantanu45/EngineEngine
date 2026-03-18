@@ -226,6 +226,18 @@ namespace Rendering
 		return shader_refl;
 	}
 
+	bool RenderingShaderContainer::from_shader_stage_spirv_data(std::vector<RenderingDeviceCommons::ShaderStageSPIRVData>& data)
+	{
+		shaders.resize(data.size());
+
+		for (int i = 0; i < data.size(); i++)
+		{
+			shaders[i].code_compressed_bytes = data[i].spirv;
+			shaders[i].shader_stage = data[i].shader_stage;
+		}
+		return true;
+	}
+
 	bool RenderingShaderContainer::from_bytes(const PackedByteArray& p_bytes)
 	{
 		// TODO:

@@ -268,7 +268,8 @@ namespace Rendering
 			}
 			stage_data.push_back(sd);
 		}
-		return _shader_create_from_spirv(stage_data);
+		std::vector<PipelineImmutableSampler> immutable_samplers;
+		return shader_create_from_spirv_with_samplers(stage_data, RID(), immutable_samplers);//_shader_create_from_spirv(stage_data);
 	}
 
 	RID RenderingDevice::_shader_create_from_spirv(const std::vector<ShaderStageSPIRVData>& p_spirv, const std::string& p_shader_name) {
@@ -292,6 +293,109 @@ namespace Rendering
 		ERR_FAIL_COND_V(shader_container == nullptr, RID());
 
 		bool parsed_container = shader_container/*shader_container->from_bytes(p_shader_binary);*/;
+		ERR_FAIL_COND_V_MSG(!parsed_container, RID(), "Failed to parse shader container from binary.");
+
+		std::vector<RDD::ImmutableSampler> driver_immutable_samplers;
+		for (const PipelineImmutableSampler& source_sampler : p_immutable_samplers) {
+			RDD::ImmutableSampler driver_sampler;
+			driver_sampler.type = source_sampler.uniform_type;
+			driver_sampler.binding = source_sampler.binding;
+
+			for (uint32_t j = 0; j < source_sampler.get_id_count(); j++) {
+				RDD::SamplerID* sampler_driver_id = sampler_owner.get_or_null(source_sampler.get_id(j));
+				driver_sampler.ids.push_back(*sampler_driver_id);
+			}
+
+			driver_immutable_samplers.push_back(driver_sampler);
+		}
+
+		RDD::ShaderID shader_id = driver->shader_create_from_container(shader_container, driver_immutable_samplers);
+		ERR_FAIL_COND_V(!shader_id, RID());
+
+		// All good, let's create modules.
+
+		RID id;
+		if (p_placeholder.is_null()) {
+			id = shader_owner.make_rid();
+		}
+		else {
+			id = p_placeholder;
+		}
+
+		Shader* shader = shader_owner.get_or_null(id);
+		ERR_FAIL_NULL_V(shader, RID());
+
+		*((ShaderReflection*)shader) = shader_container->get_shader_reflection();
+		shader->name.clear();
+		shader->name.append(shader_container->shader_name);
+		shader->driver_id = shader_id;
+		shader->layout_hash = driver->shader_get_layout_hash(shader_id);
+
+		for (int i = 0; i < shader->uniform_sets.size(); i++) {
+			uint32_t format = 0; // No format, default.
+
+			if (shader->uniform_sets[i].size()) {
+				// Sort and hash.
+
+				std::sort(shader->uniform_sets[i].begin(), shader->uniform_sets[i].end());
+
+				UniformSetFormat usformat;
+				usformat.uniforms = shader->uniform_sets[i];
+				std::map<UniformSetFormat, uint32_t>::iterator i = uniform_set_format_cache.find(usformat);
+				if (i != uniform_set_format_cache.end()) {
+					format = i->second;
+				}
+				else {
+					format = uniform_set_format_cache.size() + 1;
+					uniform_set_format_cache.emplace(usformat, format);
+				}
+			}
+
+			shader->set_formats.push_back(format);
+		}
+
+		for (ShaderStage stage : shader->stages_vector) {
+			switch (stage) {
+			case SHADER_STAGE_VERTEX:
+				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_VERTEX_SHADER_BIT);
+				break;
+			case SHADER_STAGE_FRAGMENT:
+				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+				break;
+			case SHADER_STAGE_TESSELATION_CONTROL:
+				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT);
+				break;
+			case SHADER_STAGE_TESSELATION_EVALUATION:
+				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT);
+				break;
+			case SHADER_STAGE_COMPUTE:
+				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+				break;
+			case SHADER_STAGE_RAYGEN:
+			case SHADER_STAGE_ANY_HIT:
+			case SHADER_STAGE_CLOSEST_HIT:
+			case SHADER_STAGE_MISS:
+			case SHADER_STAGE_INTERSECTION:
+				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_RAY_TRACING_SHADER_BIT);
+				break;
+			default:
+				DEV_ASSERT(false && "Unknown shader stage.");
+				break;
+			}
+		}
+
+#ifdef DEV_ENABLED
+		set_resource_name(id, "RID:" + itos(id.get_id()));
+#endif
+		return id;
+	}
+
+	RID RenderingDevice::shader_create_from_spirv_with_samplers(std::vector<ShaderStageSPIRVData>& p_shader, RID p_placeholder, const std::vector<PipelineImmutableSampler>& p_immutable_samplers)
+	{
+		RenderingShaderContainer* shader_container = driver->get_shader_container_format().create_container();
+		ERR_FAIL_COND_V(shader_container == nullptr, RID());
+
+		bool parsed_container = shader_container->from_shader_stage_spirv_data(p_shader);
 		ERR_FAIL_COND_V_MSG(!parsed_container, RID(), "Failed to parse shader container from binary.");
 
 		std::vector<RDD::ImmutableSampler> driver_immutable_samplers;

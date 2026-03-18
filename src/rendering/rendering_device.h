@@ -223,6 +223,7 @@ namespace Rendering
 		RID _shader_create_from_spirv(const std::vector<ShaderStageSPIRVData>& p_spirv, const std::string& p_shader_name = "");
 		RID shader_create_from_bytecode(const std::vector<uint8_t>& p_shader_binary, RID p_placeholder = RID());
 		RID shader_create_from_bytecode_with_samplers(const std::vector<uint8_t>& p_shader_binary, RID p_placeholder, const std::vector<PipelineImmutableSampler>& p_immutable_samplers);
+		RID shader_create_from_spirv_with_samplers(std::vector<ShaderStageSPIRVData>& p_shader, RID p_placeholder, const std::vector<PipelineImmutableSampler>& p_immutable_samplers);
 		RID shader_create_placeholder();
 		RID shader_create_from_spirv(const RDShaderSPIRV* p_spirv, const std::string& p_shader_name = "");
 
