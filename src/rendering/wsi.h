@@ -5,7 +5,7 @@
 
 namespace Rendering
 {
-
+	// display server windows
 	struct WindowData {
 		WindowPlatformData platfform_data;
 	};
@@ -15,14 +15,6 @@ namespace Rendering
 	public:
 		WSI(const std::string& p_rendering_driver, DisplayServerEnums::WindowMode p_mode, DisplayServerEnums::VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i* p_position, const Vector2i& p_resolution, int p_screen, DisplayServerEnums::Context p_context, int64_t p_parent_window, Error& r_error);
 		~WSI();
-		void set_platform(WSIPlatform* platform);
-
-		bool init_context();
-		bool init_device();
-		bool begin_frame();
-		bool end_frame();
-
-		void teardown();
 
 	private:
 

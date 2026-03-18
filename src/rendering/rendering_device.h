@@ -3,12 +3,29 @@
 #include "rendering_device_driver.h"
 #include "rendering_context_driver.h"
 #include "util/rid_owner.h"
+#include "xxhash.h"
 
 namespace Rendering
 {
 	class RenderingDevice : public RenderingDeviceCommons
 	{
 	private:
+	public:
+		//base numeric ID for all types
+		enum {
+			INVALID_FORMAT_ID = -1
+		};
+
+		enum IDType {
+			ID_TYPE_FRAMEBUFFER_FORMAT,
+			ID_TYPE_VERTEX_FORMAT,
+			ID_TYPE_DRAW_LIST,
+			ID_TYPE_COMPUTE_LIST = 4,
+			ID_TYPE_RAYTRACING_LIST = 5,
+			ID_TYPE_MAX,
+			ID_BASE_SHIFT = 58, // 5 bits for ID types.
+			ID_MASK = (ID_BASE_SHIFT - 1),
+		};
 		
 	public:
 		typedef int64_t DrawListID;
@@ -34,7 +51,20 @@ namespace Rendering
 
 		uint64_t shader_get_vertex_input_attribute_mask(RID p_shader);
 
+		struct Shader : public ShaderReflection {
+			std::string name; // Used for debug.
+			RDD::ShaderID driver_id;
+			uint32_t layout_hash = 0;
+			BitField<RDD::PipelineStageBits> stage_bits = {};
+			std::vector<uint32_t> set_formats;
+		};
+
+		RID_Owner<Shader, true> shader_owner;
+
+
+
 #pragma endregion
+
 #pragma region Pipeline
 		typedef int64_t FramebufferFormatID;
 		typedef int64_t VertexFormatID;
@@ -128,9 +158,89 @@ namespace Rendering
 		//FramebufferFormatID _framebuffer_format_create_multipass(const std::vector<RDAttachmentFormat>& p_attachments, const std::vector<RDFramebufferPass>& p_passes, uint32_t p_view_count);
 		//RID _framebuffer_create(const std::vector<RID>& p_textures, FramebufferFormatID p_format_check = INVALID_ID, uint32_t p_view_count = 1);
 		//RID _framebuffer_create_multipass(const std::vector<RID>& p_textures, const std::vector<RDFramebufferPass>& p_passes, FramebufferFormatID p_format_check = INVALID_ID, uint32_t p_view_count = 1);
+		struct VertexDescriptionKey {
+			std::vector<VertexAttribute> vertex_formats;
+
+			bool operator==(const VertexDescriptionKey& p_key) const {
+				int vdc = vertex_formats.size();
+				int vdck = p_key.vertex_formats.size();
+
+				if (vdc != vdck) {
+					return false;
+				}
+				else {
+					const VertexAttribute* a_ptr = vertex_formats.data();
+					const VertexAttribute* b_ptr = p_key.vertex_formats.data();
+					for (int i = 0; i < vdc; i++) {
+						const VertexAttribute& a = a_ptr[i];
+						const VertexAttribute& b = b_ptr[i];
+
+						if (a.location != b.location) {
+							return false;
+						}
+						if (a.offset != b.offset) {
+							return false;
+						}
+						if (a.format != b.format) {
+							return false;
+						}
+						if (a.stride != b.stride) {
+							return false;
+						}
+						if (a.frequency != b.frequency) {
+							return false;
+						}
+					}
+					return true; // They are equal.
+				}
+			}
+
+			uint32_t hash() const {
+				int vdc = vertex_formats.size();
+
+				XXH32_state_t* state = XXH32_createState();
+				XXH32_reset(state, 0);
+
+				XXH32_update(state, &vdc, sizeof(vdc));
+
+				const VertexAttribute* ptr = vertex_formats.data();
+				for (int i = 0; i < vdc; i++) {
+					const VertexAttribute& vd = ptr[i];
+
+					XXH32_update(state, &vd.location, sizeof(vd.location));
+					XXH32_update(state, &vd.offset, sizeof(vd.offset));
+					XXH32_update(state, &vd.format, sizeof(vd.format));
+					XXH32_update(state, &vd.stride, sizeof(vd.stride));
+					XXH32_update(state, &vd.frequency, sizeof(vd.frequency));
+				}
+
+				uint32_t h = XXH32_digest(state);
+				XXH32_freeState(state);
+				return h;
+			}
+		};
+
+		struct VertexDescriptionHash {
+			std::size_t operator()(const VertexDescriptionKey& p_key) const {
+				return p_key.hash();
+			}
+		};
+
+		// This is a cache and it's never freed, it ensures that
+		// ID used for a specific format always remain the same.
+		std::unordered_map<VertexDescriptionKey, VertexFormatID, VertexDescriptionHash> vertex_format_cache;
+
+		struct VertexDescriptionCache {
+			std::vector<VertexAttribute> vertex_formats;
+			VertexAttributeBindingsMap bindings;
+			RDD::VertexFormatID driver_id;
+		};
+
+		std::unordered_map<VertexFormatID, VertexDescriptionCache> vertex_formats;
+
 
 		//RID _sampler_create(const RDSamplerState* p_state);
-
+		VertexFormatID vertex_format_create(const std::vector<VertexAttribute>& p_vertex_descriptions);
 		//RenderingDeviceDriver::VertexFormatID _vertex_format_create(const std::vector<RDVertexAttribute>& p_vertex_formats);
 		//RID _vertex_array_create(uint32_t p_vertex_count, RenderingDeviceDriver::VertexFormatID p_vertex_format, const std::vector<RID>& p_src_buffers, const std::vector<int64_t>& p_offsets = std::vector<int64_t>());
 		//void _draw_list_bind_vertex_buffers_format(DrawListID p_list, RenderingDeviceDriver::VertexFormatID p_vertex_format, uint32_t p_vertex_count, const  std::vector<RID>& p_vertex_buffers, const  std::vector<int64_t>& p_offsets = std::vector<int64_t>());

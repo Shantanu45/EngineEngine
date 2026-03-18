@@ -1,7 +1,81 @@
 #include "rendering_device.h"
+#include <set>
 
 namespace Rendering
 {
+
+	Rendering::RenderingDevice::VertexFormatID RenderingDevice::vertex_format_create(const std::vector<VertexAttribute>& p_vertex_descriptions)
+	{
+		VertexDescriptionKey key;
+		key.vertex_formats = p_vertex_descriptions;
+
+		VertexFormatID* idptr = &vertex_format_cache[key];
+		if (idptr) {
+			return *idptr;
+		}
+
+		VertexAttributeBindingsMap bindings;
+		bool has_implicit = false;
+		bool has_explicit = false;
+		std::vector<VertexAttribute> vertex_descriptions = p_vertex_descriptions;
+		std::set<int> used_locations;
+
+		for (int i = 0; i < vertex_descriptions.size(); i++) {
+			VertexAttribute& attr = vertex_descriptions[i];
+			ERR_CONTINUE(attr.format >= DATA_FORMAT_MAX);
+			ERR_FAIL_COND_V(used_locations.contains(attr.location), INVALID_ID);
+
+			ERR_FAIL_COND_V_MSG(get_format_vertex_size(attr.format) == 0, INVALID_ID,
+				std::format("Data format for attribute (%d), '%s', is not valid for a vertex array.", attr.location, std::string(FORMAT_NAMES[attr.format])));
+
+			if (attr.binding == UINT32_MAX) {
+				attr.binding = i; // Implicitly assigned binding
+				has_implicit = true;
+			}
+			else {
+				has_explicit = true;
+			}
+			ERR_FAIL_COND_V_MSG(!(has_implicit ^ has_explicit), INVALID_ID, "Vertex attributes must use either all explicit or all implicit bindings.");
+
+			auto it = bindings.find(attr.binding);
+			if (it == bindings.end()) {
+				// Insert new binding
+				bindings.insert({ attr.binding, VertexAttributeBinding(attr.stride, attr.frequency) });
+			}
+			else {
+				// Validate existing binding
+				const VertexAttributeBinding* existing = &it->second;
+
+				ERR_FAIL_COND_V_MSG(
+					existing->stride != attr.stride,
+					INVALID_ID,
+					std::format("Vertex attributes with binding ({}) have an inconsistent stride.", attr.binding)
+				);
+
+				ERR_FAIL_COND_V_MSG(
+					existing->frequency != attr.frequency,
+					INVALID_ID,
+					std::format("Vertex attributes with binding ({}) have an inconsistent frequency.", attr.binding)
+				);
+			}
+
+			used_locations.insert(attr.location);
+		}
+
+		RDD::VertexFormatID driver_id = driver->vertex_format_create(vertex_descriptions, bindings);
+		ERR_FAIL_COND_V(!driver_id, 0);
+
+		VertexFormatID id = (vertex_format_cache.size() | ((int64_t)ID_TYPE_VERTEX_FORMAT << ID_BASE_SHIFT));
+		vertex_format_cache[key] = id;
+		auto [it, inserted] = vertex_formats.try_emplace(id);
+		VertexDescriptionCache& ce = it->second;
+		ce.vertex_formats = vertex_descriptions;
+		ce.bindings = std::move(bindings);
+		ce.driver_id = driver_id;
+		return id;
+
+	}
+
 	RenderingDevice::~RenderingDevice() {
 		finalize();
 	}
@@ -20,6 +94,7 @@ namespace Rendering
 		}
 
 		context = p_context;
+		// creates new vulkan device/driver
 		driver = context->driver_create();
 
 		LOGI("Devices:");
@@ -136,7 +211,7 @@ namespace Rendering
 			ERR_FAIL_V_MSG(FAILED, "Failed to create frame data.");
 		}
 
-		return Error();
+		return OK;
 	}
 
 	void RenderingDevice::finalize() {
@@ -147,8 +222,32 @@ namespace Rendering
 		return 2;
 	}
 
-	Error RenderingDevice::screen_create(DisplayServerEnums::WindowID p_screen)
+
+	RID RenderingDevice::render_pipeline_create(RID p_shader, FramebufferFormatID p_framebuffer_format, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, const PipelineRasterizationState& p_rasterization_state, const PipelineMultisampleState& p_multisample_state, const PipelineDepthStencilState& p_depth_stencil_state, const PipelineColorBlendState& p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags /*= 0*/, uint32_t p_for_render_pass /*= 0*/, const std::vector<PipelineSpecializationConstant>& p_specialization_constants /*= std::vector<PipelineSpecializationConstant>()*/)
 	{
+		Shader* shader = shader_owner.get_or_null(p_shader);
+		ERR_FAIL_NULL_V(shader, RID());
+		ERR_FAIL_COND_V_MSG(shader->pipeline_type != PIPELINE_TYPE_RASTERIZATION, RID(),
+			"Only render shaders can be used in render pipelines");
+
+		ERR_FAIL_COND_V_MSG(!shader->stage_bits.has_flag(RDD::PIPELINE_STAGE_VERTEX_SHADER_BIT), RID(), "Pre-raster shader (vertex shader) is not provided for pipeline creation.");
+
+		//FramebufferFormat fb_format;
+		//{
+		//	//_THREAD_SAFE_METHOD_
+
+		//		if (p_framebuffer_format == INVALID_ID) {
+		//			// If nothing provided, use an empty one (no attachments).
+		//			p_framebuffer_format = framebuffer_format_create(Vector<AttachmentFormat>());
+		//		}
+		//	ERR_FAIL_COND_V(!framebuffer_formats.has(p_framebuffer_format), RID());
+		//	fb_format = framebuffer_formats[p_framebuffer_format];
+		//}
+	}
+
+	Error RenderingDevice::screen_create(DisplayServerEnums::WindowID p_screen)		// swap chain resize(also frame buffer creation)
+	{
+
 		RenderingContextDriver::SurfaceID surface = context->surface_get_from_window(p_screen);
 		ERR_FAIL_COND_V_MSG(surface == 0, ERR_CANT_CREATE, "A surface was not created for the screen.");
 
