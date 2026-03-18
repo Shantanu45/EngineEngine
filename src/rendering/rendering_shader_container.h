@@ -268,8 +268,8 @@ namespace Rendering
 
 		bool set_code_from_spirv(const std::string& p_shader_name, std::span<RDC::ShaderStageSPIRVData> p_spirv);
 		RDC::ShaderReflection get_shader_reflection() const;
-		//bool from_bytes(const PackedByteArray& p_bytes);
-		//PackedByteArray to_bytes() const;
+		bool from_bytes(const PackedByteArray& p_bytes);
+		PackedByteArray to_bytes() const;
 		bool compress_code(const uint8_t* p_decompressed_bytes, uint32_t p_decompressed_size, uint8_t* p_compressed_bytes, uint32_t* r_compressed_size, uint32_t* r_compressed_flags) const;
 		bool decompress_code(const uint8_t* p_compressed_bytes, uint32_t p_compressed_size, uint32_t p_compressed_flags, uint8_t* p_decompressed_bytes, uint32_t p_decompressed_size) const;
 		RenderingShaderContainer();

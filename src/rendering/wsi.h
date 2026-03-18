@@ -19,6 +19,7 @@ namespace Rendering
 		void set_platform(WSIPlatform* platform);
 		void draw_viewport(bool p_swap_buffers);
 
+		void set_program(const std::vector<std::string> programs);
 		RenderingShaderContainerFormat* create_shader_container_format();
 		void teardown();
 		~WSI();

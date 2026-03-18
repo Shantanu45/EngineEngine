@@ -231,8 +231,7 @@ namespace Rendering
 		return 2;
 	}
 
-
-	Rendering::RDShaderSPIRV* RenderingDevice::_shader_compile_spirv_from_source(const RDShaderSource* p_source, bool p_allow_cache /*= true*/)
+	Rendering::RDShaderSPIRV* RenderingDevice::shader_compile_spirv_from_shader_source(const RDShaderSource* p_source, bool p_allow_cache /*= true*/)
 	{
 		//ERR_FAIL_COND_V(p_source.is_null(), &RDShaderSPIRV());
 
@@ -252,7 +251,7 @@ namespace Rendering
 		return bytecode;
 	}
 	
-	RID RenderingDevice::_shader_create_from_spirv(const RDShaderSPIRV* p_spirv, const std::string& p_shader_name /*= ""*/)
+	RID RenderingDevice::shader_create_from_spirv(const RDShaderSPIRV* p_spirv, const std::string& p_shader_name /*= ""*/)
 	{
 		ERR_FAIL_COND_V(p_spirv == nullptr, RID());
 
@@ -269,10 +268,10 @@ namespace Rendering
 			}
 			stage_data.push_back(sd);
 		}
-		return shader_create_from_spirv(stage_data);
+		return _shader_create_from_spirv(stage_data);
 	}
 
-	RID RenderingDevice::shader_create_from_spirv(const std::vector<ShaderStageSPIRVData>& p_spirv, const std::string& p_shader_name) {
+	RID RenderingDevice::_shader_create_from_spirv(const std::vector<ShaderStageSPIRVData>& p_spirv, const std::string& p_shader_name) {
 		std::vector<uint8_t> bytecode = shader_compile_binary_from_spirv(p_spirv, p_shader_name);
 		ERR_FAIL_COND_V(bytecode.empty(), RID());
 		return shader_create_from_bytecode(bytecode);
@@ -390,25 +389,6 @@ namespace Rendering
 		return id;
 	}
 
-	static Compiler::Stage shader_stage_from_compiler_stage(const RenderingDeviceCommons::ShaderStage stage)
-	{
-		switch (stage)
-		{
-		case RenderingDeviceCommons::SHADER_STAGE_VERTEX:
-			return Compiler::Stage::Vertex;
-		case RenderingDeviceCommons::SHADER_STAGE_FRAGMENT:
-			return Compiler::Stage::Fragment;
-		case RenderingDeviceCommons::SHADER_STAGE_TESSELATION_CONTROL:
-			return Compiler::Stage::TessControl;
-		case RenderingDeviceCommons::SHADER_STAGE_TESSELATION_EVALUATION:
-			return Compiler::Stage::TessEvaluation;
-		case RenderingDeviceCommons::SHADER_STAGE_COMPUTE:
-			return Compiler::Stage::Compute;
-		default:
-			return Compiler::Stage::Unknown;
-		}
-	}
-
 	std::vector<uint8_t> RenderingDevice::shader_compile_spirv_from_source(ShaderStage p_stage, const std::string& p_source_code, ShaderLanguage p_language /*= SHADER_LANGUAGE_GLSL*/, std::string* r_error /*= nullptr*/, bool p_allow_cache /*= true*/)
 	{
 		switch (p_language) {
@@ -416,7 +396,7 @@ namespace Rendering
 		case ShaderLanguage::SHADER_LANGUAGE_GLSL: {
 			//ShaderLanguageVersion language_version = driver->get_shader_container_format().get_shader_language_version();
 			//ShaderSpirvVersion spirv_version = driver->get_shader_container_format().get_shader_spirv_version();
-			compiler->set_source_from_file(p_source_code, shader_stage_from_compiler_stage(p_stage));			// TODO: ShaderStage to COmpiler stage
+			compiler->set_source_from_file(p_source_code, compiler_stage_from_shader_stage(p_stage));			// TODO: ShaderStage to COmpiler stage
 			compiler->preprocess();
 			std::vector<uint32_t> spirv_compiled = compiler->compile(*r_error, {});
 			std::vector<uint8_t> bytes_spirv(spirv_compiled.size() * sizeof(uint32_t));
@@ -431,6 +411,16 @@ namespace Rendering
 
 	std::vector<uint8_t> RenderingDevice::shader_compile_binary_from_spirv(const std::vector<ShaderStageSPIRVData>& p_spirv, const std::string& p_shader_name /*= ""*/)
 	{
+		const RenderingShaderContainerFormat& container_format = driver->get_shader_container_format();
+		RenderingShaderContainer* shader_container = container_format.create_container();
+		ERR_FAIL_COND_V(shader_container == nullptr, std::vector<uint8_t>());
+
+		// Compile shader binary from SPIR-V.
+		//std::vector<ShaderStageSPIRVData> data{}
+		//bool code_compiled = shader_container->set_code_from_spirv(p_shader_name, p_spirv);
+		//ERR_FAIL_COND_V_MSG(!code_compiled, std::vector<uint8_t>(), std::format("Failed to compile code to native for SPIR-V."));
+
+		//return shader_container->to_bytes(); 
 		return {};
 	}
 

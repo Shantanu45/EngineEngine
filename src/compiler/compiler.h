@@ -6,10 +6,12 @@
 #include <stdint.h>
 #include "filesystem/filesystem.h"
 #include "xxhash.h"
+#include "filesystem/path_utils.h"
 
 using namespace FileSystem;
 namespace Compiler
 {
+
 	enum class Stage
 	{
 		Vertex,
@@ -23,6 +25,29 @@ namespace Compiler
 		Unknown
 	};
 
+	inline static Stage stage_from_path(const std::string& path)
+	{
+		auto ext = Path::ext(path);
+		if (ext == "vert")
+			return Stage::Vertex;
+		else if (ext == "tesc")
+			return Stage::TessControl;
+		else if (ext == "tese")
+			return Stage::TessEvaluation;
+		else if (ext == "geom")
+			return Stage::Geometry;
+		else if (ext == "frag")
+			return Stage::Fragment;
+		else if (ext == "comp")
+			return Stage::Compute;
+		else if (ext == "task")
+			return Stage::Task;
+		else if (ext == "mesh")
+			return Stage::Mesh;
+		else
+			return Stage::Unknown;
+	}
+
 	enum class Target
 	{
 		Vulkan11,
@@ -33,6 +58,8 @@ namespace Compiler
 	class GLSLCompiler
 	{
 	public:
+
+		static Stage stage_from_path(const std::string& path);
 		explicit GLSLCompiler(FilesystemInterface& iface);
 
 		void set_target(Target target_)

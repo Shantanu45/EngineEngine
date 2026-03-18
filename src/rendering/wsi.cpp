@@ -2,6 +2,7 @@
 #include "vulkan/vulkan_context.h"
 #include "vulkan/vulkan_device.h"
 #include "libassert/assert.hpp"
+#include "compiler/compiler.h"
 
 namespace Rendering
 {
@@ -70,6 +71,19 @@ namespace Rendering
 			// screen_prepare_for_drawing
 		rendering_device->screen_prepare_for_drawing(DisplayServerEnums::MAIN_WINDOW_ID);
 		
+	}
+
+	void WSI::set_program(const std::vector<std::string> programs)
+	{
+		RDShaderSource* shaders = new RDShaderSource();
+		shaders->set_language(RenderingDeviceCommons::SHADER_LANGUAGE_GLSL);
+		for (auto shader_path: programs)
+		{
+			auto stage = shader_stage_from_compiler_stage(Compiler::stage_from_path(shader_path));
+			ERR_FAIL_COND_MSG(stage == RenderingDeviceCommons::SHADER_STAGE_MAX, "could not evaluate shader stage from path!!");
+			shaders->set_stage_source(stage, shader_path);
+		}
+		rendering_device->shader_create_from_spirv(rendering_device->shader_compile_spirv_from_shader_source(shaders), "traingle_shader");
 	}
 
 	RenderingShaderContainerFormat* WSI::create_shader_container_format() 

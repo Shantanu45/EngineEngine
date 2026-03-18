@@ -9,6 +9,45 @@
 
 namespace Rendering
 {
+	static Compiler::Stage compiler_stage_from_shader_stage(const RenderingDeviceCommons::ShaderStage stage)
+	{
+		switch (stage)
+		{
+		case RenderingDeviceCommons::SHADER_STAGE_VERTEX:
+			return Compiler::Stage::Vertex;
+		case RenderingDeviceCommons::SHADER_STAGE_FRAGMENT:
+			return Compiler::Stage::Fragment;
+		case RenderingDeviceCommons::SHADER_STAGE_TESSELATION_CONTROL:
+			return Compiler::Stage::TessControl;
+		case RenderingDeviceCommons::SHADER_STAGE_TESSELATION_EVALUATION:
+			return Compiler::Stage::TessEvaluation;
+		case RenderingDeviceCommons::SHADER_STAGE_COMPUTE:
+			return Compiler::Stage::Compute;
+		default:
+			return Compiler::Stage::Unknown;
+		}
+	}
+
+	static RenderingDeviceCommons::ShaderStage shader_stage_from_compiler_stage(const Compiler::Stage stage)
+	{
+		switch (stage)
+		{
+		case Compiler::Stage::Vertex:
+			return RenderingDeviceCommons::SHADER_STAGE_VERTEX;
+		case Compiler::Stage::TessControl:
+			return RenderingDeviceCommons::SHADER_STAGE_TESSELATION_CONTROL;
+		case Compiler::Stage::TessEvaluation:
+			return RenderingDeviceCommons::SHADER_STAGE_TESSELATION_EVALUATION;
+		case Compiler::Stage::Fragment:
+			return RenderingDeviceCommons::SHADER_STAGE_FRAGMENT;
+		case Compiler::Stage::Compute:
+			return RenderingDeviceCommons::SHADER_STAGE_COMPUTE;
+		case Compiler::Stage::Unknown:
+		default:
+			//TODO;
+			return RenderingDeviceCommons::SHADER_STAGE_MAX;
+		}
+	}
 
 	class RDShaderSource{
 		std::string source[RenderingDeviceCommons::SHADER_STAGE_MAX];
@@ -177,13 +216,16 @@ namespace Rendering
 
 
 #pragma region Shader
+		RDShaderSPIRV* shader_compile_spirv_from_shader_source(const RDShaderSource* p_source, bool p_allow_cache = true);
 		std::vector<uint8_t> shader_compile_spirv_from_source(ShaderStage p_stage, const std::string& p_source_code, 
 					ShaderLanguage p_language = SHADER_LANGUAGE_GLSL, std::string* r_error = nullptr, bool p_allow_cache = true);
 		std::vector<uint8_t> shader_compile_binary_from_spirv(const std::vector<ShaderStageSPIRVData>& p_spirv, const std::string& p_shader_name = "");
-		RID shader_create_from_spirv(const std::vector<ShaderStageSPIRVData>& p_spirv, const std::string& p_shader_name = "");
+		RID _shader_create_from_spirv(const std::vector<ShaderStageSPIRVData>& p_spirv, const std::string& p_shader_name = "");
 		RID shader_create_from_bytecode(const std::vector<uint8_t>& p_shader_binary, RID p_placeholder = RID());
 		RID shader_create_from_bytecode_with_samplers(const std::vector<uint8_t>& p_shader_binary, RID p_placeholder, const std::vector<PipelineImmutableSampler>& p_immutable_samplers);
 		RID shader_create_placeholder();
+		RID shader_create_from_spirv(const RDShaderSPIRV* p_spirv, const std::string& p_shader_name = "");
+
 		void shader_destroy_modules(RID p_shader);
 
 		uint64_t shader_get_vertex_input_attribute_mask(RID p_shader);
@@ -387,9 +429,7 @@ namespace Rendering
 		void _stall_for_previous_frames();
 		void _flush_and_stall_for_all_frames(bool p_begin_frame = true);
 		uint32_t _get_swap_chain_desired_count() const;
-		RDShaderSPIRV* _shader_compile_spirv_from_source(const RDShaderSource* p_source, bool p_allow_cache = true);
 		std::vector<uint8_t> _shader_compile_binary_from_spirv(const RDShaderSPIRV* p_bytecode, const std::string& p_shader_name = "");
-		RID _shader_create_from_spirv(const RDShaderSPIRV* p_spirv, const std::string& p_shader_name = "");
 
 		RenderingDevice();
 		~RenderingDevice();

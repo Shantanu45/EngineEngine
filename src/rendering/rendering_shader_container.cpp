@@ -226,6 +226,18 @@ namespace Rendering
 		return shader_refl;
 	}
 
+	bool RenderingShaderContainer::from_bytes(const PackedByteArray& p_bytes)
+	{
+		// TODO:
+		return false;
+	}
+
+	PackedByteArray RenderingShaderContainer::to_bytes() const
+	{
+		// TODO:
+		return {};
+	}
+
 	void RenderingShaderContainer::_set_from_shader_reflection_post(const ReflectShader& p_shader)
 	{
 		// Do nothing!

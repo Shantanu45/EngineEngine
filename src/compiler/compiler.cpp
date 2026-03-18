@@ -1,37 +1,11 @@
 #include "compiler.h"
 #include "shaderc/shaderc.hpp"
-#include "filesystem/path_utils.h"
-//#include "util/logging.h"
-//#include "util/string_helpers.h"
 
 namespace Compiler
 {
 	GLSLCompiler::GLSLCompiler(FilesystemInterface& iface_)
 		: iface(iface_)
 	{
-	}
-
-	static Stage stage_from_path(const std::string& path)
-	{
-		auto ext = Path::ext(path);
-		if (ext == "vert")
-			return Stage::Vertex;
-		else if (ext == "tesc")
-			return Stage::TessControl;
-		else if (ext == "tese")
-			return Stage::TessEvaluation;
-		else if (ext == "geom")
-			return Stage::Geometry;
-		else if (ext == "frag")
-			return Stage::Fragment;
-		else if (ext == "comp")
-			return Stage::Compute;
-		else if (ext == "task")
-			return Stage::Task;
-		else if (ext == "mesh")
-			return Stage::Mesh;
-		else
-			return Stage::Unknown;
 	}
 
 	static Stage convert_stage(const std::string& stage)
@@ -69,7 +43,7 @@ namespace Compiler
 		if (forced_stage != Stage::Unknown)
 			stage = forced_stage;
 		else
-			stage = stage_from_path(path);
+			stage = ::Compiler::stage_from_path(path);
 
 		return stage != Stage::Unknown;
 	}

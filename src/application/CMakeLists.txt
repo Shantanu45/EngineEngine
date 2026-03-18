@@ -33,6 +33,7 @@ set(ADDITIONAL_LIBRARY_DEPENDENCIES
 	input
 	vulkan
 	xxHash::xxhash
+	
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE ${ADDITIONAL_LIBRARY_DEPENDENCIES})
