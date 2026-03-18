@@ -76,6 +76,12 @@ namespace Rendering
 
 	}
 
+
+	RenderingDevice::RenderingDevice()
+	{
+
+	}
+
 	RenderingDevice::~RenderingDevice() {
 		finalize();
 	}
@@ -317,6 +323,30 @@ namespace Rendering
 		// Store the framebuffer that will be used next to draw to this screen.
 		screen_framebuffers[p_screen] = framebuffer;
 		frames[frame].swap_chains_to_present.push_back(it->second);
+	}
+
+
+	void RenderingDevice::_begin_frame(bool p_presented /*= false*/)
+	{
+
+	}
+
+
+	void RenderingDevice::_end_frame()
+	{
+
+	}
+
+
+	void RenderingDevice::_execute_frame(bool p_present)
+	{
+
+	}
+
+
+	void RenderingDevice::_flush_and_stall_for_all_frames(bool p_begin_frame /*= true*/)
+	{
+
 	}
 
 	void RenderingDevice::swap_buffers(bool p_present)

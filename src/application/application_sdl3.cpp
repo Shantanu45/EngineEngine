@@ -255,13 +255,13 @@ namespace EE
 			auto platform = std::make_unique<WSIPlatformSDL>(options);
 			auto* platform_handle = platform.get();
 
-			if (!platform->init(app->get_name(), app->get_default_width(), app->get_default_height()))
+			if (!platform->init(app->get_name(), app->get_default_width(), app->get_default_height()))		// create window
 				return 1;
 
-			if (!app->init_platform(std::move(platform)))
+			if (!app->init_platform(std::move(platform)))	// initialize platform setup in application
 				return 1;
 
-			if (!app->init_wsi())
+			if (!app->init_wsi())			// initialize wsi
 			{
 				return 1;
 			}

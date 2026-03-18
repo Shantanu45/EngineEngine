@@ -2,6 +2,7 @@
 #include <Windows.h>
 #include "application.h"
 #include "libassert/assert.hpp"
+#include "rendering/rendering_context_driver.h"
 
 namespace EE
 {
@@ -43,6 +44,7 @@ namespace EE
 	{
 		CreateConsole();
 		logger = std::make_unique<::Util::StdSpdLogger>();
+		application_wsi = std::make_unique<Rendering::WSI>();
 		::Util::set_logger_iface(logger.get());
 	}
 
@@ -52,23 +54,24 @@ namespace EE
 		FreeConsole();
 	}
 
-	bool Application::init_platform(std::unique_ptr<Vulkan::WSIPlatform> new_platform)
+	bool Application::init_platform(std::unique_ptr<Rendering::WSIPlatform> new_platform)
 	{
 		platform = std::move(new_platform);
-		application_wsi.set_platform(platform.get());
+		application_wsi->set_platform(platform.get());
 		return true;
 	}
 
 	bool Application::init_wsi()
 	{
-		DEBUG_ASSERT(application_wsi.init_context());
-		DEBUG_ASSERT(application_wsi.init_device());
+		
+		DEBUG_ASSERT(application_wsi->initialize("vulkan", DisplayServerEnums::WINDOW_MODE_WINDOWED, DisplayServerEnums::VSYNC_DISABLED, 0, {}, {}, 0, DisplayServerEnums::CONTEXT_ENGINE, 0) == OK);
+		//DEBUG_ASSERT(application_wsi.init_device());
 		return true;
 	}
 
 	void Application::teardown_wsi()
 	{
-		application_wsi.teardown();
+		application_wsi->teardown();
 		ready_modules = false;
 		ready_pipelines = false;
 	}
@@ -87,22 +90,22 @@ namespace EE
 
 	bool Application::poll()
 	{
-		auto& wsi = get_wsi();
-		if (!get_platform().alive(/*wsi*/))
+		auto* wsi = get_wsi();
+		if (!get_platform()->alive(/*wsi*/))
 			return false;
 		return true;
 	}
 
 	void Application::run_frame()
 	{
-		if (!application_wsi.begin_frame())
+		/*if (!application_wsi->begin_frame())
 		{
 			return;
 		}
 
 		render_frame(0, 0);
 
-		application_wsi.end_frame();
+		application_wsi.end_frame();*/
 	}
 
 	void Application::_check_initialization_progress()

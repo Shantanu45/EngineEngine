@@ -2,7 +2,7 @@
 #include <memory>
 #include <string>
 #include "util/logger.h"
-#include "vulkan/wsi.h"
+#include "rendering/wsi.h"
 
 namespace EE
 {
@@ -12,7 +12,7 @@ namespace EE
 		Application();
 		virtual ~Application();
 		virtual void render_frame(double frame_time, double elapsed_time) = 0;
-		bool init_platform(std::unique_ptr<Vulkan::WSIPlatform> new_platform);
+		bool init_platform(std::unique_ptr<Rendering::WSIPlatform> new_platform);
 		bool init_wsi();
 		void teardown_wsi();
 
@@ -42,14 +42,14 @@ namespace EE
 			return 720;
 		}
 
-		Vulkan::WSI& get_wsi()
+		Rendering::WSI* get_wsi() const
 		{
-			return application_wsi;
+			return application_wsi.get();
 		}
 
-		Vulkan::WSIPlatform& get_platform()
+		Rendering::WSIPlatform* get_platform() const
 		{
-			return *platform;
+			return platform.get();
 		}
 
 		bool poll();
@@ -75,10 +75,10 @@ namespace EE
 
 		std::unique_ptr<::Util::Logger> logger = nullptr;
 
-		Vulkan::RenderingContextDriverVulkan vulkan_context;
-		std::unique_ptr<Vulkan::RenderingDeviceDriverVulkan> vulkan_device_ptr = nullptr;
+		//Vulkan::RenderingContextDriverVulkan vulkan_context;
+		//std::unique_ptr<Vulkan::RenderingDeviceDriverVulkan> vulkan_device_ptr = nullptr;
 
-		std::unique_ptr<Vulkan::WSIPlatform> platform;
-		Vulkan::WSI application_wsi;
+		std::unique_ptr<Rendering::WSIPlatform> platform;
+		std::unique_ptr<Rendering::WSI> application_wsi;
 	};
 }

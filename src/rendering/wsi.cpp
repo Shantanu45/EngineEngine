@@ -5,7 +5,12 @@
 
 namespace Rendering
 {
-	WSI::WSI(const std::string& p_rendering_driver, DisplayServerEnums::WindowMode p_mode, DisplayServerEnums::VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i* p_position, const Vector2i& p_resolution, int p_screen, DisplayServerEnums::Context p_context, int64_t p_parent_window, Error& r_error)
+	WSI::WSI()
+	{
+
+	}
+
+	Error WSI::initialize(const std::string& p_rendering_driver, DisplayServerEnums::WindowMode p_mode, DisplayServerEnums::VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i* p_position, const Vector2i& p_resolution, int p_screen, DisplayServerEnums::Context p_context, int64_t p_parent_window)
 	{
 		rendering_driver = p_rendering_driver;
 		if (rendering_driver == "vulkan") {
@@ -26,10 +31,18 @@ namespace Rendering
 					rendering_device = RenderingDevice::get_singleton();
 					// device initialization happens in function call below
 					if (rendering_device->initialize(rendering_context.get(), DisplayServerEnums::MAIN_WINDOW_ID) == OK) {
+						return OK;
 					}
 				}
 			}
 		}
+		return FAILED;
+	}
+
+
+	void WSI::set_platform(WSIPlatform* p_platform)
+	{
+		platform = p_platform;
 	}
 
 	Error WSI::_create_rendering_context_window(DisplayServerEnums::WindowID p_window_id, const std::string& p_rendering_driver)
@@ -43,4 +56,14 @@ namespace Rendering
 		surface = rendering_context->surface_get_from_window(p_window_id);
 		return OK;
 	}
+
+	void WSI::teardown()
+	{
+	}
+
+	WSI::~WSI()
+	{
+
+	}
+
 }
