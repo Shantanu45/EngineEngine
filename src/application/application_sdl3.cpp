@@ -246,12 +246,12 @@ namespace EE
 		WSIPlatformSDL::Options options;
 		int exit_code;
 
-		Locator::ServiceLocator locator;
+		Locator::ServiceLocator& locator = Services::get();
 
 		// Register real implementations
 		locator.provide<FilesystemInterface>(std::make_shared<Filesystem>());
 		std::shared_ptr<FilesystemInterface> fs = locator.get<FilesystemInterface>();
-		FileSystem::Filesystem::setup_default_filesystem(static_cast<Filesystem*>(fs.get()), "D:/DXProjects/EngineEngine/assets");
+		FileSystem::Filesystem::setup_default_filesystem(static_cast<Filesystem*>(fs.get()), "D:/Code/CG/EngineEngine/assets");
 		//auto fs = Services::get().get<FilesystemInterface>();
 
 		auto app = std::unique_ptr<Application>(create_application(argc, argv));

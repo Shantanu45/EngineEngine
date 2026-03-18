@@ -3,6 +3,7 @@
 #include <memory>
 #include <unordered_map>
 #include <typeindex>
+#include <stdexcept>
 
 namespace Locator
 {
@@ -37,10 +38,7 @@ namespace Locator
 
 class Services {
 public:
-	static Locator::ServiceLocator& get() {
-		static Locator::ServiceLocator instance;
-		return instance;
-	}
+	static Locator::ServiceLocator& get();
 	Services() = delete;
 };
 

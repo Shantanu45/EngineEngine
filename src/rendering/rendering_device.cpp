@@ -1,5 +1,6 @@
 #include "rendering_device.h"
 #include "vulkan/shader_container.h"
+#include "application/service_locator.h"
 #include <set>
 
 namespace Rendering
