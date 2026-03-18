@@ -185,11 +185,41 @@ namespace Rendering
 
 		return OK;
 	}
+
 	Error RenderingDevice::screen_prepare_for_drawing(DisplayServerEnums::WindowID p_screen)
 	{
 		std::unordered_map<DisplayServerEnums::WindowID, RDD::SwapChainID>::const_iterator it = screen_swap_chains.find(p_screen);
 		ERR_FAIL_COND_V_MSG(it == screen_swap_chains.end(), ERR_CANT_CREATE, "A swap chain was not created for the screen.");
+
+		screen_framebuffers.erase(p_screen);
+
+		bool resize_required = false;
+		RDD::FramebufferID framebuffer = driver->swap_chain_acquire_framebuffer(main_queue, it->second, resize_required);
+		if (resize_required) {
+			// Flush everything so nothing can be using the swap chain before resizing it.
+			_flush_and_stall_for_all_frames();
+
+			Error err = driver->swap_chain_resize(main_queue, it->second, _get_swap_chain_desired_count());
+			if (err != OK) {
+				// Resize is allowed to fail silently because the window can be minimized.
+				return err;
+			}
+
+			framebuffer = driver->swap_chain_acquire_framebuffer(main_queue, it->second, resize_required);
+		}
+
+		if (framebuffer.id == 0) {
+			// Some drivers like NVIDIA are fast enough to invalidate the swap chain between resizing and acquisition (GH-94104).
+			// This typically occurs during continuous window resizing operations, especially if done quickly.
+			// Allow this to fail silently since it has no visual consequences.
+			return ERR_CANT_CREATE;
+		}
+
+		// Store the framebuffer that will be used next to draw to this screen.
+		screen_framebuffers[p_screen] = framebuffer;
+		frames[frame].swap_chains_to_present.push_back(it->second);
 	}
+
 	void RenderingDevice::swap_buffers(bool p_present)
 	{
 		_end_frame();

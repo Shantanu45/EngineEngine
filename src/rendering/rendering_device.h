@@ -2,6 +2,7 @@
 #include "rendering_device_commons.h"
 #include "rendering_device_driver.h"
 #include "rendering_context_driver.h"
+#include "util/rid_owner.h"
 
 namespace Rendering
 {
@@ -23,18 +24,28 @@ namespace Rendering
 
 
 #pragma region Shader
-		std::vector<uint8_t> shader_compile_spirv_from_source(ShaderStage p_stage, const std::string& p_source_code, ShaderLanguage p_language = SHADER_LANGUAGE_GLSL, std::string* r_error = nullptr, bool p_allow_cache = true);
+		std::vector<uint8_t> shader_compile_spirv_from_source(ShaderStage p_stage, const std::string& p_source_code, 
+			ShaderLanguage p_language = SHADER_LANGUAGE_GLSL, std::string* r_error = nullptr, bool p_allow_cache = true);
 		std::vector<uint8_t> shader_compile_binary_from_spirv(const std::vector<ShaderStageSPIRVData>& p_spirv, const std::string& p_shader_name = "");
-		RenderingDeviceDriver::ShaderID shader_create_from_spirv(const std::vector<ShaderStageSPIRVData>& p_spirv, const  std::string& p_shader_name = "");
-		//RenderingDeviceDriver::ShaderID shader_create_from_bytecode(const std::vector<uint8_t>& p_shader_binary, RID p_placeholder = RID());
-		void shader_destroy_modules(RenderingDeviceDriver::ShaderID p_shader);
-		uint64_t shader_get_vertex_input_attribute_mask(RenderingDeviceDriver::ShaderID p_shader);
+		RID shader_create_from_spirv(const std::vector<ShaderStageSPIRVData>& p_spirv, const std::string& p_shader_name = "");
+		RID shader_create_from_bytecode(const std::vector<uint8_t>& p_shader_binary, RID p_placeholder = RID());
+		RID shader_create_placeholder();
+		void shader_destroy_modules(RID p_shader);
+
+		uint64_t shader_get_vertex_input_attribute_mask(RID p_shader);
 
 #pragma endregion
 #pragma region Pipeline
 		typedef int64_t FramebufferFormatID;
-		RenderingDeviceDriver::PipelineID render_pipeline_create(RenderingDeviceDriver::PipelineID p_shader, FramebufferFormatID p_framebuffer_format, RenderingDeviceDriver::VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, const PipelineRasterizationState& p_rasterization_state, const PipelineMultisampleState& p_multisample_state, const PipelineDepthStencilState& p_depth_stencil_state, const PipelineColorBlendState& p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags = 0, uint32_t p_for_render_pass = 0, const std::vector<PipelineSpecializationConstant>& p_specialization_constants = std::vector<PipelineSpecializationConstant>());
-		bool render_pipeline_is_valid(RenderingDeviceDriver::PipelineID p_pipeline);
+		typedef int64_t VertexFormatID;
+		RID render_pipeline_create(RID p_shader, FramebufferFormatID p_framebuffer_format, VertexFormatID p_vertex_format, 
+			RenderPrimitive p_render_primitive, const PipelineRasterizationState& p_rasterization_state, 
+			const PipelineMultisampleState& p_multisample_state, const PipelineDepthStencilState& p_depth_stencil_state, 
+			const PipelineColorBlendState& p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags = 0, 
+			uint32_t p_for_render_pass = 0, 
+			const std::vector<PipelineSpecializationConstant>& p_specialization_constants = std::vector<PipelineSpecializationConstant>());
+
+		bool render_pipeline_is_valid(RID p_pipeline);
 
 #pragma endregion
 
