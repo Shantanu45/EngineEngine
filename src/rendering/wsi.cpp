@@ -30,13 +30,19 @@ namespace Rendering
 				if (_create_rendering_context_window(DisplayServerEnums::MAIN_WINDOW_ID, rendering_driver) == OK) {
 					rendering_device = RenderingDevice::get_singleton();
 					// device initialization happens in function call below
-					if (rendering_device->initialize(rendering_context.get(), DisplayServerEnums::MAIN_WINDOW_ID) == OK) {
-						return OK;
+					if (!(rendering_device->initialize(rendering_context.get(), DisplayServerEnums::MAIN_WINDOW_ID) == OK)) {
+						return FAILED;
 					}
 				}
 			}
 		}
-		return FAILED;
+
+		if (rendering_context) {
+			DEV_ASSERT(rendering_device != nullptr);
+
+			rendering_device->screen_create(DisplayServerEnums::MAIN_WINDOW_ID);
+		}
+		return OK;
 	}
 
 
@@ -56,6 +62,16 @@ namespace Rendering
 		surface = rendering_context->surface_get_from_window(p_window_id);
 		return OK;
 	}
+
+	// draw viewport
+	void WSI::draw_viewport(bool p_swap_buffers)
+	{
+		// blit_render_targets_to_screen
+			// screen_prepare_for_drawing
+		rendering_device->screen_prepare_for_drawing(DisplayServerEnums::MAIN_WINDOW_ID);
+		
+	}
+
 
 	void WSI::teardown()
 	{

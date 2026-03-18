@@ -17,8 +17,6 @@ namespace DisplayServerEnums
 		VSYNC_MAILBOX
 	};
 
-	typedef int WindowID;
-
 	enum {
 		MAIN_WINDOW_ID = 0,
 		INVALID_WINDOW_ID = -1,

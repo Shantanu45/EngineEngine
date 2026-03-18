@@ -257,8 +257,8 @@ namespace Rendering
 		RenderingContextDriver::SurfaceID surface = context->surface_get_from_window(p_screen);
 		ERR_FAIL_COND_V_MSG(surface == 0, ERR_CANT_CREATE, "A surface was not created for the screen.");
 
-		std::unordered_map<DisplayServerEnums::WindowID, RDD::SwapChainID>::const_iterator it = screen_swap_chains.find(p_screen);
-		ERR_FAIL_COND_V_MSG(it != screen_swap_chains.end(), ERR_CANT_CREATE, "A swap chain was already created for the screen.");
+		auto [it, inserted] = screen_swap_chains.try_emplace(p_screen, RDD::SwapChainID());
+		ERR_FAIL_COND_V_MSG(!inserted, ERR_CANT_CREATE, "A swap chain was already created for the screen.");
 
 		RDD::SwapChainID swap_chain = driver->swap_chain_create(surface);
 		ERR_FAIL_COND_V_MSG(swap_chain.id == 0, ERR_CANT_CREATE, "Unable to create swap chain.");
@@ -297,6 +297,19 @@ namespace Rendering
 		ERR_FAIL_COND_V_MSG(it == screen_swap_chains.end(), ERR_CANT_CREATE, "A swap chain was not created for the screen.");
 
 		screen_framebuffers.erase(p_screen);
+
+		// If this frame has already queued this swap chain for presentation, we present it and remove it from the pending list.
+		uint32_t to_present_index = 0;
+		while (to_present_index < frames[frame].swap_chains_to_present.size()) {
+			if (frames[frame].swap_chains_to_present[to_present_index] == it->second) {
+				std::vector<RenderingDeviceDriver::SwapChainID> v = { it->second };
+				driver->command_queue_execute_and_present(present_queue, {}, {}, {}, {}, v);
+				frames[frame].swap_chains_to_present.erase(frames[frame].swap_chains_to_present.begin() + to_present_index);
+			}
+			else {
+				to_present_index++;
+			}
+		}
 
 		bool resize_required = false;
 		RDD::FramebufferID framebuffer = driver->swap_chain_acquire_framebuffer(main_queue, it->second, resize_required);
@@ -359,4 +372,5 @@ namespace Rendering
 
 		_begin_frame(true);
 	}
+
 }

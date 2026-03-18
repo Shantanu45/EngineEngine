@@ -17,6 +17,8 @@ namespace Rendering
 		WSI();
 		Error initialize(const std::string& p_rendering_driver, DisplayServerEnums::WindowMode p_mode, DisplayServerEnums::VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i* p_position, const Vector2i& p_resolution, int p_screen, DisplayServerEnums::Context p_context, int64_t p_parent_window);
 		void set_platform(WSIPlatform* platform);
+		void draw_viewport(bool p_swap_buffers);
+
 		void teardown();
 		~WSI();
 
