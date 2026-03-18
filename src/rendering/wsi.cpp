@@ -72,6 +72,10 @@ namespace Rendering
 		
 	}
 
+	RenderingShaderContainerFormat* WSI::create_shader_container_format() 
+	{
+		return new ::Vulkan::RenderingShaderContainerFormatVulkan();
+	}
 
 	void WSI::teardown()
 	{

@@ -5647,6 +5647,14 @@ namespace Vulkan
 
 #pragma endregion
 
+#pragma region Misc
+	const RenderingShaderContainerFormat& RenderingDeviceDriverVulkan::get_shader_container_format() const {
+		return shader_container_format;
+	}
+
+#pragma endregion
+
+
 	RenderingDeviceDriverVulkan::~RenderingDeviceDriverVulkan()
 	{
 #if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)

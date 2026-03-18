@@ -115,7 +115,7 @@ class RID_Alloc : public RID_AllocBase {
 			if (THREAD_SAFE && chunk_count == chunk_limit) {
 				mutex.unlock();
 				if (description != nullptr) {
-					ERR_FAIL_V_MSG(RID(), vformat("Element limit for RID of type '%s' reached.", String(description)));
+					ERR_FAIL_V_MSG(RID(), std::format("Element limit for RID of type '%s' reached.", std::string(description)));
 				} else {
 					ERR_FAIL_V_MSG(RID(), "Element limit reached.");
 				}
@@ -130,7 +130,7 @@ class RID_Alloc : public RID_AllocBase {
 			if constexpr (!THREAD_SAFE) {
 				free_list_chunks = (uint32_t **)std::realloc(free_list_chunks, sizeof(uint32_t *) * (chunk_count + 1));
 			}
-			free_list_chunks[chunk_count] = (uint32_t *)std::realloc(sizeof(uint32_t) * elements_in_chunk);
+			free_list_chunks[chunk_count] = (uint32_t *)std::malloc(sizeof(uint32_t) * elements_in_chunk);
 
 			//initialize
 			for (uint32_t i = 0; i < elements_in_chunk; i++) {

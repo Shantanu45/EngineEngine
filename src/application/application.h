@@ -3,6 +3,7 @@
 #include <string>
 #include "util/logger.h"
 #include "rendering/wsi.h"
+#include "service_locator.h"
 
 namespace EE
 {

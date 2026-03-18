@@ -517,6 +517,8 @@ namespace Vulkan
 
 		void command_end_label(CommandBufferID p_cmd_buffer) override;
 
+		const RenderingShaderContainerFormat& get_shader_container_format() const override;
+
 		RenderingDeviceDriverVulkan::UniformSetID uniform_set_create(std::span<BoundUniform> p_uniforms, ShaderID p_shader, uint32_t p_set_index, int p_linear_pool_index) override;
 
 		void uniform_set_free(UniformSetID p_uniform_set) override;

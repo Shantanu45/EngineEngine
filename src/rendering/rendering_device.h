@@ -4,12 +4,79 @@
 #include "rendering_context_driver.h"
 #include "util/rid_owner.h"
 #include "xxhash.h"
+#include "compiler/compiler.h"
+#include <map>
 
 namespace Rendering
 {
+
+	class RDShaderSource{
+		std::string source[RenderingDeviceCommons::SHADER_STAGE_MAX];
+		RenderingDeviceCommons::ShaderLanguage language = RenderingDeviceCommons::SHADER_LANGUAGE_GLSL;
+
+	public:
+		void set_stage_source(RenderingDeviceCommons::ShaderStage p_stage, const std::string& p_source) {
+			ERR_FAIL_INDEX(p_stage, RenderingDeviceCommons::SHADER_STAGE_MAX);
+			source[p_stage] = p_source;
+		}
+
+		std::string get_stage_source(RenderingDeviceCommons::ShaderStage p_stage) const {
+			ERR_FAIL_INDEX_V(p_stage, RenderingDeviceCommons::SHADER_STAGE_MAX, std::string());
+			return source[p_stage];
+		}
+
+		void set_language(RenderingDeviceCommons::ShaderLanguage p_language) {
+			language = p_language;
+		}
+
+		RenderingDeviceCommons::ShaderLanguage get_language() const {
+			return language;
+		}
+	};
+
+	//internally holds separate SPIR-V blobs per stage
+	class RDShaderSPIRV
+	{
+		std::vector<uint8_t> bytecode[RenderingDeviceCommons::SHADER_STAGE_MAX];
+		std::string compile_error[RenderingDeviceCommons::SHADER_STAGE_MAX];
+
+	public:
+		void set_stage_bytecode(RenderingDeviceCommons::ShaderStage p_stage, const std::vector<uint8_t>& p_bytecode) {
+			ERR_FAIL_INDEX(p_stage, RenderingDeviceCommons::SHADER_STAGE_MAX);
+			bytecode[p_stage] = p_bytecode;
+		}
+
+		std::vector<uint8_t> get_stage_bytecode(RenderingDeviceCommons::ShaderStage p_stage) const {
+			ERR_FAIL_INDEX_V(p_stage, RenderingDeviceCommons::SHADER_STAGE_MAX, std::vector<uint8_t>());
+			return bytecode[p_stage];
+		}
+
+		std::vector<RenderingDeviceCommons::ShaderStageSPIRVData> get_stages() const {
+			std::vector<RenderingDeviceCommons::ShaderStageSPIRVData> stages;
+			for (int i = 0; i < RenderingDeviceCommons::SHADER_STAGE_MAX; i++) {
+				if (bytecode[i].size()) {
+					RenderingDeviceCommons::ShaderStageSPIRVData stage;
+					stage.shader_stage = RenderingDeviceCommons::ShaderStage(i);
+					stage.spirv = bytecode[i];
+					stages.push_back(stage);
+				}
+			}
+			return stages;
+		}
+
+		void set_stage_compile_error(RenderingDeviceCommons::ShaderStage p_stage, const std::string& p_compile_error) {
+			ERR_FAIL_INDEX(p_stage, RenderingDeviceCommons::SHADER_STAGE_MAX);
+			compile_error[p_stage] = p_compile_error;
+		}
+
+		std::string get_stage_compile_error(RenderingDeviceCommons::ShaderStage p_stage) const {
+			ERR_FAIL_INDEX_V(p_stage, RenderingDeviceCommons::SHADER_STAGE_MAX, std::string());
+			return compile_error[p_stage];
+		}
+	};
+
 	class RenderingDevice : public RenderingDeviceCommons
 	{
-	private:
 	public:
 		//base numeric ID for all types
 		enum {
@@ -26,9 +93,78 @@ namespace Rendering
 			ID_BASE_SHIFT = 58, // 5 bits for ID types.
 			ID_MASK = (ID_BASE_SHIFT - 1),
 		};
+
+		struct Uniform {
+			UniformType uniform_type = UNIFORM_TYPE_IMAGE;
+			uint32_t binding = 0; // Binding index as specified in shader.
+			// This flag specifies that this is an immutable sampler to be set when creating pipeline layout.
+			bool immutable_sampler = false;
+
+		private:
+			// In most cases only one ID is provided per binding, so avoid allocating memory unnecessarily for performance.
+			RID id; // If only one is provided, this is used.
+			std::vector<RID> ids; // If multiple ones are provided, this is used instead.
+
+		public:
+			_FORCE_INLINE_ uint32_t get_id_count() const {
+				return (id.is_valid() ? 1 : ids.size());
+			}
+
+			_FORCE_INLINE_ RID get_id(uint32_t p_idx) const {
+				if (id.is_valid()) {
+					ERR_FAIL_COND_V(p_idx != 0, RID());
+					return id;
+				}
+				else {
+					return ids[p_idx];
+				}
+			}
+			_FORCE_INLINE_ void set_id(uint32_t p_idx, RID p_id) {
+				if (id.is_valid()) {
+					ERR_FAIL_COND(p_idx != 0);
+					id = p_id;
+				}
+				else {
+					ids[p_idx] = p_id;
+				}
+			}
+
+			_FORCE_INLINE_ void append_id(RID p_id) {
+				if (ids.empty()) {
+					if (id == RID()) {
+						id = p_id;
+					}
+					else {
+						ids.push_back(id);
+						ids.push_back(p_id);
+						id = RID();
+					}
+				}
+				else {
+					ids.push_back(p_id);
+				}
+			}
+
+			_FORCE_INLINE_ void clear_ids() {
+				id = RID();
+				ids.clear();
+			}
+
+			_FORCE_INLINE_ Uniform(UniformType p_type, int p_binding, RID p_id) {
+				uniform_type = p_type;
+				binding = p_binding;
+				id = p_id;
+			}
+			_FORCE_INLINE_ Uniform(UniformType p_type, int p_binding, const std::vector<RID>& p_ids) {
+				uniform_type = p_type;
+				binding = p_binding;
+				ids = p_ids;
+			}
+			_FORCE_INLINE_ Uniform() = default;
+		};
 		
-	public:
 		typedef int64_t DrawListID;
+		typedef Uniform PipelineImmutableSampler;
 
 		static RenderingDevice* get_singleton() {
 			static RenderingDevice* singleton = new RenderingDevice();
@@ -42,10 +178,11 @@ namespace Rendering
 
 #pragma region Shader
 		std::vector<uint8_t> shader_compile_spirv_from_source(ShaderStage p_stage, const std::string& p_source_code, 
-			ShaderLanguage p_language = SHADER_LANGUAGE_GLSL, std::string* r_error = nullptr, bool p_allow_cache = true);
+					ShaderLanguage p_language = SHADER_LANGUAGE_GLSL, std::string* r_error = nullptr, bool p_allow_cache = true);
 		std::vector<uint8_t> shader_compile_binary_from_spirv(const std::vector<ShaderStageSPIRVData>& p_spirv, const std::string& p_shader_name = "");
 		RID shader_create_from_spirv(const std::vector<ShaderStageSPIRVData>& p_spirv, const std::string& p_shader_name = "");
 		RID shader_create_from_bytecode(const std::vector<uint8_t>& p_shader_binary, RID p_placeholder = RID());
+		RID shader_create_from_bytecode_with_samplers(const std::vector<uint8_t>& p_shader_binary, RID p_placeholder, const std::vector<PipelineImmutableSampler>& p_immutable_samplers);
 		RID shader_create_placeholder();
 		void shader_destroy_modules(RID p_shader);
 
@@ -60,8 +197,6 @@ namespace Rendering
 		};
 
 		RID_Owner<Shader, true> shader_owner;
-
-
 
 #pragma endregion
 
@@ -90,8 +225,26 @@ namespace Rendering
 		Error screen_free(DisplayServerEnums::WindowID p_screen = DisplayServerEnums::MAIN_WINDOW_ID);
 #pragma endregion
 
+		void swap_buffers(bool p_present);
+		void submit();
+		void sync();
+
+		enum MemoryType {
+			MEMORY_TEXTURES,
+			MEMORY_BUFFERS,
+			MEMORY_TOTAL
+		};
+
+		RenderingDevice* create_local_device();
+		VertexFormatID vertex_format_create(const std::vector<VertexAttribute>& p_vertex_descriptions);
+
+
+	protected:
+		void execute_chained_cmds(bool p_present_swap_chain,
+			RenderingDeviceDriver::FenceID p_draw_fence,
+			RenderingDeviceDriver::SemaphoreID p_dst_draw_semaphore_to_signal);
+
 	private:
-		uint32_t _get_swap_chain_desired_count() const;
 
 		struct Frame {
 			// The command pool used by the command buffer.
@@ -122,42 +275,7 @@ namespace Rendering
 
 			uint64_t index = 0;
 		};
-	protected:
-		void execute_chained_cmds(bool p_present_swap_chain,
-			RenderingDeviceDriver::FenceID p_draw_fence,
-			RenderingDeviceDriver::SemaphoreID p_dst_draw_semaphore_to_signal);
 
-	public:
-		//void _free_internal(RID p_id);
-		void _begin_frame(bool p_presented = false);
-		void _end_frame();
-		void _execute_frame(bool p_present);
-		void _stall_for_frame(uint32_t p_frame);
-		void _stall_for_previous_frames();
-		void _flush_and_stall_for_all_frames(bool p_begin_frame = true);
-		void swap_buffers(bool p_present);
-		void submit();
-		void sync();
-
-		enum MemoryType {
-			MEMORY_TEXTURES,
-			MEMORY_BUFFERS,
-			MEMORY_TOTAL
-		};
-
-		RenderingDevice* create_local_device();
-
-	private:
-
-		//RID _texture_create(const RDTextureFormat* p_format, const RDTextureView* p_view, const  std::vector<PackedByteArray>& p_data = {});
-		//RID _texture_create_shared(const RDTextureView* p_view, RID p_with_texture);
-		//RID _texture_create_shared_from_slice(const RDTextureView* p_view, RID p_with_texture, uint32_t p_layer, uint32_t p_mipmap, uint32_t p_mipmaps = 1, TextureSliceType p_slice_type = TEXTURE_SLICE_2D);
-		//RDTextureFormat* _texture_get_format(RID p_rd_texture);
-
-		//FramebufferFormatID _framebuffer_format_create(const std::vector<RDAttachmentFormat>& p_attachments, uint32_t p_view_count);
-		//FramebufferFormatID _framebuffer_format_create_multipass(const std::vector<RDAttachmentFormat>& p_attachments, const std::vector<RDFramebufferPass>& p_passes, uint32_t p_view_count);
-		//RID _framebuffer_create(const std::vector<RID>& p_textures, FramebufferFormatID p_format_check = INVALID_ID, uint32_t p_view_count = 1);
-		//RID _framebuffer_create_multipass(const std::vector<RID>& p_textures, const std::vector<RDFramebufferPass>& p_passes, FramebufferFormatID p_format_check = INVALID_ID, uint32_t p_view_count = 1);
 		struct VertexDescriptionKey {
 			std::vector<VertexAttribute> vertex_formats;
 
@@ -238,12 +356,40 @@ namespace Rendering
 
 		std::unordered_map<VertexFormatID, VertexDescriptionCache> vertex_formats;
 
+		struct UniformSetFormat {
+			std::vector<ShaderUniform> uniforms;
+
+			_FORCE_INLINE_ bool operator<(const UniformSetFormat& p_other) const {
+				if (uniforms.size() != p_other.uniforms.size()) {
+					return uniforms.size() < p_other.uniforms.size();
+				}
+				for (int i = 0; i < uniforms.size(); i++) {
+					if (uniforms[i] < p_other.uniforms[i]) {
+						return true;
+					}
+					else if (p_other.uniforms[i] < uniforms[i]) {
+						return false;
+					}
+				}
+				return false;
+			}
+		};
+		std::map<UniformSetFormat, uint32_t> uniform_set_format_cache;
 
 		//RID _sampler_create(const RDSamplerState* p_state);
-		VertexFormatID vertex_format_create(const std::vector<VertexAttribute>& p_vertex_descriptions);
 		//RenderingDeviceDriver::VertexFormatID _vertex_format_create(const std::vector<RDVertexAttribute>& p_vertex_formats);
 		//RID _vertex_array_create(uint32_t p_vertex_count, RenderingDeviceDriver::VertexFormatID p_vertex_format, const std::vector<RID>& p_src_buffers, const std::vector<int64_t>& p_offsets = std::vector<int64_t>());
 		//void _draw_list_bind_vertex_buffers_format(DrawListID p_list, RenderingDeviceDriver::VertexFormatID p_vertex_format, uint32_t p_vertex_count, const  std::vector<RID>& p_vertex_buffers, const  std::vector<int64_t>& p_offsets = std::vector<int64_t>());
+		void _begin_frame(bool p_presented = false);
+		void _end_frame();
+		void _execute_frame(bool p_present);
+		void _stall_for_frame(uint32_t p_frame);
+		void _stall_for_previous_frames();
+		void _flush_and_stall_for_all_frames(bool p_begin_frame = true);
+		uint32_t _get_swap_chain_desired_count() const;
+		RDShaderSPIRV* _shader_compile_spirv_from_source(const RDShaderSource* p_source, bool p_allow_cache = true);
+		std::vector<uint8_t> _shader_compile_binary_from_spirv(const RDShaderSPIRV* p_bytecode, const std::string& p_shader_name = "");
+		RID _shader_create_from_spirv(const RDShaderSPIRV* p_spirv, const std::string& p_shader_name = "");
 
 		RenderingDevice();
 		~RenderingDevice();
@@ -266,5 +412,9 @@ namespace Rendering
 
 		std::vector<Frame> frames;
 		int frame = 0;
+
+		std::unique_ptr<Compiler::GLSLCompiler> compiler;
+
+		RID_Owner<RDD::SamplerID, true> sampler_owner;
 	};
 }

@@ -825,7 +825,7 @@ namespace Rendering
 		//virtual std::string get_api_version() const = 0;
 		//virtual std::string get_pipeline_cache_uuid() const = 0;
 		//virtual const Capabilities& get_capabilities() const = 0;
-		//virtual const RenderingShaderContainerFormat& get_shader_container_format() const = 0;
+		virtual const RenderingShaderContainerFormat& get_shader_container_format() const = 0;
 
 		//virtual bool is_composite_alpha_supported(CommandQueueID p_queue) const { return false; }
 
