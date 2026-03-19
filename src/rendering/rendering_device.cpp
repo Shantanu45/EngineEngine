@@ -286,7 +286,30 @@ namespace Rendering
 
 	void RenderingDevice::_execute_frame(bool p_present)
 	{
+		// Check whether this frame should present the swap chains and in which queue.
+		const bool frame_can_present = p_present && !frames[frame].swap_chains_to_present.empty();
+		const bool separate_present_queue = main_queue != present_queue;
 
+		// The semaphore is required if the frame can be presented and a separate present queue is used;
+		// since the separate queue will wait for that semaphore before presenting.
+		const RDD::SemaphoreID semaphore = (frame_can_present && separate_present_queue)
+			? frames[frame].semaphore
+			: RDD::SemaphoreID(nullptr);
+		const bool present_swap_chain = frame_can_present && !separate_present_queue;
+
+		execute_chained_cmds(present_swap_chain, frames[frame].fence, semaphore);
+		// Indicate the fence has been signaled so the next time the frame's contents need to be
+		// used, the CPU needs to wait on the work to be completed.
+		frames[frame].fence_signaled = true;
+		std::vector<RenderingDeviceDriver::SemaphoreID> frame_semaphores{ frames[frame].semaphore };
+		if (frame_can_present) {
+			if (separate_present_queue) {
+				// Issue the presentation separately if the presentation queue is different from the main queue.
+				driver->command_queue_execute_and_present(present_queue, frame_semaphores, {}, {}, {}, frames[frame].swap_chains_to_present);
+			}
+
+			frames[frame].swap_chains_to_present.clear();
+		}
 	}
 
 	void RenderingDevice::_flush_and_stall_for_all_frames(bool p_begin_frame /*= true*/)
