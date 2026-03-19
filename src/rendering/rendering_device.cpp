@@ -231,309 +231,6 @@ namespace Rendering
 		return 2;
 	}
 
-	Rendering::RDShaderSPIRV* RenderingDevice::shader_compile_spirv_from_shader_source(const RDShaderSource* p_source, bool p_allow_cache /*= true*/)
-	{
-		//ERR_FAIL_COND_V(p_source.is_null(), &RDShaderSPIRV());
-
-		RDShaderSPIRV* bytecode = new RDShaderSPIRV;
-		for (int i = 0; i < RenderingDeviceCommons::SHADER_STAGE_MAX; i++) {
-			std::string error;
-
-			ShaderStage stage = ShaderStage(i);
-			std::string source = p_source->get_stage_source(stage);
-
-			if (!source.empty()) {
-				std::vector<uint8_t> spirv = shader_compile_spirv_from_source(stage, source, p_source->get_language(), &error, p_allow_cache);
-				bytecode->set_stage_bytecode(stage, spirv);
-				bytecode->set_stage_compile_error(stage, error);
-			}
-		}
-		return bytecode;
-	}
-	
-	RID RenderingDevice::shader_create_from_spirv(const RDShaderSPIRV* p_spirv, const std::string& p_shader_name /*= ""*/)
-	{
-		ERR_FAIL_COND_V(p_spirv == nullptr, RID());
-
-		std::vector<ShaderStageSPIRVData> stage_data;
-		for (int i = 0; i < RenderingDeviceCommons::SHADER_STAGE_MAX; i++) {
-			ShaderStage stage = ShaderStage(i);
-			ShaderStageSPIRVData sd;
-			sd.shader_stage = stage;
-			std::string error = p_spirv->get_stage_compile_error(stage);
-			ERR_FAIL_COND_V_MSG(!error.empty(), RID(), "Can't create a shader from an errored bytecode. Check errors in source bytecode.");
-			sd.spirv = p_spirv->get_stage_bytecode(stage);
-			if (sd.spirv.empty()) {
-				continue;
-			}
-			stage_data.push_back(sd);
-		}
-
-		const RenderingShaderContainerFormat& container_format = driver->get_shader_container_format();
-		RenderingShaderContainer* shader_container = container_format.create_container();
-		//ERR_FAIL_COND_V(shader_container == nullptr, std::vector<uint8_t>());
-		bool code_compiled = shader_container->set_code_from_spirv(p_shader_name, stage_data);
-		//ERR_FAIL_COND_V_MSG(!code_compiled, std::vector<uint8_t>(), std::format("Failed to compile code to native for SPIR-V."));
-		std::vector<PipelineImmutableSampler> immutable_samplers;
-		return shader_create_from_container_with_samplers(shader_container, RID(), immutable_samplers);//_shader_create_from_spirv(stage_data);
-	}
-
-	RID RenderingDevice::_shader_create_from_spirv(const std::vector<ShaderStageSPIRVData>& p_spirv, const std::string& p_shader_name) {
-		std::vector<uint8_t> bytecode = shader_compile_binary_from_spirv(p_spirv, p_shader_name);
-		ERR_FAIL_COND_V(bytecode.empty(), RID());
-		return shader_create_from_bytecode(bytecode);
-	}
-
-	RID RenderingDevice::shader_create_from_bytecode(const std::vector<uint8_t>& p_shader_binary, RID p_placeholder) {
-		// Immutable samplers :
-		// Expanding api when creating shader to allow passing optionally a set of immutable samplers
-		// keeping existing api but extending it by sending an empty set.
-		std::vector<PipelineImmutableSampler> immutable_samplers;
-		return shader_create_from_bytecode_with_samplers(p_shader_binary, p_placeholder, immutable_samplers);
-	}
-
-	RID RenderingDevice::shader_create_from_bytecode_with_samplers(const std::vector<uint8_t>& p_shader_binary, RID p_placeholder, const std::vector<PipelineImmutableSampler>& p_immutable_samplers) {
-		//_THREAD_SAFE_METHOD_
-
-		RenderingShaderContainer* shader_container = driver->get_shader_container_format().create_container();
-		ERR_FAIL_COND_V(shader_container == nullptr, RID());
-
-		bool parsed_container = shader_container/*shader_container->from_bytes(p_shader_binary);*/;
-		ERR_FAIL_COND_V_MSG(!parsed_container, RID(), "Failed to parse shader container from binary.");
-
-		std::vector<RDD::ImmutableSampler> driver_immutable_samplers;
-		for (const PipelineImmutableSampler& source_sampler : p_immutable_samplers) {
-			RDD::ImmutableSampler driver_sampler;
-			driver_sampler.type = source_sampler.uniform_type;
-			driver_sampler.binding = source_sampler.binding;
-
-			for (uint32_t j = 0; j < source_sampler.get_id_count(); j++) {
-				RDD::SamplerID* sampler_driver_id = sampler_owner.get_or_null(source_sampler.get_id(j));
-				driver_sampler.ids.push_back(*sampler_driver_id);
-			}
-
-			driver_immutable_samplers.push_back(driver_sampler);
-		}
-
-		RDD::ShaderID shader_id = driver->shader_create_from_container(shader_container, driver_immutable_samplers);
-		ERR_FAIL_COND_V(!shader_id, RID());
-
-		// All good, let's create modules.
-
-		RID id;
-		if (p_placeholder.is_null()) {
-			id = shader_owner.make_rid();
-		}
-		else {
-			id = p_placeholder;
-		}
-
-		Shader* shader = shader_owner.get_or_null(id);
-		ERR_FAIL_NULL_V(shader, RID());
-
-		*((ShaderReflection*)shader) = shader_container->get_shader_reflection();
-		shader->name.clear();
-		shader->name.append(shader_container->shader_name);
-		shader->driver_id = shader_id;
-		shader->layout_hash = driver->shader_get_layout_hash(shader_id);
-
-		for (int i = 0; i < shader->uniform_sets.size(); i++) {
-			uint32_t format = 0; // No format, default.
-
-			if (shader->uniform_sets[i].size()) {
-				// Sort and hash.
-
-				std::sort(shader->uniform_sets[i].begin(), shader->uniform_sets[i].end());
-
-				UniformSetFormat usformat;
-				usformat.uniforms = shader->uniform_sets[i];
-				std::map<UniformSetFormat, uint32_t>::iterator i = uniform_set_format_cache.find(usformat);
-				if (i != uniform_set_format_cache.end()) {
-					format = i->second;
-				}
-				else {
-					format = uniform_set_format_cache.size() + 1;
-					uniform_set_format_cache.emplace(usformat, format);
-				}
-			}
-
-			shader->set_formats.push_back(format);
-		}
-
-		for (ShaderStage stage : shader->stages_vector) {
-			switch (stage) {
-			case SHADER_STAGE_VERTEX:
-				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_VERTEX_SHADER_BIT);
-				break;
-			case SHADER_STAGE_FRAGMENT:
-				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
-				break;
-			case SHADER_STAGE_TESSELATION_CONTROL:
-				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT);
-				break;
-			case SHADER_STAGE_TESSELATION_EVALUATION:
-				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT);
-				break;
-			case SHADER_STAGE_COMPUTE:
-				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-				break;
-			case SHADER_STAGE_RAYGEN:
-			case SHADER_STAGE_ANY_HIT:
-			case SHADER_STAGE_CLOSEST_HIT:
-			case SHADER_STAGE_MISS:
-			case SHADER_STAGE_INTERSECTION:
-				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_RAY_TRACING_SHADER_BIT);
-				break;
-			default:
-				DEV_ASSERT(false && "Unknown shader stage.");
-				break;
-			}
-		}
-
-#ifdef DEV_ENABLED
-		set_resource_name(id, "RID:" + itos(id.get_id()));
-#endif
-		return id;
-	}
-
-	RID RenderingDevice::shader_create_from_container_with_samplers(RenderingShaderContainer* shader_container, RID p_placeholder, const std::vector<PipelineImmutableSampler>& p_immutable_samplers)
-	{
-		//RenderingShaderContainer* shader_container = driver->get_shader_container_format().create_container();
-		ERR_FAIL_COND_V(shader_container == nullptr, RID());
-
-		//bool parsed_container = shader_container->from_shader_stage_spirv_data(p_shader);
-		//ERR_FAIL_COND_V_MSG(!parsed_container, RID(), "Failed to parse shader container from binary.");
-
-		std::vector<RDD::ImmutableSampler> driver_immutable_samplers;
-		for (const PipelineImmutableSampler& source_sampler : p_immutable_samplers) {
-			RDD::ImmutableSampler driver_sampler;
-			driver_sampler.type = source_sampler.uniform_type;
-			driver_sampler.binding = source_sampler.binding;
-
-			for (uint32_t j = 0; j < source_sampler.get_id_count(); j++) {
-				RDD::SamplerID* sampler_driver_id = sampler_owner.get_or_null(source_sampler.get_id(j));
-				driver_sampler.ids.push_back(*sampler_driver_id);
-			}
-
-			driver_immutable_samplers.push_back(driver_sampler);
-		}
-
-		RDD::ShaderID shader_id = driver->shader_create_from_container(shader_container, driver_immutable_samplers);
-		ERR_FAIL_COND_V(!shader_id, RID());
-
-		// All good, let's create modules.
-
-		RID id;
-		if (p_placeholder.is_null()) {
-			id = shader_owner.make_rid();
-		}
-		else {
-			id = p_placeholder;
-		}
-
-		Shader* shader = shader_owner.get_or_null(id);
-		ERR_FAIL_NULL_V(shader, RID());
-
-		*((ShaderReflection*)shader) = shader_container->get_shader_reflection();
-		shader->name.clear();
-		shader->name.append(shader_container->shader_name);
-		shader->driver_id = shader_id;
-		shader->layout_hash = driver->shader_get_layout_hash(shader_id);
-
-		for (int i = 0; i < shader->uniform_sets.size(); i++) {
-			uint32_t format = 0; // No format, default.
-
-			if (shader->uniform_sets[i].size()) {
-				// Sort and hash.
-
-				std::sort(shader->uniform_sets[i].begin(), shader->uniform_sets[i].end());
-
-				UniformSetFormat usformat;
-				usformat.uniforms = shader->uniform_sets[i];
-				std::map<UniformSetFormat, uint32_t>::iterator i = uniform_set_format_cache.find(usformat);
-				if (i != uniform_set_format_cache.end()) {
-					format = i->second;
-				}
-				else {
-					format = uniform_set_format_cache.size() + 1;
-					uniform_set_format_cache.emplace(usformat, format);
-				}
-			}
-
-			shader->set_formats.push_back(format);
-		}
-
-		for (ShaderStage stage : shader->stages_vector) {
-			switch (stage) {
-			case SHADER_STAGE_VERTEX:
-				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_VERTEX_SHADER_BIT);
-				break;
-			case SHADER_STAGE_FRAGMENT:
-				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
-				break;
-			case SHADER_STAGE_TESSELATION_CONTROL:
-				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT);
-				break;
-			case SHADER_STAGE_TESSELATION_EVALUATION:
-				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT);
-				break;
-			case SHADER_STAGE_COMPUTE:
-				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-				break;
-			case SHADER_STAGE_RAYGEN:
-			case SHADER_STAGE_ANY_HIT:
-			case SHADER_STAGE_CLOSEST_HIT:
-			case SHADER_STAGE_MISS:
-			case SHADER_STAGE_INTERSECTION:
-				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_RAY_TRACING_SHADER_BIT);
-				break;
-			default:
-				DEV_ASSERT(false && "Unknown shader stage.");
-				break;
-			}
-		}
-
-#ifdef DEV_ENABLED
-		set_resource_name(id, "RID:" + itos(id.get_id()));
-#endif
-		return id;
-	}
-
-	std::vector<uint8_t> RenderingDevice::shader_compile_spirv_from_source(ShaderStage p_stage, const std::string& p_source_code, ShaderLanguage p_language /*= SHADER_LANGUAGE_GLSL*/, std::string* r_error /*= nullptr*/, bool p_allow_cache /*= true*/)
-	{
-		switch (p_language) {
-//#ifdef MODULE_GLSLANG_ENABLED
-		case ShaderLanguage::SHADER_LANGUAGE_GLSL: {
-			//ShaderLanguageVersion language_version = driver->get_shader_container_format().get_shader_language_version();
-			//ShaderSpirvVersion spirv_version = driver->get_shader_container_format().get_shader_spirv_version();
-			compiler->set_source_from_file(p_source_code, compiler_stage_from_shader_stage(p_stage));			// TODO: ShaderStage to COmpiler stage
-			compiler->preprocess();
-			std::vector<uint32_t> spirv_compiled = compiler->compile(*r_error, {});
-			std::vector<uint8_t> bytes_spirv(spirv_compiled.size() * sizeof(uint32_t));
-			std::memcpy(bytes_spirv.data(), spirv_compiled.data(), bytes_spirv.size());
-			return bytes_spirv;
-		}
-//#endif
-		default:
-			ERR_FAIL_V_MSG(std::vector<uint8_t>(), "Shader language is not supported.");
-		}
-	}
-
-	std::vector<uint8_t> RenderingDevice::shader_compile_binary_from_spirv(const std::vector<ShaderStageSPIRVData>& p_spirv, const std::string& p_shader_name /*= ""*/)
-	{
-		const RenderingShaderContainerFormat& container_format = driver->get_shader_container_format();
-		RenderingShaderContainer* shader_container = container_format.create_container();
-		ERR_FAIL_COND_V(shader_container == nullptr, std::vector<uint8_t>());
-
-		// Compile shader binary from SPIR-V.
-		//std::vector<ShaderStageSPIRVData> data{}
-		//bool code_compiled = shader_container->set_code_from_spirv(p_shader_name, p_spirv);
-		//ERR_FAIL_COND_V_MSG(!code_compiled, std::vector<uint8_t>(), std::format("Failed to compile code to native for SPIR-V."));
-
-		//return shader_container->to_bytes(); 
-		return {};
-	}
-
 	RID RenderingDevice::render_pipeline_create(RID p_shader, FramebufferFormatID p_framebuffer_format, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, const PipelineRasterizationState& p_rasterization_state, const PipelineMultisampleState& p_multisample_state, const PipelineDepthStencilState& p_depth_stencil_state, const PipelineColorBlendState& p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags /*= 0*/, uint32_t p_for_render_pass /*= 0*/, const std::vector<PipelineSpecializationConstant>& p_specialization_constants /*= std::vector<PipelineSpecializationConstant>()*/)
 	{
 		Shader* shader = shader_owner.get_or_null(p_shader);
@@ -677,4 +374,308 @@ namespace Rendering
 		_begin_frame(true);
 	}
 
+	Rendering::RDShaderSPIRV* RenderingDevice::shader_compile_spirv_from_shader_source(const RDShaderSource* p_source, bool p_allow_cache /*= true*/)
+	{
+		//ERR_FAIL_COND_V(p_source.is_null(), &RDShaderSPIRV());
+
+		RDShaderSPIRV* bytecode = new RDShaderSPIRV;
+		for (int i = 0; i < RenderingDeviceCommons::SHADER_STAGE_MAX; i++) {
+			std::string error;
+
+			ShaderStage stage = ShaderStage(i);
+			std::string source = p_source->get_stage_source(stage);
+
+			if (!source.empty()) {
+				std::vector<uint8_t> spirv = shader_compile_spirv_from_source_file(stage, source, p_source->get_language(), &error, p_allow_cache);
+				bytecode->set_stage_bytecode(stage, spirv);
+				bytecode->set_stage_compile_error(stage, error);
+			}
+		}
+		return bytecode;
+	}
+
+	RID RenderingDevice::shader_create_from_spirv(const RDShaderSPIRV* p_spirv, const std::string& p_shader_name /*= ""*/)
+	{
+		ERR_FAIL_COND_V(p_spirv == nullptr, RID());
+
+		std::vector<ShaderStageSPIRVData> stage_data;
+		for (int i = 0; i < RenderingDeviceCommons::SHADER_STAGE_MAX; i++) {
+			ShaderStage stage = ShaderStage(i);
+			ShaderStageSPIRVData sd;
+			sd.shader_stage = stage;
+			std::string error = p_spirv->get_stage_compile_error(stage);
+			ERR_FAIL_COND_V_MSG(!error.empty(), RID(), "Can't create a shader from an errored bytecode. Check errors in source bytecode.");
+			sd.spirv = p_spirv->get_stage_bytecode(stage);
+			if (sd.spirv.empty()) {
+				continue;
+			}
+			stage_data.push_back(sd);
+		}
+
+		const RenderingShaderContainerFormat& container_format = driver->get_shader_container_format();
+		RenderingShaderContainer* shader_container = container_format.create_container();
+		//ERR_FAIL_COND_V(shader_container == nullptr, std::vector<uint8_t>());
+		bool code_compiled = shader_container->set_code_from_spirv(p_shader_name, stage_data);
+		//ERR_FAIL_COND_V_MSG(!code_compiled, std::vector<uint8_t>(), std::format("Failed to compile code to native for SPIR-V."));
+		std::vector<PipelineImmutableSampler> immutable_samplers;
+		return shader_create_from_container_with_samplers(shader_container, RID(), immutable_samplers);//_shader_create_from_spirv(stage_data);
+	}
+
+	RID RenderingDevice::shader_create_from_container_with_samplers(RenderingShaderContainer* shader_container, RID p_placeholder, const std::vector<PipelineImmutableSampler>& p_immutable_samplers)
+	{
+		//RenderingShaderContainer* shader_container = driver->get_shader_container_format().create_container();
+		ERR_FAIL_COND_V(shader_container == nullptr, RID());
+
+		//bool parsed_container = shader_container->from_shader_stage_spirv_data(p_shader);
+		//ERR_FAIL_COND_V_MSG(!parsed_container, RID(), "Failed to parse shader container from binary.");
+
+		std::vector<RDD::ImmutableSampler> driver_immutable_samplers;
+		for (const PipelineImmutableSampler& source_sampler : p_immutable_samplers) {
+			RDD::ImmutableSampler driver_sampler;
+			driver_sampler.type = source_sampler.uniform_type;
+			driver_sampler.binding = source_sampler.binding;
+
+			for (uint32_t j = 0; j < source_sampler.get_id_count(); j++) {
+				RDD::SamplerID* sampler_driver_id = sampler_owner.get_or_null(source_sampler.get_id(j));
+				driver_sampler.ids.push_back(*sampler_driver_id);
+			}
+
+			driver_immutable_samplers.push_back(driver_sampler);
+		}
+
+		RDD::ShaderID shader_id = driver->shader_create_from_container(shader_container, driver_immutable_samplers);
+		ERR_FAIL_COND_V(!shader_id, RID());
+
+		// All good, let's create modules.
+
+		RID id;
+		if (p_placeholder.is_null()) {
+			id = shader_owner.make_rid();
+		}
+		else {
+			id = p_placeholder;
+		}
+
+		Shader* shader = shader_owner.get_or_null(id);
+		ERR_FAIL_NULL_V(shader, RID());
+
+		*((ShaderReflection*)shader) = shader_container->get_shader_reflection();
+		shader->name.clear();
+		shader->name.append(shader_container->shader_name);
+		shader->driver_id = shader_id;
+		shader->layout_hash = driver->shader_get_layout_hash(shader_id);
+
+		for (int i = 0; i < shader->uniform_sets.size(); i++) {
+			uint32_t format = 0; // No format, default.
+
+			if (shader->uniform_sets[i].size()) {
+				// Sort and hash.
+
+				std::sort(shader->uniform_sets[i].begin(), shader->uniform_sets[i].end());
+
+				UniformSetFormat usformat;
+				usformat.uniforms = shader->uniform_sets[i];
+				std::map<UniformSetFormat, uint32_t>::iterator i = uniform_set_format_cache.find(usformat);
+				if (i != uniform_set_format_cache.end()) {
+					format = i->second;
+				}
+				else {
+					format = uniform_set_format_cache.size() + 1;
+					uniform_set_format_cache.emplace(usformat, format);
+				}
+			}
+
+			shader->set_formats.push_back(format);
+		}
+
+		for (ShaderStage stage : shader->stages_vector) {
+			switch (stage) {
+			case SHADER_STAGE_VERTEX:
+				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_VERTEX_SHADER_BIT);
+				break;
+			case SHADER_STAGE_FRAGMENT:
+				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+				break;
+			case SHADER_STAGE_TESSELATION_CONTROL:
+				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT);
+				break;
+			case SHADER_STAGE_TESSELATION_EVALUATION:
+				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT);
+				break;
+			case SHADER_STAGE_COMPUTE:
+				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+				break;
+			case SHADER_STAGE_RAYGEN:
+			case SHADER_STAGE_ANY_HIT:
+			case SHADER_STAGE_CLOSEST_HIT:
+			case SHADER_STAGE_MISS:
+			case SHADER_STAGE_INTERSECTION:
+				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_RAY_TRACING_SHADER_BIT);
+				break;
+			default:
+				DEV_ASSERT(false && "Unknown shader stage.");
+				break;
+			}
+		}
+
+#ifdef DEV_ENABLED
+		set_resource_name(id, "RID:" + itos(id.get_id()));
+#endif
+		return id;
+	}
+
+	std::vector<uint8_t> RenderingDevice::shader_compile_spirv_from_source_file(ShaderStage p_stage, const std::string& p_source_code_file, ShaderLanguage p_language /*= SHADER_LANGUAGE_GLSL*/, std::string* r_error /*= nullptr*/, bool p_allow_cache /*= true*/)
+	{
+		switch (p_language) {
+			//#ifdef MODULE_GLSLANG_ENABLED
+		case ShaderLanguage::SHADER_LANGUAGE_GLSL: {
+			//ShaderLanguageVersion language_version = driver->get_shader_container_format().get_shader_language_version();
+			//ShaderSpirvVersion spirv_version = driver->get_shader_container_format().get_shader_spirv_version();
+			compiler->set_source_from_file(p_source_code_file, compiler_stage_from_shader_stage(p_stage));
+			compiler->preprocess();
+			std::vector<uint32_t> spirv_compiled = compiler->compile(*r_error, {});
+			std::vector<uint8_t> bytes_spirv(spirv_compiled.size() * sizeof(uint32_t));
+			std::memcpy(bytes_spirv.data(), spirv_compiled.data(), bytes_spirv.size());
+			return bytes_spirv;
+		}
+												 //#endif
+		default:
+			ERR_FAIL_V_MSG(std::vector<uint8_t>(), "Shader language is not supported.");
+		}
+	}
+
+
+
 }
+
+//	RID RenderingDevice::_shader_create_from_spirv(const std::vector<ShaderStageSPIRVData>& p_spirv, const std::string& p_shader_name) {
+//		std::vector<uint8_t> bytecode = shader_compile_binary_from_spirv(p_spirv, p_shader_name);
+//		ERR_FAIL_COND_V(bytecode.empty(), RID());
+//		return shader_create_from_bytecode(bytecode);
+//	}
+//
+//	RID RenderingDevice::shader_create_from_bytecode(const std::vector<uint8_t>& p_shader_binary, RID p_placeholder) {
+//		// Immutable samplers :
+//		// Expanding api when creating shader to allow passing optionally a set of immutable samplers
+//		// keeping existing api but extending it by sending an empty set.
+//		std::vector<PipelineImmutableSampler> immutable_samplers;
+//		return shader_create_from_bytecode_with_samplers(p_shader_binary, p_placeholder, immutable_samplers);
+//	}
+//
+//	RID RenderingDevice::shader_create_from_bytecode_with_samplers(const std::vector<uint8_t>& p_shader_binary, RID p_placeholder, const std::vector<PipelineImmutableSampler>& p_immutable_samplers) {
+//		//_THREAD_SAFE_METHOD_
+//
+//		RenderingShaderContainer* shader_container = driver->get_shader_container_format().create_container();
+//		ERR_FAIL_COND_V(shader_container == nullptr, RID());
+//
+//		bool parsed_container = shader_container/*shader_container->from_bytes(p_shader_binary);*/;
+//		ERR_FAIL_COND_V_MSG(!parsed_container, RID(), "Failed to parse shader container from binary.");
+//
+//		std::vector<RDD::ImmutableSampler> driver_immutable_samplers;
+//		for (const PipelineImmutableSampler& source_sampler : p_immutable_samplers) {
+//			RDD::ImmutableSampler driver_sampler;
+//			driver_sampler.type = source_sampler.uniform_type;
+//			driver_sampler.binding = source_sampler.binding;
+//
+//			for (uint32_t j = 0; j < source_sampler.get_id_count(); j++) {
+//				RDD::SamplerID* sampler_driver_id = sampler_owner.get_or_null(source_sampler.get_id(j));
+//				driver_sampler.ids.push_back(*sampler_driver_id);
+//			}
+//
+//			driver_immutable_samplers.push_back(driver_sampler);
+//		}
+//
+//		RDD::ShaderID shader_id = driver->shader_create_from_container(shader_container, driver_immutable_samplers);
+//		ERR_FAIL_COND_V(!shader_id, RID());
+//
+//		// All good, let's create modules.
+//
+//		RID id;
+//		if (p_placeholder.is_null()) {
+//			id = shader_owner.make_rid();
+//		}
+//		else {
+//			id = p_placeholder;
+//		}
+//
+//		Shader* shader = shader_owner.get_or_null(id);
+//		ERR_FAIL_NULL_V(shader, RID());
+//
+//		*((ShaderReflection*)shader) = shader_container->get_shader_reflection();
+//		shader->name.clear();
+//		shader->name.append(shader_container->shader_name);
+//		shader->driver_id = shader_id;
+//		shader->layout_hash = driver->shader_get_layout_hash(shader_id);
+//
+//		for (int i = 0; i < shader->uniform_sets.size(); i++) {
+//			uint32_t format = 0; // No format, default.
+//
+//			if (shader->uniform_sets[i].size()) {
+//				// Sort and hash.
+//
+//				std::sort(shader->uniform_sets[i].begin(), shader->uniform_sets[i].end());
+//
+//				UniformSetFormat usformat;
+//				usformat.uniforms = shader->uniform_sets[i];
+//				std::map<UniformSetFormat, uint32_t>::iterator i = uniform_set_format_cache.find(usformat);
+//				if (i != uniform_set_format_cache.end()) {
+//					format = i->second;
+//				}
+//				else {
+//					format = uniform_set_format_cache.size() + 1;
+//					uniform_set_format_cache.emplace(usformat, format);
+//				}
+//			}
+//
+//			shader->set_formats.push_back(format);
+//		}
+//
+//		for (ShaderStage stage : shader->stages_vector) {
+//			switch (stage) {
+//			case SHADER_STAGE_VERTEX:
+//				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_VERTEX_SHADER_BIT);
+//				break;
+//			case SHADER_STAGE_FRAGMENT:
+//				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+//				break;
+//			case SHADER_STAGE_TESSELATION_CONTROL:
+//				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT);
+//				break;
+//			case SHADER_STAGE_TESSELATION_EVALUATION:
+//				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT);
+//				break;
+//			case SHADER_STAGE_COMPUTE:
+//				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+//				break;
+//			case SHADER_STAGE_RAYGEN:
+//			case SHADER_STAGE_ANY_HIT:
+//			case SHADER_STAGE_CLOSEST_HIT:
+//			case SHADER_STAGE_MISS:
+//			case SHADER_STAGE_INTERSECTION:
+//				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_RAY_TRACING_SHADER_BIT);
+//				break;
+//			default:
+//				DEV_ASSERT(false && "Unknown shader stage.");
+//				break;
+//			}
+//		}
+//
+//#ifdef DEV_ENABLED
+//		set_resource_name(id, "RID:" + itos(id.get_id()));
+//#endif
+//		return id;
+//	}
+//std::vector<uint8_t> RenderingDevice::shader_compile_binary_from_spirv(const std::vector<ShaderStageSPIRVData>& p_spirv, const std::string& p_shader_name /*= ""*/)
+//{
+//	const RenderingShaderContainerFormat& container_format = driver->get_shader_container_format();
+//	RenderingShaderContainer* shader_container = container_format.create_container();
+//	ERR_FAIL_COND_V(shader_container == nullptr, std::vector<uint8_t>());
+//
+//	// Compile shader binary from SPIR-V.
+//	//std::vector<ShaderStageSPIRVData> data{}
+//	//bool code_compiled = shader_container->set_code_from_spirv(p_shader_name, p_spirv);
+//	//ERR_FAIL_COND_V_MSG(!code_compiled, std::vector<uint8_t>(), std::format("Failed to compile code to native for SPIR-V."));
+//
+//	//return shader_container->to_bytes(); 
+//	return {};
+//}
