@@ -47,6 +47,7 @@ namespace Rendering
 
 		std::string rendering_driver;
 		bool main_window_created = false;
+		RID shader_program;
 
 
 	};

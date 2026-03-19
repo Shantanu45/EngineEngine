@@ -155,7 +155,10 @@ namespace Vulkan
 		//device_ptr->shader_create_from_container(shader_container_ps, {});
 		auto vertex = device_ptr->vertex_format_create({}, {});
 		std::vector<int32_t> subpasses{ 1 };
-		pipeline = device_ptr->render_pipeline_create(shader, vertex, RenderingDeviceDriverVulkan::RenderPrimitive::RENDER_PRIMITIVE_TRIANGLE_STRIPS, {}, {}, {}, RenderingDeviceDriverVulkan::PipelineColorBlendState::create_blend(), subpasses, {}, device_ptr->swap_chain_get_render_pass(swapchain), 0);
+		pipeline = device_ptr->render_pipeline_create(shader, vertex, 
+			RenderingDeviceDriverVulkan::RenderPrimitive::RENDER_PRIMITIVE_TRIANGLE_STRIPS, 
+			{}, {}, {}, RenderingDeviceDriverVulkan::PipelineColorBlendState::create_blend(), 
+			subpasses, {}, device_ptr->swap_chain_get_render_pass(swapchain), 0);
 		return true;
 	}
 

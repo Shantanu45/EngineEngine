@@ -83,7 +83,7 @@ namespace Rendering
 			ERR_FAIL_COND_MSG(stage == RenderingDeviceCommons::SHADER_STAGE_MAX, "could not evaluate shader stage from path!!");
 			shaders->set_stage_source(stage, shader_path);
 		}
-		rendering_device->shader_create_from_spirv(rendering_device->shader_compile_spirv_from_shader_source(shaders), "traingle_shader");
+		shader_program = rendering_device->shader_create_from_spirv(rendering_device->shader_compile_spirv_from_shader_source(shaders), "traingle_shader");
 	}
 
 	RenderingShaderContainerFormat* WSI::create_shader_container_format() 
