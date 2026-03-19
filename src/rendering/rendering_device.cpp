@@ -268,8 +268,14 @@ namespace Rendering
 			}
 			stage_data.push_back(sd);
 		}
+
+		const RenderingShaderContainerFormat& container_format = driver->get_shader_container_format();
+		RenderingShaderContainer* shader_container = container_format.create_container();
+		//ERR_FAIL_COND_V(shader_container == nullptr, std::vector<uint8_t>());
+		bool code_compiled = shader_container->set_code_from_spirv(p_shader_name, stage_data);
+		//ERR_FAIL_COND_V_MSG(!code_compiled, std::vector<uint8_t>(), std::format("Failed to compile code to native for SPIR-V."));
 		std::vector<PipelineImmutableSampler> immutable_samplers;
-		return shader_create_from_spirv_with_samplers(stage_data, RID(), immutable_samplers);//_shader_create_from_spirv(stage_data);
+		return shader_create_from_container_with_samplers(shader_container, RID(), immutable_samplers);//_shader_create_from_spirv(stage_data);
 	}
 
 	RID RenderingDevice::_shader_create_from_spirv(const std::vector<ShaderStageSPIRVData>& p_spirv, const std::string& p_shader_name) {
@@ -390,13 +396,13 @@ namespace Rendering
 		return id;
 	}
 
-	RID RenderingDevice::shader_create_from_spirv_with_samplers(std::vector<ShaderStageSPIRVData>& p_shader, RID p_placeholder, const std::vector<PipelineImmutableSampler>& p_immutable_samplers)
+	RID RenderingDevice::shader_create_from_container_with_samplers(RenderingShaderContainer* shader_container, RID p_placeholder, const std::vector<PipelineImmutableSampler>& p_immutable_samplers)
 	{
-		RenderingShaderContainer* shader_container = driver->get_shader_container_format().create_container();
+		//RenderingShaderContainer* shader_container = driver->get_shader_container_format().create_container();
 		ERR_FAIL_COND_V(shader_container == nullptr, RID());
 
-		bool parsed_container = shader_container->from_shader_stage_spirv_data(p_shader);
-		ERR_FAIL_COND_V_MSG(!parsed_container, RID(), "Failed to parse shader container from binary.");
+		//bool parsed_container = shader_container->from_shader_stage_spirv_data(p_shader);
+		//ERR_FAIL_COND_V_MSG(!parsed_container, RID(), "Failed to parse shader container from binary.");
 
 		std::vector<RDD::ImmutableSampler> driver_immutable_samplers;
 		for (const PipelineImmutableSampler& source_sampler : p_immutable_samplers) {
