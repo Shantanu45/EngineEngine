@@ -122,6 +122,12 @@ namespace Rendering
 			INVALID_FORMAT_ID = -1
 		};
 
+		enum VRSMethod {
+			VRS_METHOD_NONE,
+			VRS_METHOD_FRAGMENT_SHADING_RATE,
+			VRS_METHOD_FRAGMENT_DENSITY_MAP,
+		};
+
 		enum IDType {
 			ID_TYPE_FRAMEBUFFER_FORMAT,
 			ID_TYPE_VERTEX_FORMAT,
@@ -239,6 +245,31 @@ namespace Rendering
 #pragma endregion
 
 #pragma region Pipeline
+		struct RenderPipeline {
+			// Cached values for validation.
+#ifdef DEBUG_ENABLED
+			struct Validation {
+				FramebufferFormatID framebuffer_format;
+				uint32_t render_pass = 0;
+				uint32_t dynamic_state = 0;
+				VertexFormatID vertex_format;
+				bool uses_restart_indices = false;
+				uint32_t primitive_minimum = 0;
+				uint32_t primitive_divisor = 0;
+			} validation;
+#endif
+			// Actual pipeline.
+			RID shader;
+			RDD::ShaderID shader_driver_id;
+			uint32_t shader_layout_hash = 0;
+			std::vector<uint32_t> set_formats;
+			RDD::PipelineID driver_id;
+			BitField<RDD::PipelineStageBits> stage_bits = {};
+			uint32_t push_constant_size = 0;
+		};
+
+		RID_Owner<RenderPipeline, true> render_pipeline_owner;
+
 		typedef int64_t FramebufferFormatID;
 		typedef int64_t VertexFormatID;
 		RID render_pipeline_create(RID p_shader, FramebufferFormatID p_framebuffer_format, VertexFormatID p_vertex_format, 
@@ -262,6 +293,200 @@ namespace Rendering
 		ColorSpace screen_get_color_space(DisplayServerEnums::WindowID p_screen = DisplayServerEnums::MAIN_WINDOW_ID) const;
 		Error screen_free(DisplayServerEnums::WindowID p_screen = DisplayServerEnums::MAIN_WINDOW_ID);
 #pragma endregion
+
+#pragma region Framebuffer
+
+		struct AttachmentFormat {
+			enum : uint32_t {
+				UNUSED_ATTACHMENT = 0xFFFFFFFF
+			};
+			DataFormat format;
+			TextureSamples samples;
+			uint32_t usage_flags;
+			AttachmentFormat() {
+				format = DATA_FORMAT_R8G8B8A8_UNORM;
+				samples = TEXTURE_SAMPLES_1;
+				usage_flags = 0;
+			}
+		};
+
+		struct FramebufferPass {
+			std::vector<int32_t> color_attachments;
+			std::vector<int32_t> input_attachments;
+			std::vector<int32_t> resolve_attachments;
+			std::vector<int32_t> preserve_attachments;
+			int32_t depth_attachment = ATTACHMENT_UNUSED;
+			int32_t depth_resolve_attachment = ATTACHMENT_UNUSED;
+		};
+
+		struct FramebufferFormatKey {
+			std::vector<AttachmentFormat> attachments;
+			std::vector<FramebufferPass> passes;
+			uint32_t view_count = 1;
+			VRSMethod vrs_method = VRS_METHOD_NONE;
+			int32_t vrs_attachment = ATTACHMENT_UNUSED;
+			Size2i vrs_texel_size;
+
+			bool operator<(const FramebufferFormatKey& p_key) const {
+				if (vrs_texel_size != p_key.vrs_texel_size) {
+
+					auto r = glm::lessThan(vrs_texel_size, p_key.vrs_texel_size);
+					return glm::all(r);
+				}
+
+				if (vrs_attachment != p_key.vrs_attachment) {
+					return vrs_attachment < p_key.vrs_attachment;
+				}
+
+				if (vrs_method != p_key.vrs_method) {
+					return vrs_method < p_key.vrs_method;
+				}
+
+				if (view_count != p_key.view_count) {
+					return view_count < p_key.view_count;
+				}
+
+				uint32_t pass_size = passes.size();
+				uint32_t key_pass_size = p_key.passes.size();
+				if (pass_size != key_pass_size) {
+					return pass_size < key_pass_size;
+				}
+				const FramebufferPass* pass_ptr = passes.data();
+				const FramebufferPass* key_pass_ptr = p_key.passes.data();
+
+				for (uint32_t i = 0; i < pass_size; i++) {
+					{ // Compare color attachments.
+						uint32_t attachment_size = pass_ptr[i].color_attachments.size();
+						uint32_t key_attachment_size = key_pass_ptr[i].color_attachments.size();
+						if (attachment_size != key_attachment_size) {
+							return attachment_size < key_attachment_size;
+						}
+						const int32_t* pass_attachment_ptr = pass_ptr[i].color_attachments.data();
+						const int32_t* key_pass_attachment_ptr = key_pass_ptr[i].color_attachments.data();
+
+						for (uint32_t j = 0; j < attachment_size; j++) {
+							if (pass_attachment_ptr[j] != key_pass_attachment_ptr[j]) {
+								return pass_attachment_ptr[j] < key_pass_attachment_ptr[j];
+							}
+						}
+					}
+					{ // Compare input attachments.
+						uint32_t attachment_size = pass_ptr[i].input_attachments.size();
+						uint32_t key_attachment_size = key_pass_ptr[i].input_attachments.size();
+						if (attachment_size != key_attachment_size) {
+							return attachment_size < key_attachment_size;
+						}
+						const int32_t* pass_attachment_ptr = pass_ptr[i].input_attachments.data();
+						const int32_t* key_pass_attachment_ptr = key_pass_ptr[i].input_attachments.data();
+
+						for (uint32_t j = 0; j < attachment_size; j++) {
+							if (pass_attachment_ptr[j] != key_pass_attachment_ptr[j]) {
+								return pass_attachment_ptr[j] < key_pass_attachment_ptr[j];
+							}
+						}
+					}
+					{ // Compare resolve attachments.
+						uint32_t attachment_size = pass_ptr[i].resolve_attachments.size();
+						uint32_t key_attachment_size = key_pass_ptr[i].resolve_attachments.size();
+						if (attachment_size != key_attachment_size) {
+							return attachment_size < key_attachment_size;
+						}
+						const int32_t* pass_attachment_ptr = pass_ptr[i].resolve_attachments.data();
+						const int32_t* key_pass_attachment_ptr = key_pass_ptr[i].resolve_attachments.data();
+
+						for (uint32_t j = 0; j < attachment_size; j++) {
+							if (pass_attachment_ptr[j] != key_pass_attachment_ptr[j]) {
+								return pass_attachment_ptr[j] < key_pass_attachment_ptr[j];
+							}
+						}
+					}
+					{ // Compare preserve attachments.
+						uint32_t attachment_size = pass_ptr[i].preserve_attachments.size();
+						uint32_t key_attachment_size = key_pass_ptr[i].preserve_attachments.size();
+						if (attachment_size != key_attachment_size) {
+							return attachment_size < key_attachment_size;
+						}
+						const int32_t* pass_attachment_ptr = pass_ptr[i].preserve_attachments.data();
+						const int32_t* key_pass_attachment_ptr = key_pass_ptr[i].preserve_attachments.data();
+
+						for (uint32_t j = 0; j < attachment_size; j++) {
+							if (pass_attachment_ptr[j] != key_pass_attachment_ptr[j]) {
+								return pass_attachment_ptr[j] < key_pass_attachment_ptr[j];
+							}
+						}
+					}
+					if (pass_ptr[i].depth_attachment != key_pass_ptr[i].depth_attachment) {
+						return pass_ptr[i].depth_attachment < key_pass_ptr[i].depth_attachment;
+					}
+				}
+
+				int as = attachments.size();
+				int bs = p_key.attachments.size();
+				if (as != bs) {
+					return as < bs;
+				}
+
+				const AttachmentFormat* af_a = attachments.data();
+				const AttachmentFormat* af_b = p_key.attachments.data();
+				for (int i = 0; i < as; i++) {
+					const AttachmentFormat& a = af_a[i];
+					const AttachmentFormat& b = af_b[i];
+					if (a.format != b.format) {
+						return a.format < b.format;
+					}
+					if (a.samples != b.samples) {
+						return a.samples < b.samples;
+					}
+					if (a.usage_flags != b.usage_flags) {
+						return a.usage_flags < b.usage_flags;
+					}
+				}
+
+				return false; // Equal.
+			}
+		};
+
+		std::map<FramebufferFormatKey, FramebufferFormatID> framebuffer_format_cache;
+		struct FramebufferFormat {
+			std::pair<const FramebufferFormatKey, FramebufferFormatID>* E;
+			RDD::RenderPassID render_pass; // Here for constructing shaders, never used, see section (7.2. Render Pass Compatibility from Vulkan spec).
+			std::vector<TextureSamples> pass_samples;
+			uint32_t view_count = 1; // Number of views.
+		};
+
+		std::unordered_map<FramebufferFormatID, FramebufferFormat> framebuffer_formats;
+		typedef void (*InvalidationCallback)(void*);
+		struct Framebuffer {
+			FramebufferFormatID format_id;
+			uint32_t storage_mask = 0;
+			std::vector<RID> texture_ids;
+			InvalidationCallback invalidated_callback = nullptr;
+			void* invalidated_callback_userdata = nullptr;
+			//RDG::FramebufferCache* framebuffer_cache = nullptr;
+			Size2 size;
+			uint32_t view_count;
+		};
+
+		RID_Owner<Framebuffer, true> framebuffer_owner;
+
+		// This ID is warranted to be unique for the same formats, does not need to be freed
+		FramebufferFormatID framebuffer_format_create(const std::vector<AttachmentFormat>& p_format, uint32_t p_view_count = 1, int32_t p_vrs_attachment = -1);
+		FramebufferFormatID framebuffer_format_create_multipass(const std::vector<AttachmentFormat>& p_attachments, const std::vector<FramebufferPass>& p_passes, uint32_t p_view_count = 1, int32_t p_vrs_attachment = -1);
+			
+		static RDD::TextureLayout _vrs_layout_from_method(VRSMethod p_method);
+		static RDD::RenderPassID _render_pass_create(RenderingDeviceDriver* p_driver, const std::vector<AttachmentFormat>& p_attachments,
+			const std::vector<FramebufferPass>& p_passes, std::span<RDD::AttachmentLoadOp> p_load_ops, 
+			std::span<RDD::AttachmentStoreOp> p_store_ops, uint32_t p_view_count = 1, VRSMethod p_vrs_method = VRS_METHOD_NONE, 
+			int32_t p_vrs_attachment = -1, Size2i p_vrs_texel_size = Size2i(), std::vector<TextureSamples>* r_samples = nullptr);
+
+		FramebufferFormatID framebuffer_format_create_empty(TextureSamples p_samples = TEXTURE_SAMPLES_1);
+
+		VRSMethod vrs_method = VRS_METHOD_NONE;
+		DataFormat vrs_format = DATA_FORMAT_MAX;
+		Size2i vrs_texel_size;
+
+#pragma endregion
+
 
 		void swap_buffers(bool p_present);
 		void submit();

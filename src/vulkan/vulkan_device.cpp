@@ -3676,6 +3676,42 @@ namespace Vulkan
 		}
 		si->vk_stages_create_info.clear();
 	}
+
+	bool RenderingDeviceDriverVulkan::has_feature(Features p_feature)
+	{
+		switch (p_feature) {
+		case SUPPORTS_HALF_FLOAT:
+			return false;// TODO: shader_capabilities.shader_float16_is_supported&& physical_device_features.shaderInt16&& storage_buffer_capabilities.storage_buffer_16_bit_access_is_supported;
+		case SUPPORTS_FRAGMENT_SHADER_WITH_ONLY_SIDE_EFFECTS:
+			return true;
+		case SUPPORTS_BUFFER_DEVICE_ADDRESS:
+			return buffer_device_address_support;
+		case SUPPORTS_IMAGE_ATOMIC_32_BIT:
+			return true;
+		case SUPPORTS_VULKAN_MEMORY_MODEL:
+			return vulkan_memory_model_support && vulkan_memory_model_device_scope_support;
+		case SUPPORTS_FRAMEBUFFER_DEPTH_RESOLVE:
+			return framebuffer_depth_resolve;
+		case SUPPORTS_POINT_SIZE:
+			return true;
+		//case SUPPORTS_RAY_QUERY:
+		//	return acceleration_structure_capabilities.acceleration_structure_support && ray_query_support;
+		//case SUPPORTS_RAYTRACING_PIPELINE:
+		//	return acceleration_structure_capabilities.acceleration_structure_support && raytracing_capabilities.raytracing_pipeline_support;
+		case SUPPORTS_HDR_OUTPUT:
+#if defined(WINDOWS_ENABLED)
+			// When using a Vulkan swapchain on Windows, some configurations
+			// involving integrated GPU hardware do not function correctly
+			// with HDR output.
+			return false;
+#else
+			return context_driver->is_colorspace_supported();
+#endif // defined(WINDOWS_ENABLED)
+		default:
+			return false;
+		}
+	}
+
 #pragma endregion
 
 

@@ -86,6 +86,14 @@ namespace Rendering
 		shader_program = rendering_device->shader_create_from_spirv(rendering_device->shader_compile_spirv_from_shader_source(shaders), "traingle_shader");
 	}
 
+	void WSI::pipeline_create()
+	{
+		//pipeline = rendering_device->render_pipeline_create(shader_program, vertex,
+		//	RenderingDeviceDriverVulkan::RenderPrimitive::RENDER_PRIMITIVE_TRIANGLE_STRIPS,
+		//	{}, {}, {}, RenderingDeviceDriverVulkan::PipelineColorBlendState::create_blend(),
+		//	subpasses, {}, device_ptr->swap_chain_get_render_pass(swapchain), 0);
+	}
+
 	RenderingShaderContainerFormat* WSI::create_shader_container_format() 
 	{
 		return new ::Vulkan::RenderingShaderContainerFormatVulkan();

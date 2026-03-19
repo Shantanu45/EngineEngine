@@ -537,6 +537,8 @@ namespace Vulkan
 
 		void shader_destroy_modules(ShaderID p_shader) override;
 
+		virtual bool has_feature(Features p_feature) override final;
+
 	private:
 		void _register_requested_device_extension(const std::string& p_extension_name, bool p_required);
 		Error _initialize_device_extensions();

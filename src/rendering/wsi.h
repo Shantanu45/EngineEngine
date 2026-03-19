@@ -20,6 +20,7 @@ namespace Rendering
 		void draw_viewport(bool p_swap_buffers);
 
 		void set_program(const std::vector<std::string> programs);
+		void pipeline_create();
 		RenderingShaderContainerFormat* create_shader_container_format();
 		void teardown();
 		~WSI();
@@ -41,7 +42,7 @@ namespace Rendering
 		uint32_t frame_count = 0;
 		uint32_t curr_frame = 0;
 		RenderingDeviceDriver::CommandQueueID main_queue;
-		RenderingDeviceDriver::PipelineID pipeline;
+		RID pipeline;
 
 		std::map<DisplayServerEnums::WindowID, WindowData> windows;
 
