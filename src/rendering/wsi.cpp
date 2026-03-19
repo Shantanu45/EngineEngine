@@ -88,10 +88,16 @@ namespace Rendering
 
 	void WSI::pipeline_create()
 	{
-		//pipeline = rendering_device->render_pipeline_create(shader_program, vertex,
-		//	RenderingDeviceDriverVulkan::RenderPrimitive::RENDER_PRIMITIVE_TRIANGLE_STRIPS,
-		//	{}, {}, {}, RenderingDeviceDriverVulkan::PipelineColorBlendState::create_blend(),
-		//	subpasses, {}, device_ptr->swap_chain_get_render_pass(swapchain), 0);
+		auto fb_format = rendering_device->screen_get_framebuffer_format(DisplayServerEnums::MAIN_WINDOW_ID);
+
+		auto vertex_format = rendering_device->vertex_format_create({});
+
+		auto blend_state = RenderingDeviceCommons::PipelineColorBlendState::create_blend();
+		pipeline = rendering_device->render_pipeline_create(shader_program, fb_format,
+			vertex_format, RenderingDeviceCommons::RENDER_PRIMITIVE_TRIANGLE_STRIPS, 
+			{}, RenderingDeviceCommons::PipelineMultisampleState(),
+			RenderingDeviceCommons::PipelineDepthStencilState(), blend_state,
+			0);
 	}
 
 	RenderingShaderContainerFormat* WSI::create_shader_container_format() 

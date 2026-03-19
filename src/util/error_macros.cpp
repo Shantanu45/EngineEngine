@@ -171,8 +171,8 @@ void _err_print_index_error(const char *p_function, const char *p_file, int p_li
 	_err_print_error(p_function, p_file, p_line, err, p_message, p_editor_notify, ERR_HANDLER_ERROR);
 }
 
-//void _err_print_index_error(const char *p_function, const char *p_file, int p_line, int64_t p_index, int64_t p_size, const char *p_index_str, const char *p_size_str, const std::string &p_message, bool p_editor_notify, bool p_fatal) {
-//	_err_print_index_error(p_function, p_file, p_line, p_index, p_size, p_index_str, p_size_str, p_message, p_editor_notify, p_fatal);
+//void _err_print_index_error(const char* p_function, const char* p_file, int p_line, int64_t p_index, int64_t p_size, const char* p_index_str, const char* p_size_str, const std::string& p_message, bool p_editor_notify, bool p_fatal) {
+//	_err_print_index_error(p_function, p_file, p_line, p_index, p_size, p_index_str, p_size_str, p_message.c_str(), p_editor_notify, p_fatal);
 //}
 
 void _err_flush_stdout() {

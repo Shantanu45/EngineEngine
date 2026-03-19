@@ -471,7 +471,8 @@ namespace Rendering
 
 		// This ID is warranted to be unique for the same formats, does not need to be freed
 		FramebufferFormatID framebuffer_format_create(const std::vector<AttachmentFormat>& p_format, uint32_t p_view_count = 1, int32_t p_vrs_attachment = -1);
-		FramebufferFormatID framebuffer_format_create_multipass(const std::vector<AttachmentFormat>& p_attachments, const std::vector<FramebufferPass>& p_passes, uint32_t p_view_count = 1, int32_t p_vrs_attachment = -1);
+		FramebufferFormatID framebuffer_format_create_multipass(const std::vector<AttachmentFormat>& p_attachments, const std::vector<FramebufferPass>& p_passes, 
+			uint32_t p_view_count = 1, int32_t p_vrs_attachment = -1);
 			
 		static RDD::TextureLayout _vrs_layout_from_method(VRSMethod p_method);
 		static RDD::RenderPassID _render_pass_create(RenderingDeviceDriver* p_driver, const std::vector<AttachmentFormat>& p_attachments,
@@ -609,7 +610,7 @@ namespace Rendering
 
 		// This is a cache and it's never freed, it ensures that
 		// ID used for a specific format always remain the same.
-		std::unordered_map<VertexDescriptionKey, VertexFormatID, VertexDescriptionHash> vertex_format_cache;
+		std::unordered_map<VertexDescriptionKey, VertexFormatID, VertexDescriptionHash> vertex_format_cache = {};
 
 		struct VertexDescriptionCache {
 			std::vector<VertexAttribute> vertex_formats;

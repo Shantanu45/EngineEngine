@@ -4608,24 +4608,28 @@ namespace Vulkan
 			vk_attachments[i].initialLayout = RD_TO_VK_LAYOUT[p_attachments[i].initial_layout];
 			vk_attachments[i].finalLayout = RD_TO_VK_LAYOUT[p_attachments[i].final_layout];
 		}
+		std::vector<VkAttachmentReference2KHR> vk_subpass_input_attachments_vec;
+		std::vector<VkAttachmentReference2KHR> vk_subpass_color_attachments_vec;
+		std::vector<VkAttachmentReference2KHR> vk_subpass_resolve_attachments_vec;
+		std::vector<VkAttachmentReference2KHR> vk_subpass_depth_stencil_attachment_vec;
 
 		std::vector<VkSubpassDescription2KHR> vk_subpasses_vec(p_subpasses.size());
 		VkSubpassDescription2KHR* vk_subpasses = vk_subpasses_vec.data();
 		for (uint32_t i = 0; i < p_subpasses.size(); i++) {
 
-			std::vector<VkAttachmentReference2KHR> vk_subpass_input_attachments_vec(p_subpasses[i].input_references.size());
+			vk_subpass_input_attachments_vec.resize(p_subpasses[i].input_references.size());
 			VkAttachmentReference2KHR* vk_subpass_input_attachments = vk_subpass_input_attachments_vec.data();
 			for (uint32_t j = 0; j < p_subpasses[i].input_references.size(); j++) {
 				_attachment_reference_to_vk(p_subpasses[i].input_references[j], &vk_subpass_input_attachments[j]);
 			}
 
-			std::vector<VkAttachmentReference2KHR> vk_subpass_color_attachments_vec(p_subpasses[i].color_references.size());
+			vk_subpass_color_attachments_vec.resize(p_subpasses[i].color_references.size());
 			VkAttachmentReference2KHR* vk_subpass_color_attachments = vk_subpass_color_attachments_vec.data();
 			for (uint32_t j = 0; j < p_subpasses[i].color_references.size(); j++) {
 				_attachment_reference_to_vk(p_subpasses[i].color_references[j], &vk_subpass_color_attachments[j]);
 			}
 
-			std::vector<VkAttachmentReference2KHR> vk_subpass_resolve_attachments_vec(p_subpasses[i].resolve_references.size());
+			vk_subpass_resolve_attachments_vec.resize(p_subpasses[i].resolve_references.size());
 			VkAttachmentReference2KHR* vk_subpass_resolve_attachments = vk_subpass_resolve_attachments_vec.data();
 			for (uint32_t j = 0; j < p_subpasses[i].resolve_references.size(); j++) {
 				_attachment_reference_to_vk(p_subpasses[i].resolve_references[j], &vk_subpass_resolve_attachments[j]);
@@ -4633,7 +4637,6 @@ namespace Vulkan
 
 			VkAttachmentReference2KHR* vk_subpass_depth_stencil_attachment = nullptr;
 			if (p_subpasses[i].depth_stencil_reference.attachment != AttachmentReference::UNUSED) {
-				std::vector<VkAttachmentReference2KHR> vk_subpass_depth_stencil_attachment_vec;
 				vk_subpass_depth_stencil_attachment = vk_subpass_depth_stencil_attachment_vec.data();
 				_attachment_reference_to_vk(p_subpasses[i].depth_stencil_reference, vk_subpass_depth_stencil_attachment);
 			}
