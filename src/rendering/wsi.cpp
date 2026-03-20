@@ -46,7 +46,6 @@ namespace Rendering
 		return OK;
 	}
 
-
 	void WSI::set_platform(WSIPlatform* p_platform)
 	{
 		platform = p_platform;
@@ -63,7 +62,6 @@ namespace Rendering
 		surface = rendering_context->surface_get_from_window(p_window_id);
 		return OK;
 	}
-
 
 	bool WSI::begin_frame()
 	{
@@ -113,7 +111,7 @@ namespace Rendering
 			0);
 	}
 
-	void WSI::pipeline_create_defulat()
+	void WSI::pipeline_create_default()
 	{
 		auto vertex_format = rendering_device->vertex_format_create({});
 

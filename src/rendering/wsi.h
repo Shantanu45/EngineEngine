@@ -26,7 +26,7 @@ namespace Rendering
 
 		void set_program(const std::vector<std::string> programs);
 		void pipeline_create();
-		void pipeline_create_defulat();
+		void pipeline_create_default();
 		RID get_current_pipeline();
 		RenderingShaderContainerFormat* create_shader_container_format();
 

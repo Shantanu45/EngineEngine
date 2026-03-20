@@ -211,7 +211,10 @@ namespace Rendering
 		while (to_present_index < frames[frame].swap_chains_to_present.size()) {
 			if (frames[frame].swap_chains_to_present[to_present_index] == it->second) {
 				std::vector<RenderingDeviceDriver::SwapChainID> v = { it->second };
+				// TODO: fix: vkQueuePresentKHR(): pPresentInfo->pSwapchains[0] images passed to present must be in layout VK_IMAGE_LAYOUT_PRESENT_SRC duting this present
 				driver->command_queue_execute_and_present(present_queue, {}, {}, {}, {}, v);
+				LOGI("pending present");
+
 				frames[frame].swap_chains_to_present.erase(frames[frame].swap_chains_to_present.begin() + to_present_index);
 			}
 			else {
