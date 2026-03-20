@@ -70,6 +70,7 @@ namespace Rendering
 	bool WSI::end_frame()
 	{
 		rendering_device->swap_buffers(true);
+		platform->poll_input();
 		return true;
 	}
 

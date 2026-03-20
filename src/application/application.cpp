@@ -62,7 +62,7 @@ namespace EE
 	bool Application::init_wsi()
 	{
 		DEBUG_ASSERT(application_wsi->initialize("vulkan", DisplayServerEnums::WINDOW_MODE_WINDOWED, DisplayServerEnums::VSYNC_DISABLED, 0, {}, {}, 0, DisplayServerEnums::CONTEXT_ENGINE, 0) == OK);
-		application_wsi->draw_viewport(true);
+		//application_wsi->draw_viewport(true);
 		application_wsi->set_program({"assets://shaders/triangle.vert", "assets://shaders/triangle.frag"});
 		application_wsi->pipeline_create_default();
 		//application_wsi->pipeline_create();
