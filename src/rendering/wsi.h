@@ -33,6 +33,7 @@ namespace Rendering
 		RenderingDevice* get_rendering_device() { return rendering_device; }
 
 		void teardown();
+
 		~WSI();
 
 	private:

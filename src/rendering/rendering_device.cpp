@@ -6,17 +6,6 @@
 namespace Rendering
 {
 
-	RenderingDevice::RenderingDevice()
-	{
-		auto fs = Services::get().get<FilesystemInterface>();
-		compiler = std::make_unique<Compiler::GLSLCompiler>(*fs);
-		compiler->set_target(Compiler::Target::Vulkan13);
-	}
-
-	RenderingDevice::~RenderingDevice() {
-		finalize();
-	}
-
 	Error RenderingDevice::initialize(RenderingContextDriver* p_context, DisplayServerEnums::WindowID p_main_window)
 	{
 		Error err;
@@ -155,8 +144,351 @@ namespace Rendering
 
 	}
 
-	uint32_t RenderingDevice::_get_swap_chain_desired_count() const {
-		return 2;
+#pragma region Shader
+
+	Rendering::RDShaderSPIRV* RenderingDevice::shader_compile_spirv_from_shader_source(const RDShaderSource* p_source, bool p_allow_cache /*= true*/)
+	{
+		//ERR_FAIL_COND_V(p_source.is_null(), &RDShaderSPIRV());
+
+		RDShaderSPIRV* bytecode = new RDShaderSPIRV;
+		for (int i = 0; i < RenderingDeviceCommons::SHADER_STAGE_MAX; i++) {
+			std::string error;
+
+			ShaderStage stage = ShaderStage(i);
+			std::string source = p_source->get_stage_source(stage);
+
+			if (!source.empty()) {
+				std::vector<uint8_t> spirv = shader_compile_spirv_from_source_file(stage, source, p_source->get_language(), &error, p_allow_cache);
+				bytecode->set_stage_bytecode(stage, spirv);
+				bytecode->set_stage_compile_error(stage, error);
+			}
+		}
+		return bytecode;
+	}
+
+	RID RenderingDevice::shader_create_from_spirv(const RDShaderSPIRV* p_spirv, const std::string& p_shader_name /*= ""*/)
+	{
+		ERR_FAIL_COND_V(p_spirv == nullptr, RID());
+
+		std::vector<ShaderStageSPIRVData> stage_data;
+		for (int i = 0; i < RenderingDeviceCommons::SHADER_STAGE_MAX; i++) {
+			ShaderStage stage = ShaderStage(i);
+			ShaderStageSPIRVData sd;
+			sd.shader_stage = stage;
+			std::string error = p_spirv->get_stage_compile_error(stage);
+			ERR_FAIL_COND_V_MSG(!error.empty(), RID(), "Can't create a shader from an errored bytecode. Check errors in source bytecode.");
+			sd.spirv = p_spirv->get_stage_bytecode(stage);
+			if (sd.spirv.empty()) {
+				continue;
+			}
+			stage_data.push_back(sd);
+		}
+
+		const RenderingShaderContainerFormat& container_format = driver->get_shader_container_format();
+		RenderingShaderContainer* shader_container = container_format.create_container();
+		//ERR_FAIL_COND_V(shader_container == nullptr, std::vector<uint8_t>());
+		bool code_compiled = shader_container->set_code_from_spirv(p_shader_name, stage_data);
+		//ERR_FAIL_COND_V_MSG(!code_compiled, std::vector<uint8_t>(), std::format("Failed to compile code to native for SPIR-V."));
+		std::vector<PipelineImmutableSampler> immutable_samplers;
+		return shader_create_from_container_with_samplers(shader_container, RID(), immutable_samplers);//_shader_create_from_spirv(stage_data);
+	}
+
+	std::vector<uint8_t> RenderingDevice::shader_compile_spirv_from_source_file(ShaderStage p_stage, const std::string& p_source_code_file, ShaderLanguage p_language /*= SHADER_LANGUAGE_GLSL*/, std::string* r_error /*= nullptr*/, bool p_allow_cache /*= true*/)
+	{
+		switch (p_language) {
+			//#ifdef MODULE_GLSLANG_ENABLED
+		case ShaderLanguage::SHADER_LANGUAGE_GLSL: {
+			//ShaderLanguageVersion language_version = driver->get_shader_container_format().get_shader_language_version();
+			//ShaderSpirvVersion spirv_version = driver->get_shader_container_format().get_shader_spirv_version();
+			compiler->set_source_from_file(p_source_code_file, compiler_stage_from_shader_stage(p_stage));
+			compiler->preprocess();
+			std::vector<uint32_t> spirv_compiled = compiler->compile(*r_error, {});
+			std::vector<uint8_t> bytes_spirv(spirv_compiled.size() * sizeof(uint32_t));
+			std::memcpy(bytes_spirv.data(), spirv_compiled.data(), bytes_spirv.size());
+			return bytes_spirv;
+		}
+												 //#endif
+		default:
+			ERR_FAIL_V_MSG(std::vector<uint8_t>(), "Shader language is not supported.");
+		}
+	}
+	RID RenderingDevice::shader_create_from_container_with_samplers(RenderingShaderContainer* shader_container, RID p_placeholder, const std::vector<PipelineImmutableSampler>& p_immutable_samplers)
+	{
+		//RenderingShaderContainer* shader_container = driver->get_shader_container_format().create_container();
+		ERR_FAIL_COND_V(shader_container == nullptr, RID());
+
+		//bool parsed_container = shader_container->from_shader_stage_spirv_data(p_shader);
+		//ERR_FAIL_COND_V_MSG(!parsed_container, RID(), "Failed to parse shader container from binary.");
+
+		std::vector<RDD::ImmutableSampler> driver_immutable_samplers;
+		for (const PipelineImmutableSampler& source_sampler : p_immutable_samplers) {
+			RDD::ImmutableSampler driver_sampler;
+			driver_sampler.type = source_sampler.uniform_type;
+			driver_sampler.binding = source_sampler.binding;
+
+			for (uint32_t j = 0; j < source_sampler.get_id_count(); j++) {
+				RDD::SamplerID* sampler_driver_id = sampler_owner.get_or_null(source_sampler.get_id(j));
+				driver_sampler.ids.push_back(*sampler_driver_id);
+			}
+
+			driver_immutable_samplers.push_back(driver_sampler);
+		}
+
+		RDD::ShaderID shader_id = driver->shader_create_from_container(shader_container, driver_immutable_samplers);
+		ERR_FAIL_COND_V(!shader_id, RID());
+
+		// All good, let's create modules.
+
+		RID id;
+		if (p_placeholder.is_null()) {
+			id = shader_owner.make_rid();
+		}
+		else {
+			id = p_placeholder;
+		}
+
+		Shader* shader = shader_owner.get_or_null(id);
+		ERR_FAIL_NULL_V(shader, RID());
+
+		*((ShaderReflection*)shader) = shader_container->get_shader_reflection();
+		shader->name.clear();
+		shader->name.append(shader_container->shader_name);
+		shader->driver_id = shader_id;
+		shader->layout_hash = driver->shader_get_layout_hash(shader_id);
+
+		for (int i = 0; i < shader->uniform_sets.size(); i++) {
+			uint32_t format = 0; // No format, default.
+
+			if (shader->uniform_sets[i].size()) {
+				// Sort and hash.
+
+				std::sort(shader->uniform_sets[i].begin(), shader->uniform_sets[i].end());
+
+				UniformSetFormat usformat;
+				usformat.uniforms = shader->uniform_sets[i];
+				std::map<UniformSetFormat, uint32_t>::iterator i = uniform_set_format_cache.find(usformat);
+				if (i != uniform_set_format_cache.end()) {
+					format = i->second;
+				}
+				else {
+					format = uniform_set_format_cache.size() + 1;
+					uniform_set_format_cache.emplace(usformat, format);
+				}
+			}
+
+			shader->set_formats.push_back(format);
+		}
+
+		for (ShaderStage stage : shader->stages_vector) {
+			switch (stage) {
+			case SHADER_STAGE_VERTEX:
+				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_VERTEX_SHADER_BIT);
+				break;
+			case SHADER_STAGE_FRAGMENT:
+				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+				break;
+			case SHADER_STAGE_TESSELATION_CONTROL:
+				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT);
+				break;
+			case SHADER_STAGE_TESSELATION_EVALUATION:
+				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT);
+				break;
+			case SHADER_STAGE_COMPUTE:
+				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+				break;
+			case SHADER_STAGE_RAYGEN:
+			case SHADER_STAGE_ANY_HIT:
+			case SHADER_STAGE_CLOSEST_HIT:
+			case SHADER_STAGE_MISS:
+			case SHADER_STAGE_INTERSECTION:
+				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_RAY_TRACING_SHADER_BIT);
+				break;
+			default:
+				DEV_ASSERT(false && "Unknown shader stage.");
+				break;
+			}
+		}
+
+#ifdef DEV_ENABLED
+		set_resource_name(id, "RID:" + itos(id.get_id()));
+#endif
+		return id;
+	}
+
+#pragma endregion
+
+	RID RenderingDevice::render_pipeline_create(RID p_shader, FramebufferFormatID p_framebuffer_format,
+		VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, 
+		const PipelineRasterizationState& p_rasterization_state, const PipelineMultisampleState& p_multisample_state, 
+		const PipelineDepthStencilState& p_depth_stencil_state, const PipelineColorBlendState& p_blend_state, 
+		BitField<PipelineDynamicStateFlags> p_dynamic_state_flags /*= 0*/, uint32_t p_for_render_pass /*= 0*/, 
+		const std::vector<PipelineSpecializationConstant>& p_specialization_constants /*= std::vector<PipelineSpecializationConstant>()*/)
+	{
+		Shader* shader = shader_owner.get_or_null(p_shader);
+		ERR_FAIL_NULL_V(shader, RID());
+		ERR_FAIL_COND_V_MSG(shader->pipeline_type != PIPELINE_TYPE_RASTERIZATION, RID(),
+			"Only render shaders can be used in render pipelines");
+
+		ERR_FAIL_COND_V_MSG(!shader->stage_bits.has_flag(RDD::PIPELINE_STAGE_VERTEX_SHADER_BIT), RID(), "Pre-raster shader (vertex shader) is not provided for pipeline creation.");
+
+		FramebufferFormat fb_format;
+		{
+			//_THREAD_SAFE_METHOD_
+
+			if (p_framebuffer_format == INVALID_ID) {
+				// If nothing provided, use an empty one (no attachments).
+				p_framebuffer_format = framebuffer_format_create(std::vector<AttachmentFormat>());
+			}
+			ERR_FAIL_COND_V(!framebuffer_formats.contains(p_framebuffer_format), RID());
+			fb_format = framebuffer_formats[p_framebuffer_format];
+		}
+
+		// Validate shader vs. framebuffer.
+		{
+			ERR_FAIL_COND_V_MSG(p_for_render_pass >= uint32_t(fb_format.E->first.passes.size()), RID(), std::format("Render pass requested for pipeline creation {} is out of bounds", std::to_string(p_for_render_pass)));
+			const FramebufferPass& pass = fb_format.E->first.passes[p_for_render_pass];
+			uint32_t output_mask = 0;
+			for (int i = 0; i < pass.color_attachments.size(); i++) {
+				if (pass.color_attachments[i] != ATTACHMENT_UNUSED) {
+					output_mask |= 1 << i;
+				}
+			}
+			ERR_FAIL_COND_V_MSG(shader->fragment_output_mask != output_mask, RID(),
+				std::format("Mismatch fragment shader output mask {} and framebuffer color output mask {} when binding both in render pipeline.", std::to_string(shader->fragment_output_mask), std::to_string(output_mask)));
+		}
+
+		RDD::VertexFormatID driver_vertex_format;
+		if (p_vertex_format != INVALID_ID) {
+			// Uses vertices, else it does not.
+			ERR_FAIL_COND_V(!vertex_formats.contains(p_vertex_format), RID());
+			const VertexDescriptionCache& vd = vertex_formats[p_vertex_format];
+			driver_vertex_format = vertex_formats[p_vertex_format].driver_id;
+
+			// Validate with inputs.
+			for (uint32_t i = 0; i < 64; i++) {
+				if (!(shader->vertex_input_mask & ((uint64_t)1) << i)) {
+					continue;
+				}
+				bool found = false;
+				for (int j = 0; j < vd.vertex_formats.size(); j++) {
+					if (vd.vertex_formats[j].location == i) {
+						found = true;
+						break;
+					}
+				}
+
+				ERR_FAIL_COND_V_MSG(!found, RID(),
+					std::format("Shader vertex input location {} not provided in vertex input description for pipeline creation.", std::to_string(i)));
+			}
+
+		}
+		else {
+			ERR_FAIL_COND_V_MSG(shader->vertex_input_mask != 0, RID(),
+				std::format("Shader contains vertex inputs, but no vertex input description was provided for pipeline creation."));
+		}
+
+		ERR_FAIL_INDEX_V(p_render_primitive, RENDER_PRIMITIVE_MAX, RID());
+
+		ERR_FAIL_INDEX_V(p_rasterization_state.cull_mode, 3, RID());
+
+		if (p_multisample_state.sample_mask.size()) {
+			// Use sample mask.
+			ERR_FAIL_COND_V((int)TEXTURE_SAMPLES_COUNT[p_multisample_state.sample_count] != p_multisample_state.sample_mask.size(), RID());
+		}
+
+		ERR_FAIL_INDEX_V(p_depth_stencil_state.depth_compare_operator, COMPARE_OP_MAX, RID());
+
+		ERR_FAIL_INDEX_V(p_depth_stencil_state.front_op.fail, STENCIL_OP_MAX, RID());
+		ERR_FAIL_INDEX_V(p_depth_stencil_state.front_op.pass, STENCIL_OP_MAX, RID());
+		ERR_FAIL_INDEX_V(p_depth_stencil_state.front_op.depth_fail, STENCIL_OP_MAX, RID());
+		ERR_FAIL_INDEX_V(p_depth_stencil_state.front_op.compare, COMPARE_OP_MAX, RID());
+
+		ERR_FAIL_INDEX_V(p_depth_stencil_state.back_op.fail, STENCIL_OP_MAX, RID());
+		ERR_FAIL_INDEX_V(p_depth_stencil_state.back_op.pass, STENCIL_OP_MAX, RID());
+		ERR_FAIL_INDEX_V(p_depth_stencil_state.back_op.depth_fail, STENCIL_OP_MAX, RID());
+		ERR_FAIL_INDEX_V(p_depth_stencil_state.back_op.compare, COMPARE_OP_MAX, RID());
+
+		ERR_FAIL_INDEX_V(p_blend_state.logic_op, LOGIC_OP_MAX, RID());
+
+		const FramebufferPass& pass = fb_format.E->first.passes[p_for_render_pass];
+		ERR_FAIL_COND_V(p_blend_state.attachments.size() < pass.color_attachments.size(), RID());
+		for (int i = 0; i < pass.color_attachments.size(); i++) {
+			if (pass.color_attachments[i] != ATTACHMENT_UNUSED) {
+				ERR_FAIL_INDEX_V(p_blend_state.attachments[i].src_color_blend_factor, BLEND_FACTOR_MAX, RID());
+				ERR_FAIL_INDEX_V(p_blend_state.attachments[i].dst_color_blend_factor, BLEND_FACTOR_MAX, RID());
+				ERR_FAIL_INDEX_V(p_blend_state.attachments[i].color_blend_op, BLEND_OP_MAX, RID());
+
+				ERR_FAIL_INDEX_V(p_blend_state.attachments[i].src_alpha_blend_factor, BLEND_FACTOR_MAX, RID());
+				ERR_FAIL_INDEX_V(p_blend_state.attachments[i].dst_alpha_blend_factor, BLEND_FACTOR_MAX, RID());
+				ERR_FAIL_INDEX_V(p_blend_state.attachments[i].alpha_blend_op, BLEND_OP_MAX, RID());
+			}
+		}
+
+		for (int i = 0; i < shader->specialization_constants.size(); i++) {
+			const ShaderSpecializationConstant& sc = shader->specialization_constants[i];
+			for (int j = 0; j < p_specialization_constants.size(); j++) {
+				const PipelineSpecializationConstant& psc = p_specialization_constants[j];
+				if (psc.constant_id == sc.constant_id) {
+					ERR_FAIL_COND_V_MSG(psc.type != sc.type, RID(), std::format("Specialization constant provided for id {} is of the wrong type.", std::to_string(sc.constant_id)));
+					break;
+				}
+			}
+		}
+		std::vector<int32_t> color_attachments = pass.color_attachments;
+		std::vector<PipelineSpecializationConstant> specialization_constants = p_specialization_constants;
+		RenderPipeline pipeline;
+		pipeline.driver_id = driver->render_pipeline_create(
+			shader->driver_id,
+			driver_vertex_format,
+			p_render_primitive,
+			p_rasterization_state,
+			p_multisample_state,
+			p_depth_stencil_state,
+			p_blend_state,
+			color_attachments,
+			p_dynamic_state_flags,
+			fb_format.render_pass,
+			p_for_render_pass,
+			specialization_constants);
+		ERR_FAIL_COND_V(!pipeline.driver_id, RID());
+
+		pipeline.shader = p_shader;
+		pipeline.shader_driver_id = shader->driver_id;
+		pipeline.shader_layout_hash = shader->layout_hash;
+		pipeline.set_formats = shader->set_formats;
+		pipeline.push_constant_size = shader->push_constant_size;
+		pipeline.stage_bits = shader->stage_bits;
+
+#ifdef DEBUG_ENABLED
+		pipeline.validation.dynamic_state = p_dynamic_state_flags;
+		pipeline.validation.framebuffer_format = p_framebuffer_format;
+		pipeline.validation.render_pass = p_for_render_pass;
+		pipeline.validation.vertex_format = p_vertex_format;
+		pipeline.validation.uses_restart_indices = p_render_primitive == RENDER_PRIMITIVE_TRIANGLE_STRIPS_WITH_RESTART_INDEX;
+
+		static const uint32_t primitive_divisor[RENDER_PRIMITIVE_MAX] = {
+			1, 2, 1, 1, 1, 3, 1, 1, 1, 1, 1
+		};
+		pipeline.validation.primitive_divisor = primitive_divisor[p_render_primitive];
+		static const uint32_t primitive_minimum[RENDER_PRIMITIVE_MAX] = {
+			1,
+			2,
+			2,
+			2,
+			2,
+			3,
+			3,
+			3,
+			3,
+			3,
+			1,
+		};
+		pipeline.validation.primitive_minimum = primitive_minimum[p_render_primitive];
+#endif
+
+		// Create ID to associate with this pipeline.
+		RID id = render_pipeline_owner.make_rid(pipeline);
+		return id;
 	}
 
 	Error RenderingDevice::screen_create(DisplayServerEnums::WindowID p_screen)		// swap chain resize(also frame buffer creation)
@@ -315,78 +647,109 @@ namespace Rendering
 		return OK;
 	}
 
-	RDD::TextureLayout RenderingDevice::_vrs_layout_from_method(VRSMethod p_method) {
-		switch (p_method) {
-		case VRS_METHOD_FRAGMENT_SHADING_RATE:
-			return RDD::TEXTURE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL;
-		case VRS_METHOD_FRAGMENT_DENSITY_MAP:
-			return RDD::TEXTURE_LAYOUT_FRAGMENT_DENSITY_MAP_ATTACHMENT_OPTIMAL;
-		default:
-			return RDD::TEXTURE_LAYOUT_UNDEFINED;
+	Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_format_create(const std::vector<AttachmentFormat>& p_format,
+		uint32_t p_view_count /*= 1*/, int32_t p_fragment_density_map_attachment /*= -1*/)
+	{
+		FramebufferPass pass;
+		for (int i = 0; i < p_format.size(); i++) {
+			if (p_format[i].usage_flags & TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+				pass.depth_attachment = i;
+			}
+			else if (p_format[i].usage_flags & TEXTURE_USAGE_DEPTH_RESOLVE_ATTACHMENT_BIT) {
+				pass.depth_resolve_attachment = i;
+			}
+			else {
+				pass.color_attachments.push_back(i);
+			}
 		}
+
+		std::vector<FramebufferPass> passes;
+		passes.push_back(pass);
+		return framebuffer_format_create_multipass(p_format, passes, p_view_count, p_fragment_density_map_attachment);
 	}
 
-	void RenderingDevice::begin_frame(bool p_presented /*= false*/)
+	Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_format_create_multipass(const std::vector<AttachmentFormat>& p_attachments,
+		const std::vector<FramebufferPass>& p_passes, uint32_t p_view_count /*= 1*/, int32_t p_vrs_attachment /*= -1*/)
 	{
-		RDD::CommandBufferID command_buffer = frames[frame].command_buffer;
-		driver->command_buffer_begin(command_buffer);
-	}
+		FramebufferFormatKey key;
+		key.attachments = p_attachments;
+		key.passes = p_passes;
+		key.view_count = p_view_count;
+		key.vrs_method = vrs_method;
+		key.vrs_attachment = p_vrs_attachment;
+		key.vrs_texel_size = vrs_texel_size;
 
-	void  RenderingDevice::bind_render_pipeline(RDD::CommandBufferID p_command_buffer, RID pipeline)
-	{
-		RenderPipeline* render_pipeline = render_pipeline_owner.get_or_null(pipeline);
-		driver->command_bind_render_pipeline(p_command_buffer, render_pipeline->driver_id);
-	}
-
-	void RenderingDevice::end_frame()
-	{
-		RDD::CommandBufferID command_buffer = frames[frame].command_buffer;
-		//driver->command_buffer_begin(command_buffer);
-		//std::array<RenderingDeviceDriver::RenderPassClearValue, 1> val;
-		//val[0].color = Color{ 1.0 , 0.0 , 0.0 , 0.0 };
-		//std::vector<Rect2i> frame_rects = { Rect2i{ 0, 0, (int)platform->get_surface_width(), (int)platform->get_surface_height() } };
-		//driver->command_begin_render_pass(command_buffer, render_pass, framebuffer, RenderingDeviceDriverVulkan::COMMAND_BUFFER_TYPE_PRIMARY, frame_rects[0], val);
-		//driver->command_bind_render_pipeline(command_buffer, pipeline);
-		//driver->command_render_set_viewport(command_buffer, frame_rects);
-		//driver->command_render_set_scissor(command_buffer, frame_rects);
-		//driver->command_render_draw(command_buffer, 3, 1, 0, 0);
-		driver->command_end_render_pass(command_buffer);
-
-		driver->command_buffer_end(command_buffer);
-	}
-
-	void RenderingDevice::execute_frame(bool p_present)
-	{
-		// Check whether this frame should present the swap chains and in which queue.
-		const bool frame_can_present = p_present && !frames[frame].swap_chains_to_present.empty();
-		const bool separate_present_queue = main_queue != present_queue;
-
-		// The semaphore is required if the frame can be presented and a separate present queue is used;
-		// since the separate queue will wait for that semaphore before presenting.
-		const RDD::SemaphoreID semaphore = (frame_can_present && separate_present_queue)
-			? frames[frame].semaphore
-			: RDD::SemaphoreID(nullptr);
-		const bool present_swap_chain = frame_can_present && !separate_present_queue;
-
-		//execute_chained_cmds(present_swap_chain, frames[frame].fence, semaphore);
-		// Indicate the fence has been signaled so the next time the frame's contents need to be
-		// used, the CPU needs to wait on the work to be completed.
-		frames[frame].fence_signaled = true;
-		std::vector<RenderingDeviceDriver::SemaphoreID> frame_semaphores{ frames[frame].semaphore };
-		if (frame_can_present) {
-			auto command_buffer = get_current_command_buffer();
-			/*if (separate_present_queue) {*/
-				// Issue the presentation separately if the presentation queue is different from the main queue.
-			driver->command_queue_execute_and_present(present_queue, {}, { &command_buffer, 1}, {}, frames[frame].fence, frames[frame].swap_chains_to_present);
-			//}
-
-			frames[frame].swap_chains_to_present.clear();
+		std::map<FramebufferFormatKey, FramebufferFormatID>::iterator it = framebuffer_format_cache.find(key);
+		if (it != framebuffer_format_cache.end())
+		{
+			return it->second;
 		}
+
+		std::vector<TextureSamples> samples;
+		std::vector<RDD::AttachmentLoadOp> load_ops;
+		std::vector<RDD::AttachmentStoreOp> store_ops;
+		for (int64_t i = 0; i < p_attachments.size(); i++) {
+			load_ops.push_back(RDD::ATTACHMENT_LOAD_OP_CLEAR);
+			store_ops.push_back(RDD::ATTACHMENT_STORE_OP_STORE);
+		}
+
+		RDD::RenderPassID render_pass = _render_pass_create(driver, p_attachments, p_passes, load_ops, store_ops, p_view_count, vrs_method, p_vrs_attachment, vrs_texel_size, &samples); // Actions don't matter for this use case.
+		if (!render_pass) { // Was likely invalid.
+			return INVALID_ID;
+		}
+
+		FramebufferFormatID id = FramebufferFormatID(framebuffer_format_cache.size()) | (FramebufferFormatID(ID_TYPE_FRAMEBUFFER_FORMAT) << FramebufferFormatID(ID_BASE_SHIFT));
+		it = framebuffer_format_cache.insert({ key, id }).first;
+
+		FramebufferFormat fb_format;
+		fb_format.E = &(*it);
+		fb_format.render_pass = render_pass;
+		fb_format.pass_samples = samples;
+		fb_format.view_count = p_view_count;
+		framebuffer_formats[id] = fb_format;
+
+#if PRINT_FRAMEBUFFER_FORMAT
+		LOGI("FRAMEBUFFER FORMAT:", id, "ATTACHMENTS:", p_attachments.size(), "PASSES:", p_passes.size());
+		for (RD::AttachmentFormat attachment : p_attachments) {
+			LOGI("FORMAT:", attachment.format, "SAMPLES:", attachment.samples, "USAGE FLAGS:", attachment.usage_flags);
+		}
+#endif
+
+		return id;
 	}
 
-	void RenderingDevice::_flush_and_stall_for_all_frames(bool p_begin_frame /*= true*/)
+	Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_format_create_empty(TextureSamples p_samples /*= TEXTURE_SAMPLES_1*/)
 	{
+		FramebufferFormatKey key;
+		key.passes.push_back(FramebufferPass());
 
+		std::map<FramebufferFormatKey, FramebufferFormatID>::iterator it = framebuffer_format_cache.find(key);
+		if (it != framebuffer_format_cache.end())
+		{
+			return it->second;
+		}
+
+		std::vector<RDD::Subpass> subpass;
+		subpass.resize(1);
+
+		RDD::RenderPassID render_pass = driver->render_pass_create({}, subpass, {}, 1, RDD::AttachmentReference());
+		ERR_FAIL_COND_V(!render_pass, FramebufferFormatID());
+
+		FramebufferFormatID id = FramebufferFormatID(framebuffer_format_cache.size()) | (FramebufferFormatID(ID_TYPE_FRAMEBUFFER_FORMAT) << FramebufferFormatID(ID_BASE_SHIFT));
+
+		it = framebuffer_format_cache.insert({ key, id }).first;
+
+		FramebufferFormat fb_format;
+		fb_format.E = &(*it);
+		fb_format.render_pass = render_pass;
+		fb_format.pass_samples.push_back(p_samples);
+		framebuffer_formats[id] = fb_format;
+
+#if PRINT_FRAMEBUFFER_FORMAT
+		print_line("FRAMEBUFFER FORMAT:", id, "ATTACHMENTS: EMPTY");
+#endif
+
+		return id;
 	}
 
 	void RenderingDevice::swap_buffers(bool p_present)
@@ -399,14 +762,6 @@ namespace Rendering
 		_stall_for_frame(frame);
 
 		frame = (frame + 1) % frames.size();
-	}
-
-	void RenderingDevice::_stall_for_frame(uint32_t p_frame)
-	{
-		if (frames[p_frame].fence_signaled) {
-			driver->fence_wait(frames[p_frame].fence);
-			frames[p_frame].fence_signaled = false;
-		}
 	}
 
 	bool RenderingDevice::begin_for_screen(DisplayServerEnums::WindowID p_screen /*= 0*/, const Color& p_clear_color /*= Color()*/)
@@ -678,178 +1033,90 @@ namespace Rendering
 		return id;
 	}
 
-	RID RenderingDevice::render_pipeline_create(RID p_shader, FramebufferFormatID p_framebuffer_format,
-		VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, 
-		const PipelineRasterizationState& p_rasterization_state, const PipelineMultisampleState& p_multisample_state, 
-		const PipelineDepthStencilState& p_depth_stencil_state, const PipelineColorBlendState& p_blend_state, 
-		BitField<PipelineDynamicStateFlags> p_dynamic_state_flags /*= 0*/, uint32_t p_for_render_pass /*= 0*/, 
-		const std::vector<PipelineSpecializationConstant>& p_specialization_constants /*= std::vector<PipelineSpecializationConstant>()*/)
+	void RenderingDevice::begin_frame(bool p_presented /*= false*/)
 	{
-		Shader* shader = shader_owner.get_or_null(p_shader);
-		ERR_FAIL_NULL_V(shader, RID());
-		ERR_FAIL_COND_V_MSG(shader->pipeline_type != PIPELINE_TYPE_RASTERIZATION, RID(),
-			"Only render shaders can be used in render pipelines");
+		RDD::CommandBufferID command_buffer = frames[frame].command_buffer;
+		driver->command_buffer_begin(command_buffer);
+	}
 
-		ERR_FAIL_COND_V_MSG(!shader->stage_bits.has_flag(RDD::PIPELINE_STAGE_VERTEX_SHADER_BIT), RID(), "Pre-raster shader (vertex shader) is not provided for pipeline creation.");
+	void  RenderingDevice::bind_render_pipeline(RDD::CommandBufferID p_command_buffer, RID pipeline)
+	{
+		RenderPipeline* render_pipeline = render_pipeline_owner.get_or_null(pipeline);
+		driver->command_bind_render_pipeline(p_command_buffer, render_pipeline->driver_id);
+	}
 
-		FramebufferFormat fb_format;
-		{
-			//_THREAD_SAFE_METHOD_
+	void RenderingDevice::end_frame()
+	{
+		RDD::CommandBufferID command_buffer = frames[frame].command_buffer;
+		//driver->command_buffer_begin(command_buffer);
+		//std::array<RenderingDeviceDriver::RenderPassClearValue, 1> val;
+		//val[0].color = Color{ 1.0 , 0.0 , 0.0 , 0.0 };
+		//std::vector<Rect2i> frame_rects = { Rect2i{ 0, 0, (int)platform->get_surface_width(), (int)platform->get_surface_height() } };
+		//driver->command_begin_render_pass(command_buffer, render_pass, framebuffer, RenderingDeviceDriverVulkan::COMMAND_BUFFER_TYPE_PRIMARY, frame_rects[0], val);
+		//driver->command_bind_render_pipeline(command_buffer, pipeline);
+		//driver->command_render_set_viewport(command_buffer, frame_rects);
+		//driver->command_render_set_scissor(command_buffer, frame_rects);
+		//driver->command_render_draw(command_buffer, 3, 1, 0, 0);
+		driver->command_end_render_pass(command_buffer);
 
-			if (p_framebuffer_format == INVALID_ID) {
-				// If nothing provided, use an empty one (no attachments).
-				p_framebuffer_format = framebuffer_format_create(std::vector<AttachmentFormat>());
-			}
-			ERR_FAIL_COND_V(!framebuffer_formats.contains(p_framebuffer_format), RID());
-			fb_format = framebuffer_formats[p_framebuffer_format];
+		driver->command_buffer_end(command_buffer);
+	}
+
+	void RenderingDevice::execute_frame(bool p_present)
+	{
+		// Check whether this frame should present the swap chains and in which queue.
+		const bool frame_can_present = p_present && !frames[frame].swap_chains_to_present.empty();
+		const bool separate_present_queue = main_queue != present_queue;
+
+		// The semaphore is required if the frame can be presented and a separate present queue is used;
+		// since the separate queue will wait for that semaphore before presenting.
+		const RDD::SemaphoreID semaphore = (frame_can_present && separate_present_queue)
+			? frames[frame].semaphore
+			: RDD::SemaphoreID(nullptr);
+		const bool present_swap_chain = frame_can_present && !separate_present_queue;
+
+		//execute_chained_cmds(present_swap_chain, frames[frame].fence, semaphore);
+		// Indicate the fence has been signaled so the next time the frame's contents need to be
+		// used, the CPU needs to wait on the work to be completed.
+		frames[frame].fence_signaled = true;
+		std::vector<RenderingDeviceDriver::SemaphoreID> frame_semaphores{ frames[frame].semaphore };
+		if (frame_can_present) {
+			auto command_buffer = get_current_command_buffer();
+			/*if (separate_present_queue) {*/
+				// Issue the presentation separately if the presentation queue is different from the main queue.
+			driver->command_queue_execute_and_present(present_queue, {}, { &command_buffer, 1}, {}, frames[frame].fence, frames[frame].swap_chains_to_present);
+			//}
+
+			frames[frame].swap_chains_to_present.clear();
 		}
+	}
 
-		// Validate shader vs. framebuffer.
-		{
-			ERR_FAIL_COND_V_MSG(p_for_render_pass >= uint32_t(fb_format.E->first.passes.size()), RID(), std::format("Render pass requested for pipeline creation {} is out of bounds", std::to_string(p_for_render_pass)));
-			const FramebufferPass& pass = fb_format.E->first.passes[p_for_render_pass];
-			uint32_t output_mask = 0;
-			for (int i = 0; i < pass.color_attachments.size(); i++) {
-				if (pass.color_attachments[i] != ATTACHMENT_UNUSED) {
-					output_mask |= 1 << i;
-				}
-			}
-			ERR_FAIL_COND_V_MSG(shader->fragment_output_mask != output_mask, RID(),
-				std::format("Mismatch fragment shader output mask {} and framebuffer color output mask {} when binding both in render pipeline.", std::to_string(shader->fragment_output_mask), std::to_string(output_mask)));
+	void RenderingDevice::_stall_for_frame(uint32_t p_frame)
+	{
+		if (frames[p_frame].fence_signaled) {
+			driver->fence_wait(frames[p_frame].fence);
+			frames[p_frame].fence_signaled = false;
 		}
+	}
 
-		RDD::VertexFormatID driver_vertex_format;
-		if (p_vertex_format != INVALID_ID) {
-			// Uses vertices, else it does not.
-			ERR_FAIL_COND_V(!vertex_formats.contains(p_vertex_format), RID());
-			const VertexDescriptionCache& vd = vertex_formats[p_vertex_format];
-			driver_vertex_format = vertex_formats[p_vertex_format].driver_id;
+	void RenderingDevice::_flush_and_stall_for_all_frames(bool p_begin_frame /*= true*/)
+	{
 
-			// Validate with inputs.
-			for (uint32_t i = 0; i < 64; i++) {
-				if (!(shader->vertex_input_mask & ((uint64_t)1) << i)) {
-					continue;
-				}
-				bool found = false;
-				for (int j = 0; j < vd.vertex_formats.size(); j++) {
-					if (vd.vertex_formats[j].location == i) {
-						found = true;
-						break;
-					}
-				}
+	}
 
-				ERR_FAIL_COND_V_MSG(!found, RID(),
-					std::format("Shader vertex input location {} not provided in vertex input description for pipeline creation.", std::to_string(i)));
-			}
+	uint32_t RenderingDevice::_get_swap_chain_desired_count() const {
+		return 2;
+	}
 
+	RDD::TextureLayout RenderingDevice::_vrs_layout_from_method(VRSMethod p_method) {
+		switch (p_method) {
+		case VRS_METHOD_FRAGMENT_SHADING_RATE:
+			return RDD::TEXTURE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL;
+		case VRS_METHOD_FRAGMENT_DENSITY_MAP:
+			return RDD::TEXTURE_LAYOUT_FRAGMENT_DENSITY_MAP_ATTACHMENT_OPTIMAL;
+		default:
+			return RDD::TEXTURE_LAYOUT_UNDEFINED;
 		}
-		else {
-			ERR_FAIL_COND_V_MSG(shader->vertex_input_mask != 0, RID(),
-				std::format("Shader contains vertex inputs, but no vertex input description was provided for pipeline creation."));
-		}
-
-		ERR_FAIL_INDEX_V(p_render_primitive, RENDER_PRIMITIVE_MAX, RID());
-
-		ERR_FAIL_INDEX_V(p_rasterization_state.cull_mode, 3, RID());
-
-		if (p_multisample_state.sample_mask.size()) {
-			// Use sample mask.
-			ERR_FAIL_COND_V((int)TEXTURE_SAMPLES_COUNT[p_multisample_state.sample_count] != p_multisample_state.sample_mask.size(), RID());
-		}
-
-		ERR_FAIL_INDEX_V(p_depth_stencil_state.depth_compare_operator, COMPARE_OP_MAX, RID());
-
-		ERR_FAIL_INDEX_V(p_depth_stencil_state.front_op.fail, STENCIL_OP_MAX, RID());
-		ERR_FAIL_INDEX_V(p_depth_stencil_state.front_op.pass, STENCIL_OP_MAX, RID());
-		ERR_FAIL_INDEX_V(p_depth_stencil_state.front_op.depth_fail, STENCIL_OP_MAX, RID());
-		ERR_FAIL_INDEX_V(p_depth_stencil_state.front_op.compare, COMPARE_OP_MAX, RID());
-
-		ERR_FAIL_INDEX_V(p_depth_stencil_state.back_op.fail, STENCIL_OP_MAX, RID());
-		ERR_FAIL_INDEX_V(p_depth_stencil_state.back_op.pass, STENCIL_OP_MAX, RID());
-		ERR_FAIL_INDEX_V(p_depth_stencil_state.back_op.depth_fail, STENCIL_OP_MAX, RID());
-		ERR_FAIL_INDEX_V(p_depth_stencil_state.back_op.compare, COMPARE_OP_MAX, RID());
-
-		ERR_FAIL_INDEX_V(p_blend_state.logic_op, LOGIC_OP_MAX, RID());
-
-		const FramebufferPass& pass = fb_format.E->first.passes[p_for_render_pass];
-		ERR_FAIL_COND_V(p_blend_state.attachments.size() < pass.color_attachments.size(), RID());
-		for (int i = 0; i < pass.color_attachments.size(); i++) {
-			if (pass.color_attachments[i] != ATTACHMENT_UNUSED) {
-				ERR_FAIL_INDEX_V(p_blend_state.attachments[i].src_color_blend_factor, BLEND_FACTOR_MAX, RID());
-				ERR_FAIL_INDEX_V(p_blend_state.attachments[i].dst_color_blend_factor, BLEND_FACTOR_MAX, RID());
-				ERR_FAIL_INDEX_V(p_blend_state.attachments[i].color_blend_op, BLEND_OP_MAX, RID());
-
-				ERR_FAIL_INDEX_V(p_blend_state.attachments[i].src_alpha_blend_factor, BLEND_FACTOR_MAX, RID());
-				ERR_FAIL_INDEX_V(p_blend_state.attachments[i].dst_alpha_blend_factor, BLEND_FACTOR_MAX, RID());
-				ERR_FAIL_INDEX_V(p_blend_state.attachments[i].alpha_blend_op, BLEND_OP_MAX, RID());
-			}
-		}
-
-		for (int i = 0; i < shader->specialization_constants.size(); i++) {
-			const ShaderSpecializationConstant& sc = shader->specialization_constants[i];
-			for (int j = 0; j < p_specialization_constants.size(); j++) {
-				const PipelineSpecializationConstant& psc = p_specialization_constants[j];
-				if (psc.constant_id == sc.constant_id) {
-					ERR_FAIL_COND_V_MSG(psc.type != sc.type, RID(), std::format("Specialization constant provided for id {} is of the wrong type.", std::to_string(sc.constant_id)));
-					break;
-				}
-			}
-		}
-		std::vector<int32_t> color_attachments = pass.color_attachments;
-		std::vector<PipelineSpecializationConstant> specialization_constants = p_specialization_constants;
-		RenderPipeline pipeline;
-		pipeline.driver_id = driver->render_pipeline_create(
-			shader->driver_id,
-			driver_vertex_format,
-			p_render_primitive,
-			p_rasterization_state,
-			p_multisample_state,
-			p_depth_stencil_state,
-			p_blend_state,
-			color_attachments,
-			p_dynamic_state_flags,
-			fb_format.render_pass,
-			p_for_render_pass,
-			specialization_constants);
-		ERR_FAIL_COND_V(!pipeline.driver_id, RID());
-
-		pipeline.shader = p_shader;
-		pipeline.shader_driver_id = shader->driver_id;
-		pipeline.shader_layout_hash = shader->layout_hash;
-		pipeline.set_formats = shader->set_formats;
-		pipeline.push_constant_size = shader->push_constant_size;
-		pipeline.stage_bits = shader->stage_bits;
-
-#ifdef DEBUG_ENABLED
-		pipeline.validation.dynamic_state = p_dynamic_state_flags;
-		pipeline.validation.framebuffer_format = p_framebuffer_format;
-		pipeline.validation.render_pass = p_for_render_pass;
-		pipeline.validation.vertex_format = p_vertex_format;
-		pipeline.validation.uses_restart_indices = p_render_primitive == RENDER_PRIMITIVE_TRIANGLE_STRIPS_WITH_RESTART_INDEX;
-
-		static const uint32_t primitive_divisor[RENDER_PRIMITIVE_MAX] = {
-			1, 2, 1, 1, 1, 3, 1, 1, 1, 1, 1
-		};
-		pipeline.validation.primitive_divisor = primitive_divisor[p_render_primitive];
-		static const uint32_t primitive_minimum[RENDER_PRIMITIVE_MAX] = {
-			1,
-			2,
-			2,
-			2,
-			2,
-			3,
-			3,
-			3,
-			3,
-			3,
-			1,
-		};
-		pipeline.validation.primitive_minimum = primitive_minimum[p_render_primitive];
-#endif
-
-		// Create ID to associate with this pipeline.
-		RID id = render_pipeline_owner.make_rid(pipeline);
-		return id;
 	}
 
 	RDD::RenderPassID RenderingDevice::_render_pass_create(RenderingDeviceDriver* p_driver, const std::vector<AttachmentFormat>& p_attachments, 
@@ -1123,414 +1390,16 @@ namespace Rendering
 		return render_pass;
 	}
 
-	Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_format_create_empty(TextureSamples p_samples /*= TEXTURE_SAMPLES_1*/)
+	RenderingDevice::RenderingDevice()
 	{
-		FramebufferFormatKey key;
-		key.passes.push_back(FramebufferPass());
-
-		std::map<FramebufferFormatKey, FramebufferFormatID>::iterator it = framebuffer_format_cache.find(key);
-		if (it != framebuffer_format_cache.end())
-		{
-			return it->second;
-		}
-
-		std::vector<RDD::Subpass> subpass;
-		subpass.resize(1);
-
-		RDD::RenderPassID render_pass = driver->render_pass_create({}, subpass, {}, 1, RDD::AttachmentReference());
-		ERR_FAIL_COND_V(!render_pass, FramebufferFormatID());
-
-		FramebufferFormatID id = FramebufferFormatID(framebuffer_format_cache.size()) | (FramebufferFormatID(ID_TYPE_FRAMEBUFFER_FORMAT) << FramebufferFormatID(ID_BASE_SHIFT));
-
-		it = framebuffer_format_cache.insert({ key, id }).first;
-
-		FramebufferFormat fb_format;
-		fb_format.E = &(*it);
-		fb_format.render_pass = render_pass;
-		fb_format.pass_samples.push_back(p_samples);
-		framebuffer_formats[id] = fb_format;
-
-#if PRINT_FRAMEBUFFER_FORMAT
-		print_line("FRAMEBUFFER FORMAT:", id, "ATTACHMENTS: EMPTY");
-#endif
-
-		return id;
+		auto fs = Services::get().get<FilesystemInterface>();
+		compiler = std::make_unique<Compiler::GLSLCompiler>(*fs);
+		compiler->set_target(Compiler::Target::Vulkan13);
 	}
 
-	Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_format_create(const std::vector<AttachmentFormat>& p_format,
-		uint32_t p_view_count /*= 1*/, int32_t p_fragment_density_map_attachment /*= -1*/)
-	{
-		FramebufferPass pass;
-		for (int i = 0; i < p_format.size(); i++) {
-			if (p_format[i].usage_flags & TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) {
-				pass.depth_attachment = i;
-			}
-			else if (p_format[i].usage_flags & TEXTURE_USAGE_DEPTH_RESOLVE_ATTACHMENT_BIT) {
-				pass.depth_resolve_attachment = i;
-			}
-			else {
-				pass.color_attachments.push_back(i);
-			}
-		}
-
-		std::vector<FramebufferPass> passes;
-		passes.push_back(pass);
-		return framebuffer_format_create_multipass(p_format, passes, p_view_count, p_fragment_density_map_attachment);
+	RenderingDevice::~RenderingDevice() {
+		finalize();
 	}
-
-	Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_format_create_multipass(const std::vector<AttachmentFormat>& p_attachments,
-		const std::vector<FramebufferPass>& p_passes, uint32_t p_view_count /*= 1*/, int32_t p_vrs_attachment /*= -1*/)
-	{
-		FramebufferFormatKey key;
-		key.attachments = p_attachments;
-		key.passes = p_passes;
-		key.view_count = p_view_count;
-		key.vrs_method = vrs_method;
-		key.vrs_attachment = p_vrs_attachment;
-		key.vrs_texel_size = vrs_texel_size;
-
-		std::map<FramebufferFormatKey, FramebufferFormatID>::iterator it = framebuffer_format_cache.find(key);
-		if (it != framebuffer_format_cache.end())
-		{
-			return it->second;
-		}
-
-		std::vector<TextureSamples> samples;
-		std::vector<RDD::AttachmentLoadOp> load_ops;
-		std::vector<RDD::AttachmentStoreOp> store_ops;
-		for (int64_t i = 0; i < p_attachments.size(); i++) {
-			load_ops.push_back(RDD::ATTACHMENT_LOAD_OP_CLEAR);
-			store_ops.push_back(RDD::ATTACHMENT_STORE_OP_STORE);
-		}
-
-		RDD::RenderPassID render_pass = _render_pass_create(driver, p_attachments, p_passes, load_ops, store_ops, p_view_count, vrs_method, p_vrs_attachment, vrs_texel_size, &samples); // Actions don't matter for this use case.
-		if (!render_pass) { // Was likely invalid.
-			return INVALID_ID;
-		}
-
-		FramebufferFormatID id = FramebufferFormatID(framebuffer_format_cache.size()) | (FramebufferFormatID(ID_TYPE_FRAMEBUFFER_FORMAT) << FramebufferFormatID(ID_BASE_SHIFT));
-		it = framebuffer_format_cache.insert({ key, id }).first;
-
-		FramebufferFormat fb_format;
-		fb_format.E = &(*it);
-		fb_format.render_pass = render_pass;
-		fb_format.pass_samples = samples;
-		fb_format.view_count = p_view_count;
-		framebuffer_formats[id] = fb_format;
-
-#if PRINT_FRAMEBUFFER_FORMAT
-		LOGI("FRAMEBUFFER FORMAT:", id, "ATTACHMENTS:", p_attachments.size(), "PASSES:", p_passes.size());
-		for (RD::AttachmentFormat attachment : p_attachments) {
-			LOGI("FORMAT:", attachment.format, "SAMPLES:", attachment.samples, "USAGE FLAGS:", attachment.usage_flags);
-		}
-#endif
-
-		return id;
-	}
-
-#pragma region Shader
-
-	Rendering::RDShaderSPIRV* RenderingDevice::shader_compile_spirv_from_shader_source(const RDShaderSource* p_source, bool p_allow_cache /*= true*/)
-	{
-		//ERR_FAIL_COND_V(p_source.is_null(), &RDShaderSPIRV());
-
-		RDShaderSPIRV* bytecode = new RDShaderSPIRV;
-		for (int i = 0; i < RenderingDeviceCommons::SHADER_STAGE_MAX; i++) {
-			std::string error;
-
-			ShaderStage stage = ShaderStage(i);
-			std::string source = p_source->get_stage_source(stage);
-
-			if (!source.empty()) {
-				std::vector<uint8_t> spirv = shader_compile_spirv_from_source_file(stage, source, p_source->get_language(), &error, p_allow_cache);
-				bytecode->set_stage_bytecode(stage, spirv);
-				bytecode->set_stage_compile_error(stage, error);
-			}
-		}
-		return bytecode;
-	}
-
-	RID RenderingDevice::shader_create_from_spirv(const RDShaderSPIRV* p_spirv, const std::string& p_shader_name /*= ""*/)
-	{
-		ERR_FAIL_COND_V(p_spirv == nullptr, RID());
-
-		std::vector<ShaderStageSPIRVData> stage_data;
-		for (int i = 0; i < RenderingDeviceCommons::SHADER_STAGE_MAX; i++) {
-			ShaderStage stage = ShaderStage(i);
-			ShaderStageSPIRVData sd;
-			sd.shader_stage = stage;
-			std::string error = p_spirv->get_stage_compile_error(stage);
-			ERR_FAIL_COND_V_MSG(!error.empty(), RID(), "Can't create a shader from an errored bytecode. Check errors in source bytecode.");
-			sd.spirv = p_spirv->get_stage_bytecode(stage);
-			if (sd.spirv.empty()) {
-				continue;
-			}
-			stage_data.push_back(sd);
-		}
-
-		const RenderingShaderContainerFormat& container_format = driver->get_shader_container_format();
-		RenderingShaderContainer* shader_container = container_format.create_container();
-		//ERR_FAIL_COND_V(shader_container == nullptr, std::vector<uint8_t>());
-		bool code_compiled = shader_container->set_code_from_spirv(p_shader_name, stage_data);
-		//ERR_FAIL_COND_V_MSG(!code_compiled, std::vector<uint8_t>(), std::format("Failed to compile code to native for SPIR-V."));
-		std::vector<PipelineImmutableSampler> immutable_samplers;
-		return shader_create_from_container_with_samplers(shader_container, RID(), immutable_samplers);//_shader_create_from_spirv(stage_data);
-	}
-
-	RID RenderingDevice::shader_create_from_container_with_samplers(RenderingShaderContainer* shader_container, RID p_placeholder, const std::vector<PipelineImmutableSampler>& p_immutable_samplers)
-	{
-		//RenderingShaderContainer* shader_container = driver->get_shader_container_format().create_container();
-		ERR_FAIL_COND_V(shader_container == nullptr, RID());
-
-		//bool parsed_container = shader_container->from_shader_stage_spirv_data(p_shader);
-		//ERR_FAIL_COND_V_MSG(!parsed_container, RID(), "Failed to parse shader container from binary.");
-
-		std::vector<RDD::ImmutableSampler> driver_immutable_samplers;
-		for (const PipelineImmutableSampler& source_sampler : p_immutable_samplers) {
-			RDD::ImmutableSampler driver_sampler;
-			driver_sampler.type = source_sampler.uniform_type;
-			driver_sampler.binding = source_sampler.binding;
-
-			for (uint32_t j = 0; j < source_sampler.get_id_count(); j++) {
-				RDD::SamplerID* sampler_driver_id = sampler_owner.get_or_null(source_sampler.get_id(j));
-				driver_sampler.ids.push_back(*sampler_driver_id);
-			}
-
-			driver_immutable_samplers.push_back(driver_sampler);
-		}
-
-		RDD::ShaderID shader_id = driver->shader_create_from_container(shader_container, driver_immutable_samplers);
-		ERR_FAIL_COND_V(!shader_id, RID());
-
-		// All good, let's create modules.
-
-		RID id;
-		if (p_placeholder.is_null()) {
-			id = shader_owner.make_rid();
-		}
-		else {
-			id = p_placeholder;
-		}
-
-		Shader* shader = shader_owner.get_or_null(id);
-		ERR_FAIL_NULL_V(shader, RID());
-
-		*((ShaderReflection*)shader) = shader_container->get_shader_reflection();
-		shader->name.clear();
-		shader->name.append(shader_container->shader_name);
-		shader->driver_id = shader_id;
-		shader->layout_hash = driver->shader_get_layout_hash(shader_id);
-
-		for (int i = 0; i < shader->uniform_sets.size(); i++) {
-			uint32_t format = 0; // No format, default.
-
-			if (shader->uniform_sets[i].size()) {
-				// Sort and hash.
-
-				std::sort(shader->uniform_sets[i].begin(), shader->uniform_sets[i].end());
-
-				UniformSetFormat usformat;
-				usformat.uniforms = shader->uniform_sets[i];
-				std::map<UniformSetFormat, uint32_t>::iterator i = uniform_set_format_cache.find(usformat);
-				if (i != uniform_set_format_cache.end()) {
-					format = i->second;
-				}
-				else {
-					format = uniform_set_format_cache.size() + 1;
-					uniform_set_format_cache.emplace(usformat, format);
-				}
-			}
-
-			shader->set_formats.push_back(format);
-		}
-
-		for (ShaderStage stage : shader->stages_vector) {
-			switch (stage) {
-			case SHADER_STAGE_VERTEX:
-				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_VERTEX_SHADER_BIT);
-				break;
-			case SHADER_STAGE_FRAGMENT:
-				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
-				break;
-			case SHADER_STAGE_TESSELATION_CONTROL:
-				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT);
-				break;
-			case SHADER_STAGE_TESSELATION_EVALUATION:
-				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT);
-				break;
-			case SHADER_STAGE_COMPUTE:
-				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-				break;
-			case SHADER_STAGE_RAYGEN:
-			case SHADER_STAGE_ANY_HIT:
-			case SHADER_STAGE_CLOSEST_HIT:
-			case SHADER_STAGE_MISS:
-			case SHADER_STAGE_INTERSECTION:
-				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_RAY_TRACING_SHADER_BIT);
-				break;
-			default:
-				DEV_ASSERT(false && "Unknown shader stage.");
-				break;
-			}
-		}
-
-#ifdef DEV_ENABLED
-		set_resource_name(id, "RID:" + itos(id.get_id()));
-#endif
-		return id;
-	}
-
-	std::vector<uint8_t> RenderingDevice::shader_compile_spirv_from_source_file(ShaderStage p_stage, const std::string& p_source_code_file, ShaderLanguage p_language /*= SHADER_LANGUAGE_GLSL*/, std::string* r_error /*= nullptr*/, bool p_allow_cache /*= true*/)
-	{
-		switch (p_language) {
-			//#ifdef MODULE_GLSLANG_ENABLED
-		case ShaderLanguage::SHADER_LANGUAGE_GLSL: {
-			//ShaderLanguageVersion language_version = driver->get_shader_container_format().get_shader_language_version();
-			//ShaderSpirvVersion spirv_version = driver->get_shader_container_format().get_shader_spirv_version();
-			compiler->set_source_from_file(p_source_code_file, compiler_stage_from_shader_stage(p_stage));
-			compiler->preprocess();
-			std::vector<uint32_t> spirv_compiled = compiler->compile(*r_error, {});
-			std::vector<uint8_t> bytes_spirv(spirv_compiled.size() * sizeof(uint32_t));
-			std::memcpy(bytes_spirv.data(), spirv_compiled.data(), bytes_spirv.size());
-			return bytes_spirv;
-		}
-												 //#endif
-		default:
-			ERR_FAIL_V_MSG(std::vector<uint8_t>(), "Shader language is not supported.");
-		}
-	}
-#pragma endregion
 
 }
 
-//	RID RenderingDevice::_shader_create_from_spirv(const std::vector<ShaderStageSPIRVData>& p_spirv, const std::string& p_shader_name) {
-//		std::vector<uint8_t> bytecode = shader_compile_binary_from_spirv(p_spirv, p_shader_name);
-//		ERR_FAIL_COND_V(bytecode.empty(), RID());
-//		return shader_create_from_bytecode(bytecode);
-//	}
-//
-//	RID RenderingDevice::shader_create_from_bytecode(const std::vector<uint8_t>& p_shader_binary, RID p_placeholder) {
-//		// Immutable samplers :
-//		// Expanding api when creating shader to allow passing optionally a set of immutable samplers
-//		// keeping existing api but extending it by sending an empty set.
-//		std::vector<PipelineImmutableSampler> immutable_samplers;
-//		return shader_create_from_bytecode_with_samplers(p_shader_binary, p_placeholder, immutable_samplers);
-//	}
-//
-//	RID RenderingDevice::shader_create_from_bytecode_with_samplers(const std::vector<uint8_t>& p_shader_binary, RID p_placeholder, const std::vector<PipelineImmutableSampler>& p_immutable_samplers) {
-//		//_THREAD_SAFE_METHOD_
-//
-//		RenderingShaderContainer* shader_container = driver->get_shader_container_format().create_container();
-//		ERR_FAIL_COND_V(shader_container == nullptr, RID());
-//
-//		bool parsed_container = shader_container/*shader_container->from_bytes(p_shader_binary);*/;
-//		ERR_FAIL_COND_V_MSG(!parsed_container, RID(), "Failed to parse shader container from binary.");
-//
-//		std::vector<RDD::ImmutableSampler> driver_immutable_samplers;
-//		for (const PipelineImmutableSampler& source_sampler : p_immutable_samplers) {
-//			RDD::ImmutableSampler driver_sampler;
-//			driver_sampler.type = source_sampler.uniform_type;
-//			driver_sampler.binding = source_sampler.binding;
-//
-//			for (uint32_t j = 0; j < source_sampler.get_id_count(); j++) {
-//				RDD::SamplerID* sampler_driver_id = sampler_owner.get_or_null(source_sampler.get_id(j));
-//				driver_sampler.ids.push_back(*sampler_driver_id);
-//			}
-//
-//			driver_immutable_samplers.push_back(driver_sampler);
-//		}
-//
-//		RDD::ShaderID shader_id = driver->shader_create_from_container(shader_container, driver_immutable_samplers);
-//		ERR_FAIL_COND_V(!shader_id, RID());
-//
-//		// All good, let's create modules.
-//
-//		RID id;
-//		if (p_placeholder.is_null()) {
-//			id = shader_owner.make_rid();
-//		}
-//		else {
-//			id = p_placeholder;
-//		}
-//
-//		Shader* shader = shader_owner.get_or_null(id);
-//		ERR_FAIL_NULL_V(shader, RID());
-//
-//		*((ShaderReflection*)shader) = shader_container->get_shader_reflection();
-//		shader->name.clear();
-//		shader->name.append(shader_container->shader_name);
-//		shader->driver_id = shader_id;
-//		shader->layout_hash = driver->shader_get_layout_hash(shader_id);
-//
-//		for (int i = 0; i < shader->uniform_sets.size(); i++) {
-//			uint32_t format = 0; // No format, default.
-//
-//			if (shader->uniform_sets[i].size()) {
-//				// Sort and hash.
-//
-//				std::sort(shader->uniform_sets[i].begin(), shader->uniform_sets[i].end());
-//
-//				UniformSetFormat usformat;
-//				usformat.uniforms = shader->uniform_sets[i];
-//				std::map<UniformSetFormat, uint32_t>::iterator i = uniform_set_format_cache.find(usformat);
-//				if (i != uniform_set_format_cache.end()) {
-//					format = i->second;
-//				}
-//				else {
-//					format = uniform_set_format_cache.size() + 1;
-//					uniform_set_format_cache.emplace(usformat, format);
-//				}
-//			}
-//
-//			shader->set_formats.push_back(format);
-//		}
-//
-//		for (ShaderStage stage : shader->stages_vector) {
-//			switch (stage) {
-//			case SHADER_STAGE_VERTEX:
-//				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_VERTEX_SHADER_BIT);
-//				break;
-//			case SHADER_STAGE_FRAGMENT:
-//				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
-//				break;
-//			case SHADER_STAGE_TESSELATION_CONTROL:
-//				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT);
-//				break;
-//			case SHADER_STAGE_TESSELATION_EVALUATION:
-//				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT);
-//				break;
-//			case SHADER_STAGE_COMPUTE:
-//				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-//				break;
-//			case SHADER_STAGE_RAYGEN:
-//			case SHADER_STAGE_ANY_HIT:
-//			case SHADER_STAGE_CLOSEST_HIT:
-//			case SHADER_STAGE_MISS:
-//			case SHADER_STAGE_INTERSECTION:
-//				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_RAY_TRACING_SHADER_BIT);
-//				break;
-//			default:
-//				DEV_ASSERT(false && "Unknown shader stage.");
-//				break;
-//			}
-//		}
-//
-//#ifdef DEV_ENABLED
-//		set_resource_name(id, "RID:" + itos(id.get_id()));
-//#endif
-//		return id;
-//	}
-//std::vector<uint8_t> RenderingDevice::shader_compile_binary_from_spirv(const std::vector<ShaderStageSPIRVData>& p_spirv, const std::string& p_shader_name /*= ""*/)
-//{
-//	const RenderingShaderContainerFormat& container_format = driver->get_shader_container_format();
-//	RenderingShaderContainer* shader_container = container_format.create_container();
-//	ERR_FAIL_COND_V(shader_container == nullptr, std::vector<uint8_t>());
-//
-//	// Compile shader binary from SPIR-V.
-//	//std::vector<ShaderStageSPIRVData> data{}
-//	//bool code_compiled = shader_container->set_code_from_spirv(p_shader_name, p_spirv);
-//	//ERR_FAIL_COND_V_MSG(!code_compiled, std::vector<uint8_t>(), std::format("Failed to compile code to native for SPIR-V."));
-//
-//	//return shader_container->to_bytes(); 
-//	return {};
-//}

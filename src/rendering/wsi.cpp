@@ -51,18 +51,6 @@ namespace Rendering
 		platform = p_platform;
 	}
 
-	Error WSI::_create_rendering_context_window(DisplayServerEnums::WindowID p_window_id, const std::string& p_rendering_driver)
-	{
-		WindowData& wd = windows[p_window_id];
-		wd.platfform_data = platform->get_window_platform_data(p_window_id);
-
-		Error err = rendering_context->window_create(p_window_id, &wd.platfform_data);
-		ERR_FAIL_COND_V_MSG(err != OK, err, std::format("Failed to create %s window.", p_rendering_driver));
-		rendering_context->window_set_size(p_window_id, platform->get_surface_width(), platform->get_surface_height());
-		surface = rendering_context->surface_get_from_window(p_window_id);
-		return OK;
-	}
-
 	bool WSI::begin_frame()
 	{
 		rendering_device->begin_frame();
@@ -140,6 +128,18 @@ namespace Rendering
 	WSI::~WSI()
 	{
 
+	}
+
+	Error WSI::_create_rendering_context_window(DisplayServerEnums::WindowID p_window_id, const std::string& p_rendering_driver)
+	{
+		WindowData& wd = windows[p_window_id];
+		wd.platfform_data = platform->get_window_platform_data(p_window_id);
+
+		Error err = rendering_context->window_create(p_window_id, &wd.platfform_data);
+		ERR_FAIL_COND_V_MSG(err != OK, err, std::format("Failed to create %s window.", p_rendering_driver));
+		rendering_context->window_set_size(p_window_id, platform->get_surface_width(), platform->get_surface_height());
+		surface = rendering_context->surface_get_from_window(p_window_id);
+		return OK;
 	}
 
 }
