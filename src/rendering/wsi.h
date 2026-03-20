@@ -26,7 +26,12 @@ namespace Rendering
 
 		void set_program(const std::vector<std::string> programs);
 		void pipeline_create();
+		void pipeline_create_defulat();
+		RID get_current_pipeline();
 		RenderingShaderContainerFormat* create_shader_container_format();
+
+		RenderingDevice* get_rendering_device() { return rendering_device; }
+
 		void teardown();
 		~WSI();
 

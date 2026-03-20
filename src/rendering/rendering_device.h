@@ -490,6 +490,9 @@ namespace Rendering
 
 
 		void swap_buffers(bool p_present);
+		bool begin_for_screen(DisplayServerEnums::WindowID p_screen = 0, const Color& p_clear_color = Color());
+		RDD::CommandBufferID get_current_command_buffer();
+		void render_draw(RenderingDeviceDriver::CommandBufferID p_command_buffer, uint32_t p_vertex_count, uint32_t p_instance_count);
 		void submit();
 		void sync();
 
@@ -503,10 +506,16 @@ namespace Rendering
 		VertexFormatID vertex_format_create(const std::vector<VertexAttribute>& p_vertex_descriptions);
 
 
+		RID create_swapchain_pipeline(DisplayServerEnums::WindowID window, RID p_shader, VertexFormatID p_vertex_format,
+			RenderPrimitive p_render_primitive, const PipelineRasterizationState& p_rasterization_state,
+			const PipelineMultisampleState& p_multisample_state, const PipelineDepthStencilState& p_depth_stencil_state,
+			const PipelineColorBlendState& p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags = 0,
+			uint32_t p_for_render_pass = 0,
+			const std::vector<PipelineSpecializationConstant>& p_specialization_constants = std::vector<PipelineSpecializationConstant>());
 	protected:
-		void execute_chained_cmds(bool p_present_swap_chain,
-			RenderingDeviceDriver::FenceID p_draw_fence,
-			RenderingDeviceDriver::SemaphoreID p_dst_draw_semaphore_to_signal);
+		//void execute_chained_cmds(bool p_present_swap_chain,
+		//	RenderingDeviceDriver::FenceID p_draw_fence,
+		//	RenderingDeviceDriver::SemaphoreID p_dst_draw_semaphore_to_signal);
 
 	private:
 
@@ -644,7 +653,9 @@ namespace Rendering
 		//RenderingDeviceDriver::VertexFormatID _vertex_format_create(const std::vector<RDVertexAttribute>& p_vertex_formats);
 		//RID _vertex_array_create(uint32_t p_vertex_count, RenderingDeviceDriver::VertexFormatID p_vertex_format, const std::vector<RID>& p_src_buffers, const std::vector<int64_t>& p_offsets = std::vector<int64_t>());
 		//void _draw_list_bind_vertex_buffers_format(DrawListID p_list, RenderingDeviceDriver::VertexFormatID p_vertex_format, uint32_t p_vertex_count, const  std::vector<RID>& p_vertex_buffers, const  std::vector<int64_t>& p_offsets = std::vector<int64_t>());
+		public:
 		void _begin_frame(bool p_presented = false);
+		void bind_render_pipeline(RDD::CommandBufferID p_command_buffer, RID pipeline);
 		void _end_frame();
 		void _execute_frame(bool p_present);
 		void _stall_for_frame(uint32_t p_frame);

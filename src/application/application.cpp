@@ -67,6 +67,7 @@ namespace EE
 		DEBUG_ASSERT(application_wsi->initialize("vulkan", DisplayServerEnums::WINDOW_MODE_WINDOWED, DisplayServerEnums::VSYNC_DISABLED, 0, {}, {}, 0, DisplayServerEnums::CONTEXT_ENGINE, 0) == OK);
 		application_wsi->draw_viewport(true);
 		application_wsi->set_program({"assets://shaders/triangle.vert", "assets://shaders/triangle.frag"});
+		//application_wsi->pipeline_create_defulat();
 		application_wsi->pipeline_create();
 		//DEBUG_ASSERT(application_wsi.init_device());
 		return true;
@@ -101,14 +102,14 @@ namespace EE
 
 	void Application::run_frame()
 	{
-		/*if (!application_wsi->begin_frame())
+		if (!application_wsi->begin_frame())
 		{
 			return;
 		}
-
+		application_wsi->draw_viewport(true);
 		render_frame(0, 0);
 
-		application_wsi.end_frame();*/
+		application_wsi->end_frame();
 	}
 
 	void Application::_check_initialization_progress()

@@ -246,6 +246,28 @@ namespace Rendering
 		frames[frame].swap_chains_to_present.push_back(it->second);
 	}
 
+	int RenderingDevice::screen_get_width(DisplayServerEnums::WindowID p_screen /*= DisplayServerEnums::MAIN_WINDOW_ID*/) const
+	{
+		RenderingContextDriver::SurfaceID surface = context->surface_get_from_window(p_screen);
+		ERR_FAIL_COND_V_MSG(surface == 0, 0, "A surface was not created for the screen.");
+		return context->surface_get_width(surface);
+	}
+
+	int RenderingDevice::screen_get_height(DisplayServerEnums::WindowID p_screen /*= DisplayServerEnums::MAIN_WINDOW_ID*/) const
+	{
+		RenderingContextDriver::SurfaceID surface = context->surface_get_from_window(p_screen);
+		ERR_FAIL_COND_V_MSG(surface == 0, 0, "A surface was not created for the screen.");
+		return context->surface_get_height(surface);
+	}
+
+	int RenderingDevice::screen_get_pre_rotation_degrees(DisplayServerEnums::WindowID p_screen /*= DisplayServerEnums::MAIN_WINDOW_ID*/) const
+	{
+		std::unordered_map<DisplayServerEnums::WindowID, RDD::SwapChainID>::const_iterator it = screen_swap_chains.find(p_screen);
+		ERR_FAIL_COND_V_MSG(it == screen_swap_chains.end(), ERR_CANT_CREATE, "A swap chain was not created for the screen.");
+
+		return driver->swap_chain_get_pre_rotation_degrees(it->second);
+	}
+
 	Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::screen_get_framebuffer_format(DisplayServerEnums::WindowID p_screen /*= DisplayServerEnums::MAIN_WINDOW_ID*/) const
 	{
 		std::unordered_map<DisplayServerEnums::WindowID, RDD::SwapChainID>::const_iterator it = screen_swap_chains.find(p_screen);
@@ -263,6 +285,33 @@ namespace Rendering
 		return const_cast<RenderingDevice*>(this)->framebuffer_format_create(screen_attachment);
 	}
 
+	Rendering::RenderingDeviceCommons::ColorSpace RenderingDevice::screen_get_color_space(DisplayServerEnums::WindowID p_screen /*= DisplayServerEnums::MAIN_WINDOW_ID*/) const
+	{
+		std::unordered_map<DisplayServerEnums::WindowID, RDD::SwapChainID>::const_iterator it = screen_swap_chains.find(p_screen);
+		ERR_FAIL_COND_V_MSG(it == screen_swap_chains.end(), COLOR_SPACE_MAX, "Screen was never prepared.");
+
+		ColorSpace color_space = driver->swap_chain_get_color_space(it->second);
+		ERR_FAIL_COND_V_MSG(color_space == COLOR_SPACE_MAX, COLOR_SPACE_MAX, "Unknown color space.");
+		return color_space;
+	}
+
+	Error RenderingDevice::screen_free(DisplayServerEnums::WindowID p_screen /*= DisplayServerEnums::MAIN_WINDOW_ID*/)
+	{
+		std::unordered_map<DisplayServerEnums::WindowID, RDD::SwapChainID>::const_iterator it = screen_swap_chains.find(p_screen);
+		ERR_FAIL_COND_V_MSG(it == screen_swap_chains.end(), FAILED, "Screen was never created.");
+
+		// Flush everything so nothing can be using the swap chain before erasing it.
+		_flush_and_stall_for_all_frames();
+
+		const DisplayServerEnums::WindowID screen = it->first;
+		const RDD::SwapChainID swap_chain = it->second;
+		driver->swap_chain_free(swap_chain);
+		screen_framebuffers.erase(screen);
+		screen_swap_chains.erase(screen);
+
+		return OK;
+	}
+
 	RDD::TextureLayout RenderingDevice::_vrs_layout_from_method(VRSMethod p_method) {
 		switch (p_method) {
 		case VRS_METHOD_FRAGMENT_SHADING_RATE:
@@ -276,12 +325,31 @@ namespace Rendering
 
 	void RenderingDevice::_begin_frame(bool p_presented /*= false*/)
 	{
+		RDD::CommandBufferID command_buffer = frames[frame].command_buffer;
+		driver->command_buffer_begin(command_buffer);
+	}
 
+	void  RenderingDevice::bind_render_pipeline(RDD::CommandBufferID p_command_buffer, RID pipeline)
+	{
+		RenderPipeline* render_pipeline = render_pipeline_owner.get_or_null(pipeline);
+		driver->command_bind_render_pipeline(p_command_buffer, render_pipeline->driver_id);
 	}
 
 	void RenderingDevice::_end_frame()
 	{
+		RDD::CommandBufferID command_buffer = frames[frame].command_buffer;
+		//driver->command_buffer_begin(command_buffer);
+		//std::array<RenderingDeviceDriver::RenderPassClearValue, 1> val;
+		//val[0].color = Color{ 1.0 , 0.0 , 0.0 , 0.0 };
+		//std::vector<Rect2i> frame_rects = { Rect2i{ 0, 0, (int)platform->get_surface_width(), (int)platform->get_surface_height() } };
+		//driver->command_begin_render_pass(command_buffer, render_pass, framebuffer, RenderingDeviceDriverVulkan::COMMAND_BUFFER_TYPE_PRIMARY, frame_rects[0], val);
+		//driver->command_bind_render_pipeline(command_buffer, pipeline);
+		//driver->command_render_set_viewport(command_buffer, frame_rects);
+		//driver->command_render_set_scissor(command_buffer, frame_rects);
+		//driver->command_render_draw(command_buffer, 3, 1, 0, 0);
+		driver->command_end_render_pass(command_buffer);
 
+		driver->command_buffer_end(command_buffer);
 	}
 
 	void RenderingDevice::_execute_frame(bool p_present)
@@ -297,16 +365,17 @@ namespace Rendering
 			: RDD::SemaphoreID(nullptr);
 		const bool present_swap_chain = frame_can_present && !separate_present_queue;
 
-		execute_chained_cmds(present_swap_chain, frames[frame].fence, semaphore);
+		//execute_chained_cmds(present_swap_chain, frames[frame].fence, semaphore);
 		// Indicate the fence has been signaled so the next time the frame's contents need to be
 		// used, the CPU needs to wait on the work to be completed.
 		frames[frame].fence_signaled = true;
 		std::vector<RenderingDeviceDriver::SemaphoreID> frame_semaphores{ frames[frame].semaphore };
 		if (frame_can_present) {
-			if (separate_present_queue) {
+			auto command_buffer = get_current_command_buffer();
+			/*if (separate_present_queue) {*/
 				// Issue the presentation separately if the presentation queue is different from the main queue.
-				driver->command_queue_execute_and_present(present_queue, frame_semaphores, {}, {}, {}, frames[frame].swap_chains_to_present);
-			}
+			driver->command_queue_execute_and_present(present_queue, {}, { &command_buffer, 1}, {}, frames[frame].fence, frames[frame].swap_chains_to_present);
+			//}
 
 			frames[frame].swap_chains_to_present.clear();
 		}
@@ -319,13 +388,55 @@ namespace Rendering
 
 	void RenderingDevice::swap_buffers(bool p_present)
 	{
+		//_begin_frame(true);
+
 		_end_frame();
 
 		_execute_frame(p_present);
+		_stall_for_frame(frame);
 
 		frame = (frame + 1) % frames.size();
+	}
 
-		_begin_frame(true);
+	void RenderingDevice::_stall_for_frame(uint32_t p_frame)
+	{
+		if (frames[p_frame].fence_signaled) {
+			driver->fence_wait(frames[p_frame].fence);
+			frames[p_frame].fence_signaled = false;
+		}
+	}
+
+	bool RenderingDevice::begin_for_screen(DisplayServerEnums::WindowID p_screen /*= 0*/, const Color& p_clear_color /*= Color()*/)
+	{
+		RDD::CommandBufferID command_buffer = frames[frame].command_buffer;
+
+		RenderingContextDriver::SurfaceID surface = context->surface_get_from_window(p_screen);
+		std::unordered_map<DisplayServerEnums::WindowID, RDD::SwapChainID>::const_iterator sc_it = screen_swap_chains.find(p_screen);
+		std::unordered_map<DisplayServerEnums::WindowID, RDD::FramebufferID>::const_iterator fb_it = screen_framebuffers.find(p_screen);
+		ERR_FAIL_COND_V_MSG(surface == 0, 0, "A surface was not created for the screen.");
+		ERR_FAIL_COND_V_MSG(sc_it == screen_swap_chains.end(), INVALID_ID, "Screen was never prepared.");
+		ERR_FAIL_COND_V_MSG(fb_it == screen_framebuffers.end(), INVALID_ID, "Framebuffer was never prepared.");
+
+		std::vector<Rect2i> viewport{ Rect2i(0, 0, context->surface_get_width(surface), context->surface_get_height(surface)) };
+
+		RDD::RenderPassID render_pass = driver->swap_chain_get_render_pass(sc_it->second);
+
+		std::array<RenderingDeviceDriver::RenderPassClearValue, 1> val;
+		val[0].color = p_clear_color;
+
+		driver->command_begin_render_pass(command_buffer, render_pass, fb_it->second, RenderingDeviceDriver::COMMAND_BUFFER_TYPE_PRIMARY, viewport[0], val);
+		driver->command_render_set_viewport(command_buffer, viewport);
+		driver->command_render_set_scissor(command_buffer, viewport);
+	}
+
+	RDD::CommandBufferID RenderingDevice::get_current_command_buffer()
+	{
+		return frames[frame].command_buffer;
+	}
+
+	void RenderingDevice::render_draw(RenderingDeviceDriver::CommandBufferID p_command_buffer, uint32_t p_vertex_count, uint32_t p_instance_count)
+	{
+		driver->command_render_draw(p_command_buffer, p_vertex_count, p_instance_count, 0, 0);
 	}
 
 	Rendering::RenderingDevice::VertexFormatID RenderingDevice::vertex_format_create(const std::vector<VertexAttribute>& p_vertex_descriptions)
@@ -400,7 +511,173 @@ namespace Rendering
 
 	}
 
-	RID RenderingDevice::render_pipeline_create(RID p_shader, FramebufferFormatID p_framebuffer_format, 
+	
+
+	RID RenderingDevice::create_swapchain_pipeline(DisplayServerEnums::WindowID window, RID p_shader, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, const PipelineRasterizationState& p_rasterization_state, const PipelineMultisampleState& p_multisample_state, const PipelineDepthStencilState& p_depth_stencil_state, const PipelineColorBlendState& p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags /*= 0*/, uint32_t p_for_render_pass /*= 0*/, const std::vector<PipelineSpecializationConstant>& p_specialization_constants /*= std::vector<PipelineSpecializationConstant>()*/)
+	{
+		Shader* shader = shader_owner.get_or_null(p_shader);
+		ERR_FAIL_NULL_V(shader, RID());
+		ERR_FAIL_COND_V_MSG(shader->pipeline_type != PIPELINE_TYPE_RASTERIZATION, RID(),
+			"Only render shaders can be used in render pipelines");
+
+		ERR_FAIL_COND_V_MSG(!shader->stage_bits.has_flag(RDD::PIPELINE_STAGE_VERTEX_SHADER_BIT), RID(), "Pre-raster shader (vertex shader) is not provided for pipeline creation.");
+
+		std::unordered_map<DisplayServerEnums::WindowID, RDD::SwapChainID>::const_iterator sc_it = screen_swap_chains.find(window);
+		ERR_FAIL_COND_V_MSG(sc_it == screen_swap_chains.end(), RID(), "Screen was never prepared.");
+
+		//FramebufferFormat fb_format = framebuffer_formats[driver->swap_chain_get_format(swapchain)];
+
+		//// Validate shader vs. framebuffer.
+		//{
+		//	ERR_FAIL_COND_V_MSG(p_for_render_pass >= uint32_t(fb_format.E->first.passes.size()), RID(), std::format("Render pass requested for pipeline creation {} is out of bounds", std::to_string(p_for_render_pass)));
+		//	const FramebufferPass& pass = fb_format.E->first.passes[p_for_render_pass];
+		//	uint32_t output_mask = 0;
+		//	for (int i = 0; i < pass.color_attachments.size(); i++) {
+		//		if (pass.color_attachments[i] != ATTACHMENT_UNUSED) {
+		//			output_mask |= 1 << i;
+		//		}
+		//	}
+		//	ERR_FAIL_COND_V_MSG(shader->fragment_output_mask != output_mask, RID(),
+		//		std::format("Mismatch fragment shader output mask {} and framebuffer color output mask {} when binding both in render pipeline.", std::to_string(shader->fragment_output_mask), std::to_string(output_mask)));
+		//}
+
+		RDD::VertexFormatID driver_vertex_format;
+		if (p_vertex_format != INVALID_ID) {
+			// Uses vertices, else it does not.
+			ERR_FAIL_COND_V(!vertex_formats.contains(p_vertex_format), RID());
+			const VertexDescriptionCache& vd = vertex_formats[p_vertex_format];
+			driver_vertex_format = vertex_formats[p_vertex_format].driver_id;
+
+			// Validate with inputs.
+			for (uint32_t i = 0; i < 64; i++) {
+				if (!(shader->vertex_input_mask & ((uint64_t)1) << i)) {
+					continue;
+				}
+				bool found = false;
+				for (int j = 0; j < vd.vertex_formats.size(); j++) {
+					if (vd.vertex_formats[j].location == i) {
+						found = true;
+						break;
+					}
+				}
+
+				ERR_FAIL_COND_V_MSG(!found, RID(),
+					std::format("Shader vertex input location {} not provided in vertex input description for pipeline creation.", std::to_string(i)));
+			}
+
+		}
+		else {
+			ERR_FAIL_COND_V_MSG(shader->vertex_input_mask != 0, RID(),
+				std::format("Shader contains vertex inputs, but no vertex input description was provided for pipeline creation."));
+		}
+
+		ERR_FAIL_INDEX_V(p_render_primitive, RENDER_PRIMITIVE_MAX, RID());
+
+		ERR_FAIL_INDEX_V(p_rasterization_state.cull_mode, 3, RID());
+
+		if (p_multisample_state.sample_mask.size()) {
+			// Use sample mask.
+			ERR_FAIL_COND_V((int)TEXTURE_SAMPLES_COUNT[p_multisample_state.sample_count] != p_multisample_state.sample_mask.size(), RID());
+		}
+
+		ERR_FAIL_INDEX_V(p_depth_stencil_state.depth_compare_operator, COMPARE_OP_MAX, RID());
+
+		ERR_FAIL_INDEX_V(p_depth_stencil_state.front_op.fail, STENCIL_OP_MAX, RID());
+		ERR_FAIL_INDEX_V(p_depth_stencil_state.front_op.pass, STENCIL_OP_MAX, RID());
+		ERR_FAIL_INDEX_V(p_depth_stencil_state.front_op.depth_fail, STENCIL_OP_MAX, RID());
+		ERR_FAIL_INDEX_V(p_depth_stencil_state.front_op.compare, COMPARE_OP_MAX, RID());
+
+		ERR_FAIL_INDEX_V(p_depth_stencil_state.back_op.fail, STENCIL_OP_MAX, RID());
+		ERR_FAIL_INDEX_V(p_depth_stencil_state.back_op.pass, STENCIL_OP_MAX, RID());
+		ERR_FAIL_INDEX_V(p_depth_stencil_state.back_op.depth_fail, STENCIL_OP_MAX, RID());
+		ERR_FAIL_INDEX_V(p_depth_stencil_state.back_op.compare, COMPARE_OP_MAX, RID());
+
+		ERR_FAIL_INDEX_V(p_blend_state.logic_op, LOGIC_OP_MAX, RID());
+
+		//const FramebufferPass& pass = fb_format.E->first.passes[p_for_render_pass];
+		//ERR_FAIL_COND_V(p_blend_state.attachments.size() < pass.color_attachments.size(), RID());
+		//for (int i = 0; i < pass.color_attachments.size(); i++) {
+		//	if (pass.color_attachments[i] != ATTACHMENT_UNUSED) {
+		//		ERR_FAIL_INDEX_V(p_blend_state.attachments[i].src_color_blend_factor, BLEND_FACTOR_MAX, RID());
+		//		ERR_FAIL_INDEX_V(p_blend_state.attachments[i].dst_color_blend_factor, BLEND_FACTOR_MAX, RID());
+		//		ERR_FAIL_INDEX_V(p_blend_state.attachments[i].color_blend_op, BLEND_OP_MAX, RID());
+
+		//		ERR_FAIL_INDEX_V(p_blend_state.attachments[i].src_alpha_blend_factor, BLEND_FACTOR_MAX, RID());
+		//		ERR_FAIL_INDEX_V(p_blend_state.attachments[i].dst_alpha_blend_factor, BLEND_FACTOR_MAX, RID());
+		//		ERR_FAIL_INDEX_V(p_blend_state.attachments[i].alpha_blend_op, BLEND_OP_MAX, RID());
+		//	}
+		//}
+
+		for (int i = 0; i < shader->specialization_constants.size(); i++) {
+			const ShaderSpecializationConstant& sc = shader->specialization_constants[i];
+			for (int j = 0; j < p_specialization_constants.size(); j++) {
+				const PipelineSpecializationConstant& psc = p_specialization_constants[j];
+				if (psc.constant_id == sc.constant_id) {
+					ERR_FAIL_COND_V_MSG(psc.type != sc.type, RID(), std::format("Specialization constant provided for id {} is of the wrong type.", std::to_string(sc.constant_id)));
+					break;
+				}
+			}
+		}
+
+		auto render_pass = driver->swap_chain_get_render_pass(sc_it->second);
+		std::vector<int32_t> color_attachments{ 1 };
+		std::vector<PipelineSpecializationConstant> specialization_constants = p_specialization_constants;
+		RenderPipeline pipeline;
+		pipeline.driver_id = driver->render_pipeline_create(
+			shader->driver_id,
+			driver_vertex_format,
+			p_render_primitive,
+			p_rasterization_state,
+			p_multisample_state,
+			p_depth_stencil_state,
+			p_blend_state,
+			color_attachments,
+			p_dynamic_state_flags,
+			render_pass,
+			p_for_render_pass,
+			specialization_constants);
+		ERR_FAIL_COND_V(!pipeline.driver_id, RID());
+
+		pipeline.shader = p_shader;
+		pipeline.shader_driver_id = shader->driver_id;
+		pipeline.shader_layout_hash = shader->layout_hash;
+		pipeline.set_formats = shader->set_formats;
+		pipeline.push_constant_size = shader->push_constant_size;
+		pipeline.stage_bits = shader->stage_bits;
+
+#ifdef DEBUG_ENABLED
+		pipeline.validation.dynamic_state = p_dynamic_state_flags;
+		pipeline.validation.framebuffer_format = p_framebuffer_format;
+		pipeline.validation.render_pass = p_for_render_pass;
+		pipeline.validation.vertex_format = p_vertex_format;
+		pipeline.validation.uses_restart_indices = p_render_primitive == RENDER_PRIMITIVE_TRIANGLE_STRIPS_WITH_RESTART_INDEX;
+
+		static const uint32_t primitive_divisor[RENDER_PRIMITIVE_MAX] = {
+			1, 2, 1, 1, 1, 3, 1, 1, 1, 1, 1
+		};
+		pipeline.validation.primitive_divisor = primitive_divisor[p_render_primitive];
+		static const uint32_t primitive_minimum[RENDER_PRIMITIVE_MAX] = {
+			1,
+			2,
+			2,
+			2,
+			2,
+			3,
+			3,
+			3,
+			3,
+			3,
+			1,
+		};
+		pipeline.validation.primitive_minimum = primitive_minimum[p_render_primitive];
+#endif
+
+		// Create ID to associate with this pipeline.
+		RID id = render_pipeline_owner.make_rid(pipeline);
+		return id;
+	}
+
+	RID RenderingDevice::render_pipeline_create(RID p_shader, FramebufferFormatID p_framebuffer_format,
 		VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, 
 		const PipelineRasterizationState& p_rasterization_state, const PipelineMultisampleState& p_multisample_state, 
 		const PipelineDepthStencilState& p_depth_stencil_state, const PipelineColorBlendState& p_blend_state, 

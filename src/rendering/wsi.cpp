@@ -64,6 +64,13 @@ namespace Rendering
 		return OK;
 	}
 
+
+	bool WSI::begin_frame()
+	{
+		rendering_device->_begin_frame();
+		return true;
+	}
+
 	// draw viewport
 	void WSI::draw_viewport(bool p_swap_buffers)
 	{
@@ -71,6 +78,12 @@ namespace Rendering
 			// screen_prepare_for_drawing
 		rendering_device->screen_prepare_for_drawing(DisplayServerEnums::MAIN_WINDOW_ID);
 		
+	}
+
+	bool WSI::end_frame()
+	{
+		rendering_device->swap_buffers(true);
+		return true;
 	}
 
 	void WSI::set_program(const std::vector<std::string> programs)
@@ -93,11 +106,28 @@ namespace Rendering
 		auto vertex_format = rendering_device->vertex_format_create({});
 
 		auto blend_state = RenderingDeviceCommons::PipelineColorBlendState::create_blend();
-		pipeline = rendering_device->render_pipeline_create(shader_program, fb_format,
+		pipeline = rendering_device->render_pipeline_create( shader_program, fb_format,
 			vertex_format, RenderingDeviceCommons::RENDER_PRIMITIVE_TRIANGLE_STRIPS, 
 			{}, RenderingDeviceCommons::PipelineMultisampleState(),
 			RenderingDeviceCommons::PipelineDepthStencilState(), blend_state,
 			0);
+	}
+
+	void WSI::pipeline_create_defulat()
+	{
+		auto vertex_format = rendering_device->vertex_format_create({});
+
+		auto blend_state = RenderingDeviceCommons::PipelineColorBlendState::create_blend();
+		pipeline = rendering_device->create_swapchain_pipeline(DisplayServerEnums::MAIN_WINDOW_ID, shader_program,
+			vertex_format, RenderingDeviceCommons::RENDER_PRIMITIVE_TRIANGLE_STRIPS,
+			{}, RenderingDeviceCommons::PipelineMultisampleState(),
+			RenderingDeviceCommons::PipelineDepthStencilState(), blend_state,
+			0);
+	}
+
+	RID WSI::get_current_pipeline()
+	{
+		return pipeline;
 	}
 
 	RenderingShaderContainerFormat* WSI::create_shader_container_format() 
