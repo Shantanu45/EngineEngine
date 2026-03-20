@@ -230,7 +230,7 @@ namespace Rendering
 					}
 					p_index -= set.size();
 				}
-				CRASH_NOW_MSG(std::format("Uniform index %d out of range (total %d)", p_index, uniform_count()));
+				CRASH_NOW_MSG(std::format("Uniform index {} out of range (total {})", p_index, uniform_count()));
 			}
 
 			uint32_t uniform_count() const {

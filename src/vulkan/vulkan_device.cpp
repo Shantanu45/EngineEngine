@@ -470,7 +470,7 @@ namespace Vulkan
 					ERR_FAIL_V_MSG(ERR_BUG, msg.c_str());
 				}
 				else {
-					LOGI("Optional extension %s not found.", requested_extension.first);
+					LOGI("Optional extension %s not found.", requested_extension.first.c_str());
 				}
 			}
 		}
@@ -483,7 +483,7 @@ namespace Vulkan
 
 		// Check for required features.
 		if (!physical_device_features.imageCubeArray || !physical_device_features.independentBlend) {
-			std::string error_string = std::format("Your GPU (%s) does not support the following features which are required to use Vulkan-based renderers in Godot:\n\n", context_device.name);
+			std::string error_string = std::format("Your GPU ({}) does not support the following features which are required to use Vulkan-based renderers in Godot:\n\n", context_device.name);
 			if (!physical_device_features.imageCubeArray) {
 				error_string += "- No support for image cube arrays.\n";
 			}
@@ -1291,15 +1291,15 @@ namespace Vulkan
 			alloc_create_info.preferredFlags &= ~vma_flags_to_remove;
 			alloc_create_info.usage = vma_usage;
 			VkResult err = vmaCreateBuffer(allocator, &create_info, &alloc_create_info, &vk_buffer, &allocation, &alloc_info);
-			ERR_FAIL_COND_V_MSG(err, BufferID(), std::format( "Can't create buffer of size: %s , error %s", std::to_string(p_size), std::to_string(err)));
+			ERR_FAIL_COND_V_MSG(err, BufferID(), std::format( "Can't create buffer of size: {} , error {}", std::to_string(p_size), std::to_string(err)));
 		}
 		else {
 			VkResult err = vkCreateBuffer(vk_device, &create_info, nullptr, &vk_buffer);
-			ERR_FAIL_COND_V_MSG(err, BufferID(), std::format("Can't create buffer of size: %s , error %s", std::to_string(p_size) + std::to_string(err)));
+			ERR_FAIL_COND_V_MSG(err, BufferID(), std::format("Can't create buffer of size: {} , error {}", std::to_string(p_size), std::to_string(err)));
 			err = vmaAllocateMemoryForBuffer(allocator, vk_buffer, &alloc_create_info, &allocation, &alloc_info);
-			ERR_FAIL_COND_V_MSG(err, BufferID(), std::format("Can't allocate memory for buffer of size: %s, error %s .", std::to_string(p_size), std::to_string(err)));
+			ERR_FAIL_COND_V_MSG(err, BufferID(), std::format("Can't allocate memory for buffer of size: {}, error {} .", std::to_string(p_size), std::to_string(err)));
 			err = vmaBindBufferMemory2(allocator, allocation, 0, vk_buffer, nullptr);
-			ERR_FAIL_COND_V_MSG(err, BufferID(), std::format("Can't bind memory to buffer of size: %s, error %s .", std::to_string(p_size), std::to_string(err)));
+			ERR_FAIL_COND_V_MSG(err, BufferID(), std::format("Can't bind memory to buffer of size: {}, error {} .", std::to_string(p_size), std::to_string(err)));
 		}
 
 		// Bookkeep.
@@ -1307,7 +1307,7 @@ namespace Vulkan
 		if (p_usage.has_flag(BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT)) {
 			void* persistent_ptr = nullptr;
 			VkResult err = vmaMapMemory(allocator, allocation, &persistent_ptr);
-			ERR_FAIL_COND_V_MSG(err, BufferID(), std::format("vmaMapMemory failed with error %s .", std::to_string(err)));
+			ERR_FAIL_COND_V_MSG(err, BufferID(), std::format("vmaMapMemory failed with error {} .", std::to_string(err)));
 
 			BufferDynamicInfo* dyn_buffer = new BufferDynamicInfo;		// TODO: dealloc
 			buf_info = dyn_buffer;
@@ -1366,7 +1366,7 @@ namespace Vulkan
 		view_create_info.range = buf_info->allocation.size;
 
 		VkResult res = vkCreateBufferView(vk_device, &view_create_info, nullptr, &buf_info->vk_view);
-		ERR_FAIL_COND_V_MSG(res, false, std::format("Unable to create buffer view, error %s .", std::to_string(res)));
+		ERR_FAIL_COND_V_MSG(res, false, std::format("Unable to create buffer view, error {} .", std::to_string(res)));
 
 		return true;
 	}
@@ -1381,7 +1381,7 @@ namespace Vulkan
 		ERR_FAIL_COND_V_MSG(buf_info->is_dynamic(), nullptr, "Buffer must NOT have BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT. Use buffer_persistent_map_advance() instead.");
 		void* data_ptr = nullptr;
 		VkResult err = vmaMapMemory(allocator, buf_info->allocation.handle, &data_ptr);
-		ERR_FAIL_COND_V_MSG(err, nullptr, std::format("vmaMapMemory failed with error %s .", std::to_string(err)));
+		ERR_FAIL_COND_V_MSG(err, nullptr, std::format("vmaMapMemory failed with error {} .", std::to_string(err)));
 		return (uint8_t*)data_ptr;
 	}
 
@@ -1625,15 +1625,15 @@ namespace Vulkan
 		if (false/*!Engine::get_singleton()->is_extra_gpu_memory_tracking_enabled()*/) {
 			alloc_create_info.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
 			VkResult err = vmaCreateImage(allocator, &create_info, &alloc_create_info, &vk_image, &allocation, &alloc_info);
-			ERR_FAIL_COND_V_MSG(err, TextureID(), std::format("vmaCreateImage failed with error %s .", std::to_string(err)));
+			ERR_FAIL_COND_V_MSG(err, TextureID(), std::format("vmaCreateImage failed with error {} .", std::to_string(err)));
 		}
 		else {
 			VkResult err = vkCreateImage(vk_device, &create_info, nullptr, &vk_image);
-			ERR_FAIL_COND_V_MSG(err, TextureID(), std::format("vkCreateImage failed with error %s", std::to_string(err)));
+			ERR_FAIL_COND_V_MSG(err, TextureID(), std::format("vkCreateImage failed with error {}", std::to_string(err)));
 			err = vmaAllocateMemoryForImage(allocator, vk_image, &alloc_create_info, &allocation, &alloc_info);
-			ERR_FAIL_COND_V_MSG(err, TextureID(), std::format("Can't allocate memory for image, error: %s", std::to_string(err)));
+			ERR_FAIL_COND_V_MSG(err, TextureID(), std::format("Can't allocate memory for image, error: {}", std::to_string(err)));
 			err = vmaBindImageMemory2(allocator, allocation, 0, vk_image, nullptr);
-			ERR_FAIL_COND_V_MSG(err, TextureID(), std::format("Can't bind memory to image, error: %s", std::to_string(err)));
+			ERR_FAIL_COND_V_MSG(err, TextureID(), std::format("Can't bind memory to image, error: {}", std::to_string(err)));
 		}
 
 		// Create view.
@@ -1677,7 +1677,7 @@ namespace Vulkan
 				vmaFreeMemory(allocator, allocation);
 			}
 
-			ERR_FAIL_COND_V_MSG(err, TextureID(), std::format("vkCreateImageView failed with error %s .", std::to_string(err)));
+			ERR_FAIL_COND_V_MSG(err, TextureID(), std::format("vkCreateImageView failed with error {} .", std::to_string(err)));
 		}
 
 		// Bookkeep.
@@ -1723,7 +1723,7 @@ namespace Vulkan
 		VkImageView vk_image_view = VK_NULL_HANDLE;
 		VkResult err = vkCreateImageView(vk_device, &image_view_create_info, nullptr, &vk_image_view);
 		if (err) {
-			ERR_FAIL_COND_V_MSG(err, TextureID(), std::format("vkCreateImageView failed with error %s .",std::to_string(err)));
+			ERR_FAIL_COND_V_MSG(err, TextureID(), std::format("vkCreateImageView failed with error {} .",std::to_string(err)));
 		}
 
 		// Bookkeep.
@@ -1778,7 +1778,7 @@ namespace Vulkan
 
 		VkImageView new_vk_image_view = VK_NULL_HANDLE;
 		VkResult err = vkCreateImageView(vk_device, &image_view_create_info, nullptr, &new_vk_image_view);
-		ERR_FAIL_COND_V_MSG(err, TextureID(), std::format("vkCreateImageView failed with error %s .", std::to_string(err)));
+		ERR_FAIL_COND_V_MSG(err, TextureID(), std::format("vkCreateImageView failed with error {} .", std::to_string(err)));
 
 		// Bookkeep.
 
@@ -1831,7 +1831,7 @@ namespace Vulkan
 
 		VkImageView new_vk_image_view = VK_NULL_HANDLE;
 		VkResult err = vkCreateImageView(vk_device, &image_view_create_info, nullptr, &new_vk_image_view);
-		ERR_FAIL_COND_V_MSG(err, TextureID(), std::format("vkCreateImageView failed with error %s .", std::to_string(err)));
+		ERR_FAIL_COND_V_MSG(err, TextureID(), std::format("vkCreateImageView failed with error {} .", std::to_string(err)));
 
 		// Bookkeep.
 
@@ -1906,7 +1906,7 @@ namespace Vulkan
 
 		void* data_ptr = nullptr;
 		VkResult err = vmaMapMemory(allocator, tex->allocation.handle, &data_ptr);
-		ERR_FAIL_COND_V_MSG(err, std::vector<uint8_t>(), std::format("vmaMapMemory failed with error %s .", std::to_string(err)));
+		ERR_FAIL_COND_V_MSG(err, std::vector<uint8_t>(), std::format("vmaMapMemory failed with error {} .", std::to_string(err)));
 
 		{
 			uint8_t* w = image_data.data();
@@ -2027,7 +2027,7 @@ namespace Vulkan
 
 		VkSampler vk_sampler = VK_NULL_HANDLE;
 		VkResult res = vkCreateSampler(vk_device, &sampler_create_info, nullptr, &vk_sampler);
-		ERR_FAIL_COND_V_MSG(res, SamplerID(), std::format("vkCreateSampler failed with error %s .", std::to_string(res)));
+		ERR_FAIL_COND_V_MSG(res, SamplerID(), std::format("vkCreateSampler failed with error {} .", std::to_string(res)));
 
 		return SamplerID(vk_sampler);
 	}
@@ -2543,7 +2543,7 @@ namespace Vulkan
 			ERR_FAIL_COND_V_MSG(
 				err != VK_SUCCESS && err != VK_SUBOPTIMAL_KHR,
 				FAILED,
-				std::format("QueuePresentKHR failed with error: %s .", get_vulkan_result(err)));
+				std::format("QueuePresentKHR failed with error: {} .", get_vulkan_result(err)));
 		}
 
 		return OK;
@@ -2588,7 +2588,7 @@ namespace Vulkan
 
 		VkCommandPool vk_command_pool = VK_NULL_HANDLE;
 		VkResult res = vkCreateCommandPool(vk_device, &cmd_pool_info, nullptr, &vk_command_pool);
-		ERR_FAIL_COND_V_MSG(res, CommandPoolID(), std::format("vkCreateCommandPool failed with error %s .",std::to_string(res)));
+		ERR_FAIL_COND_V_MSG(res, CommandPoolID(), std::format("vkCreateCommandPool failed with error {} .",std::to_string(res)));
 
 		CommandPool* command_pool = new CommandPool;
 		command_pool->vk_command_pool = vk_command_pool;
@@ -2601,7 +2601,7 @@ namespace Vulkan
 
 		CommandPool* command_pool = (CommandPool*)(p_cmd_pool.id);
 		VkResult err = vkResetCommandPool(vk_device, command_pool->vk_command_pool, 0);
-		ERR_FAIL_COND_V_MSG(err, false, std::format("vkResetCommandPool failed with error %s .", std::to_string(err)));
+		ERR_FAIL_COND_V_MSG(err, false, std::format("vkResetCommandPool failed with error {} .", std::to_string(err)));
 
 		return true;
 	}
@@ -2638,7 +2638,7 @@ namespace Vulkan
 
 		VkCommandBuffer vk_command_buffer = VK_NULL_HANDLE;
 		VkResult err = vkAllocateCommandBuffers(vk_device, &cmd_buf_info, &vk_command_buffer);
-		ERR_FAIL_COND_V_MSG(err, CommandBufferID(), std::format("vkAllocateCommandBuffers failed with error %s .", std::to_string(err)));
+		ERR_FAIL_COND_V_MSG(err, CommandBufferID(), std::format("vkAllocateCommandBuffers failed with error {} .", std::to_string(err)));
 
 		CommandBufferInfo* command_buffer = new CommandBufferInfo;
 		command_buffer->vk_command_buffer = vk_command_buffer;
@@ -2654,7 +2654,7 @@ namespace Vulkan
 		cmd_buf_begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
 		VkResult err = vkBeginCommandBuffer(command_buffer->vk_command_buffer, &cmd_buf_begin_info);
-		ERR_FAIL_COND_V_MSG(err, false, std::format("vkBeginCommandBuffer failed with error %s .", std::to_string(err)));
+		ERR_FAIL_COND_V_MSG(err, false, std::format("vkBeginCommandBuffer failed with error {} .", std::to_string(err)));
 
 		return true;
 	}
@@ -2676,7 +2676,7 @@ namespace Vulkan
 		cmd_buf_begin_info.pInheritanceInfo = &inheritance_info;
 
 		VkResult err = vkBeginCommandBuffer(command_buffer->vk_command_buffer, &cmd_buf_begin_info);
-		ERR_FAIL_COND_V_MSG(err, false, std::format("vkBeginCommandBuffer failed with error %s .", std::to_string(err)));
+		ERR_FAIL_COND_V_MSG(err, false, std::format("vkBeginCommandBuffer failed with error {} .", std::to_string(err)));
 
 		return true;
 	}
@@ -2920,7 +2920,7 @@ namespace Vulkan
 		bool present_mode_available = (std::find(present_modes.begin(), present_modes.end(), present_mode) != present_modes.end());
 		if (!present_mode_available) {
 			// Present mode is not available, fall back to FIFO which is guaranteed to be supported.
-			WARN_PRINT(std::format("The requested V-Sync mode %s is not available. Falling back to V-Sync mode Enabled.", present_mode_name));
+			WARN_PRINT(std::format("The requested V-Sync mode {} is not available. Falling back to V-Sync mode Enabled.", present_mode_name));
 			surface->vsync_mode = DisplayServerEnums::VSyncMode::VSYNC_ENABLED;
 			present_mode = VkPresentModeKHR::VK_PRESENT_MODE_FIFO_KHR;
 		}
@@ -3266,7 +3266,7 @@ namespace Vulkan
 
 		VkFramebuffer vk_framebuffer = VK_NULL_HANDLE;
 		VkResult err = vkCreateFramebuffer(vk_device, &framebuffer_create_info, nullptr, &vk_framebuffer);
-		ERR_FAIL_COND_V_MSG(err, FramebufferID(), std::format("vkCreateFramebuffer failed with error %s .", std::to_string(err)));
+		ERR_FAIL_COND_V_MSG(err, FramebufferID(), std::format("vkCreateFramebuffer failed with error {} .", std::to_string(err)));
 
 #if PRINT_NATIVE_COMMANDS
 		LOGI(std::format("vkCreateFramebuffer 0x%uX with %d attachments", uint64_t(vk_framebuffer), p_attachments.size()));
@@ -3495,7 +3495,7 @@ namespace Vulkan
 
 			res = vkCreateShaderModule(vk_device, &shader_module_create_info, nullptr, &vk_module);
 			if (res != VK_SUCCESS) {
-				error_text = std::format("Error (%d) creating module for shader stage %s.", std::to_string(res), std::string(SHADER_STAGE_NAMES[shader_refl.stages_vector[i]]));
+				error_text = std::format("Error ({}) creating module for shader stage {}.", std::to_string(res), std::string(SHADER_STAGE_NAMES[shader_refl.stages_vector[i]]));
 				break;
 			}
 
@@ -3828,7 +3828,7 @@ namespace Vulkan
 		VkDescriptorPool vk_pool = VK_NULL_HANDLE;
 		VkResult res = vkCreateDescriptorPool(vk_device, &descriptor_set_pool_create_info, nullptr, &vk_pool);
 		if (res) {
-			ERR_FAIL_COND_V_MSG(res, VK_NULL_HANDLE, std::format("vkCreateDescriptorPool failed with error %s .", std::to_string(res)));
+			ERR_FAIL_COND_V_MSG(res, VK_NULL_HANDLE, std::format("vkCreateDescriptorPool failed with error {} .", std::to_string(res)));
 		}
 
 		return vk_pool;
@@ -4018,7 +4018,7 @@ namespace Vulkan
 				vk_buf_info->range = buf_info->size;
 
 				ERR_FAIL_COND_V_MSG(buf_info->is_dynamic(), UniformSetID(),
-					std::format("Sent a buffer with BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT but binding ( %s ), set ( %s ) is UNIFORM_TYPE_UNIFORM_BUFFER instead of UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC.", std::to_string(uniform.binding), std::to_string(p_set_index)));
+					std::format("Sent a buffer with BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT but binding ( {} ), set ( {} ) is UNIFORM_TYPE_UNIFORM_BUFFER instead of UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC.", std::to_string(uniform.binding), std::to_string(p_set_index)));
 
 				vk_writes[writes_amount].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 				vk_writes[writes_amount].pBufferInfo = vk_buf_info;
@@ -4032,9 +4032,9 @@ namespace Vulkan
 				vk_buf_info->range = buf_info->size;
 
 				ERR_FAIL_COND_V_MSG(!buf_info->is_dynamic(), UniformSetID(),
-					std::format("Sent a buffer without BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT but binding ( %s ), set ( %s ) is UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC instead of UNIFORM_TYPE_UNIFORM_BUFFER.", std::to_string(uniform.binding), std::to_string(p_set_index) ));
+					std::format("Sent a buffer without BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT but binding ( {} ), set ( {} ) is UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC instead of UNIFORM_TYPE_UNIFORM_BUFFER.", std::to_string(uniform.binding), std::to_string(p_set_index) ));
 				ERR_FAIL_COND_V_MSG(num_dynamic_buffers >= MAX_DYNAMIC_BUFFERS, UniformSetID(),
-					std::format("Uniform set exceeded the limit of dynamic/persistent buffers. ( %s ).", std::to_string(MAX_DYNAMIC_BUFFERS)));
+					std::format("Uniform set exceeded the limit of dynamic/persistent buffers. ( {} ).", std::to_string(MAX_DYNAMIC_BUFFERS)));
 
 				dynamic_buffers[num_dynamic_buffers++] = buf_info;
 				vk_writes[writes_amount].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
@@ -4049,7 +4049,7 @@ namespace Vulkan
 				vk_buf_info->range = buf_info->size;
 
 				ERR_FAIL_COND_V_MSG(buf_info->is_dynamic(), UniformSetID(),
-					std::format("Sent a buffer with BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT but binding ( %s ), set ( %s ) is UNIFORM_TYPE_STORAGE_BUFFER instead of UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC.", std::to_string(uniform.binding), std::to_string(p_set_index)));
+					std::format("Sent a buffer with BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT but binding ( {} ), set ( {} ) is UNIFORM_TYPE_STORAGE_BUFFER instead of UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC.", std::to_string(uniform.binding), std::to_string(p_set_index)));
 
 				vk_writes[writes_amount].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 				vk_writes[writes_amount].pBufferInfo = vk_buf_info;
@@ -4063,9 +4063,9 @@ namespace Vulkan
 				vk_buf_info->range = buf_info->size;
 
 				ERR_FAIL_COND_V_MSG(!buf_info->is_dynamic(), UniformSetID(),
-					std::format("Sent a buffer without BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT but binding ( %s ), set ( %s ) is UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC instead of UNIFORM_TYPE_STORAGE_BUFFER.", std::to_string(uniform.binding), std::to_string(p_set_index)));
+					std::format("Sent a buffer without BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT but binding ( {} ), set ( {} ) is UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC instead of UNIFORM_TYPE_STORAGE_BUFFER.", std::to_string(uniform.binding), std::to_string(p_set_index)));
 				ERR_FAIL_COND_V_MSG(num_dynamic_buffers >= MAX_DYNAMIC_BUFFERS, UniformSetID(),
-					std::format("Uniform set exceeded the limit of dynamic/persistent buffers. ( %s )", std::to_string(MAX_DYNAMIC_BUFFERS)));
+					std::format("Uniform set exceeded the limit of dynamic/persistent buffers. ( {} )", std::to_string(MAX_DYNAMIC_BUFFERS)));
 
 				dynamic_buffers[num_dynamic_buffers++] = buf_info;
 				vk_writes[writes_amount].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
@@ -4107,7 +4107,7 @@ namespace Vulkan
 				writes_amount++;
 			}
 
-			ERR_FAIL_COND_V_MSG(pool_key.uniform_type[uniform.type] == MAX_UNIFORM_POOL_ELEMENT, UniformSetID(), std::format("Uniform set reached the limit of bindings for the same type ( %s )", std::to_string(MAX_UNIFORM_POOL_ELEMENT)));
+			ERR_FAIL_COND_V_MSG(pool_key.uniform_type[uniform.type] == MAX_UNIFORM_POOL_ELEMENT, UniformSetID(), std::format("Uniform set reached the limit of bindings for the same type ( {} )", std::to_string(MAX_UNIFORM_POOL_ELEMENT)));
 			pool_key.uniform_type[uniform.type] += num_descriptors;
 		}
 
@@ -4141,7 +4141,7 @@ namespace Vulkan
 
 				// "Fragmented pool" and "out of memory pool" errors are handled by creating more pools. Any other error is unexpected.
 				if (res != VK_ERROR_FRAGMENTED_POOL && res != VK_ERROR_OUT_OF_POOL_MEMORY) {
-					ERR_FAIL_V_MSG(UniformSetID(), std::format("Cannot allocate descriptor sets, error %s .", std::to_string(res)));
+					ERR_FAIL_V_MSG(UniformSetID(), std::format("Cannot allocate descriptor sets, error {} .", std::to_string(res)));
 				}
 			}
 		}
@@ -4154,7 +4154,7 @@ namespace Vulkan
 			// All errors are unexpected at this stage.
 			if (res) {
 				vkDestroyDescriptorPool(vk_device, descriptor_set_allocate_info.descriptorPool, nullptr);
-				ERR_FAIL_V_MSG(UniformSetID(),std::format("Cannot allocate descriptor sets, error %s ."), std::to_string(res));
+				ERR_FAIL_V_MSG(UniformSetID(),std::format("Cannot allocate descriptor sets, error {} .", std::to_string(res)));
 			}
 		}
 
@@ -4757,7 +4757,7 @@ namespace Vulkan
 
 		VkRenderPass vk_render_pass = VK_NULL_HANDLE;
 		VkResult res = _create_render_pass(vk_device, &create_info, nullptr, &vk_render_pass);
-		ERR_FAIL_COND_V_MSG(res, RenderPassID(), std::format("vkCreateRenderPass2KHR failed with error %s .", std::to_string(res)));
+		ERR_FAIL_COND_V_MSG(res, RenderPassID(), std::format("vkCreateRenderPass2KHR failed with error {} .", std::to_string(res)));
 
 		RenderPassInfo* render_pass = new RenderPassInfo;
 		render_pass->vk_render_pass = vk_render_pass;
@@ -4773,9 +4773,13 @@ namespace Vulkan
 
 	// ----- COMMANDS -----
 
-	void RenderingDeviceDriverVulkan::command_begin_render_pass(CommandBufferID p_cmd_buffer, RenderPassID p_render_pass, FramebufferID p_framebuffer, CommandBufferType p_cmd_buffer_type, const Rect2i& p_rect, std::span<RenderingDeviceDriver::RenderPassClearValue> p_clear_values) {
+	void RenderingDeviceDriverVulkan::command_begin_render_pass(CommandBufferID p_cmd_buffer, RenderPassID p_render_pass, 
+		FramebufferID p_framebuffer, CommandBufferType p_cmd_buffer_type, const Rect2i& p_rect,
+		std::span<RenderingDeviceDriver::RenderPassClearValue> p_clear_values) {
+
 		CommandBufferInfo* command_buffer = (CommandBufferInfo*)(p_cmd_buffer.id);
 		RenderPassInfo* render_pass = (RenderPassInfo*)(p_render_pass.id);
+
 		Framebuffer* framebuffer = (Framebuffer*)(p_framebuffer.id);
 
 		if (framebuffer->swap_chain_acquired) {
@@ -5318,7 +5322,7 @@ namespace Vulkan
 							}
 						}
 
-						LOGI(std::format("re-spirv transformed the shader from %d bytes to %d bytes with constants %s (%d).", shader_info->respv_stage_shaders[i].inlinedSpirvWords.size() * sizeof(uint32_t), respv_optimized_data.size(), spec_constants, p_shader.id));
+						LOGI(std::format("re-spirv transformed the shader from {} bytes to %d bytes with constants {} ({}).", shader_info->respv_stage_shaders[i].inlinedSpirvWords.size() * sizeof(uint32_t), respv_optimized_data.size(), spec_constants, p_shader.id));
 #endif
 
 						// Create the shader module with the optimized output.

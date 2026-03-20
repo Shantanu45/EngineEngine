@@ -115,7 +115,7 @@ class RID_Alloc : public RID_AllocBase {
 			if (THREAD_SAFE && chunk_count == chunk_limit) {
 				mutex.unlock();
 				if (description != nullptr) {
-					ERR_FAIL_V_MSG(RID(), std::format("Element limit for RID of type '%s' reached.", std::string(description)));
+					ERR_FAIL_V_MSG(RID(), std::format("Element limit for RID of type '{}' reached.", std::string(description)));
 				} else {
 					ERR_FAIL_V_MSG(RID(), "Element limit reached.");
 				}
@@ -425,7 +425,7 @@ public:
 		}
 
 		if (alloc_count) {
-			LOGE(std::format("ERROR: %d RID allocations of type '%s' were leaked at exit.",
+			LOGE(std::format("ERROR: %d RID allocations of type '{}' were leaked at exit.",
 					alloc_count, description ? description : typeid(T).name()).c_str());
 
 			for (size_t i = 0; i < max_alloc; i++) {

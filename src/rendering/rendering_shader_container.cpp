@@ -359,7 +359,7 @@ namespace Rendering
 					"Compute shaders can only receive one stage, dedicated to compute.");
 			}
 			ERR_FAIL_COND_V_MSG(reflection.stages_bits.has_flag(stage_flag), FAILED,
-				std::format("Stage %s submitted more than once.", std::string(RDC::SHADER_STAGE_NAMES[stage])));
+				std::format("Stage {} submitted more than once.", std::string(RDC::SHADER_STAGE_NAMES[stage])));
 			reflection.stages_bits.set_flag(stage_flag);
 
 			{
