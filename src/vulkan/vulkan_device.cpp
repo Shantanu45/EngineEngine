@@ -1218,7 +1218,9 @@ namespace Vulkan
 
 #pragma region Buffer
 
-	RenderingDeviceDriverVulkan::BufferID RenderingDeviceDriverVulkan::buffer_create(uint64_t p_size, BitField<RenderingDeviceDriverVulkan::BufferUsageBits> p_usage, RenderingDeviceDriverVulkan::MemoryAllocationType p_allocation_type, uint64_t p_frames_drawn) {
+	RenderingDeviceDriverVulkan::BufferID RenderingDeviceDriverVulkan::buffer_create(uint64_t p_size, BitField<RenderingDeviceDriverVulkan::BufferUsageBits> p_usage, 
+		RenderingDeviceDriverVulkan::MemoryAllocationType p_allocation_type, uint64_t p_frames_drawn) {
+
 		uint32_t alignment = 16u; // 16 bytes is reasonable.
 		if (p_usage.has_flag(BUFFER_USAGE_UNIFORM_BIT)) {
 			// Some GPUs (e.g. NVIDIA) have absurdly high alignments, like 256 bytes.
@@ -3715,7 +3717,6 @@ namespace Vulkan
 	}
 
 #pragma endregion
-
 
 #pragma region Uniform Set
 
