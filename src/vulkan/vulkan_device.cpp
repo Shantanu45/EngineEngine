@@ -1842,7 +1842,7 @@ namespace Vulkan
 		tex_info->allocation = {};
 
 #if PRINT_NATIVE_COMMANDS
-		LOGI(std::format("vkCreateImageView: 0x%uX for 0x%uX (%d %d %d %d)", uint64_t(new_vk_image_view), uint64_t(owner_tex_info->vk_view_create_info.image), p_mipmap, p_mipmaps, p_layer, p_layers));
+		LOGI(std::format("vkCreateImageView: {} for {} ({} {} {} {})", uint64_t(new_vk_image_view), uint64_t(owner_tex_info->vk_view_create_info.image), p_mipmap, p_mipmaps, p_layer, p_layers));
 #endif
 
 		return TextureID(tex_info);
@@ -2185,23 +2185,23 @@ namespace Vulkan
 		//}
 
 #if PRINT_NATIVE_COMMANDS
-		LOGI(std::format("vkCmdPipelineBarrier MEMORY %d BUFFER %d TEXTURE %d ACCELERATION STRUCTURE %d", p_memory_barriers.size(), p_buffer_barriers.size(), p_texture_barriers.size(), p_acceleration_structure_barriers.size()));
+		LOGI(std::format("vkCmdPipelineBarrier MEMORY {} BUFFER {} TEXTURE {} ACCELERATION STRUCTURE {}", p_memory_barriers.size(), p_buffer_barriers.size(), p_texture_barriers.size(), p_acceleration_structure_barriers.size()));
 		for (uint32_t i = 0; i < p_memory_barriers.size(); i++) {
-			LOGI(std::format("  VkMemoryBarrier #%d src 0x%uX dst 0x%uX", i, vk_memory_barriers[i].srcAccessMask, vk_memory_barriers[i].dstAccessMask));
+			LOGI(std::format("  VkMemoryBarrier #{} src {} dst {}", i, vk_memory_barriers[i].srcAccessMask, vk_memory_barriers[i].dstAccessMask));
 		}
 
 		for (uint32_t i = 0; i < p_buffer_barriers.size(); i++) {
-			LOGI(std::format("  VkBufferMemoryBarrier #%d src 0x%uX dst 0x%uX buffer 0x%ux", i, vk_buffer_barriers[i].srcAccessMask, vk_buffer_barriers[i].dstAccessMask, uint64_t(vk_buffer_barriers[i].buffer)));
+			LOGI(std::format("  VkBufferMemoryBarrier #{} src 0x%uX dst {} buffer {}", i, vk_buffer_barriers[i].srcAccessMask, vk_buffer_barriers[i].dstAccessMask, uint64_t(vk_buffer_barriers[i].buffer)));
 		}
 
 		for (uint32_t i = 0; i < p_texture_barriers.size(); i++) {
-			LOGI(std::format("  VkImageMemoryBarrier #%d src 0x%uX dst 0x%uX image 0x%ux old %d new %d (%d %d %d %d)", i, vk_image_barriers[i].srcAccessMask, vk_image_barriers[i].dstAccessMask,
+			LOGI(std::format("  VkImageMemoryBarrier #{} src {} dst {}X image {} old {} new {} ({} {} {} {})", i, vk_image_barriers[i].srcAccessMask, vk_image_barriers[i].dstAccessMask,
 				uint64_t(vk_image_barriers[i].image), vk_image_barriers[i].oldLayout, vk_image_barriers[i].newLayout, vk_image_barriers[i].subresourceRange.baseMipLevel, vk_image_barriers[i].subresourceRange.levelCount,
 				vk_image_barriers[i].subresourceRange.baseArrayLayer, vk_image_barriers[i].subresourceRange.layerCount));
 		}
 
 		for (uint32_t i = 0; i < p_acceleration_structure_barriers.size(); i++) {
-			LOGI(std::format("  VkBufferMemoryBarrier #%d src 0x%uX dst 0x%uX acceleration structure buffer 0x%ux", i, vk_accel_barriers[i].srcAccessMask, vk_accel_barriers[i].dstAccessMask, uint64_t(vk_accel_barriers[i].buffer)));
+			LOGI(std::format("  VkBufferMemoryBarrier #{} src 0x%uX dst {} acceleration structure buffer {}", i, vk_accel_barriers[i].srcAccessMask, vk_accel_barriers[i].dstAccessMask, uint64_t(vk_accel_barriers[i].buffer)));
 		}
 #endif
 
@@ -3269,10 +3269,10 @@ namespace Vulkan
 		ERR_FAIL_COND_V_MSG(err, FramebufferID(), std::format("vkCreateFramebuffer failed with error {} .", std::to_string(err)));
 
 #if PRINT_NATIVE_COMMANDS
-		LOGI(std::format("vkCreateFramebuffer 0x%uX with %d attachments", uint64_t(vk_framebuffer), p_attachments.size()));
+		LOGI(std::format("vkCreateFramebuffer {} with {} attachments", uint64_t(vk_framebuffer), p_attachments.size()));
 		for (uint32_t i = 0; i < p_attachments.size(); i++) {
 			const TextureInfo* attachment_info = (const TextureInfo*)p_attachments[i].id;
-			LOGI(std::format("  Attachment #%d: IMAGE 0x%uX VIEW 0x%uX", i, uint64_t(attachment_info->vk_view_create_info.image), uint64_t(attachment_info->vk_view)));
+			LOGI(std::format("  Attachment #{}: IMAGE {} VIEW {}", i, uint64_t(attachment_info->vk_view_create_info.image), uint64_t(attachment_info->vk_view)));
 		}
 #endif
 
@@ -3579,7 +3579,7 @@ namespace Vulkan
 				VkDescriptorSetLayout layout = VK_NULL_HANDLE;
 				res = vkCreateDescriptorSetLayout(vk_device, &layout_create_info, nullptr, &layout);
 				if (res) {
-					error_text = std::format("Error (%d) creating descriptor set layout for set %d.", std::to_string(res), i);
+					error_text = std::format("Error ({}) creating descriptor set layout for set {}.", std::to_string(res), i);
 					break;
 				}
 
@@ -3606,7 +3606,7 @@ namespace Vulkan
 
 			res = vkCreatePipelineLayout(vk_device, &pipeline_layout_create_info, nullptr, &shader_info.vk_pipeline_layout);
 			if (res != VK_SUCCESS) {
-				error_text = std::format("Error (%d) creating pipeline layout.", std::to_string(res));
+				error_text = std::format("Error ({}) creating pipeline layout.", std::to_string(res));
 			}
 		}
 
@@ -5322,7 +5322,7 @@ namespace Vulkan
 							}
 						}
 
-						LOGI(std::format("re-spirv transformed the shader from {} bytes to %d bytes with constants {} ({}).", shader_info->respv_stage_shaders[i].inlinedSpirvWords.size() * sizeof(uint32_t), respv_optimized_data.size(), spec_constants, p_shader.id));
+						LOGI(std::format("re-spirv transformed the shader from {} bytes to {} bytes with constants {} ({}).", shader_info->respv_stage_shaders[i].inlinedSpirvWords.size() * sizeof(uint32_t), respv_optimized_data.size(), spec_constants, p_shader.id));
 #endif
 
 						// Create the shader module with the optimized output.

@@ -425,7 +425,7 @@ public:
 		}
 
 		if (alloc_count) {
-			LOGE(std::format("ERROR: %d RID allocations of type '{}' were leaked at exit.",
+			LOGE(std::format("ERROR: {} RID allocations of type '{}' were leaked at exit.",
 					alloc_count, description ? description : typeid(T).name()).c_str());
 
 			for (size_t i = 0; i < max_alloc; i++) {
