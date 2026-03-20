@@ -65,7 +65,7 @@ namespace Rendering
 
 	bool WSI::begin_frame()
 	{
-		rendering_device->_begin_frame();
+		rendering_device->begin_frame();
 		return true;
 	}
 

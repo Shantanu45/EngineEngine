@@ -335,7 +335,7 @@ namespace Vulkan
 			break;
 		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
 			LOGE(error_message.c_str());
-			CRASH_COND_MSG(true/*Engine::get_singleton()->is_abort_on_gpu_errors_enabled()*/, "Crashing, because abort on GPU errors is enabled.");
+			CRASH_COND_MSG(false/*Engine::get_singleton()->is_abort_on_gpu_errors_enabled()*/, "Crashing, because abort on GPU errors is enabled.");
 			break;
 		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_FLAG_BITS_MAX_ENUM_EXT:
 			break; // Shouldn't happen, only handling to make compilers happy.
@@ -499,7 +499,7 @@ namespace Vulkan
 
 #ifdef VULKAN_DEBUG
 		for (uint32_t i = 0; i < instance_extension_count; i++) {
-			print_verbose(String("VULKAN: Found instance extension ") + String::utf8(instance_extensions[i].extensionName) + String("."));
+			LOGI(std::format("VULKAN: Found instance extension {} .", std::string(instance_extensions[i].extensionName)).c_str());
 		}
 #endif
 

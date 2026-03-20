@@ -9,6 +9,8 @@
 // Only enable function inlining for re-spirv when dealing with a shader that uses specialization constants.
 #define RESPV_ONLY_INLINE_SHADERS_WITH_SPEC_CONSTANTS 1
 
+#define VULKAN_DEBUG
+
 namespace Vulkan
 {
 #pragma region Generic
@@ -448,7 +450,7 @@ namespace Vulkan
 
 #ifdef VULKAN_DEBUG
 		for (uint32_t i = 0; i < device_extension_count; i++) {
-			LOGI(String("VULKAN: Found device extension ") + String::utf8(device_extensions[i].extensionName));
+			LOGI(std::format("VULKAN: Found device extension {}", std::string(device_extensions[i].extensionName)).c_str());
 		}
 #endif
 

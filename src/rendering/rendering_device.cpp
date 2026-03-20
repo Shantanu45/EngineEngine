@@ -326,7 +326,7 @@ namespace Rendering
 		}
 	}
 
-	void RenderingDevice::_begin_frame(bool p_presented /*= false*/)
+	void RenderingDevice::begin_frame(bool p_presented /*= false*/)
 	{
 		RDD::CommandBufferID command_buffer = frames[frame].command_buffer;
 		driver->command_buffer_begin(command_buffer);
@@ -338,7 +338,7 @@ namespace Rendering
 		driver->command_bind_render_pipeline(p_command_buffer, render_pipeline->driver_id);
 	}
 
-	void RenderingDevice::_end_frame()
+	void RenderingDevice::end_frame()
 	{
 		RDD::CommandBufferID command_buffer = frames[frame].command_buffer;
 		//driver->command_buffer_begin(command_buffer);
@@ -355,7 +355,7 @@ namespace Rendering
 		driver->command_buffer_end(command_buffer);
 	}
 
-	void RenderingDevice::_execute_frame(bool p_present)
+	void RenderingDevice::execute_frame(bool p_present)
 	{
 		// Check whether this frame should present the swap chains and in which queue.
 		const bool frame_can_present = p_present && !frames[frame].swap_chains_to_present.empty();
@@ -393,9 +393,9 @@ namespace Rendering
 	{
 		//_begin_frame(true);
 
-		_end_frame();
+		end_frame();
 
-		_execute_frame(p_present);
+		execute_frame(p_present);
 		_stall_for_frame(frame);
 
 		frame = (frame + 1) % frames.size();
@@ -513,8 +513,6 @@ namespace Rendering
 		return id;
 
 	}
-
-	
 
 	RID RenderingDevice::create_swapchain_pipeline(DisplayServerEnums::WindowID window, RID p_shader, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, const PipelineRasterizationState& p_rasterization_state, const PipelineMultisampleState& p_multisample_state, const PipelineDepthStencilState& p_depth_stencil_state, const PipelineColorBlendState& p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags /*= 0*/, uint32_t p_for_render_pass /*= 0*/, const std::vector<PipelineSpecializationConstant>& p_specialization_constants /*= std::vector<PipelineSpecializationConstant>()*/)
 	{

@@ -116,7 +116,9 @@ namespace Rendering
 
 	class RenderingDevice : public RenderingDeviceCommons
 	{
-	public:
+		typedef int64_t DrawListID;
+		typedef int64_t FramebufferFormatID;
+		typedef int64_t VertexFormatID;
 		//base numeric ID for all types
 		enum {
 			INVALID_FORMAT_ID = -1
@@ -137,6 +139,12 @@ namespace Rendering
 			ID_TYPE_MAX,
 			ID_BASE_SHIFT = 58, // 5 bits for ID types.
 			ID_MASK = (ID_BASE_SHIFT - 1),
+		};
+
+		enum MemoryType {
+			MEMORY_TEXTURES,
+			MEMORY_BUFFERS,
+			MEMORY_TOTAL
 		};
 
 		struct Uniform {
@@ -207,44 +215,101 @@ namespace Rendering
 			}
 			_FORCE_INLINE_ Uniform() = default;
 		};
-		
-		typedef int64_t DrawListID;
 		typedef Uniform PipelineImmutableSampler;
 
-		static RenderingDevice* get_singleton() {
-			static RenderingDevice* singleton = new RenderingDevice();
-			return singleton;
+		struct VertexDescriptionKey {
+			std::vector<VertexAttribute> vertex_formats;
+
+			bool operator==(const VertexDescriptionKey& p_key) const {
+				int vdc = vertex_formats.size();
+				int vdck = p_key.vertex_formats.size();
+
+				if (vdc != vdck) {
+					return false;
+				}
+				else {
+					const VertexAttribute* a_ptr = vertex_formats.data();
+					const VertexAttribute* b_ptr = p_key.vertex_formats.data();
+					for (int i = 0; i < vdc; i++) {
+						const VertexAttribute& a = a_ptr[i];
+						const VertexAttribute& b = b_ptr[i];
+
+						if (a.location != b.location) {
+							return false;
+						}
+						if (a.offset != b.offset) {
+							return false;
+						}
+						if (a.format != b.format) {
+							return false;
+						}
+						if (a.stride != b.stride) {
+							return false;
+						}
+						if (a.frequency != b.frequency) {
+							return false;
+						}
+					}
+					return true; // They are equal.
+				}
+			}
+
+			uint32_t hash() const {
+				int vdc = vertex_formats.size();
+
+				XXH32_state_t* state = XXH32_createState();
+				XXH32_reset(state, 0);
+
+				XXH32_update(state, &vdc, sizeof(vdc));
+
+				const VertexAttribute* ptr = vertex_formats.data();
+				for (int i = 0; i < vdc; i++) {
+					const VertexAttribute& vd = ptr[i];
+
+					XXH32_update(state, &vd.location, sizeof(vd.location));
+					XXH32_update(state, &vd.offset, sizeof(vd.offset));
+					XXH32_update(state, &vd.format, sizeof(vd.format));
+					XXH32_update(state, &vd.stride, sizeof(vd.stride));
+					XXH32_update(state, &vd.frequency, sizeof(vd.frequency));
+				}
+
+				uint32_t h = XXH32_digest(state);
+				XXH32_freeState(state);
+				return h;
+			}
 		};
 
-		Error initialize(RenderingContextDriver* p_context, DisplayServerEnums::WindowID p_main_window = DisplayServerEnums::INVALID_WINDOW_ID);
-
-		void finalize();
-
-
-#pragma region Shader
-		RDShaderSPIRV* shader_compile_spirv_from_shader_source(const RDShaderSource* p_source, bool p_allow_cache = true);
-		std::vector<uint8_t> shader_compile_spirv_from_source_file(ShaderStage p_stage, const std::string& p_source_code_file, 
-					ShaderLanguage p_language = SHADER_LANGUAGE_GLSL, std::string* r_error = nullptr, bool p_allow_cache = true);
-		RID shader_create_from_container_with_samplers(RenderingShaderContainer* shader_container, RID p_placeholder, const std::vector<PipelineImmutableSampler>& p_immutable_samplers);
-		RID shader_create_from_spirv(const RDShaderSPIRV* p_spirv, const std::string& p_shader_name = "");
-
-		void shader_destroy_modules(RID p_shader);
-
-		uint64_t shader_get_vertex_input_attribute_mask(RID p_shader);
-
-		struct Shader : public ShaderReflection {
-			std::string name; // Used for debug.
-			RDD::ShaderID driver_id;
-			uint32_t layout_hash = 0;
-			BitField<RDD::PipelineStageBits> stage_bits = {};
-			std::vector<uint32_t> set_formats;
+		struct VertexDescriptionHash {
+			std::size_t operator()(const VertexDescriptionKey& p_key) const {
+				return p_key.hash();
+			}
 		};
 
-		RID_Owner<Shader, true> shader_owner;
+		struct VertexDescriptionCache {
+			std::vector<VertexAttribute> vertex_formats;
+			VertexAttributeBindingsMap bindings;
+			RDD::VertexFormatID driver_id;
+		};
 
-#pragma endregion
+		struct UniformSetFormat {
+			std::vector<ShaderUniform> uniforms;
 
-#pragma region Pipeline
+			_FORCE_INLINE_ bool operator<(const UniformSetFormat& p_other) const {
+				if (uniforms.size() != p_other.uniforms.size()) {
+					return uniforms.size() < p_other.uniforms.size();
+				}
+				for (int i = 0; i < uniforms.size(); i++) {
+					if (uniforms[i] < p_other.uniforms[i]) {
+						return true;
+					}
+					else if (p_other.uniforms[i] < uniforms[i]) {
+						return false;
+					}
+				}
+				return false;
+			}
+		};
+
 		struct RenderPipeline {
 			// Cached values for validation.
 #ifdef DEBUG_ENABLED
@@ -268,33 +333,13 @@ namespace Rendering
 			uint32_t push_constant_size = 0;
 		};
 
-		RID_Owner<RenderPipeline, true> render_pipeline_owner;
-
-		typedef int64_t FramebufferFormatID;
-		typedef int64_t VertexFormatID;
-		RID render_pipeline_create(RID p_shader, FramebufferFormatID p_framebuffer_format, VertexFormatID p_vertex_format, 
-			RenderPrimitive p_render_primitive, const PipelineRasterizationState& p_rasterization_state, 
-			const PipelineMultisampleState& p_multisample_state, const PipelineDepthStencilState& p_depth_stencil_state, 
-			const PipelineColorBlendState& p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags = 0, 
-			uint32_t p_for_render_pass = 0, 
-			const std::vector<PipelineSpecializationConstant>& p_specialization_constants = std::vector<PipelineSpecializationConstant>());
-
-		bool render_pipeline_is_valid(RID p_pipeline);
-
-#pragma endregion
-
-#pragma region Screen
-		Error screen_create(DisplayServerEnums::WindowID p_screen = DisplayServerEnums::MAIN_WINDOW_ID);
-		Error screen_prepare_for_drawing(DisplayServerEnums::WindowID p_screen = DisplayServerEnums::MAIN_WINDOW_ID);
-		int screen_get_width(DisplayServerEnums::WindowID p_screen = DisplayServerEnums::MAIN_WINDOW_ID) const;
-		int screen_get_height(DisplayServerEnums::WindowID p_screen = DisplayServerEnums::MAIN_WINDOW_ID) const;
-		int screen_get_pre_rotation_degrees(DisplayServerEnums::WindowID p_screen = DisplayServerEnums::MAIN_WINDOW_ID) const;
-		FramebufferFormatID screen_get_framebuffer_format(DisplayServerEnums::WindowID p_screen = DisplayServerEnums::MAIN_WINDOW_ID) const;
-		ColorSpace screen_get_color_space(DisplayServerEnums::WindowID p_screen = DisplayServerEnums::MAIN_WINDOW_ID) const;
-		Error screen_free(DisplayServerEnums::WindowID p_screen = DisplayServerEnums::MAIN_WINDOW_ID);
-#pragma endregion
-
-#pragma region Framebuffer
+		struct Shader : public ShaderReflection {
+			std::string name; // Used for debug.
+			RDD::ShaderID driver_id;
+			uint32_t layout_hash = 0;
+			BitField<RDD::PipelineStageBits> stage_bits = {};
+			std::vector<uint32_t> set_formats;
+		};
 
 		struct AttachmentFormat {
 			enum : uint32_t {
@@ -446,7 +491,6 @@ namespace Rendering
 			}
 		};
 
-		std::map<FramebufferFormatKey, FramebufferFormatID> framebuffer_format_cache;
 		struct FramebufferFormat {
 			std::pair<const FramebufferFormatKey, FramebufferFormatID>* E;
 			RDD::RenderPassID render_pass; // Here for constructing shaders, never used, see section (7.2. Render Pass Compatibility from Vulkan spec).
@@ -454,7 +498,6 @@ namespace Rendering
 			uint32_t view_count = 1; // Number of views.
 		};
 
-		std::unordered_map<FramebufferFormatID, FramebufferFormat> framebuffer_formats;
 		typedef void (*InvalidationCallback)(void*);
 		struct Framebuffer {
 			FramebufferFormatID format_id;
@@ -466,58 +509,6 @@ namespace Rendering
 			Size2 size;
 			uint32_t view_count;
 		};
-
-		RID_Owner<Framebuffer, true> framebuffer_owner;
-
-		// This ID is warranted to be unique for the same formats, does not need to be freed
-		FramebufferFormatID framebuffer_format_create(const std::vector<AttachmentFormat>& p_format, uint32_t p_view_count = 1, int32_t p_vrs_attachment = -1);
-		FramebufferFormatID framebuffer_format_create_multipass(const std::vector<AttachmentFormat>& p_attachments, const std::vector<FramebufferPass>& p_passes, 
-			uint32_t p_view_count = 1, int32_t p_vrs_attachment = -1);
-			
-		static RDD::TextureLayout _vrs_layout_from_method(VRSMethod p_method);
-		static RDD::RenderPassID _render_pass_create(RenderingDeviceDriver* p_driver, const std::vector<AttachmentFormat>& p_attachments,
-			const std::vector<FramebufferPass>& p_passes, std::span<RDD::AttachmentLoadOp> p_load_ops, 
-			std::span<RDD::AttachmentStoreOp> p_store_ops, uint32_t p_view_count = 1, VRSMethod p_vrs_method = VRS_METHOD_NONE, 
-			int32_t p_vrs_attachment = -1, Size2i p_vrs_texel_size = Size2i(), std::vector<TextureSamples>* r_samples = nullptr);
-
-		FramebufferFormatID framebuffer_format_create_empty(TextureSamples p_samples = TEXTURE_SAMPLES_1);
-
-		VRSMethod vrs_method = VRS_METHOD_NONE;
-		DataFormat vrs_format = DATA_FORMAT_MAX;
-		Size2i vrs_texel_size;
-
-#pragma endregion
-
-
-		void swap_buffers(bool p_present);
-		bool begin_for_screen(DisplayServerEnums::WindowID p_screen = 0, const Color& p_clear_color = Color());
-		RDD::CommandBufferID get_current_command_buffer();
-		void render_draw(RenderingDeviceDriver::CommandBufferID p_command_buffer, uint32_t p_vertex_count, uint32_t p_instance_count);
-		void submit();
-		void sync();
-
-		enum MemoryType {
-			MEMORY_TEXTURES,
-			MEMORY_BUFFERS,
-			MEMORY_TOTAL
-		};
-
-		RenderingDevice* create_local_device();
-		VertexFormatID vertex_format_create(const std::vector<VertexAttribute>& p_vertex_descriptions);
-
-
-		RID create_swapchain_pipeline(DisplayServerEnums::WindowID window, RID p_shader, VertexFormatID p_vertex_format,
-			RenderPrimitive p_render_primitive, const PipelineRasterizationState& p_rasterization_state,
-			const PipelineMultisampleState& p_multisample_state, const PipelineDepthStencilState& p_depth_stencil_state,
-			const PipelineColorBlendState& p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags = 0,
-			uint32_t p_for_render_pass = 0,
-			const std::vector<PipelineSpecializationConstant>& p_specialization_constants = std::vector<PipelineSpecializationConstant>());
-	protected:
-		//void execute_chained_cmds(bool p_present_swap_chain,
-		//	RenderingDeviceDriver::FenceID p_draw_fence,
-		//	RenderingDeviceDriver::SemaphoreID p_dst_draw_semaphore_to_signal);
-
-	private:
 
 		struct Frame {
 			// The command pool used by the command buffer.
@@ -549,123 +540,113 @@ namespace Rendering
 			uint64_t index = 0;
 		};
 
-		struct VertexDescriptionKey {
-			std::vector<VertexAttribute> vertex_formats;
+	public:
 
-			bool operator==(const VertexDescriptionKey& p_key) const {
-				int vdc = vertex_formats.size();
-				int vdck = p_key.vertex_formats.size();
-
-				if (vdc != vdck) {
-					return false;
-				}
-				else {
-					const VertexAttribute* a_ptr = vertex_formats.data();
-					const VertexAttribute* b_ptr = p_key.vertex_formats.data();
-					for (int i = 0; i < vdc; i++) {
-						const VertexAttribute& a = a_ptr[i];
-						const VertexAttribute& b = b_ptr[i];
-
-						if (a.location != b.location) {
-							return false;
-						}
-						if (a.offset != b.offset) {
-							return false;
-						}
-						if (a.format != b.format) {
-							return false;
-						}
-						if (a.stride != b.stride) {
-							return false;
-						}
-						if (a.frequency != b.frequency) {
-							return false;
-						}
-					}
-					return true; // They are equal.
-				}
-			}
-
-			uint32_t hash() const {
-				int vdc = vertex_formats.size();
-
-				XXH32_state_t* state = XXH32_createState();
-				XXH32_reset(state, 0);
-
-				XXH32_update(state, &vdc, sizeof(vdc));
-
-				const VertexAttribute* ptr = vertex_formats.data();
-				for (int i = 0; i < vdc; i++) {
-					const VertexAttribute& vd = ptr[i];
-
-					XXH32_update(state, &vd.location, sizeof(vd.location));
-					XXH32_update(state, &vd.offset, sizeof(vd.offset));
-					XXH32_update(state, &vd.format, sizeof(vd.format));
-					XXH32_update(state, &vd.stride, sizeof(vd.stride));
-					XXH32_update(state, &vd.frequency, sizeof(vd.frequency));
-				}
-
-				uint32_t h = XXH32_digest(state);
-				XXH32_freeState(state);
-				return h;
-			}
+		static RenderingDevice* get_singleton() {
+			static RenderingDevice* singleton = new RenderingDevice();
+			return singleton;
 		};
+		Error initialize(RenderingContextDriver* p_context, DisplayServerEnums::WindowID p_main_window = DisplayServerEnums::INVALID_WINDOW_ID);
 
-		struct VertexDescriptionHash {
-			std::size_t operator()(const VertexDescriptionKey& p_key) const {
-				return p_key.hash();
-			}
-		};
+		void finalize();
 
-		// This is a cache and it's never freed, it ensures that
-		// ID used for a specific format always remain the same.
-		std::unordered_map<VertexDescriptionKey, VertexFormatID, VertexDescriptionHash> vertex_format_cache = {};
+#pragma region Shader
+		RDShaderSPIRV* shader_compile_spirv_from_shader_source(const RDShaderSource* p_source, bool p_allow_cache = true);
 
-		struct VertexDescriptionCache {
-			std::vector<VertexAttribute> vertex_formats;
-			VertexAttributeBindingsMap bindings;
-			RDD::VertexFormatID driver_id;
-		};
+		RID shader_create_from_spirv(const RDShaderSPIRV* p_spirv, const std::string& p_shader_name = "");
 
-		std::unordered_map<VertexFormatID, VertexDescriptionCache> vertex_formats;
 
-		struct UniformSetFormat {
-			std::vector<ShaderUniform> uniforms;
+		std::vector<uint8_t> shader_compile_spirv_from_source_file(ShaderStage p_stage, const std::string& p_source_code_file,
+			ShaderLanguage p_language = SHADER_LANGUAGE_GLSL, std::string* r_error = nullptr, bool p_allow_cache = true);
+		RID shader_create_from_container_with_samplers(RenderingShaderContainer* shader_container, RID p_placeholder, const std::vector<PipelineImmutableSampler>& p_immutable_samplers);
 
-			_FORCE_INLINE_ bool operator<(const UniformSetFormat& p_other) const {
-				if (uniforms.size() != p_other.uniforms.size()) {
-					return uniforms.size() < p_other.uniforms.size();
-				}
-				for (int i = 0; i < uniforms.size(); i++) {
-					if (uniforms[i] < p_other.uniforms[i]) {
-						return true;
-					}
-					else if (p_other.uniforms[i] < uniforms[i]) {
-						return false;
-					}
-				}
-				return false;
-			}
-		};
-		std::map<UniformSetFormat, uint32_t> uniform_set_format_cache;
+		void shader_destroy_modules(RID p_shader);
 
-		//RID _sampler_create(const RDSamplerState* p_state);
-		//RenderingDeviceDriver::VertexFormatID _vertex_format_create(const std::vector<RDVertexAttribute>& p_vertex_formats);
-		//RID _vertex_array_create(uint32_t p_vertex_count, RenderingDeviceDriver::VertexFormatID p_vertex_format, const std::vector<RID>& p_src_buffers, const std::vector<int64_t>& p_offsets = std::vector<int64_t>());
-		//void _draw_list_bind_vertex_buffers_format(DrawListID p_list, RenderingDeviceDriver::VertexFormatID p_vertex_format, uint32_t p_vertex_count, const  std::vector<RID>& p_vertex_buffers, const  std::vector<int64_t>& p_offsets = std::vector<int64_t>());
-		public:
-		void _begin_frame(bool p_presented = false);
+		uint64_t shader_get_vertex_input_attribute_mask(RID p_shader);
+
+#pragma endregion
+
+#pragma region Pipeline
+		RID render_pipeline_create(RID p_shader, FramebufferFormatID p_framebuffer_format, VertexFormatID p_vertex_format,
+			RenderPrimitive p_render_primitive, const PipelineRasterizationState& p_rasterization_state,
+			const PipelineMultisampleState& p_multisample_state, const PipelineDepthStencilState& p_depth_stencil_state,
+			const PipelineColorBlendState& p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags = 0,
+			uint32_t p_for_render_pass = 0,
+			const std::vector<PipelineSpecializationConstant>& p_specialization_constants = std::vector<PipelineSpecializationConstant>());
+
+		bool render_pipeline_is_valid(RID p_pipeline);
+#pragma endregion
+
+#pragma region Screen
+		Error screen_create(DisplayServerEnums::WindowID p_screen = DisplayServerEnums::MAIN_WINDOW_ID);
+		Error screen_prepare_for_drawing(DisplayServerEnums::WindowID p_screen = DisplayServerEnums::MAIN_WINDOW_ID);
+		int screen_get_width(DisplayServerEnums::WindowID p_screen = DisplayServerEnums::MAIN_WINDOW_ID) const;
+		int screen_get_height(DisplayServerEnums::WindowID p_screen = DisplayServerEnums::MAIN_WINDOW_ID) const;
+		int screen_get_pre_rotation_degrees(DisplayServerEnums::WindowID p_screen = DisplayServerEnums::MAIN_WINDOW_ID) const;
+		FramebufferFormatID screen_get_framebuffer_format(DisplayServerEnums::WindowID p_screen = DisplayServerEnums::MAIN_WINDOW_ID) const;
+		ColorSpace screen_get_color_space(DisplayServerEnums::WindowID p_screen = DisplayServerEnums::MAIN_WINDOW_ID) const;
+		Error screen_free(DisplayServerEnums::WindowID p_screen = DisplayServerEnums::MAIN_WINDOW_ID);
+#pragma endregion
+
+#pragma region Framebuffer
+		// This ID is warranted to be unique for the same formats, does not need to be freed
+		FramebufferFormatID framebuffer_format_create(const std::vector<AttachmentFormat>& p_format, uint32_t p_view_count = 1, int32_t p_vrs_attachment = -1);
+		FramebufferFormatID framebuffer_format_create_multipass(const std::vector<AttachmentFormat>& p_attachments, const std::vector<FramebufferPass>& p_passes, 
+			uint32_t p_view_count = 1, int32_t p_vrs_attachment = -1);
+			
+		FramebufferFormatID framebuffer_format_create_empty(TextureSamples p_samples = TEXTURE_SAMPLES_1);
+
+#pragma endregion
+
+		void swap_buffers(bool p_present);
+
+		bool begin_for_screen(DisplayServerEnums::WindowID p_screen = 0, const Color& p_clear_color = Color());
+
+		RDD::CommandBufferID get_current_command_buffer();
+
+		void render_draw(RenderingDeviceDriver::CommandBufferID p_command_buffer, uint32_t p_vertex_count, uint32_t p_instance_count);
+
+		void submit();
+
+		void sync();
+
+		RenderingDevice* create_local_device();
+
+		VertexFormatID vertex_format_create(const std::vector<VertexAttribute>& p_vertex_descriptions);
+
+		RID create_swapchain_pipeline(DisplayServerEnums::WindowID window, RID p_shader, VertexFormatID p_vertex_format,
+			RenderPrimitive p_render_primitive, const PipelineRasterizationState& p_rasterization_state,
+			const PipelineMultisampleState& p_multisample_state, const PipelineDepthStencilState& p_depth_stencil_state,
+			const PipelineColorBlendState& p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags = 0,
+			uint32_t p_for_render_pass = 0,
+			const std::vector<PipelineSpecializationConstant>& p_specialization_constants = std::vector<PipelineSpecializationConstant>());
+
+		void begin_frame(bool p_presented = false);
+
 		void bind_render_pipeline(RDD::CommandBufferID p_command_buffer, RID pipeline);
-		void _end_frame();
-		void _execute_frame(bool p_present);
+
+		void end_frame();
+
+		void execute_frame(bool p_present);
+
+		std::vector<uint8_t> _shader_compile_binary_from_spirv(const RDShaderSPIRV* p_bytecode, const std::string& p_shader_name = "");
+
+	private:
 		void _stall_for_frame(uint32_t p_frame);
 		void _stall_for_previous_frames();
 		void _flush_and_stall_for_all_frames(bool p_begin_frame = true);
 		uint32_t _get_swap_chain_desired_count() const;
-		std::vector<uint8_t> _shader_compile_binary_from_spirv(const RDShaderSPIRV* p_bytecode, const std::string& p_shader_name = "");
+
+		static RDD::TextureLayout _vrs_layout_from_method(VRSMethod p_method);
+		static RDD::RenderPassID _render_pass_create(RenderingDeviceDriver* p_driver, const std::vector<AttachmentFormat>& p_attachments,
+			const std::vector<FramebufferPass>& p_passes, std::span<RDD::AttachmentLoadOp> p_load_ops,
+			std::span<RDD::AttachmentStoreOp> p_store_ops, uint32_t p_view_count = 1, VRSMethod p_vrs_method = VRS_METHOD_NONE,
+			int32_t p_vrs_attachment = -1, Size2i p_vrs_texel_size = Size2i(), std::vector<TextureSamples>* r_samples = nullptr);
 
 		RenderingDevice();
 		~RenderingDevice();
+
+	private:
 
 		bool is_main_instance = false;
 
@@ -683,11 +664,33 @@ namespace Rendering
 		std::unordered_map<DisplayServerEnums::WindowID, RDD::SwapChainID> screen_swap_chains;
 		std::unordered_map<DisplayServerEnums::WindowID, RDD::FramebufferID> screen_framebuffers;
 
+		// This is a cache and it's never freed, it ensures that
+		// ID used for a specific format always remain the same.
+		std::unordered_map<VertexDescriptionKey, VertexFormatID, VertexDescriptionHash> vertex_format_cache = {};
+		std::unordered_map<VertexFormatID, VertexDescriptionCache> vertex_formats;
+
+		std::map<UniformSetFormat, uint32_t> uniform_set_format_cache;
+
+		std::map<FramebufferFormatKey, FramebufferFormatID> framebuffer_format_cache;
+		std::unordered_map<FramebufferFormatID, FramebufferFormat> framebuffer_formats;
+
+
+		VRSMethod vrs_method = VRS_METHOD_NONE;
+		DataFormat vrs_format = DATA_FORMAT_MAX;
+		Size2i vrs_texel_size;
+
 		std::vector<Frame> frames;
 		int frame = 0;
 
 		std::unique_ptr<Compiler::GLSLCompiler> compiler;
 
 		RID_Owner<RDD::SamplerID, true> sampler_owner;
+
+		RID_Owner<RenderPipeline, true> render_pipeline_owner;
+
+		RID_Owner<Shader, true> shader_owner;
+
+		RID_Owner<Framebuffer, true> framebuffer_owner;
+
 	};
 }

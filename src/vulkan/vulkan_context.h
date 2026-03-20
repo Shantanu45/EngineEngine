@@ -5,6 +5,8 @@
 #include <unordered_map>
 #include <string>
 #include "rendering/rendering_context_driver.h"
+#define VULKAN_DEBUG
+
 
 namespace Vulkan
 {
