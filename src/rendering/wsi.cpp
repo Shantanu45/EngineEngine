@@ -44,6 +44,8 @@ namespace Rendering
 
 			rendering_device->screen_create(DisplayServerEnums::MAIN_WINDOW_ID);
 		}
+
+		create_triangle();
 		return OK;
 	}
 
@@ -121,6 +123,49 @@ namespace Rendering
 	RenderingShaderContainerFormat* WSI::create_shader_container_format() 
 	{
 		return new ::Vulkan::RenderingShaderContainerFormatVulkan();
+	}
+ 
+	void WSI::create_triangle()
+	{
+		static const uint32_t triangle_vertex_count = 3;
+		static const float triangle_vertices[triangle_vertex_count * 3] = {
+			0.0f,  1.0f, 0.0f,   // Vertex 0
+		   -1.0f, -1.0f, 0.0f,   // Vertex 1
+			1.0f, -1.0f, 0.0f    // Vertex 2
+		};
+
+		static const uint32_t triangle_triangle_count = 1;
+		static const uint16_t triangle_triangle_indices[triangle_triangle_count * 3] = {
+			0, 1, 2
+		};
+
+		std::vector<uint8_t> vertex_data;
+		vertex_data.resize(sizeof(float) * triangle_vertex_count * 3);
+		memcpy(vertex_data.data(), triangle_vertices, vertex_data.size());
+
+		triangle_vertex_buffer = rendering_device->vertex_buffer_create(vertex_data.size(), vertex_data);
+
+		std::vector<uint8_t> index_data;
+		index_data.resize(sizeof(uint16_t) * triangle_triangle_count * 3);
+		memcpy(index_data.data(), triangle_triangle_indices, index_data.size());
+
+		triangle_index_buffer = rendering_device->index_buffer_create(triangle_triangle_count * 3, RenderingDeviceCommons::INDEX_BUFFER_FORMAT_UINT16, index_data);
+
+		std::vector<RID> buffers;
+		buffers.push_back(triangle_vertex_buffer);
+
+		std::vector<RenderingDeviceCommons::VertexAttribute> attributes;
+		{
+			RenderingDeviceCommons::VertexAttribute va;
+			va.format = RenderingDeviceCommons::DATA_FORMAT_R32G32B32_SFLOAT;
+			va.stride = sizeof(float) * 3;
+			attributes.push_back(va);
+		}
+		auto vertex_format = rendering_device->vertex_format_create(attributes);
+
+		triangle_vertex_array = rendering_device->vertex_array_create(triangle_vertex_count, vertex_format, buffers);
+
+		triangle_index_array = rendering_device->index_array_create(triangle_index_buffer, 0, triangle_triangle_count * 3);
 	}
 
 	void WSI::teardown()

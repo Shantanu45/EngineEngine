@@ -30,6 +30,7 @@ namespace Rendering
 		RID get_current_pipeline();
 		RenderingShaderContainerFormat* create_shader_container_format();
 
+		void create_triangle();
 		RenderingDevice* get_rendering_device() { return rendering_device; }
 
 		void teardown();
@@ -61,6 +62,10 @@ namespace Rendering
 		bool main_window_created = false;
 		RID shader_program;
 
+		RID triangle_vertex_buffer;
+		RID triangle_index_buffer;
+		RID triangle_vertex_array;
+		RID triangle_index_array;
 
 	};
 }

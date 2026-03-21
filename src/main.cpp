@@ -18,6 +18,10 @@ struct TriangleApplication : EE::Application
 		device->bind_render_pipeline(cmd_buffer, wsi->get_current_pipeline());
 
 		device->render_draw(cmd_buffer, 3, 1);
+
+		{
+			
+		}
 	}
 };
 

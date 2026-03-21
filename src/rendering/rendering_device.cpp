@@ -73,7 +73,17 @@ namespace Rendering
 		// Create the main queue.
 		main_queue = driver->command_queue_create(main_queue_family, true);
 		ERR_FAIL_COND_V(!main_queue, FAILED);
-		//TODO: transfer_queue_family
+		
+		// Create the transfer queue.
+		transfer_queue_family = driver->command_queue_family_get(RDD::COMMAND_QUEUE_FAMILY_TRANSFER_BIT);
+		if (!transfer_queue_family) {
+			// Use main queue family if transfer queue family is not supported.
+			transfer_queue_family = main_queue_family;
+		}
+
+		// Create the transfer queue.
+		transfer_queue = driver->command_queue_create(transfer_queue_family);
+		ERR_FAIL_COND_V(!transfer_queue, FAILED);
 
 		if (present_queue_family) {
 			// Create the present queue.
@@ -85,6 +95,13 @@ namespace Rendering
 			present_queue = main_queue;
 			present_queue_family = main_queue_family;
 		}
+
+		// Use the processor count as the max amount of transfer workers that can be created.
+		transfer_worker_pool_max_size = 1;//TODO: OS::get_singleton()->get_processor_count();
+
+		// Pre-allocate to avoid locking a mutex when indexing into them.
+		transfer_worker_pool.resize(transfer_worker_pool_max_size);
+		transfer_worker_operation_used_by_draw.resize(transfer_worker_pool_max_size);
 
 		frames.resize(frame_count);
 
