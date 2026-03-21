@@ -2,6 +2,7 @@
 #include "vulkan/shader_container.h"
 #include "application/service_locator.h"
 #include <set>
+#include "glm/gtc/round.hpp"
 
 namespace Rendering
 {
@@ -1387,7 +1388,320 @@ namespace Rendering
 		ERR_FAIL_COND_V(!render_pass, RDD::RenderPassID());
 
 		return render_pass;
+	}	
+
+#pragma region Transfer worker
+
+	static uint32_t _get_alignment_offset(uint32_t p_offset, uint32_t p_required_align) {
+		uint32_t alignment_offset = (p_required_align > 0) ? (p_offset % p_required_align) : 0;
+		if (alignment_offset != 0) {
+			// If a particular alignment is required, add the offset as part of the required size.
+			alignment_offset = p_required_align - alignment_offset;
+		}
+
+		return alignment_offset;
 	}
+
+	RenderingDevice::TransferWorker* RenderingDevice::_acquire_transfer_worker(uint32_t p_transfer_size, uint32_t p_required_align, uint32_t& r_staging_offset) {
+		// Find the first worker that is not currently executing anything and has enough size for the transfer.
+		// If no workers are available, we make a new one. If we're not allowed to make new ones, we wait until one of them is available.
+		TransferWorker* transfer_worker = nullptr;
+		uint32_t available_list_index = 0;
+		bool transfer_worker_busy = true;
+		bool transfer_worker_full = true;
+		{
+			std::unique_lock<std::mutex> pool_lock(transfer_worker_pool_mutex);
+
+			// If no workers are available and we've reached the max pool capacity, wait until one of them becomes available.
+			bool transfer_worker_pool_full = transfer_worker_pool_size >= transfer_worker_pool_max_size;
+			while (transfer_worker_pool_available_list.empty() && transfer_worker_pool_full) {
+				transfer_worker_pool_condition.wait(pool_lock);
+			}
+
+			// Look at all available workers first.
+			for (uint32_t i = 0; i < transfer_worker_pool_available_list.size(); i++) {
+				uint32_t worker_index = transfer_worker_pool_available_list[i];
+				TransferWorker* candidate_worker = transfer_worker_pool[worker_index];
+				candidate_worker->thread_mutex.lock();
+
+				// Figure out if the worker can fit the transfer.
+				uint32_t alignment_offset = _get_alignment_offset(candidate_worker->staging_buffer_size_in_use, p_required_align);
+				uint32_t required_size = candidate_worker->staging_buffer_size_in_use + p_transfer_size + alignment_offset;
+				bool candidate_worker_busy = candidate_worker->submitted;
+				bool candidate_worker_full = required_size > candidate_worker->staging_buffer_size_allocated;
+				bool pick_candidate = false;
+				if (!candidate_worker_busy && !candidate_worker_full) {
+					// A worker that can fit the transfer and is not waiting for a previous execution is the best possible candidate.
+					pick_candidate = true;
+				}
+				else if (!candidate_worker_busy) {
+					// The worker can't fit the transfer but it's not currently doing anything.
+					// We pick it as a possible candidate if the current one is busy.
+					pick_candidate = transfer_worker_busy;
+				}
+				else if (!candidate_worker_full) {
+					// The worker can fit the transfer but it's currently executing previous work.
+					// We pick it as a possible candidate if the current one is both busy and full.
+					pick_candidate = transfer_worker_busy && transfer_worker_full;
+				}
+				else if (transfer_worker == nullptr) {
+					// The worker can't fit the transfer and it's currently executing work, so it's the worst candidate.
+					// We only pick if no candidate has been picked yet.
+					pick_candidate = true;
+				}
+
+				if (pick_candidate) {
+					if (transfer_worker != nullptr) {
+						// Release the lock for the worker that was picked previously.
+						transfer_worker->thread_mutex.unlock();
+					}
+
+					// Keep the lock active for this worker.
+					transfer_worker = candidate_worker;
+					transfer_worker_busy = candidate_worker_busy;
+					transfer_worker_full = candidate_worker_full;
+					available_list_index = i;
+
+					if (!transfer_worker_busy && !transfer_worker_full) {
+						// Best possible candidate, stop searching early.
+						break;
+					}
+				}
+				else {
+					// Release the lock for the candidate.
+					candidate_worker->thread_mutex.unlock();
+				}
+			}
+
+			if (transfer_worker != nullptr) {
+				// A worker was picked, remove it from the available list.
+				transfer_worker_pool_available_list.erase(transfer_worker_pool_available_list.begin() + available_list_index);
+			}
+			else {
+				DEV_ASSERT(!transfer_worker_pool_full && "A transfer worker should never be created when the pool is full.");
+
+				// No existing worker was picked, we create a new one.
+				uint32_t transfer_worker_index = transfer_worker_pool_size;
+				++transfer_worker_pool_size;
+
+				transfer_worker = new TransferWorker;
+				transfer_worker->command_fence = driver->fence_create();
+				transfer_worker->command_pool = driver->command_pool_create(transfer_queue_family, RDD::COMMAND_BUFFER_TYPE_PRIMARY);
+				transfer_worker->command_buffer = driver->command_buffer_create(transfer_worker->command_pool);
+				transfer_worker->index = transfer_worker_index;
+				transfer_worker_pool[transfer_worker_index] = transfer_worker;
+				transfer_worker_operation_used_by_draw[transfer_worker_index] = 0;
+				transfer_worker->thread_mutex.lock();
+			}
+		}
+
+		if (transfer_worker->submitted) {
+			// Wait for the worker if the command buffer was submitted but it hasn't finished processing yet.
+			_wait_for_transfer_worker(transfer_worker);
+		}
+
+		uint32_t alignment_offset = _get_alignment_offset(transfer_worker->staging_buffer_size_in_use, p_required_align);
+		transfer_worker->max_transfer_size = MAX(transfer_worker->max_transfer_size, p_transfer_size);
+
+		uint32_t required_size = transfer_worker->staging_buffer_size_in_use + p_transfer_size + alignment_offset;
+		if (required_size > transfer_worker->staging_buffer_size_allocated) {
+			// If there's not enough bytes to use on the staging buffer, we submit everything pending from the worker and wait for the work to be finished.
+			if (transfer_worker->recording) {
+				_end_transfer_worker(transfer_worker);
+				_submit_transfer_worker(transfer_worker);
+			}
+
+			if (transfer_worker->submitted) {
+				_wait_for_transfer_worker(transfer_worker);
+			}
+
+			alignment_offset = 0;
+
+			// If the staging buffer can't fit the transfer, we recreate the buffer.
+			const uint32_t expected_buffer_size_minimum = 16 * 1024;
+			uint32_t expected_buffer_size = MAX(transfer_worker->max_transfer_size, expected_buffer_size_minimum);
+			if (expected_buffer_size > transfer_worker->staging_buffer_size_allocated) {
+				if (transfer_worker->staging_buffer.id != 0) {
+					driver->buffer_free(transfer_worker->staging_buffer);
+				}
+
+				uint32_t new_staging_buffer_size = glm::ceilPowerOfTwo(expected_buffer_size);
+				transfer_worker->staging_buffer_size_allocated = new_staging_buffer_size;
+				transfer_worker->staging_buffer = driver->buffer_create(new_staging_buffer_size, RDD::BUFFER_USAGE_TRANSFER_FROM_BIT, RDD::MEMORY_ALLOCATION_TYPE_CPU, frames_drawn);
+			}
+		}
+
+		// Add the alignment before storing the offset that will be returned.
+		transfer_worker->staging_buffer_size_in_use += alignment_offset;
+
+		// Store the offset to return and increment the current size.
+		r_staging_offset = transfer_worker->staging_buffer_size_in_use;
+		transfer_worker->staging_buffer_size_in_use += p_transfer_size;
+
+		if (!transfer_worker->recording) {
+			// Begin the command buffer if the worker wasn't recording yet.
+			driver->command_buffer_begin(transfer_worker->command_buffer);
+			transfer_worker->recording = true;
+		}
+
+		return transfer_worker;
+	}
+
+	void RenderingDevice::_release_transfer_worker(TransferWorker* p_transfer_worker) {
+		p_transfer_worker->thread_mutex.unlock();
+
+		transfer_worker_pool_mutex.lock();
+		transfer_worker_pool_available_list.push_back(p_transfer_worker->index);
+		transfer_worker_pool_mutex.unlock();
+		transfer_worker_pool_condition.notify_one();
+	}
+
+	void RenderingDevice::_end_transfer_worker(TransferWorker* p_transfer_worker) {
+		driver->command_buffer_end(p_transfer_worker->command_buffer);
+		p_transfer_worker->recording = false;
+	}
+
+	void RenderingDevice::_submit_transfer_worker(TransferWorker* p_transfer_worker, std::span<RDD::SemaphoreID> p_signal_semaphores /*= std::span<RDD::SemaphoreID>()*/)
+	{
+		driver->command_queue_execute_and_present(transfer_queue, {}, { &p_transfer_worker->command_buffer, 1 }, p_signal_semaphores, p_transfer_worker->command_fence, {});
+
+		for (uint32_t i = 0; i < p_signal_semaphores.size(); i++) {
+			// Indicate the frame should wait on these semaphores before executing the main command buffer.
+			frames[frame].semaphores_to_wait_on.push_back(p_signal_semaphores[i]);
+		}
+
+		p_transfer_worker->submitted = true;
+
+		{
+			std::lock_guard lock(p_transfer_worker->operations_mutex);
+			p_transfer_worker->operations_submitted = p_transfer_worker->operations_counter;
+		}
+	}
+
+	void RenderingDevice::_wait_for_transfer_worker(TransferWorker* p_transfer_worker) {
+		driver->fence_wait(p_transfer_worker->command_fence);
+		driver->command_pool_reset(p_transfer_worker->command_pool);
+		p_transfer_worker->staging_buffer_size_in_use = 0;
+		p_transfer_worker->submitted = false;
+
+		{
+			std::lock_guard lock(p_transfer_worker->operations_mutex);
+			p_transfer_worker->operations_processed = p_transfer_worker->operations_submitted;
+		}
+
+		_flush_barriers_for_transfer_worker(p_transfer_worker);
+	}
+
+	void RenderingDevice::_flush_barriers_for_transfer_worker(TransferWorker* p_transfer_worker) {
+		// Caller must have already acquired the mutex for the worker.
+		if (!p_transfer_worker->texture_barriers.empty()) {
+			std::lock_guard transfer_worker_lock(transfer_worker_pool_texture_barriers_mutex);
+			for (uint32_t i = 0; i < p_transfer_worker->texture_barriers.size(); i++) {
+				transfer_worker_pool_texture_barriers.push_back(p_transfer_worker->texture_barriers[i]);
+			}
+
+			p_transfer_worker->texture_barriers.clear();
+		}
+	}
+
+	void RenderingDevice::_check_transfer_worker_operation(uint32_t p_transfer_worker_index, uint64_t p_transfer_worker_operation) {
+		TransferWorker* transfer_worker = transfer_worker_pool[p_transfer_worker_index];
+		std::lock_guard lock(transfer_worker->operations_mutex);
+		uint64_t& dst_operation = transfer_worker_operation_used_by_draw[transfer_worker->index];
+		dst_operation = MAX(dst_operation, p_transfer_worker_operation);
+	}
+
+	void RenderingDevice::_check_transfer_worker_buffer(Buffer* p_buffer) {
+		if (p_buffer->transfer_worker_index >= 0) {
+			_check_transfer_worker_operation(p_buffer->transfer_worker_index, p_buffer->transfer_worker_operation);
+			p_buffer->transfer_worker_index = -1;
+		}
+	}
+
+	void RenderingDevice::_check_transfer_worker_vertex_array(VertexArray* p_vertex_array) {
+		if (!p_vertex_array->transfer_worker_indices.empty()) {
+			for (int i = 0; i < p_vertex_array->transfer_worker_indices.size(); i++) {
+				_check_transfer_worker_operation(p_vertex_array->transfer_worker_indices[i], p_vertex_array->transfer_worker_operations[i]);
+			}
+
+			p_vertex_array->transfer_worker_indices.clear();
+			p_vertex_array->transfer_worker_operations.clear();
+		}
+	}
+
+	void RenderingDevice::_check_transfer_worker_index_array(IndexArray* p_index_array) {
+		if (p_index_array->transfer_worker_index >= 0) {
+			_check_transfer_worker_operation(p_index_array->transfer_worker_index, p_index_array->transfer_worker_operation);
+			p_index_array->transfer_worker_index = -1;
+		}
+	}
+
+	void RenderingDevice::_submit_transfer_workers(RDD::CommandBufferID p_draw_command_buffer) {
+		std::lock_guard transfer_worker_lock(transfer_worker_pool_mutex);
+		for (uint32_t i = 0; i < transfer_worker_pool_size; i++) {
+			TransferWorker* worker = transfer_worker_pool[i];
+			if (p_draw_command_buffer) {
+				std::lock_guard lock(worker->operations_mutex);
+				if (worker->operations_processed >= transfer_worker_operation_used_by_draw[worker->index]) {
+					// The operation used by the draw has already been processed, we don't need to wait on the worker.
+					continue;
+				}
+			}
+
+			{
+				std::lock_guard lock(worker->thread_mutex);
+				if (worker->recording) {
+					std::vector<RenderingDeviceDriver::SemaphoreID> tws{ frames[frame].transfer_worker_semaphores[i] };
+					std::span<RDD::SemaphoreID> semaphores = p_draw_command_buffer ? tws : std::span<RDD::SemaphoreID>();
+					_end_transfer_worker(worker);
+					_submit_transfer_worker(worker, semaphores);
+				}
+
+				if (p_draw_command_buffer) {
+					_flush_barriers_for_transfer_worker(worker);
+				}
+			}
+		}
+	}
+
+	void RenderingDevice::_submit_transfer_barriers(RDD::CommandBufferID p_draw_command_buffer) {
+		std::lock_guard transfer_worker_lock(transfer_worker_pool_texture_barriers_mutex);
+		if (!transfer_worker_pool_texture_barriers.empty()) {
+			driver->command_pipeline_barrier(p_draw_command_buffer, RDD::PIPELINE_STAGE_COPY_BIT, RDD::PIPELINE_STAGE_ALL_COMMANDS_BIT, {}, {}, transfer_worker_pool_texture_barriers, {});
+			transfer_worker_pool_texture_barriers.clear();
+		}
+	}
+
+	void RenderingDevice::_wait_for_transfer_workers() {
+		std::lock_guard transfer_worker_lock(transfer_worker_pool_mutex);
+		for (uint32_t i = 0; i < transfer_worker_pool_size; i++) {
+			TransferWorker* worker = transfer_worker_pool[i];
+			std::lock_guard lock(worker->thread_mutex);
+			if (worker->submitted) {
+				_wait_for_transfer_worker(worker);
+			}
+		}
+	}
+
+	void RenderingDevice::_free_transfer_workers() {
+		std::lock_guard transfer_worker_lock(transfer_worker_pool_mutex);
+		for (uint32_t i = 0; i < transfer_worker_pool_size; i++) {
+			TransferWorker* worker = transfer_worker_pool[i];
+			driver->fence_free(worker->command_fence);
+			driver->buffer_free(worker->staging_buffer);
+			driver->command_pool_free(worker->command_pool);
+			delete worker;
+		}
+
+		transfer_worker_pool_size = 0;
+	}
+
+
+
+#pragma endregion
+
+
+
 
 	RenderingDevice::RenderingDevice()
 	{

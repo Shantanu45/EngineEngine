@@ -6,6 +6,7 @@
 #include "xxhash.h"
 #include "compiler/compiler.h"
 #include <map>
+#include <set>
 
 namespace Rendering
 {
@@ -510,6 +511,67 @@ namespace Rendering
 			uint32_t view_count;
 		};
 
+		struct Buffer {
+			RDD::BufferID driver_id;
+			uint32_t size = 0;
+			BitField<RDD::BufferUsageBits> usage = {};
+			//RDG::ResourceTracker* draw_tracker = nullptr;
+			int32_t transfer_worker_index = -1;
+			uint64_t transfer_worker_operation = 0;
+		};
+
+		struct TransferWorker {
+			uint32_t index = 0;
+			RDD::BufferID staging_buffer;
+			uint32_t max_transfer_size = 0;
+			uint32_t staging_buffer_size_in_use = 0;
+			uint32_t staging_buffer_size_allocated = 0;
+			RDD::CommandBufferID command_buffer;
+			RDD::CommandPoolID command_pool;
+			RDD::FenceID command_fence;
+			std::vector<RDD::TextureBarrier> texture_barriers;
+			bool recording = false;
+			bool submitted = false;
+			std::mutex thread_mutex;
+			uint64_t operations_processed = 0;
+			uint64_t operations_submitted = 0;
+			uint64_t operations_counter = 0;
+			std::mutex operations_mutex;
+		};
+
+		struct VertexArray {
+			RID buffer;
+			VertexFormatID description;
+			int vertex_count = 0;
+			uint32_t max_instances_allowed = 0;
+
+			std::vector<RDD::BufferID> buffers; // Not owned, just referenced.
+			//std::vector<RDG::ResourceTracker*> draw_trackers; // Not owned, just referenced.
+			std::vector<uint64_t> offsets;
+			std::vector<int32_t> transfer_worker_indices;
+			std::vector<uint64_t> transfer_worker_operations;
+			std::set <RID> untracked_buffers;
+		};
+
+		struct IndexBuffer : public Buffer {
+			uint32_t max_index = 0; // Used for validation.
+			uint32_t index_count = 0;
+			IndexBufferFormat format = INDEX_BUFFER_FORMAT_UINT16;
+			bool supports_restart_indices = false;
+		};
+
+		struct IndexArray {
+			uint32_t max_index = 0; // Remember the maximum index here too, for validation.
+			RDD::BufferID driver_id; // Not owned, inherited from index buffer.
+			//RDG::ResourceTracker* draw_tracker = nullptr; // Not owned, inherited from index buffer.
+			uint32_t offset = 0;
+			uint32_t indices = 0;
+			IndexBufferFormat format = INDEX_BUFFER_FORMAT_UINT16;
+			bool supports_restart_indices = false;
+			int32_t transfer_worker_index = -1;
+			uint64_t transfer_worker_operation = 0;
+		};
+
 		struct Frame {
 			// The command pool used by the command buffer.
 			RenderingDeviceDriver::CommandPoolID command_pool;
@@ -643,11 +705,33 @@ namespace Rendering
 			std::span<RDD::AttachmentStoreOp> p_store_ops, uint32_t p_view_count = 1, VRSMethod p_vrs_method = VRS_METHOD_NONE,
 			int32_t p_vrs_attachment = -1, Size2i p_vrs_texel_size = Size2i(), std::vector<TextureSamples>* r_samples = nullptr);
 
+		Buffer* _get_buffer_from_owner(RID p_buffer);
+
+#pragma region Transfer Worker
+
+		TransferWorker* _acquire_transfer_worker(uint32_t p_transfer_size, uint32_t p_required_align, uint32_t& r_staging_offset);
+		void _release_transfer_worker(TransferWorker* p_transfer_worker);
+		void _end_transfer_worker(TransferWorker* p_transfer_worker);
+		void _submit_transfer_worker(TransferWorker* p_transfer_worker, std::span<RDD::SemaphoreID> p_signal_semaphores = std::span<RDD::SemaphoreID>());
+		void _wait_for_transfer_worker(TransferWorker* p_transfer_worker);
+		void _flush_barriers_for_transfer_worker(TransferWorker* p_transfer_worker);
+		void _check_transfer_worker_operation(uint32_t p_transfer_worker_index, uint64_t p_transfer_worker_operation);
+		void _check_transfer_worker_buffer(Buffer* p_buffer);
+		//void _check_transfer_worker_texture(Texture* p_texture);
+		void _check_transfer_worker_vertex_array(VertexArray* p_vertex_array);
+		void _check_transfer_worker_index_array(IndexArray* p_index_array);
+		void _submit_transfer_workers(RDD::CommandBufferID p_draw_command_buffer = RDD::CommandBufferID());
+		void _submit_transfer_barriers(RDD::CommandBufferID p_draw_command_buffer);
+		void _wait_for_transfer_workers();
+		void _free_transfer_workers();
+
+#pragma endregion
+
+
 		RenderingDevice();
 		~RenderingDevice();
 
 	private:
-
 		bool is_main_instance = false;
 
 		RenderingContextDriver* context = nullptr;
@@ -674,6 +758,15 @@ namespace Rendering
 		std::map<FramebufferFormatKey, FramebufferFormatID> framebuffer_format_cache;
 		std::unordered_map<FramebufferFormatID, FramebufferFormat> framebuffer_formats;
 
+		std::vector<TransferWorker*> transfer_worker_pool;
+		uint32_t transfer_worker_pool_size = 0;
+		uint32_t transfer_worker_pool_max_size = 1;
+		std::vector<uint64_t> transfer_worker_operation_used_by_draw;
+		std::vector<uint32_t> transfer_worker_pool_available_list;
+		std::vector<RDD::TextureBarrier> transfer_worker_pool_texture_barriers;
+		std::mutex transfer_worker_pool_mutex;
+		std::mutex transfer_worker_pool_texture_barriers_mutex;
+		std::condition_variable transfer_worker_pool_condition;
 
 		VRSMethod vrs_method = VRS_METHOD_NONE;
 		DataFormat vrs_format = DATA_FORMAT_MAX;
@@ -681,6 +774,7 @@ namespace Rendering
 
 		std::vector<Frame> frames;
 		int frame = 0;
+		uint64_t frames_drawn = 0;
 
 		std::unique_ptr<Compiler::GLSLCompiler> compiler;
 
@@ -691,6 +785,14 @@ namespace Rendering
 		RID_Owner<Shader, true> shader_owner;
 
 		RID_Owner<Framebuffer, true> framebuffer_owner;
+
+		RID_Owner<Buffer, true> vertex_buffer_owner;
+
+		RID_Owner<IndexBuffer, true> index_buffer_owner;
+
+		RID_Owner<VertexArray, true> vertex_array_owner;
+
+		RID_Owner<IndexArray, true> index_array_owner;
 
 	};
 }

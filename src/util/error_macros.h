@@ -33,7 +33,6 @@
 #include "typedefs.h"
 #include "logger.h"
 
-class std::string;
 class ObjectID;
 
 enum ErrorHandlerType {

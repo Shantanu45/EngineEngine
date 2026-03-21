@@ -1183,8 +1183,6 @@ namespace Vulkan
 	}
 #pragma endregion
 
-	// TODO: do I need to use vold device to call vulkan functions!!??
-
 #pragma region Memory
 
 	static const uint32_t SMALL_ALLOCATION_MAX_SIZE = 4096;
@@ -4313,7 +4311,7 @@ namespace Vulkan
 		vkCmdFillBuffer(command_buffer->vk_command_buffer, buf_info->vk_buffer, p_offset, p_size, 0);
 	}
 
-	void RenderingDeviceDriverVulkan::command_copy_buffer(CommandBufferID p_cmd_buffer, BufferID p_src_buffer, BufferID p_dst_buffer, std::span<BufferCopyRegion> p_regions) {
+	void RenderingDeviceDriverVulkan::command_copy_buffer(CommandBufferID p_cmd_buffer, BufferID p_src_buffer, BufferID p_dst_buffer, std::span<BufferCopyRegion> p_regions)   {
 		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
 		const BufferInfo* src_buf_info = (const BufferInfo*)p_src_buffer.id;
 		const BufferInfo* dst_buf_info = (const BufferInfo*)p_dst_buffer.id;
