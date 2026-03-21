@@ -752,6 +752,52 @@ namespace Rendering
 		return id;
 	}
 
+	RID RenderingDevice::vertex_buffer_create(uint32_t p_size_bytes, std::span<uint8_t> p_data /*= {}*/, BitField<BufferCreationBits> p_creation_bits /*= 0*/)
+	{
+		ERR_FAIL_COND_V(p_data.size() && (uint32_t)p_data.size() != p_size_bytes, RID());
+
+		Buffer buffer;
+		buffer.size = p_size_bytes;
+		buffer.usage = RDD::BUFFER_USAGE_TRANSFER_FROM_BIT | RDD::BUFFER_USAGE_TRANSFER_TO_BIT | RDD::BUFFER_USAGE_VERTEX_BIT;
+		if (p_creation_bits.has_flag(BUFFER_CREATION_AS_STORAGE_BIT)) {
+			buffer.usage.set_flag(RDD::BUFFER_USAGE_STORAGE_BIT);
+		}
+		if (p_creation_bits.has_flag(BUFFER_CREATION_DYNAMIC_PERSISTENT_BIT)) {
+			buffer.usage.set_flag(RDD::BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT);
+
+			// Persistent buffers expect frequent CPU -> GPU writes, so GPU writes should avoid the same path.
+			buffer.usage.clear_flag(RDD::BUFFER_USAGE_TRANSFER_TO_BIT);
+		}
+		if (p_creation_bits.has_flag(BUFFER_CREATION_DEVICE_ADDRESS_BIT)) {
+			buffer.usage.set_flag(RDD::BUFFER_USAGE_DEVICE_ADDRESS_BIT);
+		}
+		if (p_creation_bits.has_flag(BUFFER_CREATION_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT)) {
+			buffer.usage.set_flag(RDD::BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT);
+		}
+		buffer.driver_id = driver->buffer_create(buffer.size, buffer.usage, RDD::MEMORY_ALLOCATION_TYPE_GPU, frames_drawn);
+		ERR_FAIL_COND_V(!buffer.driver_id, RID());
+
+		// Vertex buffers are assumed to be immutable unless they don't have initial data or they've been marked for storage explicitly.
+		if (p_data.empty() || p_creation_bits.has_flag(BUFFER_CREATION_AS_STORAGE_BIT) || p_creation_bits.has_flag(BUFFER_CREATION_DYNAMIC_PERSISTENT_BIT)) {
+			//buffer.draw_tracker = RDG::resource_tracker_create();
+			//buffer.draw_tracker->buffer_driver_id = buffer.driver_id;
+		}
+
+		if (p_data.size()) {
+			_buffer_initialize(&buffer, p_data);
+		}
+
+		//_THREAD_SAFE_LOCK_
+			buffer_memory += buffer.size;
+		//_THREAD_SAFE_UNLOCK_
+
+			RID id = vertex_buffer_owner.make_rid(buffer);
+#ifdef DEV_ENABLED
+		set_resource_name(id, "RID:" + itos(id.get_id()));
+#endif
+		return id;
+	}
+
 	void RenderingDevice::swap_buffers(bool p_present)
 	{
 		//_begin_frame(true);
@@ -811,7 +857,7 @@ namespace Rendering
 		bool has_implicit = false;
 		bool has_explicit = false;
 		std::vector<VertexAttribute> vertex_descriptions = p_vertex_descriptions;
-		std::set<int> used_locations;
+		std::unordered_set<int> used_locations;
 
 		for (int i = 0; i < vertex_descriptions.size(); i++) {
 			VertexAttribute& attr = vertex_descriptions[i];
@@ -1390,6 +1436,244 @@ namespace Rendering
 		return render_pass;
 	}	
 
+	Rendering::RenderingDevice::Buffer* RenderingDevice::_get_buffer_from_owner(RID p_buffer)
+	{
+		Buffer* buffer = nullptr;
+		if (vertex_buffer_owner.owns(p_buffer)) {
+			buffer = vertex_buffer_owner.get_or_null(p_buffer);
+		}
+		else if (index_buffer_owner.owns(p_buffer)) {
+			buffer = index_buffer_owner.get_or_null(p_buffer);
+		}
+		//else if (uniform_buffer_owner.owns(p_buffer)) {
+		//	buffer = uniform_buffer_owner.get_or_null(p_buffer);
+		//}
+		//else if (texture_buffer_owner.owns(p_buffer)) {
+		//	DEV_ASSERT(false && "FIXME: Broken.");
+		//	//buffer = texture_buffer_owner.get_or_null(p_buffer)->buffer;
+		//}
+		//else if (storage_buffer_owner.owns(p_buffer)) {
+		//	buffer = storage_buffer_owner.get_or_null(p_buffer);
+		//}
+		//else if (instances_buffer_owner.owns(p_buffer)) {
+		//	buffer = &instances_buffer_owner.get_or_null(p_buffer)->buffer;
+		//}
+		return buffer;
+	}
+
+	Error RenderingDevice::_buffer_initialize(Buffer* p_buffer, std::span<uint8_t> p_data, uint32_t p_required_align /*= 32*/)
+	{
+		uint32_t transfer_worker_offset;
+		TransferWorker* transfer_worker = _acquire_transfer_worker(p_data.size(), p_required_align, transfer_worker_offset);
+		p_buffer->transfer_worker_index = transfer_worker->index;
+
+		{
+			std::lock_guard lock(transfer_worker->operations_mutex);
+			p_buffer->transfer_worker_operation = ++transfer_worker->operations_counter;
+		}
+
+		// Copy to the worker's staging buffer.
+		uint8_t* data_ptr = driver->buffer_map(transfer_worker->staging_buffer);
+		ERR_FAIL_NULL_V(data_ptr, ERR_CANT_CREATE);
+
+		memcpy(data_ptr + transfer_worker_offset, p_data.data(), p_data.size());
+		driver->buffer_unmap(transfer_worker->staging_buffer);
+
+		// Copy from the staging buffer to the real buffer.
+		RDD::BufferCopyRegion region;
+		region.src_offset = transfer_worker_offset;
+		region.dst_offset = 0;
+		region.size = p_data.size();
+		driver->command_copy_buffer(transfer_worker->command_buffer, transfer_worker->staging_buffer, p_buffer->driver_id, { &region, 1 });
+
+		_release_transfer_worker(transfer_worker);
+
+		return OK;
+	}
+
+	RID RenderingDevice::vertex_array_create(uint32_t p_vertex_count, VertexFormatID p_vertex_format, const std::vector<RID>& p_src_buffers, const std::vector<uint64_t>& p_offsets /*= std::vector<uint64_t>()*/)
+	{
+		ERR_FAIL_COND_V(!vertex_formats.contains(p_vertex_format), RID());
+		const VertexDescriptionCache& vd = vertex_formats[p_vertex_format];
+
+		VertexArray vertex_array;
+
+		if (p_offsets.empty()) {
+			vertex_array.offsets.resize(p_src_buffers.size());
+		}
+		else {
+			ERR_FAIL_COND_V(p_offsets.size() != p_src_buffers.size(), RID());
+			vertex_array.offsets = p_offsets;
+		}
+
+		vertex_array.vertex_count = p_vertex_count;
+		vertex_array.description = p_vertex_format;
+		vertex_array.max_instances_allowed = 0xFFFFFFFF; // By default as many as you want.
+		vertex_array.buffers.resize(p_src_buffers.size());
+
+		std::unordered_set<RID> unique_buffers;
+		unique_buffers.reserve(p_src_buffers.size());
+
+		for (const VertexAttribute& atf : vd.vertex_formats) {
+			ERR_FAIL_COND_V_MSG(atf.binding >= p_src_buffers.size(), RID(), std::format("Vertex attribute location ({}) is missing a buffer for binding ({}).", atf.location, atf.binding));
+			RID buf = p_src_buffers[atf.binding];
+			ERR_FAIL_COND_V(!vertex_buffer_owner.owns(buf), RID());
+
+			Buffer* buffer = vertex_buffer_owner.get_or_null(buf);
+
+			// Validate with buffer.
+			{
+				uint32_t element_size = get_format_vertex_size(atf.format);
+				ERR_FAIL_COND_V(element_size == 0, RID()); // Should never happen since this was prevalidated.
+
+				if (atf.frequency == VERTEX_FREQUENCY_VERTEX) {
+					// Validate size for regular drawing.
+					uint64_t total_size = uint64_t(atf.stride) * (p_vertex_count - 1) + atf.offset + element_size;
+					ERR_FAIL_COND_V_MSG(total_size > buffer->size, RID(),
+						std::format("Vertex attribute ({}) will read past the end of the buffer.", atf.location));
+
+				}
+				else {
+					// Validate size for instances drawing.
+					uint64_t available = buffer->size - atf.offset;
+					ERR_FAIL_COND_V_MSG(available < element_size, RID(),
+						std::format("Vertex attribute ({}) uses instancing, but it's just too small.", atf.location));
+
+					uint32_t instances_allowed = available / atf.stride;
+					vertex_array.max_instances_allowed = MIN(instances_allowed, vertex_array.max_instances_allowed);
+				}
+			}
+
+			vertex_array.buffers[atf.binding] = buffer->driver_id;
+
+			if (unique_buffers.contains(buf)) {
+				// No need to add dependencies multiple times.
+				continue;
+			}
+
+			unique_buffers.insert(buf);
+
+			//if (buffer->draw_tracker != nullptr) {
+			//	vertex_array.draw_trackers.push_back(buffer->draw_tracker);
+			//}
+			//else {
+				vertex_array.untracked_buffers.insert(buf);
+			//}
+
+			if (buffer->transfer_worker_index >= 0) {
+				vertex_array.transfer_worker_indices.push_back(buffer->transfer_worker_index);
+				vertex_array.transfer_worker_operations.push_back(buffer->transfer_worker_operation);
+			}
+		}
+
+		RID id = vertex_array_owner.make_rid(vertex_array);
+		//for (const RID& buf : unique_buffers) {
+		//	_add_dependency(id, buf);
+		//}
+
+		return id;
+	}
+
+	RID RenderingDevice::index_buffer_create(uint32_t p_index_count, IndexBufferFormat p_format, std::span<uint8_t> p_data /*= {}*/, bool p_use_restart_indices /*= false*/, BitField<BufferCreationBits> p_creation_bits /*= 0*/)
+	{
+		ERR_FAIL_COND_V(p_index_count == 0, RID());
+
+		IndexBuffer index_buffer;
+		index_buffer.format = p_format;
+		index_buffer.supports_restart_indices = p_use_restart_indices;
+		index_buffer.index_count = p_index_count;
+		uint32_t size_bytes = p_index_count * ((p_format == INDEX_BUFFER_FORMAT_UINT16) ? 2 : 4);
+#ifdef DEBUG_ENABLED
+		if (p_data.size()) {
+			index_buffer.max_index = 0;
+			ERR_FAIL_COND_V_MSG((uint32_t)p_data.size() != size_bytes, RID(),
+				"Default index buffer initializer array size (" + itos(p_data.size()) + ") does not match format required size (" + itos(size_bytes) + ").");
+			const uint8_t* r = p_data.ptr();
+			if (p_format == INDEX_BUFFER_FORMAT_UINT16) {
+				const uint16_t* index16 = (const uint16_t*)r;
+				for (uint32_t i = 0; i < p_index_count; i++) {
+					if (p_use_restart_indices && index16[i] == 0xFFFF) {
+						continue; // Restart index, ignore.
+					}
+					index_buffer.max_index = MAX(index16[i], index_buffer.max_index);
+				}
+			}
+			else {
+				const uint32_t* index32 = (const uint32_t*)r;
+				for (uint32_t i = 0; i < p_index_count; i++) {
+					if (p_use_restart_indices && index32[i] == 0xFFFFFFFF) {
+						continue; // Restart index, ignore.
+					}
+					index_buffer.max_index = MAX(index32[i], index_buffer.max_index);
+				}
+			}
+		}
+		else {
+			index_buffer.max_index = 0xFFFFFFFF;
+		}
+#else
+		index_buffer.max_index = 0xFFFFFFFF;
+#endif
+		index_buffer.size = size_bytes;
+		index_buffer.usage = (RDD::BUFFER_USAGE_TRANSFER_FROM_BIT | RDD::BUFFER_USAGE_TRANSFER_TO_BIT | RDD::BUFFER_USAGE_INDEX_BIT);
+		if (p_creation_bits.has_flag(BUFFER_CREATION_AS_STORAGE_BIT)) {
+			index_buffer.usage.set_flag(RDD::BUFFER_USAGE_STORAGE_BIT);
+		}
+		if (p_creation_bits.has_flag(BUFFER_CREATION_DEVICE_ADDRESS_BIT)) {
+			index_buffer.usage.set_flag(RDD::BUFFER_USAGE_DEVICE_ADDRESS_BIT);
+		}
+		if (p_creation_bits.has_flag(BUFFER_CREATION_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT)) {
+			index_buffer.usage.set_flag(RDD::BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT);
+		}
+		index_buffer.driver_id = driver->buffer_create(index_buffer.size, index_buffer.usage, RDD::MEMORY_ALLOCATION_TYPE_GPU, frames_drawn);
+		ERR_FAIL_COND_V(!index_buffer.driver_id, RID());
+
+		// Index buffers are assumed to be immutable unless they don't have initial data.
+		//if (p_data.empty()) {
+		//	index_buffer.draw_tracker = RDG::resource_tracker_create();
+		//	index_buffer.draw_tracker->buffer_driver_id = index_buffer.driver_id;
+		//}
+
+		if (p_data.size()) {
+			_buffer_initialize(&index_buffer, p_data);
+		}
+
+		//_THREAD_SAFE_LOCK_
+			buffer_memory += index_buffer.size;
+		//_THREAD_SAFE_UNLOCK_
+
+			RID id = index_buffer_owner.make_rid(index_buffer);
+#ifdef DEV_ENABLED
+		set_resource_name(id, "RID:" + itos(id.get_id()));
+#endif
+		return id;
+	}
+
+	RID RenderingDevice::index_array_create(RID p_index_buffer, uint32_t p_index_offset, uint32_t p_index_count)
+	{
+		ERR_FAIL_COND_V(!index_buffer_owner.owns(p_index_buffer), RID());
+
+		IndexBuffer* index_buffer = index_buffer_owner.get_or_null(p_index_buffer);
+
+		ERR_FAIL_COND_V(p_index_count == 0, RID());
+		ERR_FAIL_COND_V(p_index_offset + p_index_count > index_buffer->index_count, RID());
+
+		IndexArray index_array;
+		index_array.max_index = index_buffer->max_index;
+		index_array.driver_id = index_buffer->driver_id;
+		//index_array.draw_tracker = index_buffer->draw_tracker;
+		index_array.offset = p_index_offset;
+		index_array.indices = p_index_count;
+		index_array.format = index_buffer->format;
+		index_array.supports_restart_indices = index_buffer->supports_restart_indices;
+		index_array.transfer_worker_index = index_buffer->transfer_worker_index;
+		index_array.transfer_worker_operation = index_buffer->transfer_worker_operation;
+
+		RID id = index_array_owner.make_rid(index_array);
+		//_add_dependency(id, p_index_buffer);
+		return id;
+	}
+
 #pragma region Transfer worker
 
 	static uint32_t _get_alignment_offset(uint32_t p_offset, uint32_t p_required_align) {
@@ -1699,8 +1983,6 @@ namespace Rendering
 
 
 #pragma endregion
-
-
 
 
 	RenderingDevice::RenderingDevice()

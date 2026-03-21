@@ -148,6 +148,13 @@ namespace Rendering
 			MEMORY_TOTAL
 		};
 
+		enum BufferCreationBits {
+			BUFFER_CREATION_DEVICE_ADDRESS_BIT = (1 << 0),
+			BUFFER_CREATION_AS_STORAGE_BIT = (1 << 1),
+			BUFFER_CREATION_DYNAMIC_PERSISTENT_BIT = (1 << 2),
+			BUFFER_CREATION_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT = (1 << 3),
+		};
+
 		struct Uniform {
 			UniformType uniform_type = UNIFORM_TYPE_IMAGE;
 			uint32_t binding = 0; // Binding index as specified in shader.
@@ -550,7 +557,7 @@ namespace Rendering
 			std::vector<uint64_t> offsets;
 			std::vector<int32_t> transfer_worker_indices;
 			std::vector<uint64_t> transfer_worker_operations;
-			std::set <RID> untracked_buffers;
+			std::unordered_set <RID> untracked_buffers;
 		};
 
 		struct IndexBuffer : public Buffer {
@@ -660,6 +667,11 @@ namespace Rendering
 
 #pragma endregion
 
+		RID vertex_buffer_create(uint32_t p_size_bytes, std::span<uint8_t> p_data = {}, BitField<BufferCreationBits> p_creation_bits = 0);
+		RID _vertex_buffer_create(uint32_t p_size_bytes, std::vector<uint8_t>& p_data, BitField<BufferCreationBits> p_creation_bits = 0) {
+			return vertex_buffer_create(p_size_bytes, p_data, p_creation_bits);
+		}
+
 		void swap_buffers(bool p_present);
 
 		bool begin_for_screen(DisplayServerEnums::WindowID p_screen = 0, const Color& p_clear_color = Color());
@@ -693,19 +705,34 @@ namespace Rendering
 
 		std::vector<uint8_t> _shader_compile_binary_from_spirv(const RDShaderSPIRV* p_bytecode, const std::string& p_shader_name = "");
 
+		RID vertex_array_create(uint32_t p_vertex_count, VertexFormatID p_vertex_format, const std::vector<RID>& p_src_buffers, const std::vector<uint64_t>& p_offsets = std::vector<uint64_t>());
+
+		RID index_buffer_create(uint32_t p_index_count, IndexBufferFormat p_format, std::span<uint8_t> p_data = {},
+			bool p_use_restart_indices = false, BitField<BufferCreationBits> p_creation_bits = 0);
+
+		RID index_array_create(RID p_index_buffer, uint32_t p_index_offset, uint32_t p_index_count);
+
 	private:
+
+		RID _index_buffer_create(uint32_t p_index_count, IndexBufferFormat p_format, std::vector<uint8_t>& p_data,
+			bool p_use_restart_indices = false, BitField<BufferCreationBits> p_creation_bits = 0) {
+			return index_buffer_create(p_index_count, p_format, p_data, p_use_restart_indices, p_creation_bits);
+		}
 		void _stall_for_frame(uint32_t p_frame);
 		void _stall_for_previous_frames();
 		void _flush_and_stall_for_all_frames(bool p_begin_frame = true);
 		uint32_t _get_swap_chain_desired_count() const;
 
 		static RDD::TextureLayout _vrs_layout_from_method(VRSMethod p_method);
+
 		static RDD::RenderPassID _render_pass_create(RenderingDeviceDriver* p_driver, const std::vector<AttachmentFormat>& p_attachments,
 			const std::vector<FramebufferPass>& p_passes, std::span<RDD::AttachmentLoadOp> p_load_ops,
 			std::span<RDD::AttachmentStoreOp> p_store_ops, uint32_t p_view_count = 1, VRSMethod p_vrs_method = VRS_METHOD_NONE,
 			int32_t p_vrs_attachment = -1, Size2i p_vrs_texel_size = Size2i(), std::vector<TextureSamples>* r_samples = nullptr);
 
 		Buffer* _get_buffer_from_owner(RID p_buffer);
+
+		Error _buffer_initialize(Buffer* p_buffer, std::span<uint8_t> p_data, uint32_t p_required_align = 32);
 
 #pragma region Transfer Worker
 
@@ -775,6 +802,8 @@ namespace Rendering
 		std::vector<Frame> frames;
 		int frame = 0;
 		uint64_t frames_drawn = 0;
+
+		uint64_t buffer_memory = 0;
 
 		std::unique_ptr<Compiler::GLSLCompiler> compiler;
 
