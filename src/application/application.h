@@ -20,6 +20,12 @@ namespace EE
 		Application();
 		virtual ~Application();
 
+		bool on_init(DisplayServerEnums::WindowID p_window, Rendering::WindowData* p_window_data);
+
+		bool init_wsi();
+
+		virtual void pre_frame();
+
 		/**
 		 * application must overload at least this function. runs in loop between begin and end frame
 		 * 
@@ -27,11 +33,11 @@ namespace EE
 		 * \param elapsed_time
 		 */
 		virtual void render_frame(double frame_time, double elapsed_time) = 0;
-		//bool init_platform(std::unique_ptr<Rendering::WSIPlatform> new_platform);
-		bool init_wsi();
-		void teardown_wsi();
+
+		void run_frame();
 
 		virtual void post_frame();
+
 
 		virtual void render_early_loading(double frame_time, double elapsed_time);
 
@@ -62,18 +68,14 @@ namespace EE
 			return application_wsi.get();
 		}
 
-		//bool poll();
-		void run_frame();
-		bool on_init(DisplayServerEnums::WindowID p_window, Rendering::WindowData* p_window_data);
-		//void show_message_box(const std::string& str, Vulkan::WSIPlatform::MessageType type);
+
+		void teardown_wsi();
 
 	protected:
 		void request_shutdown()
 		{
 			requested_shutdown = true;
 		}
-
-		//void poll_input_tracker_async(InputTrackerHandler* override_handler);
 
 	private:
 		bool requested_shutdown = false;
@@ -86,8 +88,6 @@ namespace EE
 
 		std::unique_ptr<::Util::Logger> logger = nullptr;
 
-		//Vulkan::RenderingContextDriverVulkan vulkan_context;
-		//std::unique_ptr<Vulkan::RenderingDeviceDriverVulkan> vulkan_device_ptr = nullptr;
 		std::unique_ptr<Rendering::WSI> application_wsi;
 	};
 }

@@ -840,8 +840,6 @@ namespace Rendering
 
 	void RenderingDevice::swap_buffers(bool p_present)
 	{
-		//_begin_frame(true);
-
 		end_frame();
 
 		execute_frame(p_present);
@@ -880,6 +878,7 @@ namespace Rendering
 
 	void RenderingDevice::render_draw(RenderingDeviceDriver::CommandBufferID p_command_buffer, uint32_t p_vertex_count, uint32_t p_instance_count)
 	{
+		//TODO: re
 		//driver->command_render_draw(p_command_buffer, p_vertex_count, p_instance_count, 0, 0);
 		driver->command_render_draw_indexed(p_command_buffer, 3, 1, 0, 0, 0);
 	}

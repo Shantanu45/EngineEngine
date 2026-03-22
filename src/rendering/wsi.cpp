@@ -20,7 +20,7 @@ namespace Rendering
 
 	Error WSI::initialize(const std::string& p_rendering_driver, DisplayServerEnums::WindowMode p_mode, DisplayServerEnums::VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i* p_position, const Vector2i& p_resolution, int p_screen, DisplayServerEnums::Context p_context, int64_t p_parent_window)
 	{
-		auto window_id = DisplayServerEnums::MAIN_WINDOW_ID;
+		active_window = DisplayServerEnums::MAIN_WINDOW_ID;
 		rendering_driver = p_rendering_driver;
 		if (rendering_driver == "vulkan") {
 			rendering_context = std::make_unique<Vulkan::RenderingContextDriverVulkan>();
@@ -29,56 +29,73 @@ namespace Rendering
 		{
 			// api not supported
 			DEBUG_ASSERT(false);
+			return FAILED;
 		}
 
 		if (rendering_context != nullptr) {
-			if (!rendering_context->init_loader_and_extensions(windows[window_id].platfform_data.platform))
+			if (!rendering_context->init_loader_and_extensions(windows[active_window].platfform_data.platform))
 			{
 				LOGE("Failed to initialize Vulkan loader.\n");
 				return FAILED;
 			}
-			//rendering_context->set_platform_surface_extension(windows[window_id].platform_instance_extensions);		// TODO: remove hardcoded zero
-			if (rendering_context->initialize() == OK) {
-				//DEBUG_ASSERT(platform || main_window_created);
-
-				if (_create_rendering_context_window(window_id, rendering_driver) == OK) {
-					rendering_device = RenderingDevice::get_singleton();
-					// device initialization happens in function call below
-					if (!(rendering_device->initialize(rendering_context.get(), window_id) == OK)) {
-						return FAILED;
-					}
+			if (rendering_context->initialize() == OK && _create_rendering_context_window(active_window, rendering_driver) == OK)
+			{
+				rendering_device = RenderingDevice::get_singleton();
+				// device initialization happens in function call below
+				if (!(rendering_device->initialize(rendering_context.get(), active_window) == OK))
+				{
+					return FAILED;
 				}
 			}
 		}
+		return OK;
+	}
 
-		if (rendering_context) {
+	bool WSI::pre_frame_loop()
+	{
+		if (rendering_context && rendering_device) {
+			
 			DEV_ASSERT(rendering_device != nullptr);
 
-			rendering_device->screen_create(DisplayServerEnums::MAIN_WINDOW_ID);
+			rendering_device->screen_create(active_window);
+
+			return true;
 		}
-		return OK;
+		// TODO
+		return false;
+	}
+
+	bool WSI::pre_begin_frame()
+	{
+		// TODO
+		return false;
 	}
 
 	bool WSI::begin_frame()
 	{
 		rendering_device->begin_frame();
-		return true;
-	}
+		rendering_device->screen_prepare_for_drawing(active_window);
 
-	// draw viewport
-	void WSI::draw_viewport(bool p_swap_buffers)
-	{
-		// blit_render_targets_to_screen
-			// screen_prepare_for_drawing
-		rendering_device->screen_prepare_for_drawing(DisplayServerEnums::MAIN_WINDOW_ID);
-		
+		return true;
 	}
 
 	bool WSI::end_frame()
 	{
 		rendering_device->swap_buffers(true);
-		//platform->poll_input();
+
 		return true;
+	}
+
+	bool WSI::post_end_frame()
+	{
+		// TODO
+		return false;
+	}
+
+	bool WSI::post_frame_loop()
+	{
+		// TODO
+		return false;
 	}
 
 	void WSI::set_program(const std::vector<std::string> programs)
@@ -96,7 +113,7 @@ namespace Rendering
 
 	void WSI::pipeline_create()
 	{
-		auto fb_format = rendering_device->screen_get_framebuffer_format(DisplayServerEnums::MAIN_WINDOW_ID);
+		auto fb_format = rendering_device->screen_get_framebuffer_format(active_window);
 
 		auto vertex_format = rendering_device->vertex_format_create({});
 
@@ -122,7 +139,7 @@ namespace Rendering
 		//auto vertex_format = rendering_device->vertex_format_create({});
 
 		auto blend_state = RenderingDeviceCommons::PipelineColorBlendState::create_blend();
-		pipeline = rendering_device->create_swapchain_pipeline(DisplayServerEnums::MAIN_WINDOW_ID, shader_program,
+		pipeline = rendering_device->create_swapchain_pipeline(active_window, shader_program,
 			vertex_format, RenderingDeviceCommons::RENDER_PRIMITIVE_TRIANGLE_STRIPS,
 			{}, RenderingDeviceCommons::PipelineMultisampleState(),
 			RenderingDeviceCommons::PipelineDepthStencilState(), blend_state,
@@ -203,7 +220,7 @@ namespace Rendering
 	{
 		// TODO: check if window entry exsists
 
-		auto wd = windows[p_window_id];
+		auto wd = windows.at(p_window_id);
 
 		Error err = rendering_context->window_create(p_window_id, &wd.platfform_data);
 		ERR_FAIL_COND_V_MSG(err != OK, err, std::format("Failed to create {} window.", p_rendering_driver));

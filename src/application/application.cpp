@@ -59,26 +59,46 @@ namespace EE
 		FreeConsole();
 	}
 
+	bool Application::on_init(DisplayServerEnums::WindowID p_window, Rendering::WindowData* p_window_data)
+	{
+		application_wsi->set_wsi_platform_data(p_window, *p_window_data);
+
+		if (init_wsi())
+		{
+			return true;
+		}
+		return false;
+	}
+
 	bool Application::init_wsi()
 	{
 		DEBUG_ASSERT(application_wsi->initialize("vulkan", DisplayServerEnums::WINDOW_MODE_WINDOWED, DisplayServerEnums::VSYNC_DISABLED, 0, {}, {}, 0, DisplayServerEnums::CONTEXT_ENGINE, 0) == OK);
-		//application_wsi->draw_viewport(true);
-		application_wsi->set_program({"assets://shaders/triangle_v2.vert", "assets://shaders/triangle_v2.frag"});
-		application_wsi->pipeline_create_default();
-		//application_wsi->pipeline_create();
-		//DEBUG_ASSERT(application_wsi.init_device());
+
 		return true;
 	}
 
-	void Application::teardown_wsi()
+	void Application::pre_frame()
 	{
-		application_wsi->teardown();
-		ready_modules = false;
-		ready_pipelines = false;
+		application_wsi->pre_frame_loop();
+		application_wsi->set_program({ "assets://shaders/triangle_v2.vert", "assets://shaders/triangle_v2.frag" });
+		application_wsi->pipeline_create_default();
+	}
+
+	void Application::run_frame()
+	{
+		application_wsi->pre_begin_frame();
+		if (!application_wsi->begin_frame())
+			return;
+
+		render_frame(0, 0);
+
+		application_wsi->end_frame();
+		application_wsi->post_end_frame();
 	}
 
 	void Application::post_frame()
 	{
+		application_wsi->post_frame_loop();
 	}
 
 	void Application::render_early_loading(double frame_time, double elapsed_time)
@@ -89,27 +109,11 @@ namespace EE
 	{
 	}
 
-	void Application::run_frame()
+	void Application::teardown_wsi()
 	{
-		if (!application_wsi->begin_frame())
-		{
-			return;
-		}
-		application_wsi->draw_viewport(true);
-		render_frame(0, 0);
-
-		application_wsi->end_frame();
-	}
-
-	bool Application::on_init(DisplayServerEnums::WindowID p_window, Rendering::WindowData* p_window_data)
-	{
-		application_wsi->set_wsi_platform_data(p_window, *p_window_data);
-
-		if (init_wsi())
-		{
-			return true;
-		}
-		return false;
+		application_wsi->teardown();
+		ready_modules = false;
+		ready_pipelines = false;
 	}
 
 	void Application::_check_initialization_progress()

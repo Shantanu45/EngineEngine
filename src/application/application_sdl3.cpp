@@ -68,7 +68,9 @@ namespace EE
 			auto data = create_window_data();
 			
 			app->on_init(DisplayServerEnums::MAIN_WINDOW_ID, data.get());
+			app->pre_frame();
 			run_loop(app);
+			app->post_frame();
 			return EXIT_SUCCESS;
 		}
 
