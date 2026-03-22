@@ -7,8 +7,8 @@
 #include "util/timer.h"
 #include "volk.h"
 #include "input/input.h"
-#include "vulkan/wsi.h"
 #include "rendering/wsi_platform.h"
+#include "vulkan/vulkan_context.h"
 
 namespace EE
 {
