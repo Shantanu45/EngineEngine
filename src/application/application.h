@@ -12,7 +12,6 @@
 #include "rendering/wsi.h"
 #include "service_locator.h"
 
-
 namespace EE
 {
 	class Application
@@ -28,7 +27,7 @@ namespace EE
 		 * \param elapsed_time
 		 */
 		virtual void render_frame(double frame_time, double elapsed_time) = 0;
-		bool init_platform(std::unique_ptr<Rendering::WSIPlatform> new_platform);
+		//bool init_platform(std::unique_ptr<Rendering::WSIPlatform> new_platform);
 		bool init_wsi();
 		void teardown_wsi();
 
@@ -63,13 +62,9 @@ namespace EE
 			return application_wsi.get();
 		}
 
-		Rendering::WSIPlatform* get_platform() const
-		{
-			return platform.get();
-		}
-
-		bool poll();
+		//bool poll();
 		void run_frame();
+		bool on_init(DisplayServerEnums::WindowID p_window, Rendering::WindowData* p_window_data);
 		//void show_message_box(const std::string& str, Vulkan::WSIPlatform::MessageType type);
 
 	protected:
@@ -93,8 +88,6 @@ namespace EE
 
 		//Vulkan::RenderingContextDriverVulkan vulkan_context;
 		//std::unique_ptr<Vulkan::RenderingDeviceDriverVulkan> vulkan_device_ptr = nullptr;
-
-		std::unique_ptr<Rendering::WSIPlatform> platform;
 		std::unique_ptr<Rendering::WSI> application_wsi;
 	};
 }

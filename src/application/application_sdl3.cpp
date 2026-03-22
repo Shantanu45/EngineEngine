@@ -14,12 +14,40 @@
 #include "util/timer.h"
 #include "volk.h"
 #include "input/input.h"
-#include "rendering/wsi_platform.h"
-#include "vulkan/vulkan_context.h"
 
 namespace EE
 {
-	class WSIPlatformSDL : public Rendering::WSIPlatform
+	class IPlatform
+	{
+	public:
+		virtual ~IPlatform() = default;
+
+		virtual int run(Application* app) = 0;
+
+		virtual std::unique_ptr<Rendering::WindowData> create_window_data() = 0;
+		virtual std::vector<const char*> get_device_extensions()
+		{
+			return { "VK_KHR_swapchain" };
+		}
+
+		virtual uint32_t get_surface_width() = 0;
+		virtual uint32_t get_surface_height() = 0;
+		virtual bool alive(/*WSI& wsi*/) = 0;
+		virtual void poll_input() = 0;
+
+		virtual WindowPlatformData get_window_platform_data(DisplayServerEnums::WindowID p_window_id) = 0;
+
+		virtual void release_resources()
+		{
+		}
+
+	protected:
+		unsigned current_swapchain_width = 0;
+		unsigned current_swapchain_height = 0;
+
+	};
+
+	class WSIPlatformSDL : public IPlatform
 	{
 	public:
 		~WSIPlatformSDL()
@@ -33,6 +61,24 @@ namespace EE
 			bool fullscreen = false;
 			bool threaded = true;
 		};
+
+		int run(Application* app) override
+		{
+			init(app->get_name(), app->get_default_width(), app->get_default_height());
+			auto data = create_window_data();
+			
+			app->on_init(DisplayServerEnums::MAIN_WINDOW_ID, data.get());
+			run_loop(app);
+			return EXIT_SUCCESS;
+		}
+
+		std::unique_ptr<Rendering::WindowData> create_window_data() override
+		{
+			std::unique_ptr wd = std::make_unique<Rendering::WindowData>();
+			wd->platfform_data = get_window_platform_data(DisplayServerEnums::MAIN_WINDOW_ID);
+			wd->window_resolution = { get_surface_width(), get_surface_height() };
+			return wd;
+		}
 
 		explicit WSIPlatformSDL(const Options& options_)
 		{
@@ -56,19 +102,6 @@ namespace EE
 
 			SDL_SetEventEnabled(SDL_EVENT_DROP_FILE, false);
 			SDL_SetEventEnabled(SDL_EVENT_DROP_TEXT, false);
-
-			if (!SDL_Vulkan_LoadLibrary(nullptr))
-			{
-				LOGE("Failed to load Vulkan library.\n");
-				return false;
-			}
-
-			if (!Vulkan::RenderingContextDriverVulkan::init_loader(
-				reinterpret_cast<PFN_vkGetInstanceProcAddr>(SDL_Vulkan_GetVkGetInstanceProcAddr())))
-			{
-				LOGE("Failed to initialize Vulkan loader.\n");
-				return false;
-			}
 
 			wake_event_type = SDL_RegisterEvents(1);
 
@@ -173,14 +206,6 @@ namespace EE
 			thread_main(app);
 		}
 
-		std::vector<const char*> get_instance_extensions() override
-		{
-			uint32_t count;
-			const char* const* ext = SDL_Vulkan_GetInstanceExtensions(&count);
-
-			return { ext, ext + count };
-		}
-
 		WindowPlatformData get_window_platform_data(DisplayServerEnums::WindowID p_window_id) override
 		{
 			//WindowData& wd = windows[p_window_id];
@@ -209,8 +234,13 @@ namespace EE
 
 		void thread_main(Application* app/*, Global::GlobalManagersHandle ctx*/)
 		{
-			while (app->poll())
+			while (alive())
+			{
+				poll_input();
+
 				app->run_frame();
+
+			}
 		}
 
 		bool alive(/*Vulkan::WSI&*/) override
@@ -261,28 +291,31 @@ namespace EE
 		FileSystem::Filesystem::setup_default_filesystem(static_cast<Filesystem*>(fs.get()), "D:/Code/CG/EngineEngine/assets");
 		//auto fs = Services::get().get<FilesystemInterface>();
 
+		// creates application
 		auto app = std::unique_ptr<Application>(create_application(argc, argv));
 		int ret;
 
 		if (app)
 		{
+			// creates platform 
 			auto platform = std::make_unique<WSIPlatformSDL>(options);
+			return platform->run(app.get());
 
-			if (!platform->init(app->get_name(), app->get_default_width(), app->get_default_height()))		// create window
-				return 1;
+			//if (!platform->init(app->get_name(), app->get_default_width(), app->get_default_height()))		// create window
+			//	return 1;
 
-			if (!app->init_platform(std::move(platform)))	// initialize platform setup in application
-				return 1;
+			//if (!app->init_platform(std::move(platform)))	// initialize platform setup in application
+			//	return 1;
 
-			if (!app->init_wsi())			// initialize wsi
-			{
-				return 1;
-			}
+			//if (!app->init_wsi())			// initialize wsi
+			//{
+			//	return 1;
+			//}
 
-			platform->run_loop(app.get());
+			//platform->run_loop(app.get());
 
-			app.reset();
-			ret = EXIT_SUCCESS;
+			//app.reset();
+	/*		ret = EXIT_SUCCESS;*/
 		}
 		else
 		{

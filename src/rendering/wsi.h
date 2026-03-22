@@ -8,14 +8,15 @@
 #include <map>
 #include "rendering_device_driver.h"
 #include "rendering_device.h"
-#include "wsi_platform.h"
 
 namespace Rendering
 {
 	// display server windows
 	struct WindowData {
 		WindowPlatformData platfform_data;
+		Size2i window_resolution;
 	};
+
 
 	class WSI
 	{
@@ -23,7 +24,6 @@ namespace Rendering
 		//WSI(const std::string& p_rendering_driver, DisplayServerEnums::WindowMode p_mode, DisplayServerEnums::VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i* p_position, const Vector2i& p_resolution, int p_screen, DisplayServerEnums::Context p_context, int64_t p_parent_window, Error& r_error);
 		WSI();
 		Error initialize(const std::string& p_rendering_driver, DisplayServerEnums::WindowMode p_mode, DisplayServerEnums::VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i* p_position, const Vector2i& p_resolution, int p_screen, DisplayServerEnums::Context p_context, int64_t p_parent_window);
-		void set_platform(WSIPlatform* platform);
 
 		bool begin_frame();
 
@@ -45,13 +45,13 @@ namespace Rendering
 
 		~WSI();
 
+		void set_wsi_platform_data(DisplayServerEnums::WindowID window, WindowData data);
 	private:
 
 		Error _create_rendering_context_window(DisplayServerEnums::WindowID p_window_id, const std::string& p_rendering_driver = "vulkan");
 		void _destroy_rendering_context_window(DisplayServerEnums::WindowID p_window_id);
 
 		void free_pending_resources(int p_frame);
-		WSIPlatform* platform = nullptr;
 
 		std::unique_ptr<RenderingContextDriver> rendering_context = nullptr;
 		RenderingDevice* rendering_device = nullptr;

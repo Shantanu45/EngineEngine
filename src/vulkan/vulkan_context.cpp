@@ -21,18 +21,20 @@ namespace Vulkan
 	static bool loader_init_once;
 	static PFN_vkGetInstanceProcAddr instance_proc_addr;
 
-    bool RenderingContextDriverVulkan::init_loader(PFN_vkGetInstanceProcAddr addr, bool force_reload)
+
+    bool RenderingContextDriverVulkan::init_loader(WindowPlatformData::Platform p_platform, bool force_reload)
     {
-		std::lock_guard<std::mutex> holder(loader_init_lock);
-
-		if (loader_init_once && !force_reload && !addr)
-			return true;
-
-		if (!addr)
+		switch (p_platform)
 		{
-#ifndef _WIN32
-			// TODO: If the user didn't pass in an address (!addr), the code manually searches the operating system for the Vulkan Loader file.
-#else
+		case WindowPlatformData::Platform::SDL3:
+		{
+			PFN_vkGetInstanceProcAddr addr = reinterpret_cast<PFN_vkGetInstanceProcAddr>(SDL_Vulkan_GetVkGetInstanceProcAddr());
+			if (!addr)
+			{
+				LOGE("Failed to initialize Vulkan loader.\n");
+				return false;
+			}
+
 			static HMODULE module;
 			if (!module)
 			{
@@ -48,13 +50,66 @@ namespace Vulkan
 
 			if (!addr)
 				return false;
-#endif
+
+			std::lock_guard<std::mutex> holder(loader_init_lock);
+
+			if (loader_init_once && !force_reload && !addr)
+				return true;
+
+			instance_proc_addr = addr;
+			volkInitializeCustom(instance_proc_addr);		// automatic version: volkInitialize();
+			loader_init_once = true;
+
+			if (!SDL_Vulkan_LoadLibrary(nullptr))
+			{
+				LOGE("Failed to load Vulkan library.\n");
+				return false;
+			}
+
+			// load intance extensions
+			uint32_t count;
+			const char* const* ext = SDL_Vulkan_GetInstanceExtensions(&count);
+			set_platform_surface_extension({ ext, ext + count });
+
+			break;
 		}
-		instance_proc_addr = addr;
-		volkInitializeCustom(addr);		// automatic version: volkInitialize();
-		loader_init_once = true;
+		case WindowPlatformData::Platform::Win32:
+		default:
+			// platform not supported
+			return false;
+			break;
+		}
 		return true;
     }
+
+	RenderingContextDriverVulkan::SurfaceID RenderingContextDriverVulkan::surface_create(const void* p_platform_data) {
+		const WindowPlatformData* wpd = (const WindowPlatformData*)(p_platform_data);
+		VkSurfaceKHR vk_surface = VK_NULL_HANDLE;
+		VkResult err;
+		switch (wpd->platform) {
+		case WindowPlatformData::Platform::SDL3: {
+			auto* win = static_cast<SDL_Window*>(wpd->sdl.window);
+			auto result = SDL_Vulkan_CreateSurface(win, instance, nullptr, &vk_surface);
+			err = result ? VK_SUCCESS : VK_INCOMPLETE;
+			break;
+		}
+		case WindowPlatformData::Platform::Win32: {
+
+			VkWin32SurfaceCreateInfoKHR create_info = {};
+			create_info.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
+			create_info.hinstance = static_cast<HINSTANCE>(wpd->win32.hinstance);
+			create_info.hwnd = static_cast<HWND>(wpd->win32.hwnd);
+#if 0
+			err = vkCreateWin32SurfaceKHR(instance, &create_info, nullptr, &vk_surface);
+#endif // ifdef
+		}
+		}
+		ERR_FAIL_COND_V(err != VK_SUCCESS, SurfaceID());
+
+		Surface* surface = new Surface;
+		surface->vk_surface = vk_surface;
+		return SurfaceID(surface);
+	}
 
 	VkApplicationInfo RenderingContextDriverVulkan::get_promoted_application_info() const
 	{
@@ -579,35 +634,6 @@ namespace Vulkan
 	}
 
 	RenderingContextDriverVulkan::SurfaceID RenderingContextDriverVulkan::set_surface(VkSurfaceKHR vk_surface) {
-		Surface* surface = new Surface;
-		surface->vk_surface = vk_surface;
-		return SurfaceID(surface);
-	}
-
-	RenderingContextDriverVulkan::SurfaceID RenderingContextDriverVulkan::surface_create(const void* p_platform_data) {
-		const WindowPlatformData* wpd = (const WindowPlatformData*)(p_platform_data);
-		VkSurfaceKHR vk_surface = VK_NULL_HANDLE;
-		VkResult err;
-		switch (wpd->platform) {
-		case WindowPlatformData::Platform::SDL3: {
-			auto* win = static_cast<SDL_Window*>(wpd->sdl.window);
-			auto result = SDL_Vulkan_CreateSurface(win, instance, nullptr, &vk_surface);
-			err = result ? VK_SUCCESS : VK_INCOMPLETE;
-			break;
-		}
-		case WindowPlatformData::Platform::Win32: {
-
-			VkWin32SurfaceCreateInfoKHR create_info = {};
-			create_info.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
-			create_info.hinstance = static_cast<HINSTANCE>(wpd->win32.hinstance);
-			create_info.hwnd = static_cast<HWND>(wpd->win32.hwnd);
-#if 0
-			err = vkCreateWin32SurfaceKHR(instance, &create_info, nullptr, &vk_surface);
-#endif // ifdef
-		}
-		}
-		ERR_FAIL_COND_V(err != VK_SUCCESS, SurfaceID());
-
 		Surface* surface = new Surface;
 		surface->vk_surface = vk_surface;
 		return SurfaceID(surface);

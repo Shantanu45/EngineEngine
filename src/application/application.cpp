@@ -10,6 +10,7 @@
 #include "application.h"
 #include "libassert/assert.hpp"
 #include "rendering/rendering_context_driver.h"
+ #include "vulkan/vulkan_context.h"
 
 namespace EE
 {
@@ -59,13 +60,6 @@ namespace EE
 		FreeConsole();
 	}
 
-	bool Application::init_platform(std::unique_ptr<Rendering::WSIPlatform> new_platform)
-	{
-		platform = std::move(new_platform);
-		application_wsi->set_platform(platform.get());
-		return true;
-	}
-
 	bool Application::init_wsi()
 	{
 		DEBUG_ASSERT(application_wsi->initialize("vulkan", DisplayServerEnums::WINDOW_MODE_WINDOWED, DisplayServerEnums::VSYNC_DISABLED, 0, {}, {}, 0, DisplayServerEnums::CONTEXT_ENGINE, 0) == OK);
@@ -96,14 +90,6 @@ namespace EE
 	{
 	}
 
-	bool Application::poll()
-	{
-		auto* wsi = get_wsi();
-		if (!get_platform()->alive(/*wsi*/))
-			return false;
-		return true;
-	}
-
 	void Application::run_frame()
 	{
 		if (!application_wsi->begin_frame())
@@ -114,6 +100,17 @@ namespace EE
 		render_frame(0, 0);
 
 		application_wsi->end_frame();
+	}
+
+	bool Application::on_init(DisplayServerEnums::WindowID p_window, Rendering::WindowData* p_window_data)
+	{
+		application_wsi->set_wsi_platform_data(p_window, *p_window_data);
+
+		if (init_wsi())
+		{
+			return true;
+		}
+		return false;
 	}
 
 	void Application::_check_initialization_progress()

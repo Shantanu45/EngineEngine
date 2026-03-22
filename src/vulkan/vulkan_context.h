@@ -57,7 +57,7 @@ namespace Vulkan
 
 		RenderingContextDriverVulkan::SurfaceID set_surface(VkSurfaceKHR vk_surface);
 
-		static bool init_loader(PFN_vkGetInstanceProcAddr addr, bool force_reload = false);
+		bool init_loader(WindowPlatformData::Platform p_platform, bool force_reload = false) override;
 
 		VkApplicationInfo get_promoted_application_info() const;
 

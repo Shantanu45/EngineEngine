@@ -20,6 +20,7 @@ namespace Rendering
 
 	Error WSI::initialize(const std::string& p_rendering_driver, DisplayServerEnums::WindowMode p_mode, DisplayServerEnums::VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i* p_position, const Vector2i& p_resolution, int p_screen, DisplayServerEnums::Context p_context, int64_t p_parent_window)
 	{
+		auto window_id = DisplayServerEnums::MAIN_WINDOW_ID;
 		rendering_driver = p_rendering_driver;
 		if (rendering_driver == "vulkan") {
 			rendering_context = std::make_unique<Vulkan::RenderingContextDriverVulkan>();
@@ -31,14 +32,19 @@ namespace Rendering
 		}
 
 		if (rendering_context != nullptr) {
-			rendering_context->set_platform_surface_extension(platform->get_instance_extensions());
+			if (!rendering_context->init_loader(windows[window_id].platfform_data.platform))
+			{
+				LOGE("Failed to initialize Vulkan loader.\n");
+				return FAILED;
+			}
+			//rendering_context->set_platform_surface_extension(windows[window_id].platform_instance_extensions);		// TODO: remove hardcoded zero
 			if (rendering_context->initialize() == OK) {
-				DEBUG_ASSERT(platform || main_window_created);
+				//DEBUG_ASSERT(platform || main_window_created);
 
-				if (_create_rendering_context_window(DisplayServerEnums::MAIN_WINDOW_ID, rendering_driver) == OK) {
+				if (_create_rendering_context_window(window_id, rendering_driver) == OK) {
 					rendering_device = RenderingDevice::get_singleton();
 					// device initialization happens in function call below
-					if (!(rendering_device->initialize(rendering_context.get(), DisplayServerEnums::MAIN_WINDOW_ID) == OK)) {
+					if (!(rendering_device->initialize(rendering_context.get(), window_id) == OK)) {
 						return FAILED;
 					}
 				}
@@ -51,11 +57,6 @@ namespace Rendering
 			rendering_device->screen_create(DisplayServerEnums::MAIN_WINDOW_ID);
 		}
 		return OK;
-	}
-
-	void WSI::set_platform(WSIPlatform* p_platform)
-	{
-		platform = p_platform;
 	}
 
 	bool WSI::begin_frame()
@@ -76,7 +77,7 @@ namespace Rendering
 	bool WSI::end_frame()
 	{
 		rendering_device->swap_buffers(true);
-		platform->poll_input();
+		//platform->poll_input();
 		return true;
 	}
 
@@ -193,14 +194,20 @@ namespace Rendering
 
 	}
 
+	void WSI::set_wsi_platform_data(DisplayServerEnums::WindowID window, WindowData data)
+	{
+		windows.insert({ window, data });
+	}
+
 	Error WSI::_create_rendering_context_window(DisplayServerEnums::WindowID p_window_id, const std::string& p_rendering_driver)
 	{
-		WindowData& wd = windows[p_window_id];
-		wd.platfform_data = platform->get_window_platform_data(p_window_id);
+		// TODO: check if window entry exsists
+
+		auto wd = windows[p_window_id];
 
 		Error err = rendering_context->window_create(p_window_id, &wd.platfform_data);
 		ERR_FAIL_COND_V_MSG(err != OK, err, std::format("Failed to create {} window.", p_rendering_driver));
-		rendering_context->window_set_size(p_window_id, platform->get_surface_width(), platform->get_surface_height());
+		rendering_context->window_set_size(p_window_id, wd.window_resolution.x, wd.window_resolution.y);
 		surface = rendering_context->surface_get_from_window(p_window_id);
 		return OK;
 	}
