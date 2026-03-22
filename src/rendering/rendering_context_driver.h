@@ -156,7 +156,7 @@ namespace Rendering
 		virtual void surface_destroy(SurfaceID p_surface) = 0;
 		virtual bool is_debug_utils_enabled() const = 0;
 		virtual void set_platform_surface_extension(std::vector<const char*> ext) = 0;
-		virtual bool init_loader(WindowPlatformData::Platform p_platform, bool force_reload = false) = 0;
+		virtual bool init_loader_and_extensions(WindowPlatformData::Platform p_platform, bool force_reload = false) = 0;
 
 		std::string get_driver_and_device_memory_report() const;
 

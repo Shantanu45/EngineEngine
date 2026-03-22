@@ -22,7 +22,7 @@ namespace Vulkan
 	static PFN_vkGetInstanceProcAddr instance_proc_addr;
 
 
-    bool RenderingContextDriverVulkan::init_loader(WindowPlatformData::Platform p_platform, bool force_reload)
+    bool RenderingContextDriverVulkan::init_loader_and_extensions(WindowPlatformData::Platform p_platform, bool force_reload)
     {
 		switch (p_platform)
 		{

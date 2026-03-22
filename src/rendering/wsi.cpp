@@ -32,7 +32,7 @@ namespace Rendering
 		}
 
 		if (rendering_context != nullptr) {
-			if (!rendering_context->init_loader(windows[window_id].platfform_data.platform))
+			if (!rendering_context->init_loader_and_extensions(windows[window_id].platfform_data.platform))
 			{
 				LOGE("Failed to initialize Vulkan loader.\n");
 				return FAILED;
