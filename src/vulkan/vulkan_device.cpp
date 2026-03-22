@@ -1192,7 +1192,7 @@ namespace Vulkan
 			return small_allocs_pools[p_mem_type_index];
 		}
 
-		LOGI("Creating VMA small objects pool for memory type index %s", std::to_string(p_mem_type_index));
+		LOGI("Creating VMA small objects pool for memory type index %d", p_mem_type_index);
 
 		VmaPoolCreateInfo pci = {};
 		pci.memoryTypeIndex = p_mem_type_index;

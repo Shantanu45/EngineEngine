@@ -129,6 +129,16 @@ namespace Rendering
 				break;
 			}
 			frames[i].fence_signaled = false;
+
+			// Create the semaphores for the transfer workers.
+			frames[i].transfer_worker_semaphores.resize(transfer_worker_pool_max_size);
+			for (uint32_t j = 0; j < transfer_worker_pool_max_size; j++) {
+				frames[i].transfer_worker_semaphores[j] = driver->semaphore_create();
+				if (!frames[i].transfer_worker_semaphores[j]) {
+					frame_failed = true;
+					break;
+				}
+			}
 		}
 		if (frame_failed) {
 			// Clean up created data.
@@ -141,6 +151,12 @@ namespace Rendering
 				}
 				if (frames[i].fence) {
 					driver->fence_free(frames[i].fence);
+				}
+
+				for (uint32_t j = 0; j < frames[i].transfer_worker_semaphores.size(); j++) {
+					if (frames[i].transfer_worker_semaphores[j]) {
+						driver->semaphore_free(frames[i].transfer_worker_semaphores[j]);
+					}
 				}
 				//if (frames[i].timestamp_pool) {
 				//	device_ptr->timestamp_query_pool_free(frames[i].timestamp_pool);
@@ -857,7 +873,8 @@ namespace Rendering
 
 	void RenderingDevice::render_draw(RenderingDeviceDriver::CommandBufferID p_command_buffer, uint32_t p_vertex_count, uint32_t p_instance_count)
 	{
-		driver->command_render_draw(p_command_buffer, p_vertex_count, p_instance_count, 0, 0);
+		//driver->command_render_draw(p_command_buffer, p_vertex_count, p_instance_count, 0, 0);
+		driver->command_render_draw_indexed(p_command_buffer, 3, 1, 0, 0, 0);
 	}
 
 	Rendering::RenderingDevice::VertexFormatID RenderingDevice::vertex_format_create(const std::vector<VertexAttribute>& p_vertex_descriptions)
@@ -1098,7 +1115,9 @@ namespace Rendering
 
 	void RenderingDevice::begin_frame(bool p_presented /*= false*/)
 	{
+
 		RDD::CommandBufferID command_buffer = frames[frame].command_buffer;
+
 		driver->command_buffer_begin(command_buffer);
 	}
 
@@ -1691,6 +1710,18 @@ namespace Rendering
 		return id;
 	}
 
+	void RenderingDevice::bind_vertex_array(RID p_vertex_array)
+	{
+		VertexArray* vertex_array = vertex_array_owner.get_or_null(p_vertex_array);
+		driver->command_render_bind_vertex_buffers(frames[frame].command_buffer, vertex_array->buffers.size(), vertex_array->buffers.data(), vertex_array->offsets.data(), 0);
+	}
+
+	void RenderingDevice::bind_index_array(RID p_index_array)
+	{
+		IndexArray* index_array = index_array_owner.get_or_null(p_index_array);
+		driver->command_render_bind_index_buffer(frames[frame].command_buffer, index_array->driver_id, index_array->format, index_array->offset);
+	}
+
 #pragma region Transfer worker
 
 	static uint32_t _get_alignment_offset(uint32_t p_offset, uint32_t p_required_align) {
@@ -1938,6 +1969,7 @@ namespace Rendering
 	}
 
 	void RenderingDevice::_submit_transfer_workers(RDD::CommandBufferID p_draw_command_buffer) {
+		//p_draw_command_buffer = frames[frame].command_buffer;
 		std::lock_guard transfer_worker_lock(transfer_worker_pool_mutex);
 		for (uint32_t i = 0; i < transfer_worker_pool_size; i++) {
 			TransferWorker* worker = transfer_worker_pool[i];

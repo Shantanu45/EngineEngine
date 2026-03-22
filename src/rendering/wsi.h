@@ -31,6 +31,7 @@ namespace Rendering
 		RenderingShaderContainerFormat* create_shader_container_format();
 
 		void create_triangle();
+		void bind();
 		RenderingDevice* get_rendering_device() { return rendering_device; }
 
 		void teardown();
@@ -66,6 +67,7 @@ namespace Rendering
 		RID triangle_index_buffer;
 		RID triangle_vertex_array;
 		RID triangle_index_array;
+		RenderingDevice::VertexFormatID vertex_format;
 
 	};
 }

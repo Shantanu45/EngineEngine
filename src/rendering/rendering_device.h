@@ -117,6 +117,7 @@ namespace Rendering
 
 	class RenderingDevice : public RenderingDeviceCommons
 	{
+	public:
 		typedef int64_t DrawListID;
 		typedef int64_t FramebufferFormatID;
 		typedef int64_t VertexFormatID;
@@ -712,6 +713,11 @@ namespace Rendering
 
 		RID index_array_create(RID p_index_buffer, uint32_t p_index_offset, uint32_t p_index_count);
 
+		void bind_vertex_array(RID p_vertex_array);
+		void bind_index_array(RID p_index_array);
+		// TODO: #temp
+		void _submit_transfer_workers(RDD::CommandBufferID p_draw_command_buffer = RDD::CommandBufferID());
+
 	private:
 
 		RID _index_buffer_create(uint32_t p_index_count, IndexBufferFormat p_format, std::vector<uint8_t>& p_data,
@@ -747,7 +753,6 @@ namespace Rendering
 		//void _check_transfer_worker_texture(Texture* p_texture);
 		void _check_transfer_worker_vertex_array(VertexArray* p_vertex_array);
 		void _check_transfer_worker_index_array(IndexArray* p_index_array);
-		void _submit_transfer_workers(RDD::CommandBufferID p_draw_command_buffer = RDD::CommandBufferID());
 		void _submit_transfer_barriers(RDD::CommandBufferID p_draw_command_buffer);
 		void _wait_for_transfer_workers();
 		void _free_transfer_workers();

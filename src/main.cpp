@@ -15,13 +15,12 @@ struct TriangleApplication : EE::Application
 		auto device = wsi->get_rendering_device();
 		device->begin_for_screen(DisplayServerEnums::MAIN_WINDOW_ID);
 		auto cmd_buffer = device->get_current_command_buffer();
-		device->bind_render_pipeline(cmd_buffer, wsi->get_current_pipeline());
+		wsi->bind();
 
+		device->bind_render_pipeline(cmd_buffer, wsi->get_current_pipeline());
+		
 		device->render_draw(cmd_buffer, 3, 1);
 
-		{
-			
-		}
 	}
 };
 

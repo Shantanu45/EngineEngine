@@ -44,8 +44,6 @@ namespace Rendering
 
 			rendering_device->screen_create(DisplayServerEnums::MAIN_WINDOW_ID);
 		}
-
-		create_triangle();
 		return OK;
 	}
 
@@ -105,7 +103,16 @@ namespace Rendering
 
 	void WSI::pipeline_create_default()
 	{
-		auto vertex_format = rendering_device->vertex_format_create({});
+		std::vector<RenderingDeviceCommons::VertexAttribute> attributes;
+		{
+			RenderingDeviceCommons::VertexAttribute va;
+			va.format = RenderingDeviceCommons::DATA_FORMAT_R32G32B32_SFLOAT;
+			va.stride = sizeof(float) * 3;
+			va.binding = 0;
+			attributes.push_back(va);
+		}
+		vertex_format = rendering_device->vertex_format_create(attributes);
+		//auto vertex_format = rendering_device->vertex_format_create({});
 
 		auto blend_state = RenderingDeviceCommons::PipelineColorBlendState::create_blend();
 		pipeline = rendering_device->create_swapchain_pipeline(DisplayServerEnums::MAIN_WINDOW_ID, shader_program,
@@ -113,6 +120,11 @@ namespace Rendering
 			{}, RenderingDeviceCommons::PipelineMultisampleState(),
 			RenderingDeviceCommons::PipelineDepthStencilState(), blend_state,
 			0);
+
+		create_triangle();
+		rendering_device->_submit_transfer_workers();
+
+
 	}
 
 	RID WSI::get_current_pipeline()
@@ -154,18 +166,16 @@ namespace Rendering
 		std::vector<RID> buffers;
 		buffers.push_back(triangle_vertex_buffer);
 
-		std::vector<RenderingDeviceCommons::VertexAttribute> attributes;
-		{
-			RenderingDeviceCommons::VertexAttribute va;
-			va.format = RenderingDeviceCommons::DATA_FORMAT_R32G32B32_SFLOAT;
-			va.stride = sizeof(float) * 3;
-			attributes.push_back(va);
-		}
-		auto vertex_format = rendering_device->vertex_format_create(attributes);
-
 		triangle_vertex_array = rendering_device->vertex_array_create(triangle_vertex_count, vertex_format, buffers);
 
 		triangle_index_array = rendering_device->index_array_create(triangle_index_buffer, 0, triangle_triangle_count * 3);
+		
+	}
+
+	void WSI::bind()
+	{
+		rendering_device->bind_vertex_array(triangle_vertex_array);
+		rendering_device->bind_index_array(triangle_index_array);
 	}
 
 	void WSI::teardown()
