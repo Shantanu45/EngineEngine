@@ -1,3 +1,10 @@
+/*****************************************************************//**
+ * \file   input.h
+ * \brief  
+ * 
+ * \author Shantanu Kumar
+ * \date   March 2026
+ *********************************************************************/
 #pragma once
 #include <cstdint>
 #include "SDL3/SDL.h"

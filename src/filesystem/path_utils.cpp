@@ -1,3 +1,10 @@
+/*****************************************************************//**
+ * \file   path_utils.cpp
+ * \brief  
+ * 
+ * \author Shantanu Kumar
+ * \date   March 2026
+ *********************************************************************/
 #define NOMINMAX
 #include "path_utils.h"
 #include <filesystem>

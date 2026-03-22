@@ -1,5 +1,11 @@
+/*****************************************************************//**
+ * \file   application_entry.h
+ * \brief  
+ * 
+ * \author Shantanu Kumar
+ * \date   March 2026
+ *********************************************************************/
 #pragma once
-
 #include <Windows.h>
 #include <cstdio>
 #include <memory>

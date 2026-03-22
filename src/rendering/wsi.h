@@ -1,3 +1,10 @@
+/*****************************************************************//**
+ * \file   wsi.h
+ * \brief  
+ * 
+ * \author Shantanu Kumar
+ * \date   March 2026
+ *********************************************************************/
 #include <map>
 #include "rendering_device_driver.h"
 #include "rendering_device.h"

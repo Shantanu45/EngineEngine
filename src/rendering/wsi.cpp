@@ -1,4 +1,10 @@
-
+/*****************************************************************//**
+ * \file   wsi.cpp
+ * \brief  
+ * 
+ * \author Shantanu Kumar
+ * \date   March 2026
+ *********************************************************************/
 #include "wsi.h"
 #include "vulkan/vulkan_context.h"
 #include "vulkan/vulkan_device.h"

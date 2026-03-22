@@ -1,3 +1,10 @@
+/*****************************************************************//**
+ * \file   rendering_device.h
+ * \brief  
+ * 
+ * \author Shantanu Kumar
+ * \date   March 2026
+ *********************************************************************/
 #pragma once
 #include "rendering_device_commons.h"
 #include "rendering_device_driver.h"

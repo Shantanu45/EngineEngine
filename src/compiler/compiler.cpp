@@ -1,3 +1,10 @@
+/*****************************************************************//**
+ * \file   compiler.cpp
+ * \brief  
+ * 
+ * \author Shantanu Kumar
+ * \date   March 2026
+ *********************************************************************/
 #include "compiler.h"
 #include "shaderc/shaderc.hpp"
 

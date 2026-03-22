@@ -1,3 +1,10 @@
+/*****************************************************************//**
+ * \file   application_sdl3.cpp
+ * \brief  
+ * 
+ * \author Shantanu Kumar
+ * \date   March 2026
+ *********************************************************************/
 #include <memory>
 #include "application.h"
 #include "application_entry/application_entry.h"
@@ -260,7 +267,6 @@ namespace EE
 		if (app)
 		{
 			auto platform = std::make_unique<WSIPlatformSDL>(options);
-			auto* platform_handle = platform.get();
 
 			if (!platform->init(app->get_name(), app->get_default_width(), app->get_default_height()))		// create window
 				return 1;
@@ -273,7 +279,7 @@ namespace EE
 				return 1;
 			}
 
-			platform_handle->run_loop(app.get());
+			platform->run_loop(app.get());
 
 			app.reset();
 			ret = EXIT_SUCCESS;

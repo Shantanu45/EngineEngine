@@ -1,3 +1,10 @@
+/*****************************************************************//**
+ * \file   rendering_device_commons.cpp
+ * \brief  
+ * 
+ * \author Shantanu Kumar
+ * \date   March 2026
+ *********************************************************************/
 #include "rendering_device_commons.h"
 
 namespace Rendering

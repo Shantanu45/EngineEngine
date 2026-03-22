@@ -1,3 +1,10 @@
+/*****************************************************************//**
+ * \file   _vulkan_headers.h
+ * \brief  
+ * 
+ * \author Shantanu Kumar
+ * \date   March 2026
+ *********************************************************************/
 #pragma once
 
 #if defined(_WIN32) && !defined(VK_USE_PLATFORM_WIN32_KHR)

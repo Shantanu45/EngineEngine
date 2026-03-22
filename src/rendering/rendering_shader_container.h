@@ -1,3 +1,10 @@
+/*****************************************************************//**
+ * \file   rendering_shader_container.h
+ * \brief  
+ * 
+ * \author Shantanu Kumar
+ * \date   March 2026
+ *********************************************************************/
 #pragma once
 #include <cstdint>
 #include "rendering_device_commons.h"

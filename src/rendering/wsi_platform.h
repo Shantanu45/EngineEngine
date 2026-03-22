@@ -1,3 +1,10 @@
+/*****************************************************************//**
+ * \file   wsi_platform.h
+ * \brief  
+ * 
+ * \author Shantanu Kumar
+ * \date   March 2026
+ *********************************************************************/
 #pragma once
 #include <cstdint>
 #include <vector>

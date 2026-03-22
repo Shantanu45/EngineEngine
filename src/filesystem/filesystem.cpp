@@ -1,3 +1,10 @@
+/*****************************************************************//**
+ * \file   filesystem.cpp
+ * \brief  
+ * 
+ * \author Shantanu Kumar
+ * \date   March 2026
+ *********************************************************************/
 #define NOMINMAX
 #include "filesystem.h"
 #include "path_utils.h"
@@ -8,7 +15,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
-//#include "util/string_helpers.h"
 
 namespace FileSystem
 {

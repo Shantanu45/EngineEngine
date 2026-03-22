@@ -1,3 +1,10 @@
+/*****************************************************************//**
+ * \file   vulkan_context.h
+ * \brief  
+ * 
+ * \author Shantanu Kumar
+ * \date   March 2026
+ *********************************************************************/
 #pragma once
 #include "vulkan_common.h"
 #include "util/error_list.h"

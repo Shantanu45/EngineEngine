@@ -1,3 +1,10 @@
+/*****************************************************************//**
+ * \file   application.h
+ * \brief  
+ * 
+ * \author Shantanu Kumar
+ * \date   March 2026
+ *********************************************************************/
 #pragma once
 #include <memory>
 #include <string>
@@ -13,6 +20,13 @@ namespace EE
 	public:
 		Application();
 		virtual ~Application();
+
+		/**
+		 * application must overload at least this function. runs in loop between begin and end frame
+		 * 
+		 * \param frame_time
+		 * \param elapsed_time
+		 */
 		virtual void render_frame(double frame_time, double elapsed_time) = 0;
 		bool init_platform(std::unique_ptr<Rendering::WSIPlatform> new_platform);
 		bool init_wsi();

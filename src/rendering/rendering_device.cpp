@@ -1,3 +1,10 @@
+/*****************************************************************//**
+ * \file   rendering_device.cpp
+ * \brief  
+ * 
+ * \author Shantanu Kumar
+ * \date   March 2026
+ *********************************************************************/
 #include "rendering_device.h"
 #include "vulkan/shader_container.h"
 #include "application/service_locator.h"
