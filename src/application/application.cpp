@@ -10,7 +10,6 @@
 #include "application.h"
 #include "libassert/assert.hpp"
 #include "rendering/rendering_context_driver.h"
- #include "vulkan/vulkan_context.h"
 
 namespace EE
 {

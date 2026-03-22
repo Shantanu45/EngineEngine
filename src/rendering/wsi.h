@@ -17,7 +17,6 @@ namespace Rendering
 		Size2i window_resolution;
 	};
 
-
 	class WSI
 	{
 	public:

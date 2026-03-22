@@ -6,12 +6,13 @@
  * \date   March 2026
  *********************************************************************/
 #pragma once
-#include "vulkan_common.h"
-#include "util/error_list.h"
 #include <set>
 #include <unordered_map>
 #include <string>
+#include "vulkan_common.h"
+#include "util/error_list.h"
 #include "rendering/rendering_context_driver.h"
+#include "libassert/assert.hpp"
 #define VULKAN_DEBUG
 
 

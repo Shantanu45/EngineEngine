@@ -5,12 +5,11 @@
  * \author Shantanu Kumar
  * \date   March 2026
  *********************************************************************/
-#include "vulkan_context.h"
-#include "vulkan/vk_enum_string_helper.h"
 #include <windows.h>
 #include <mutex>
+#include "vulkan_context.h"
+#include "vulkan/vk_enum_string_helper.h"
 #include "util/logger.h"
-#include "libassert/assert.hpp"
 #include "util/error_macros.h"
 #include <SDL3/SDL_vulkan.h>
 #include "vulkan_device.h"
