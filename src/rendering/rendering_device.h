@@ -655,7 +655,20 @@ namespace Rendering
 #pragma endregion
 
 #pragma region Screen
+		/**
+		 * Creates swapchain and framebuffer for it.
+		 * 
+		 * \param p_screen
+		 * \return 
+		 */
 		Error screen_create(DisplayServerEnums::WindowID p_screen = DisplayServerEnums::MAIN_WINDOW_ID);
+
+		/**
+		 * Flush and resize swap chain (if needed). Also acquires swapchain frame buffer
+		 * 
+		 * \param p_screen
+		 * \return 
+		 */
 		Error screen_prepare_for_drawing(DisplayServerEnums::WindowID p_screen = DisplayServerEnums::MAIN_WINDOW_ID);
 		int screen_get_width(DisplayServerEnums::WindowID p_screen = DisplayServerEnums::MAIN_WINDOW_ID) const;
 		int screen_get_height(DisplayServerEnums::WindowID p_screen = DisplayServerEnums::MAIN_WINDOW_ID) const;
@@ -682,10 +695,24 @@ namespace Rendering
 
 		void swap_buffers(bool p_present);
 
+		/**
+		 * Begin render pass and set viewport scissor.
+		 * 
+		 * \param p_screen
+		 * \param p_clear_color
+		 * \return 
+		 */
 		bool begin_for_screen(DisplayServerEnums::WindowID p_screen = 0, const Color& p_clear_color = Color());
 
 		RDD::CommandBufferID get_current_command_buffer();
 
+		/**
+		 * push draw command.
+		 * 
+		 * \param p_command_buffer
+		 * \param p_vertex_count
+		 * \param p_instance_count
+		 */
 		void render_draw(RenderingDeviceDriver::CommandBufferID p_command_buffer, uint32_t p_vertex_count, uint32_t p_instance_count);
 
 		void submit();
@@ -709,6 +736,11 @@ namespace Rendering
 
 		void end_frame();
 
+		/**
+		 * Execute and present.
+		 * 
+		 * \param p_present
+		 */
 		void execute_frame(bool p_present);
 
 		std::vector<uint8_t> _shader_compile_binary_from_spirv(const RDShaderSPIRV* p_bytecode, const std::string& p_shader_name = "");

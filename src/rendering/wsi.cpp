@@ -61,7 +61,6 @@ namespace Rendering
 
 			return true;
 		}
-		// TODO
 		return false;
 	}
 

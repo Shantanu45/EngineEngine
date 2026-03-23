@@ -532,7 +532,7 @@ namespace Rendering
 		return id;
 	}
 
-	Error RenderingDevice::screen_create(DisplayServerEnums::WindowID p_screen)		// swap chain resize(also frame buffer creation)
+	Error RenderingDevice::screen_create(DisplayServerEnums::WindowID p_screen)
 	{
 
 		RenderingContextDriver::SurfaceID surface = context->surface_get_from_window(p_screen);
@@ -1136,15 +1136,6 @@ namespace Rendering
 	void RenderingDevice::end_frame()
 	{
 		RDD::CommandBufferID command_buffer = frames[frame].command_buffer;
-		//driver->command_buffer_begin(command_buffer);
-		//std::array<RenderingDeviceDriver::RenderPassClearValue, 1> val;
-		//val[0].color = Color{ 1.0 , 0.0 , 0.0 , 0.0 };
-		//std::vector<Rect2i> frame_rects = { Rect2i{ 0, 0, (int)platform->get_surface_width(), (int)platform->get_surface_height() } };
-		//driver->command_begin_render_pass(command_buffer, render_pass, framebuffer, RenderingDeviceDriverVulkan::COMMAND_BUFFER_TYPE_PRIMARY, frame_rects[0], val);
-		//driver->command_bind_render_pipeline(command_buffer, pipeline);
-		//driver->command_render_set_viewport(command_buffer, frame_rects);
-		//driver->command_render_set_scissor(command_buffer, frame_rects);
-		//driver->command_render_draw(command_buffer, 3, 1, 0, 0);
 		driver->command_end_render_pass(command_buffer);
 
 		driver->command_buffer_end(command_buffer);
