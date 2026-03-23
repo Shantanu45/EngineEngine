@@ -127,12 +127,24 @@ namespace Rendering
 	void WSI::pipeline_create_default()
 	{
 		std::vector<RenderingDeviceCommons::VertexAttribute> attributes;
+		uint32_t offset = 0;
 		{
 			RenderingDeviceCommons::VertexAttribute va;
 			va.format = RenderingDeviceCommons::DATA_FORMAT_R32G32B32_SFLOAT;
-			va.stride = sizeof(float) * 3;
+			va.stride = sizeof(float) * 6;
 			va.binding = 0;
+			va.location = 0;
+			va.offset = offset;
+			offset += sizeof(float) * 3;
 			attributes.push_back(va);
+
+			//va.format = RenderingDeviceCommons::DATA_FORMAT_R32G32B32_SFLOAT;
+			//va.stride = sizeof(float) * 3;
+			//va.binding = 0;
+			va.location = 1;
+			va.offset = offset;
+			attributes.push_back(va);
+
 		}
 		vertex_format = rendering_device->vertex_format_create(attributes);
 		//auto vertex_format = rendering_device->vertex_format_create({});
@@ -163,10 +175,16 @@ namespace Rendering
 	void WSI::create_triangle()
 	{
 		static const uint32_t triangle_vertex_count = 3;
-		static const float triangle_vertices[triangle_vertex_count * 3] = {
-			0.0f,  1.0f, 0.0f,   // Vertex 0
-		   -1.0f, -1.0f, 0.0f,   // Vertex 1
-			1.0f, -1.0f, 0.0f    // Vertex 2
+		// position (x,y,z) + color (r,g,b)
+		static const float triangle_vertices[triangle_vertex_count * 6] = {
+			// Vertex 0
+			0.0f,  1.0f, 0.0f,   1.0f, 0.0f, 0.0f,  // red
+								
+			// Vertex 1			//
+		   -1.0f, -1.0f, 0.0f,   0.0f, 1.0f, 0.0f,  // green
+								
+		   // Vertex 2			//
+		   1.0f, -1.0f, 0.0f,   0.0f, 0.0f, 1.0f   // blue
 		};
 
 		static const uint32_t triangle_triangle_count = 1;
@@ -174,24 +192,26 @@ namespace Rendering
 			0, 1, 2
 		};
 
+		uint32_t index_count = sizeof(triangle_triangle_indices) / sizeof(triangle_triangle_indices[0]);
+
 		std::vector<uint8_t> vertex_data;
-		vertex_data.resize(sizeof(float) * triangle_vertex_count * 3);
+		vertex_data.resize(sizeof(triangle_vertices[0]) * sizeof(triangle_vertices));
 		memcpy(vertex_data.data(), triangle_vertices, vertex_data.size());
 
 		triangle_vertex_buffer = rendering_device->vertex_buffer_create(vertex_data.size(), vertex_data);
 
 		std::vector<uint8_t> index_data;
-		index_data.resize(sizeof(uint16_t) * triangle_triangle_count * 3);
+		index_data.resize(sizeof(triangle_triangle_indices[0]) * sizeof(triangle_triangle_indices));
 		memcpy(index_data.data(), triangle_triangle_indices, index_data.size());
 
-		triangle_index_buffer = rendering_device->index_buffer_create(triangle_triangle_count * 3, RenderingDeviceCommons::INDEX_BUFFER_FORMAT_UINT16, index_data);
+		triangle_index_buffer = rendering_device->index_buffer_create(index_count, RenderingDeviceCommons::INDEX_BUFFER_FORMAT_UINT16, index_data);
 
 		std::vector<RID> buffers;
 		buffers.push_back(triangle_vertex_buffer);
 
 		triangle_vertex_array = rendering_device->vertex_array_create(triangle_vertex_count, vertex_format, buffers);
 
-		triangle_index_array = rendering_device->index_array_create(triangle_index_buffer, 0, triangle_triangle_count * 3);
+		triangle_index_array = rendering_device->index_array_create(triangle_index_buffer, 0, index_count);
 		
 	}
 
