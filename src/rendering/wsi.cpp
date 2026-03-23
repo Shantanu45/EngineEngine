@@ -145,25 +145,46 @@ namespace Rendering
 
 	//}
 
+	std::vector<uint8_t> WSI::_get_attrib_interleaved(const std::vector<RenderingDeviceCommons::VertexAttribute>& attribs, std::vector<uint8_t> vertex_data)
+	{
+		std::vector<uint8_t> interleved_data;
+		uint32_t vert_num = vertex_data.size() / attribs[0].stride;
+		uint32_t stride = attribs[0].stride;
+		interleved_data.resize(vertex_data.size());
+		for (int v = 0; v < vert_num; v++)
+		{
+			auto vert_pos = v;
+			uint32_t dst_offset;
+			uint32_t src_offset;
+
+			auto src_attrib_offset = 0;
+			// for each vertex
+			for (int i = 0; i < attribs.size() - 1; i++)
+			{
+				auto size = attribs[i + 1].offset - attribs[i].offset;		// size of the attribute
+
+				dst_offset = (vert_pos * stride) + attribs[i].offset;
+				src_offset = (i  * src_attrib_offset) + (vert_pos * size);
+
+				memcpy(interleved_data.data() + dst_offset, vertex_data.data() + src_offset, size);
+				LOGI("dst %d, src %d, size %d", dst_offset, src_offset, size);
+				src_attrib_offset += (size * vert_num);
+			}
+			auto last_attrib_size = attribs.back().stride - attribs.back().offset;
+
+			dst_offset = (vert_pos * stride) + attribs.back().offset;
+			src_offset = (src_attrib_offset) + (vert_pos * last_attrib_size);
+
+			memcpy(interleved_data.data() + dst_offset, vertex_data.data() + src_offset, last_attrib_size);
+			LOGI("last dst %d, src %d, size %d", dst_offset, src_offset, last_attrib_size);
+
+		}
+
+		return interleved_data;
+	}
+
 	void WSI::pipeline_create_default()
 	{
-		set_vertex_attribute(0, 0, RenderingDeviceCommons::DATA_FORMAT_R32G32B32_SFLOAT, 0, sizeof(float) * 6);
-		set_vertex_attribute(0, 1, RenderingDeviceCommons::DATA_FORMAT_R32G32B32_SFLOAT, sizeof(float) * 3, sizeof(float) * 6);
-
-		
-			/*RenderingDeviceCommons::VertexAttribute va;
-			va.format = RenderingDeviceCommons::DATA_FORMAT_R32G32B32_SFLOAT;
-			va.stride = sizeof(float) * 6;
-			va.binding = 0;
-			va.location = 0;
-			va.offset = offset;
-			offset += sizeof(float) * 3;
-			vertex_attributes.push_back(va);
-
-			va.location = 1;
-			va.offset = offset;
-			vertex_attributes.push_back(va);*/
-
 		DEBUG_ASSERT(!vertex_attributes.empty());
 		vertex_format = rendering_device->vertex_format_create(vertex_attributes);
 
@@ -176,8 +197,6 @@ namespace Rendering
 
 		create_triangle();
 		rendering_device->_submit_transfer_workers();
-
-
 	}
 
 	RID WSI::get_current_pipeline()
@@ -190,42 +209,46 @@ namespace Rendering
 		return new ::Vulkan::RenderingShaderContainerFormatVulkan();
 	}
  
+	void WSI::push_vertex_data(void* data, size_t size)
+	{
+		const size_t offset = vertex_data.size();
+		vertex_data.resize(offset + size);
+		memcpy(vertex_data.data() + offset, data, size);
+	}
+
+	void WSI::push_index_data(void* data, size_t size, RenderingDeviceCommons::IndexBufferFormat format)
+	{
+		const size_t offset = index_data.size();
+		index_data.resize(offset + size);
+		memcpy(index_data.data() + offset, data, size);
+		
+		switch (format)
+		{
+		case Rendering::RenderingDeviceCommons::INDEX_BUFFER_FORMAT_UINT16:
+			index_count = index_data.size() / sizeof(uint16_t);
+			break;
+		case Rendering::RenderingDeviceCommons::INDEX_BUFFER_FORMAT_UINT32:
+			index_count = index_data.size() / sizeof(uint32_t);
+			break;
+		default:
+			index_count = 0;
+			break;
+		}
+	}
+
 	void WSI::create_triangle()
 	{
-		static const uint32_t triangle_vertex_count = 3;
-		// position (x,y,z) + color (r,g,b)
-		static const float triangle_vertices[triangle_vertex_count * 6] = {
-			// Vertex 0
-			0.0f,  1.0f, 0.0f,   1.0f, 0.0f, 0.0f,  // red
-								
-			// Vertex 1			//
-		   -1.0f, -1.0f, 0.0f,   0.0f, 1.0f, 0.0f,  // green
-								
-		   // Vertex 2			//
-		   1.0f, -1.0f, 0.0f,   0.0f, 0.0f, 1.0f   // blue
-		};
+		DEBUG_ASSERT(index_count > 0);
+		DEBUG_ASSERT(!vertex_data.empty());
 
-		std::vector<uint8_t> vertex_data;
-		vertex_data.resize(sizeof(triangle_vertices[0]) * sizeof(triangle_vertices));
-		memcpy(vertex_data.data(), triangle_vertices, vertex_data.size());
-
-		triangle_vertex_buffer = rendering_device->vertex_buffer_create(vertex_data.size(), vertex_data);
+		auto interleved = _get_attrib_interleaved(vertex_attributes, vertex_data);
+		uint32_t triangle_vertex_count = vertex_data.size() / vertex_attributes[0].stride;
+		triangle_vertex_buffer = rendering_device->vertex_buffer_create(interleved.size(), interleved);
 
 		std::vector<RID> buffers;
 		buffers.push_back(triangle_vertex_buffer);
 
 		triangle_vertex_array = rendering_device->vertex_array_create(triangle_vertex_count, vertex_format, buffers);
-
-		static const uint32_t triangle_triangle_count = 1;
-		static const uint16_t triangle_triangle_indices[triangle_triangle_count * 3] = {
-			0, 1, 2
-		};
-
-		uint32_t index_count = sizeof(triangle_triangle_indices) / sizeof(triangle_triangle_indices[0]);
-
-		std::vector<uint8_t> index_data;
-		index_data.resize(sizeof(triangle_triangle_indices[0]) * sizeof(triangle_triangle_indices));
-		memcpy(index_data.data(), triangle_triangle_indices, index_data.size());
 
 		triangle_index_buffer = rendering_device->index_buffer_create(index_count, RenderingDeviceCommons::INDEX_BUFFER_FORMAT_UINT16, index_data);
 

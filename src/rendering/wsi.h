@@ -47,18 +47,23 @@ namespace Rendering
 		void bind();
 		RenderingDevice* get_rendering_device() { return rendering_device; }
 
+		void set_wsi_platform_data(DisplayServerEnums::WindowID window, WindowData data);
+		void push_vertex_data(void* vertex_data, size_t size);
+		void push_index_data(void* data, size_t size, RenderingDeviceCommons::IndexBufferFormat format);
+
+		void clear_vertex_data() { vertex_data.clear(); }
+		void clear_index_data() { index_data.clear(); }
+
 		void teardown();
 
 		~WSI();
-
-		void set_wsi_platform_data(DisplayServerEnums::WindowID window, WindowData data);
 	private:
 
 		Error _create_rendering_context_window(DisplayServerEnums::WindowID p_window_id, const std::string& p_rendering_driver = "vulkan");
 		void _destroy_rendering_context_window(DisplayServerEnums::WindowID p_window_id);
 
 		void free_pending_resources(int p_frame);
-
+		std::vector<uint8_t> _get_attrib_interleaved(const std::vector<RenderingDeviceCommons::VertexAttribute>& attribs, std::vector<uint8_t> vertex_data);
 		std::unique_ptr<RenderingContextDriver> rendering_context = nullptr;
 		RenderingDevice* rendering_device = nullptr;
 
@@ -85,6 +90,8 @@ namespace Rendering
 		DisplayServerEnums::WindowID active_window = DisplayServerEnums::INVALID_WINDOW_ID;
 
 		std::vector<RenderingDeviceCommons::VertexAttribute> vertex_attributes;
-
+		std::vector<uint8_t> vertex_data{};
+		std::vector<uint8_t> index_data{};
+		uint32_t index_count = 0;
 	};
 }
