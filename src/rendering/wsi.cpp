@@ -114,6 +114,66 @@ namespace Rendering
 		shader_program = rendering_device->shader_create_from_spirv(rendering_device->shader_compile_spirv_from_shader_source(shaders), "traingle_shader");
 	}
 
+	void WSI::set_vertex_attribute(const uint32_t binding, const uint32_t location, const RenderingDeviceCommons::DataFormat format, const uint32_t offset, const uint32_t stride)
+	{
+		RenderingDeviceCommons::VertexAttribute va;
+		va.format = format;
+		va.stride = stride;// RenderingDeviceCommons::get_format_vertex_size(format);
+		//va.stride = sizeof(float) * 6;
+		va.binding = binding;
+		va.location = location;
+		va.offset = offset;
+		vertex_attributes.push_back(va);
+	}
+
+	RID WSI::get_current_pipeline()
+	{
+		return pipeline;
+	}
+
+	RenderingShaderContainerFormat* WSI::create_shader_container_format() 
+	{
+		return new ::Vulkan::RenderingShaderContainerFormatVulkan();
+	}
+ 
+	void WSI::bind_vbo_and_ibo()
+	{
+		rendering_device->bind_vertex_array(triangle_vertex_array);
+		rendering_device->bind_index_array(triangle_index_array);
+	}
+
+	void WSI::set_wsi_platform_data(DisplayServerEnums::WindowID window, WindowData data)
+	{
+		windows.insert({ window, data });
+	}
+
+	void WSI::push_vertex_data(void* data, size_t size)
+	{
+		const size_t offset = vertex_data.size();
+		vertex_data.resize(offset + size);
+		memcpy(vertex_data.data() + offset, data, size);
+	}
+
+	void WSI::push_index_data(void* data, size_t size, RenderingDeviceCommons::IndexBufferFormat format)
+	{
+		const size_t offset = index_data.size();
+		index_data.resize(offset + size);
+		memcpy(index_data.data() + offset, data, size);
+		
+		switch (format)
+		{
+		case Rendering::RenderingDeviceCommons::INDEX_BUFFER_FORMAT_UINT16:
+			index_count = index_data.size() / sizeof(uint16_t);
+			break;
+		case Rendering::RenderingDeviceCommons::INDEX_BUFFER_FORMAT_UINT32:
+			index_count = index_data.size() / sizeof(uint32_t);
+			break;
+		default:
+			index_count = 0;
+			break;
+		}
+	}
+
 	void WSI::pipeline_create()
 	{
 		auto fb_format = rendering_device->screen_get_framebuffer_format(active_window);
@@ -128,22 +188,43 @@ namespace Rendering
 			0);
 	}
 
-	void WSI::set_vertex_attribute(const uint32_t binding, const uint32_t location, const RenderingDeviceCommons::DataFormat format, const uint32_t offset, const uint32_t stride)
+	void WSI::pipeline_create_default()
 	{
-		RenderingDeviceCommons::VertexAttribute va;
-		va.format = format;
-		va.stride = stride;// RenderingDeviceCommons::get_format_vertex_size(format);
-		//va.stride = sizeof(float) * 6;
-		va.binding = binding;
-		va.location = location;
-		va.offset = offset;
-		vertex_attributes.push_back(va);
+		DEBUG_ASSERT(!vertex_attributes.empty());
+		vertex_format = rendering_device->vertex_format_create(vertex_attributes);
+
+		auto blend_state = RenderingDeviceCommons::PipelineColorBlendState::create_blend();
+		pipeline = rendering_device->create_swapchain_pipeline(active_window, shader_program,
+			vertex_format, RenderingDeviceCommons::RENDER_PRIMITIVE_TRIANGLE_STRIPS,
+			{}, RenderingDeviceCommons::PipelineMultisampleState(),
+			RenderingDeviceCommons::PipelineDepthStencilState(), blend_state,
+			0);
+
+		_create_vertex_and_index_buffers();
+		rendering_device->_submit_transfer_workers();
 	}
 
-	//void WSI::set_vertex_data()
-	//{
+	void WSI::teardown()
+	{
+	}
 
-	//}
+	WSI::~WSI()
+	{
+
+	}
+
+	Error WSI::_create_rendering_context_window(DisplayServerEnums::WindowID p_window_id, const std::string& p_rendering_driver)
+	{
+		// TODO: check if window entry exists
+
+		auto wd = windows.at(p_window_id);
+
+		Error err = rendering_context->window_create(p_window_id, &wd.platfform_data);
+		ERR_FAIL_COND_V_MSG(err != OK, err, std::format("Failed to create {} window.", p_rendering_driver));
+		rendering_context->window_set_size(p_window_id, wd.window_resolution.x, wd.window_resolution.y);
+		surface = rendering_context->surface_get_from_window(p_window_id);
+		return OK;
+	}
 
 	std::vector<uint8_t> WSI::_get_attrib_interleaved(const std::vector<RenderingDeviceCommons::VertexAttribute>& attribs, std::vector<uint8_t> vertex_data)
 	{
@@ -183,60 +264,7 @@ namespace Rendering
 		return interleved_data;
 	}
 
-	void WSI::pipeline_create_default()
-	{
-		DEBUG_ASSERT(!vertex_attributes.empty());
-		vertex_format = rendering_device->vertex_format_create(vertex_attributes);
-
-		auto blend_state = RenderingDeviceCommons::PipelineColorBlendState::create_blend();
-		pipeline = rendering_device->create_swapchain_pipeline(active_window, shader_program,
-			vertex_format, RenderingDeviceCommons::RENDER_PRIMITIVE_TRIANGLE_STRIPS,
-			{}, RenderingDeviceCommons::PipelineMultisampleState(),
-			RenderingDeviceCommons::PipelineDepthStencilState(), blend_state,
-			0);
-
-		create_triangle();
-		rendering_device->_submit_transfer_workers();
-	}
-
-	RID WSI::get_current_pipeline()
-	{
-		return pipeline;
-	}
-
-	RenderingShaderContainerFormat* WSI::create_shader_container_format() 
-	{
-		return new ::Vulkan::RenderingShaderContainerFormatVulkan();
-	}
- 
-	void WSI::push_vertex_data(void* data, size_t size)
-	{
-		const size_t offset = vertex_data.size();
-		vertex_data.resize(offset + size);
-		memcpy(vertex_data.data() + offset, data, size);
-	}
-
-	void WSI::push_index_data(void* data, size_t size, RenderingDeviceCommons::IndexBufferFormat format)
-	{
-		const size_t offset = index_data.size();
-		index_data.resize(offset + size);
-		memcpy(index_data.data() + offset, data, size);
-		
-		switch (format)
-		{
-		case Rendering::RenderingDeviceCommons::INDEX_BUFFER_FORMAT_UINT16:
-			index_count = index_data.size() / sizeof(uint16_t);
-			break;
-		case Rendering::RenderingDeviceCommons::INDEX_BUFFER_FORMAT_UINT32:
-			index_count = index_data.size() / sizeof(uint32_t);
-			break;
-		default:
-			index_count = 0;
-			break;
-		}
-	}
-
-	void WSI::create_triangle()
+	void WSI::_create_vertex_and_index_buffers()
 	{
 		DEBUG_ASSERT(index_count > 0);
 		DEBUG_ASSERT(!vertex_data.empty());
@@ -254,39 +282,6 @@ namespace Rendering
 
 		triangle_index_array = rendering_device->index_array_create(triangle_index_buffer, 0, index_count);
 		
-	}
-
-	void WSI::bind()
-	{
-		rendering_device->bind_vertex_array(triangle_vertex_array);
-		rendering_device->bind_index_array(triangle_index_array);
-	}
-
-	void WSI::teardown()
-	{
-	}
-
-	WSI::~WSI()
-	{
-
-	}
-
-	void WSI::set_wsi_platform_data(DisplayServerEnums::WindowID window, WindowData data)
-	{
-		windows.insert({ window, data });
-	}
-
-	Error WSI::_create_rendering_context_window(DisplayServerEnums::WindowID p_window_id, const std::string& p_rendering_driver)
-	{
-		// TODO: check if window entry exsists
-
-		auto wd = windows.at(p_window_id);
-
-		Error err = rendering_context->window_create(p_window_id, &wd.platfform_data);
-		ERR_FAIL_COND_V_MSG(err != OK, err, std::format("Failed to create {} window.", p_rendering_driver));
-		rendering_context->window_set_size(p_window_id, wd.window_resolution.x, wd.window_resolution.y);
-		surface = rendering_context->surface_get_from_window(p_window_id);
-		return OK;
 	}
 
 }

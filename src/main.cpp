@@ -82,7 +82,7 @@ struct TriangleApplication : EE::Application
 		auto cmd_buffer = device->get_current_command_buffer();
 
 		device->bind_render_pipeline(cmd_buffer, wsi->get_current_pipeline());
-		wsi->bind();
+		wsi->bind_vbo_and_ibo();
 
 		device->render_draw(cmd_buffer, 3, 1);
 

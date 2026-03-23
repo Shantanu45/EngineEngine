@@ -37,22 +37,27 @@ namespace Rendering
 		bool post_frame_loop();
 
 		void set_program(const std::vector<std::string> programs);
-		void pipeline_create();
+
 		void set_vertex_attribute(const uint32_t binding, const uint32_t location, const RenderingDeviceCommons::DataFormat format, const uint32_t offset, const uint32_t stride);
-		void pipeline_create_default();
+
 		RID get_current_pipeline();
+
 		RenderingShaderContainerFormat* create_shader_container_format();
 
-		void create_triangle();
-		void bind();
+		void bind_vbo_and_ibo();
+
 		RenderingDevice* get_rendering_device() { return rendering_device; }
 
 		void set_wsi_platform_data(DisplayServerEnums::WindowID window, WindowData data);
+
 		void push_vertex_data(void* vertex_data, size_t size);
 		void push_index_data(void* data, size_t size, RenderingDeviceCommons::IndexBufferFormat format);
 
 		void clear_vertex_data() { vertex_data.clear(); }
 		void clear_index_data() { index_data.clear(); }
+
+		void pipeline_create();
+		void pipeline_create_default();
 
 		void teardown();
 
@@ -62,8 +67,11 @@ namespace Rendering
 		Error _create_rendering_context_window(DisplayServerEnums::WindowID p_window_id, const std::string& p_rendering_driver = "vulkan");
 		void _destroy_rendering_context_window(DisplayServerEnums::WindowID p_window_id);
 
-		void free_pending_resources(int p_frame);
+		void _free_pending_resources(int p_frame);
 		std::vector<uint8_t> _get_attrib_interleaved(const std::vector<RenderingDeviceCommons::VertexAttribute>& attribs, std::vector<uint8_t> vertex_data);
+
+		void _create_vertex_and_index_buffers();
+
 		std::unique_ptr<RenderingContextDriver> rendering_context = nullptr;
 		RenderingDevice* rendering_device = nullptr;
 
