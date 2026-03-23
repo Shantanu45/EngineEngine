@@ -59,6 +59,10 @@ namespace Rendering
 
 			rendering_device->screen_create(active_window);
 
+			set_program({ "assets://shaders/triangle_v2.vert", "assets://shaders/triangle_v2.frag" });
+
+			pipeline_create_default();
+
 			return true;
 		}
 		return false;
@@ -124,30 +128,44 @@ namespace Rendering
 			0);
 	}
 
+	void WSI::set_vertex_attribute(const uint32_t binding, const uint32_t location, const RenderingDeviceCommons::DataFormat format, const uint32_t offset, const uint32_t stride)
+	{
+		RenderingDeviceCommons::VertexAttribute va;
+		va.format = format;
+		va.stride = stride;// RenderingDeviceCommons::get_format_vertex_size(format);
+		//va.stride = sizeof(float) * 6;
+		va.binding = binding;
+		va.location = location;
+		va.offset = offset;
+		vertex_attributes.push_back(va);
+	}
+
+	//void WSI::set_vertex_data()
+	//{
+
+	//}
+
 	void WSI::pipeline_create_default()
 	{
-		std::vector<RenderingDeviceCommons::VertexAttribute> attributes;
-		uint32_t offset = 0;
-		{
-			RenderingDeviceCommons::VertexAttribute va;
+		set_vertex_attribute(0, 0, RenderingDeviceCommons::DATA_FORMAT_R32G32B32_SFLOAT, 0, sizeof(float) * 6);
+		set_vertex_attribute(0, 1, RenderingDeviceCommons::DATA_FORMAT_R32G32B32_SFLOAT, sizeof(float) * 3, sizeof(float) * 6);
+
+		
+			/*RenderingDeviceCommons::VertexAttribute va;
 			va.format = RenderingDeviceCommons::DATA_FORMAT_R32G32B32_SFLOAT;
 			va.stride = sizeof(float) * 6;
 			va.binding = 0;
 			va.location = 0;
 			va.offset = offset;
 			offset += sizeof(float) * 3;
-			attributes.push_back(va);
+			vertex_attributes.push_back(va);
 
-			//va.format = RenderingDeviceCommons::DATA_FORMAT_R32G32B32_SFLOAT;
-			//va.stride = sizeof(float) * 3;
-			//va.binding = 0;
 			va.location = 1;
 			va.offset = offset;
-			attributes.push_back(va);
+			vertex_attributes.push_back(va);*/
 
-		}
-		vertex_format = rendering_device->vertex_format_create(attributes);
-		//auto vertex_format = rendering_device->vertex_format_create({});
+		DEBUG_ASSERT(!vertex_attributes.empty());
+		vertex_format = rendering_device->vertex_format_create(vertex_attributes);
 
 		auto blend_state = RenderingDeviceCommons::PipelineColorBlendState::create_blend();
 		pipeline = rendering_device->create_swapchain_pipeline(active_window, shader_program,
@@ -187,6 +205,17 @@ namespace Rendering
 		   1.0f, -1.0f, 0.0f,   0.0f, 0.0f, 1.0f   // blue
 		};
 
+		std::vector<uint8_t> vertex_data;
+		vertex_data.resize(sizeof(triangle_vertices[0]) * sizeof(triangle_vertices));
+		memcpy(vertex_data.data(), triangle_vertices, vertex_data.size());
+
+		triangle_vertex_buffer = rendering_device->vertex_buffer_create(vertex_data.size(), vertex_data);
+
+		std::vector<RID> buffers;
+		buffers.push_back(triangle_vertex_buffer);
+
+		triangle_vertex_array = rendering_device->vertex_array_create(triangle_vertex_count, vertex_format, buffers);
+
 		static const uint32_t triangle_triangle_count = 1;
 		static const uint16_t triangle_triangle_indices[triangle_triangle_count * 3] = {
 			0, 1, 2
@@ -194,22 +223,11 @@ namespace Rendering
 
 		uint32_t index_count = sizeof(triangle_triangle_indices) / sizeof(triangle_triangle_indices[0]);
 
-		std::vector<uint8_t> vertex_data;
-		vertex_data.resize(sizeof(triangle_vertices[0]) * sizeof(triangle_vertices));
-		memcpy(vertex_data.data(), triangle_vertices, vertex_data.size());
-
-		triangle_vertex_buffer = rendering_device->vertex_buffer_create(vertex_data.size(), vertex_data);
-
 		std::vector<uint8_t> index_data;
 		index_data.resize(sizeof(triangle_triangle_indices[0]) * sizeof(triangle_triangle_indices));
 		memcpy(index_data.data(), triangle_triangle_indices, index_data.size());
 
 		triangle_index_buffer = rendering_device->index_buffer_create(index_count, RenderingDeviceCommons::INDEX_BUFFER_FORMAT_UINT16, index_data);
-
-		std::vector<RID> buffers;
-		buffers.push_back(triangle_vertex_buffer);
-
-		triangle_vertex_array = rendering_device->vertex_array_create(triangle_vertex_count, vertex_format, buffers);
 
 		triangle_index_array = rendering_device->index_array_create(triangle_index_buffer, 0, index_count);
 		

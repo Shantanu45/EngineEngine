@@ -17,7 +17,7 @@ namespace Rendering
 		Size2i window_resolution;
 	};
 
-	class WSI
+	class WSI /*: protected RenderingDeviceCommons*/
 	{
 	public:
 		//WSI(const std::string& p_rendering_driver, DisplayServerEnums::WindowMode p_mode, DisplayServerEnums::VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i* p_position, const Vector2i& p_resolution, int p_screen, DisplayServerEnums::Context p_context, int64_t p_parent_window, Error& r_error);
@@ -38,6 +38,7 @@ namespace Rendering
 
 		void set_program(const std::vector<std::string> programs);
 		void pipeline_create();
+		void set_vertex_attribute(const uint32_t binding, const uint32_t location, const RenderingDeviceCommons::DataFormat format, const uint32_t offset, const uint32_t stride);
 		void pipeline_create_default();
 		RID get_current_pipeline();
 		RenderingShaderContainerFormat* create_shader_container_format();
@@ -82,6 +83,8 @@ namespace Rendering
 		RenderingDevice::VertexFormatID vertex_format;
 
 		DisplayServerEnums::WindowID active_window = DisplayServerEnums::INVALID_WINDOW_ID;
+
+		std::vector<RenderingDeviceCommons::VertexAttribute> vertex_attributes;
 
 	};
 }

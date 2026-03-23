@@ -5285,13 +5285,13 @@ namespace Vulkan
 		thread_local std::vector<VkSpecializationMapEntry> specialization_entries;
 
 #if RECORD_PIPELINE_STATISTICS
-		thread_local LocalVector<uint64_t> respv_run_time;
-		thread_local LocalVector<uint64_t> respv_size;
+		thread_local std::vector<uint64_t> respv_run_time;
+		thread_local std::vector<uint64_t> respv_size;
 		uint32_t stage_count = shader_info->vk_stages_create_info.size();
 		respv_run_time.clear();
 		respv_size.clear();
-		respv_run_time.resize_initialized(stage_count);
-		respv_size.resize_initialized(stage_count);
+		respv_run_time.resize(stage_count);
+		respv_size.resize(stage_count);
 #endif
 
 		respv_shader_modules.clear();

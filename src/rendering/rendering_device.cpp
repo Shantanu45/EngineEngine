@@ -189,7 +189,7 @@ namespace Rendering
 
 	Rendering::RDShaderSPIRV* RenderingDevice::shader_compile_spirv_from_shader_source(const RDShaderSource* p_source, bool p_allow_cache /*= true*/)
 	{
-		//ERR_FAIL_COND_V(p_source.is_null(), &RDShaderSPIRV());
+		//ERR_FAIL_COND_V(p_source == nullptr, &RDShaderSPIRV());
 
 		RDShaderSPIRV* bytecode = new RDShaderSPIRV;
 		for (int i = 0; i < RenderingDeviceCommons::SHADER_STAGE_MAX; i++) {
@@ -970,22 +970,6 @@ namespace Rendering
 		std::unordered_map<DisplayServerEnums::WindowID, RDD::SwapChainID>::const_iterator sc_it = screen_swap_chains.find(window);
 		ERR_FAIL_COND_V_MSG(sc_it == screen_swap_chains.end(), RID(), "Screen was never prepared.");
 
-		//FramebufferFormat fb_format = framebuffer_formats[driver->swap_chain_get_format(swapchain)];
-
-		//// Validate shader vs. framebuffer.
-		//{
-		//	ERR_FAIL_COND_V_MSG(p_for_render_pass >= uint32_t(fb_format.E->first.passes.size()), RID(), std::format("Render pass requested for pipeline creation {} is out of bounds", std::to_string(p_for_render_pass)));
-		//	const FramebufferPass& pass = fb_format.E->first.passes[p_for_render_pass];
-		//	uint32_t output_mask = 0;
-		//	for (int i = 0; i < pass.color_attachments.size(); i++) {
-		//		if (pass.color_attachments[i] != ATTACHMENT_UNUSED) {
-		//			output_mask |= 1 << i;
-		//		}
-		//	}
-		//	ERR_FAIL_COND_V_MSG(shader->fragment_output_mask != output_mask, RID(),
-		//		std::format("Mismatch fragment shader output mask {} and framebuffer color output mask {} when binding both in render pipeline.", std::to_string(shader->fragment_output_mask), std::to_string(output_mask)));
-		//}
-
 		RDD::VertexFormatID driver_vertex_format;
 		if (p_vertex_format != INVALID_ID) {
 			// Uses vertices, else it does not.
@@ -1038,20 +1022,6 @@ namespace Rendering
 		ERR_FAIL_INDEX_V(p_depth_stencil_state.back_op.compare, COMPARE_OP_MAX, RID());
 
 		ERR_FAIL_INDEX_V(p_blend_state.logic_op, LOGIC_OP_MAX, RID());
-
-		//const FramebufferPass& pass = fb_format.E->first.passes[p_for_render_pass];
-		//ERR_FAIL_COND_V(p_blend_state.attachments.size() < pass.color_attachments.size(), RID());
-		//for (int i = 0; i < pass.color_attachments.size(); i++) {
-		//	if (pass.color_attachments[i] != ATTACHMENT_UNUSED) {
-		//		ERR_FAIL_INDEX_V(p_blend_state.attachments[i].src_color_blend_factor, BLEND_FACTOR_MAX, RID());
-		//		ERR_FAIL_INDEX_V(p_blend_state.attachments[i].dst_color_blend_factor, BLEND_FACTOR_MAX, RID());
-		//		ERR_FAIL_INDEX_V(p_blend_state.attachments[i].color_blend_op, BLEND_OP_MAX, RID());
-
-		//		ERR_FAIL_INDEX_V(p_blend_state.attachments[i].src_alpha_blend_factor, BLEND_FACTOR_MAX, RID());
-		//		ERR_FAIL_INDEX_V(p_blend_state.attachments[i].dst_alpha_blend_factor, BLEND_FACTOR_MAX, RID());
-		//		ERR_FAIL_INDEX_V(p_blend_state.attachments[i].alpha_blend_op, BLEND_OP_MAX, RID());
-		//	}
-		//}
 
 		for (int i = 0; i < shader->specialization_constants.size(); i++) {
 			const ShaderSpecializationConstant& sc = shader->specialization_constants[i];
@@ -2033,6 +2003,22 @@ namespace Rendering
 
 #pragma endregion
 
+
+	std::vector<uint8_t> RenderingDevice::_load_pipeline_cache()
+	{
+		// TODO
+		return {};
+	}
+
+	void RenderingDevice::update_pipeline_cache(bool p_closing /*= false*/)
+	{
+
+	}
+
+	void RenderingDevice::_save_pipeline_cache(void* p_data)
+	{
+
+	}
 
 	RenderingDevice::RenderingDevice()
 	{

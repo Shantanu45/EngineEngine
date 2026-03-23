@@ -757,6 +757,8 @@ namespace Rendering
 		// TODO: #temp
 		void _submit_transfer_workers(RDD::CommandBufferID p_draw_command_buffer = RDD::CommandBufferID());
 
+		void update_pipeline_cache(bool p_closing = false);
+
 	private:
 
 		RID _index_buffer_create(uint32_t p_index_count, IndexBufferFormat p_format, std::vector<uint8_t>& p_data,
@@ -797,6 +799,9 @@ namespace Rendering
 		void _free_transfer_workers();
 
 #pragma endregion
+
+		std::vector<uint8_t> _load_pipeline_cache();
+		static void _save_pipeline_cache(void* p_data);
 
 
 		RenderingDevice();

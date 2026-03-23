@@ -80,8 +80,6 @@ namespace EE
 	void Application::pre_frame()
 	{
 		application_wsi->pre_frame_loop();
-		application_wsi->set_program({ "assets://shaders/triangle_v2.vert", "assets://shaders/triangle_v2.frag" });
-		application_wsi->pipeline_create_default();
 	}
 
 	void Application::run_frame()
