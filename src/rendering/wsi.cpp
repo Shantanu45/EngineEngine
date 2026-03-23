@@ -190,6 +190,7 @@ namespace Rendering
 
 	void WSI::pipeline_create_default()
 	{
+		DEBUG_ASSERT(!shader_program.is_null());
 		DEBUG_ASSERT(!vertex_attributes.empty());
 		vertex_format = rendering_device->vertex_format_create(vertex_attributes);
 
