@@ -617,6 +617,59 @@ namespace Rendering
 			uint64_t index = 0;
 		};
 
+		struct UniformSet {
+			uint32_t format = 0;
+			RID shader_id;
+			uint32_t shader_set = 0;
+			RDD::UniformSetID driver_id;
+			struct AttachableTexture {
+				uint32_t bind = 0;
+				RID texture;
+			};
+
+			struct SharedTexture {
+				uint32_t writing = 0;
+				RID texture;
+			};
+
+			std::vector<AttachableTexture> attachable_textures; // Used for validation.
+			//std::vector<RenderingDeviceCommons::ResourceTracker*> draw_trackers;
+			//std::vector<RenderingDeviceCommons::ResourceUsage> draw_trackers_usage;
+			//std::unordered_map<RID, RenderingDeviceCommons::ResourceUsage> untracked_usage;
+			std::vector<SharedTexture> shared_textures_to_update;
+			std::vector<RID> pending_clear_textures;
+			InvalidationCallback invalidated_callback = nullptr;
+			void* invalidated_callback_userdata = nullptr;
+		};
+
+		enum StagingRequiredAction {
+			STAGING_REQUIRED_ACTION_NONE,
+			STAGING_REQUIRED_ACTION_FLUSH_AND_STALL_ALL,
+			STAGING_REQUIRED_ACTION_STALL_PREVIOUS,
+		};
+
+		struct StagingBufferBlock {
+			RDD::BufferID driver_id;
+			uint64_t frame_used = 0;
+			uint32_t fill_amount = 0;
+			uint8_t* data_ptr = nullptr;
+		};
+
+		struct StagingBuffers {
+			std::vector<StagingBufferBlock> blocks;
+			int current = 0;
+			uint32_t block_size = 0;
+			uint64_t max_size = 0;
+			BitField<RDD::BufferUsageBits> usage_bits = {};
+			bool used = false;
+		};
+
+
+		struct RecordedBufferCopy {
+			RenderingDeviceDriver::BufferID source;
+			RenderingDeviceDriver::BufferCopyRegion region;
+		};
+
 	public:
 
 		static RenderingDevice* get_singleton() {
@@ -689,9 +742,19 @@ namespace Rendering
 #pragma endregion
 
 		RID vertex_buffer_create(uint32_t p_size_bytes, std::span<uint8_t> p_data = {}, BitField<BufferCreationBits> p_creation_bits = 0);
+		bool _buffer_make_mutable(Buffer* p_buffer, RID p_buffer_id);
 		RID _vertex_buffer_create(uint32_t p_size_bytes, std::vector<uint8_t>& p_data, BitField<BufferCreationBits> p_creation_bits = 0) {
 			return vertex_buffer_create(p_size_bytes, p_data, p_creation_bits);
 		}
+
+		RID uniform_buffer_create(uint32_t p_size_bytes, std::span<uint8_t> p_data = {}, BitField<BufferCreationBits> p_creation_bits = 0);
+		RID uniform_set_create(const std::span<Uniform>& p_uniforms, RID p_shader, uint32_t p_shader_set, bool p_linear_pool = false);
+		bool uniform_set_is_valid(RID p_uniform_set);
+
+		Error buffer_copy(RID p_src_buffer, RID p_dst_buffer, uint32_t p_src_offset, uint32_t p_dst_offset, uint32_t p_size);
+		Error buffer_update(RID p_buffer, uint32_t p_offset, uint32_t p_size, const void* p_data, bool p_skip_check = false);
+		Error buffer_clear(RID p_buffer, uint32_t p_offset, uint32_t p_size);
+		void buffer_flush(RID p_buffer);
 
 		void swap_buffers(bool p_present);
 
@@ -803,6 +866,10 @@ namespace Rendering
 		std::vector<uint8_t> _load_pipeline_cache();
 		static void _save_pipeline_cache(void* p_data);
 
+		Error _staging_buffer_allocate(StagingBuffers& p_staging_buffers, uint32_t p_amount, uint32_t p_required_align, uint32_t& r_alloc_offset, uint32_t& r_alloc_size, StagingRequiredAction& r_required_action, bool p_can_segment = true);
+		void _staging_buffer_execute_required_action(StagingBuffers& p_staging_buffers, StagingRequiredAction p_required_action);
+		Error _insert_staging_block(StagingBuffers& p_staging_buffers);
+
 
 		RenderingDevice();
 		~RenderingDevice();
@@ -856,6 +923,21 @@ namespace Rendering
 
 		std::unique_ptr<Compiler::GLSLCompiler> compiler;
 
+		// Flag for batching descriptor sets.
+		bool descriptor_set_batching = true;
+		// When true, the final draw call that copies our offscreen result into the Swapchain is put into its
+		// own cmd buffer, so that the whole rendering can start early instead of having to wait for the
+		// swapchain semaphore to be signaled (which causes bubbles).
+		bool split_swapchain_into_its_own_cmd_buffer = true;
+		uint32_t gpu_copy_count = 0;
+		uint32_t direct_copy_count = 0;
+		uint32_t copy_bytes_count = 0;
+		uint32_t prev_gpu_copy_count = 0;
+		uint32_t prev_copy_bytes_count = 0;
+
+		StagingBuffers upload_staging_buffers;
+		StagingBuffers download_staging_buffers;
+
 		RID_Owner<RDD::SamplerID, true> sampler_owner;
 
 		RID_Owner<RenderPipeline, true> render_pipeline_owner;
@@ -871,6 +953,13 @@ namespace Rendering
 		RID_Owner<VertexArray, true> vertex_array_owner;
 
 		RID_Owner<IndexArray, true> index_array_owner;
+
+		RID_Owner<Buffer, true> uniform_buffer_owner;
+		RID_Owner<Buffer, true> storage_buffer_owner;
+		RID_Owner<Buffer, true> texture_buffer_owner;
+
+		RID_Owner<UniformSet, true> uniform_set_owner;
+
 
 	};
 }

@@ -13,6 +13,20 @@
 
 namespace Rendering
 {
+	static const char* SHADER_UNIFORM_NAMES[RenderingDevice::UNIFORM_TYPE_MAX] = {
+	"Sampler",
+	"CombinedSampler", // UNIFORM_TYPE_SAMPLER_WITH_TEXTURE
+	"Texture",
+	"Image",
+	"TextureBuffer",
+	"SamplerTextureBuffer",
+	"ImageBuffer",
+	"UniformBuffer",
+	"StorageBuffer",
+	"InputAttachment",
+	"UniformBufferDynamic",
+	"StorageBufferDynamic",
+	};
 
 	Error RenderingDevice::initialize(RenderingContextDriver* p_context, DisplayServerEnums::WindowID p_main_window)
 	{
@@ -838,6 +852,670 @@ namespace Rendering
 		return id;
 	}
 
+	bool RenderingDevice::_buffer_make_mutable(Buffer* p_buffer, RID p_buffer_id) {
+		//if (p_buffer->draw_tracker != nullptr) {
+		//	// Buffer already has a tracker.
+		//	return false;
+		//}
+		//else {
+		//	// Create a tracker for the buffer and make all its dependencies mutable.
+		//	p_buffer->draw_tracker = RDG::resource_tracker_create();
+		//	p_buffer->draw_tracker->buffer_driver_id = p_buffer->driver_id;
+		//	if (p_buffer_id.is_valid()) {
+		//		_dependencies_make_mutable(p_buffer_id, p_buffer->draw_tracker);
+		//	}
+
+		//	return true;
+		//}
+		return true;
+	}
+
+	RID RenderingDevice::uniform_buffer_create(uint32_t p_size_bytes, std::span<uint8_t> p_data /*= {}*/, BitField<BufferCreationBits> p_creation_bits /*= 0*/)
+	{
+		ERR_FAIL_COND_V(p_data.size() && (uint32_t)p_data.size() != p_size_bytes, RID());
+
+		Buffer buffer;
+		buffer.size = p_size_bytes;
+		buffer.usage = (RDD::BUFFER_USAGE_TRANSFER_TO_BIT | RDD::BUFFER_USAGE_UNIFORM_BIT);
+		if (p_creation_bits.has_flag(BUFFER_CREATION_DEVICE_ADDRESS_BIT)) {
+			buffer.usage.set_flag(RDD::BUFFER_USAGE_DEVICE_ADDRESS_BIT);
+		}
+		if (p_creation_bits.has_flag(BUFFER_CREATION_DYNAMIC_PERSISTENT_BIT)) {
+			buffer.usage.set_flag(RDD::BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT);
+
+			// This is a precaution: Persistent buffers are meant for frequent CPU -> GPU transfers.
+			// Writing to this buffer from GPU might cause sync issues if both CPU & GPU try to write at the
+			// same time. It's probably fine (since CPU always advances the pointer before writing) but let's
+			// stick to the known/intended use cases and scream if we deviate from it.
+			buffer.usage.clear_flag(RDD::BUFFER_USAGE_TRANSFER_TO_BIT);
+		}
+		buffer.driver_id = driver->buffer_create(buffer.size, buffer.usage, RDD::MEMORY_ALLOCATION_TYPE_GPU, frames_drawn);
+		ERR_FAIL_COND_V(!buffer.driver_id, RID());
+
+		// Uniform buffers are assumed to be immutable unless they don't have initial data.
+		//if (p_data.empty()) {
+		//	buffer.draw_tracker = RDG::resource_tracker_create();
+		//	buffer.draw_tracker->buffer_driver_id = buffer.driver_id;
+		//}
+
+		if (p_data.size()) {
+			_buffer_initialize(&buffer, p_data);
+		}
+
+		//_THREAD_SAFE_LOCK_
+			buffer_memory += buffer.size;
+		//_THREAD_SAFE_UNLOCK_
+
+			RID id = uniform_buffer_owner.make_rid(buffer);
+#ifdef DEV_ENABLED
+		set_resource_name(id, "RID:" + itos(id.get_id()));
+#endif
+		return id;
+	}
+
+	RID RenderingDevice::uniform_set_create(const std::span<Uniform>& p_uniforms, RID p_shader, uint32_t p_shader_set, bool p_linear_pool /*= false*/)
+	{
+		ERR_FAIL_COND_V(p_uniforms.size() == 0, RID());
+
+		Shader* shader = shader_owner.get_or_null(p_shader);
+		ERR_FAIL_NULL_V(shader, RID());
+
+		ERR_FAIL_COND_V_MSG(p_shader_set >= (uint32_t)shader->uniform_sets.size() || shader->uniform_sets[p_shader_set].empty(), RID(),
+			std::format("Desired set ({}) not used by shader.", p_shader_set));
+		// See that all sets in shader are satisfied.
+
+		const std::vector<ShaderUniform>& set = shader->uniform_sets[p_shader_set];
+
+		uint32_t uniform_count = p_uniforms.size();
+		const Uniform* uniforms = p_uniforms.data();
+
+		uint32_t set_uniform_count = set.size();
+		const ShaderUniform* set_uniforms = set.data();
+
+		std::vector<RDD::BoundUniform> driver_uniforms;
+		driver_uniforms.resize(set_uniform_count);
+
+		// Used for verification to make sure a uniform set does not use a framebuffer bound texture.
+		//std::vector<UniformSet::AttachableTexture> attachable_textures;
+		//std::vector<RDG::ResourceTracker*> draw_trackers;
+		//std::vector<RDG::ResourceUsage> draw_trackers_usage;
+		//std::unordered_map<RID, RDG::ResourceUsage> untracked_usage;
+		//std::vector<UniformSet::SharedTexture> shared_textures_to_update;
+		std::vector<RID> pending_clear_textures;
+
+		for (uint32_t i = 0; i < set_uniform_count; i++) {
+			const ShaderUniform& set_uniform = set_uniforms[i];
+			int uniform_idx = -1;
+			for (int j = 0; j < (int)uniform_count; j++) {
+				if (uniforms[j].binding == set_uniform.binding) {
+					uniform_idx = j;
+					break;
+				}
+			}
+			ERR_FAIL_COND_V_MSG(uniform_idx == -1, RID(),
+				std::format("All the shader bindings for the given set must be covered by the uniforms provided. Binding ({}), set ({}) was not provided.", set_uniform.binding, p_shader_set));
+
+			const Uniform& uniform = uniforms[uniform_idx];
+
+			ERR_FAIL_INDEX_V(uniform.uniform_type, RenderingDeviceCommons::UNIFORM_TYPE_MAX, RID());
+			ERR_FAIL_COND_V_MSG(uniform.uniform_type != set_uniform.type, RID(), std::format("Shader '{}' Mismatch uniform type for binding ({}), set ({}). Expected '{}', supplied: '{}'.", shader->name, set_uniform.binding, p_shader_set, SHADER_UNIFORM_NAMES[set_uniform.type], SHADER_UNIFORM_NAMES[uniform.uniform_type]));
+
+			RDD::BoundUniform& driver_uniform = driver_uniforms[i];
+			driver_uniform.type = uniform.uniform_type;
+			driver_uniform.binding = uniform.binding;
+
+			// Mark immutable samplers to be skipped when creating uniform set.
+			driver_uniform.immutable_sampler = uniform.immutable_sampler;
+
+			switch (uniform.uniform_type) {
+			case UNIFORM_TYPE_SAMPLER: {
+				/*if (uniform.get_id_count() != (uint32_t)set_uniform.length) {
+					if (set_uniform.length > 1) {
+						ERR_FAIL_V_MSG(RID(), "Sampler (binding: " + itos(uniform.binding) + ") is an array of (" + itos(set_uniform.length) + ") sampler elements, so it should be provided equal number of sampler IDs to satisfy it (IDs provided: " + itos(uniform.get_id_count()) + ").");
+					}
+					else {
+						ERR_FAIL_V_MSG(RID(), "Sampler (binding: " + itos(uniform.binding) + ") should provide one ID referencing a sampler (IDs provided: " + itos(uniform.get_id_count()) + ").");
+					}
+				}
+
+				for (uint32_t j = 0; j < uniform.get_id_count(); j++) {
+					RDD::SamplerID* sampler_driver_id = sampler_owner.get_or_null(uniform.get_id(j));
+					ERR_FAIL_NULL_V_MSG(sampler_driver_id, RID(), "Sampler (binding: " + itos(uniform.binding) + ", index " + itos(j) + ") is not a valid sampler.");
+
+					driver_uniform.ids.push_back(*sampler_driver_id);
+				}*/
+			} break;
+			case UNIFORM_TYPE_SAMPLER_WITH_TEXTURE: {
+				/*if (uniform.get_id_count() != (uint32_t)set_uniform.length * 2) {
+					if (set_uniform.length > 1) {
+						ERR_FAIL_V_MSG(RID(), "SamplerTexture (binding: " + itos(uniform.binding) + ") is an array of (" + itos(set_uniform.length) + ") sampler&texture elements, so it should provided twice the amount of IDs (sampler,texture pairs) to satisfy it (IDs provided: " + itos(uniform.get_id_count()) + ").");
+					}
+					else {
+						ERR_FAIL_V_MSG(RID(), "SamplerTexture (binding: " + itos(uniform.binding) + ") should provide two IDs referencing a sampler and then a texture (IDs provided: " + itos(uniform.get_id_count()) + ").");
+					}
+				}
+
+				for (uint32_t j = 0; j < uniform.get_id_count(); j += 2) {
+					RDD::SamplerID* sampler_driver_id = sampler_owner.get_or_null(uniform.get_id(j + 0));
+					ERR_FAIL_NULL_V_MSG(sampler_driver_id, RID(), "SamplerBuffer (binding: " + itos(uniform.binding) + ", index " + itos(j + 1) + ") is not a valid sampler.");
+
+					RID texture_id = uniform.get_id(j + 1);
+					Texture* texture = texture_owner.get_or_null(texture_id);
+					ERR_FAIL_NULL_V_MSG(texture, RID(), "Texture (binding: " + itos(uniform.binding) + ", index " + itos(j) + ") is not a valid texture.");
+
+					ERR_FAIL_COND_V_MSG(!(texture->usage_flags & TEXTURE_USAGE_SAMPLING_BIT), RID(),
+						"Texture (binding: " + itos(uniform.binding) + ", index " + itos(j) + ") needs the TEXTURE_USAGE_SAMPLING_BIT usage flag set in order to be used as uniform.");
+
+					if ((texture->usage_flags & (TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | TEXTURE_USAGE_DEPTH_RESOLVE_ATTACHMENT_BIT | TEXTURE_USAGE_INPUT_ATTACHMENT_BIT))) {
+						UniformSet::AttachableTexture attachable_texture;
+						attachable_texture.bind = set_uniform.binding;
+						attachable_texture.texture = texture->owner.is_valid() ? texture->owner : uniform.get_id(j + 1);
+						attachable_textures.push_back(attachable_texture);
+					}
+
+					if (texture->pending_clear) {
+						pending_clear_textures.push_back(texture_id);
+					}
+
+					RDD::TextureID driver_id = texture->driver_id;
+					RDG::ResourceTracker* tracker = texture->draw_tracker;
+					if (texture->shared_fallback != nullptr && texture->shared_fallback->texture.id != 0) {
+						driver_id = texture->shared_fallback->texture;
+						tracker = texture->shared_fallback->texture_tracker;
+						shared_textures_to_update.push_back({ false, texture_id });
+					}
+
+					if (tracker != nullptr) {
+						draw_trackers.push_back(tracker);
+						draw_trackers_usage.push_back(RDG::RESOURCE_USAGE_TEXTURE_SAMPLE);
+					}
+					else {
+						untracked_usage[texture_id] = RDG::RESOURCE_USAGE_TEXTURE_SAMPLE;
+					}
+
+					DEV_ASSERT(!texture->owner.is_valid() || texture_owner.get_or_null(texture->owner));
+
+					driver_uniform.ids.push_back(*sampler_driver_id);
+					driver_uniform.ids.push_back(driver_id);
+					_check_transfer_worker_texture(texture);
+				}*/
+			} break;
+			case UNIFORM_TYPE_TEXTURE: {
+				/*if (uniform.get_id_count() != (uint32_t)set_uniform.length) {
+					if (set_uniform.length > 1) {
+						ERR_FAIL_V_MSG(RID(), "Texture (binding: " + itos(uniform.binding) + ") is an array of (" + itos(set_uniform.length) + ") textures, so it should be provided equal number of texture IDs to satisfy it (IDs provided: " + itos(uniform.get_id_count()) + ").");
+					}
+					else {
+						ERR_FAIL_V_MSG(RID(), "Texture (binding: " + itos(uniform.binding) + ") should provide one ID referencing a texture (IDs provided: " + itos(uniform.get_id_count()) + ").");
+					}
+				}
+
+				for (uint32_t j = 0; j < uniform.get_id_count(); j++) {
+					RID texture_id = uniform.get_id(j);
+					Texture* texture = texture_owner.get_or_null(texture_id);
+					ERR_FAIL_NULL_V_MSG(texture, RID(), "Texture (binding: " + itos(uniform.binding) + ", index " + itos(j) + ") is not a valid texture.");
+
+					ERR_FAIL_COND_V_MSG(!(texture->usage_flags & TEXTURE_USAGE_SAMPLING_BIT), RID(),
+						"Texture (binding: " + itos(uniform.binding) + ", index " + itos(j) + ") needs the TEXTURE_USAGE_SAMPLING_BIT usage flag set in order to be used as uniform.");
+
+					if ((texture->usage_flags & (TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | TEXTURE_USAGE_DEPTH_RESOLVE_ATTACHMENT_BIT | TEXTURE_USAGE_INPUT_ATTACHMENT_BIT))) {
+						UniformSet::AttachableTexture attachable_texture;
+						attachable_texture.bind = set_uniform.binding;
+						attachable_texture.texture = texture->owner.is_valid() ? texture->owner : uniform.get_id(j);
+						attachable_textures.push_back(attachable_texture);
+					}
+
+					if (texture->pending_clear) {
+						pending_clear_textures.push_back(texture_id);
+					}
+
+					RDD::TextureID driver_id = texture->driver_id;
+					RDG::ResourceTracker* tracker = texture->draw_tracker;
+					if (texture->shared_fallback != nullptr && texture->shared_fallback->texture.id != 0) {
+						driver_id = texture->shared_fallback->texture;
+						tracker = texture->shared_fallback->texture_tracker;
+						shared_textures_to_update.push_back({ false, texture_id });
+					}
+
+					if (tracker != nullptr) {
+						draw_trackers.push_back(tracker);
+						draw_trackers_usage.push_back(RDG::RESOURCE_USAGE_TEXTURE_SAMPLE);
+					}
+					else {
+						untracked_usage[texture_id] = RDG::RESOURCE_USAGE_TEXTURE_SAMPLE;
+					}
+
+					DEV_ASSERT(!texture->owner.is_valid() || texture_owner.get_or_null(texture->owner));
+
+					driver_uniform.ids.push_back(driver_id);
+					_check_transfer_worker_texture(texture);
+				}*/
+			} break;
+			case UNIFORM_TYPE_IMAGE: {
+				//if (uniform.get_id_count() != (uint32_t)set_uniform.length) {
+				//	if (set_uniform.length > 1) {
+				//		ERR_FAIL_V_MSG(RID(), "Image (binding: " + itos(uniform.binding) + ") is an array of (" + itos(set_uniform.length) + ") textures, so it should be provided equal number of texture IDs to satisfy it (IDs provided: " + itos(uniform.get_id_count()) + ").");
+				//	}
+				//	else {
+				//		ERR_FAIL_V_MSG(RID(), "Image (binding: " + itos(uniform.binding) + ") should provide one ID referencing a texture (IDs provided: " + itos(uniform.get_id_count()) + ").");
+				//	}
+				//}
+
+				//for (uint32_t j = 0; j < uniform.get_id_count(); j++) {
+				//	RID texture_id = uniform.get_id(j);
+				//	Texture* texture = texture_owner.get_or_null(texture_id);
+
+				//	ERR_FAIL_NULL_V_MSG(texture, RID(),
+				//		"Image (binding: " + itos(uniform.binding) + ", index " + itos(j) + ") is not a valid texture.");
+
+				//	ERR_FAIL_COND_V_MSG(!(texture->usage_flags & TEXTURE_USAGE_STORAGE_BIT), RID(),
+				//		"Image (binding: " + itos(uniform.binding) + ", index " + itos(j) + ") needs the TEXTURE_USAGE_STORAGE_BIT usage flag set in order to be used as uniform.");
+
+				//	if (texture->owner.is_null() && texture->shared_fallback != nullptr) {
+				//		shared_textures_to_update.push_back({ true, texture_id });
+				//	}
+
+				//	if (texture->pending_clear) {
+				//		pending_clear_textures.push_back(texture_id);
+				//	}
+
+				//	if (_texture_make_mutable(texture, texture_id)) {
+				//		// The texture must be mutable as a layout transition will be required.
+				//		draw_graph.add_synchronization();
+				//	}
+
+				//	if (texture->draw_tracker != nullptr) {
+				//		draw_trackers.push_back(texture->draw_tracker);
+
+				//		if (set_uniform.writable) {
+				//			draw_trackers_usage.push_back(RDG::RESOURCE_USAGE_STORAGE_IMAGE_READ_WRITE);
+				//		}
+				//		else {
+				//			draw_trackers_usage.push_back(RDG::RESOURCE_USAGE_STORAGE_IMAGE_READ);
+				//		}
+				//	}
+
+				//	DEV_ASSERT(!texture->owner.is_valid() || texture_owner.get_or_null(texture->owner));
+
+				//	driver_uniform.ids.push_back(texture->driver_id);
+				//	_check_transfer_worker_texture(texture);
+				//}
+			} break;
+			case UNIFORM_TYPE_TEXTURE_BUFFER: {
+				//if (uniform.get_id_count() != (uint32_t)set_uniform.length) {
+				//	if (set_uniform.length > 1) {
+				//		ERR_FAIL_V_MSG(RID(), "Buffer (binding: " + itos(uniform.binding) + ") is an array of (" + itos(set_uniform.length) + ") texture buffer elements, so it should be provided equal number of texture buffer IDs to satisfy it (IDs provided: " + itos(uniform.get_id_count()) + ").");
+				//	}
+				//	else {
+				//		ERR_FAIL_V_MSG(RID(), "Buffer (binding: " + itos(uniform.binding) + ") should provide one ID referencing a texture buffer (IDs provided: " + itos(uniform.get_id_count()) + ").");
+				//	}
+				//}
+
+				//for (uint32_t j = 0; j < uniform.get_id_count(); j++) {
+				//	RID buffer_id = uniform.get_id(j);
+				//	Buffer* buffer = texture_buffer_owner.get_or_null(buffer_id);
+				//	ERR_FAIL_NULL_V_MSG(buffer, RID(), "Texture Buffer (binding: " + itos(uniform.binding) + ", index " + itos(j) + ") is not a valid texture buffer.");
+
+				//	if (set_uniform.writable && _buffer_make_mutable(buffer, buffer_id)) {
+				//		// The buffer must be mutable if it's used for writing.
+				//		draw_graph.add_synchronization();
+				//	}
+
+				//	if (buffer->draw_tracker != nullptr) {
+				//		draw_trackers.push_back(buffer->draw_tracker);
+
+				//		if (set_uniform.writable) {
+				//			draw_trackers_usage.push_back(RDG::RESOURCE_USAGE_TEXTURE_BUFFER_READ_WRITE);
+				//		}
+				//		else {
+				//			draw_trackers_usage.push_back(RDG::RESOURCE_USAGE_TEXTURE_BUFFER_READ);
+				//		}
+				//	}
+				//	else {
+				//		untracked_usage[buffer_id] = RDG::RESOURCE_USAGE_TEXTURE_BUFFER_READ;
+				//	}
+
+				//	driver_uniform.ids.push_back(buffer->driver_id);
+				//	_check_transfer_worker_buffer(buffer);
+				//}
+			} break;
+			case UNIFORM_TYPE_SAMPLER_WITH_TEXTURE_BUFFER: {
+				/*if (uniform.get_id_count() != (uint32_t)set_uniform.length * 2) {
+					if (set_uniform.length > 1) {
+						ERR_FAIL_V_MSG(RID(), "SamplerBuffer (binding: " + itos(uniform.binding) + ") is an array of (" + itos(set_uniform.length) + ") sampler buffer elements, so it should provided twice the amount of IDs (sampler,buffer pairs) to satisfy it (IDs provided: " + itos(uniform.get_id_count()) + ").");
+					}
+					else {
+						ERR_FAIL_V_MSG(RID(), "SamplerBuffer (binding: " + itos(uniform.binding) + ") should provide two IDs referencing a sampler and then a texture buffer (IDs provided: " + itos(uniform.get_id_count()) + ").");
+					}
+				}
+
+				for (uint32_t j = 0; j < uniform.get_id_count(); j += 2) {
+					RDD::SamplerID* sampler_driver_id = sampler_owner.get_or_null(uniform.get_id(j + 0));
+					ERR_FAIL_NULL_V_MSG(sampler_driver_id, RID(), "SamplerBuffer (binding: " + itos(uniform.binding) + ", index " + itos(j + 1) + ") is not a valid sampler.");
+
+					RID buffer_id = uniform.get_id(j + 1);
+					Buffer* buffer = texture_buffer_owner.get_or_null(buffer_id);
+					ERR_FAIL_NULL_V_MSG(buffer, RID(), "SamplerBuffer (binding: " + itos(uniform.binding) + ", index " + itos(j + 1) + ") is not a valid texture buffer.");
+
+					if (buffer->draw_tracker != nullptr) {
+						draw_trackers.push_back(buffer->draw_tracker);
+						draw_trackers_usage.push_back(RDG::RESOURCE_USAGE_TEXTURE_BUFFER_READ);
+					}
+					else {
+						untracked_usage[buffer_id] = RDG::RESOURCE_USAGE_TEXTURE_BUFFER_READ;
+					}
+
+					driver_uniform.ids.push_back(*sampler_driver_id);
+					driver_uniform.ids.push_back(buffer->driver_id);
+					_check_transfer_worker_buffer(buffer);
+				}*/
+			} break;
+			case UNIFORM_TYPE_IMAGE_BUFFER: {
+				// Todo.
+			} break;
+			case UNIFORM_TYPE_UNIFORM_BUFFER:
+			case UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC: {
+				/*	ERR_FAIL_COND_V_MSG(uniform.get_id_count() != 1, RID(),
+						"Uniform buffer supplied (binding: " + itos(uniform.binding) + ") must provide one ID (" + itos(uniform.get_id_count()) + " provided).");
+
+					RID buffer_id = uniform.get_id(0);
+					Buffer* buffer = uniform_buffer_owner.get_or_null(buffer_id);
+					ERR_FAIL_NULL_V_MSG(buffer, RID(), "Uniform buffer supplied (binding: " + itos(uniform.binding) + ") is invalid.");
+
+					ERR_FAIL_COND_V_MSG(buffer->size < (uint32_t)set_uniform.length, RID(),
+						"Uniform buffer supplied (binding: " + itos(uniform.binding) + ") size (" + itos(buffer->size) + ") is smaller than size of shader uniform: (" + itos(set_uniform.length) + ").");
+
+					if (buffer->draw_tracker != nullptr) {
+						draw_trackers.push_back(buffer->draw_tracker);
+						draw_trackers_usage.push_back(RDG::RESOURCE_USAGE_UNIFORM_BUFFER_READ);
+					}
+					else {
+						untracked_usage[buffer_id] = RDG::RESOURCE_USAGE_UNIFORM_BUFFER_READ;
+					}
+
+					driver_uniform.ids.push_back(buffer->driver_id);
+					_check_transfer_worker_buffer(buffer);*/
+			} break;
+			case UNIFORM_TYPE_STORAGE_BUFFER:
+			case UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC: {
+				ERR_FAIL_COND_V_MSG(uniform.get_id_count() != 1, RID(),
+					std::format("Storage buffer supplied (binding: {}) must provide one ID ({} provided).", uniform.binding, uniform.get_id_count()));
+
+				Buffer* buffer = nullptr;
+
+				RID buffer_id = uniform.get_id(0);
+				if (storage_buffer_owner.owns(buffer_id)) {
+					buffer = storage_buffer_owner.get_or_null(buffer_id);
+				}
+				else if (vertex_buffer_owner.owns(buffer_id)) {
+					buffer = vertex_buffer_owner.get_or_null(buffer_id);
+
+					ERR_FAIL_COND_V_MSG(!(buffer->usage.has_flag(RDD::BUFFER_USAGE_STORAGE_BIT)), RID(), std::format("Vertex buffer supplied (binding: {}) was not created with storage flag.", uniform.binding));
+				}
+				ERR_FAIL_NULL_V_MSG(buffer, RID(), std::format("Storage buffer supplied (binding: {}) is invalid.", uniform.binding));
+
+				// If 0, then it's sized on link time.
+				ERR_FAIL_COND_V_MSG(set_uniform.length > 0 && buffer->size != (uint32_t)set_uniform.length, RID(),
+					std::format("Storage buffer supplied (binding: {}) size ({}) does not match size of shader uniform: ({}).", uniform.binding, buffer->size, set_uniform.length));
+
+				if (set_uniform.writable && _buffer_make_mutable(buffer, buffer_id)) {
+					// The buffer must be mutable if it's used for writing.
+					//draw_graph.add_synchronization();
+				}
+
+				//if (buffer->draw_tracker != nullptr) {
+				//	draw_trackers.push_back(buffer->draw_tracker);
+
+				//	if (set_uniform.writable) {
+				//		draw_trackers_usage.push_back(RESOURCE_USAGE_STORAGE_BUFFER_READ_WRITE);
+				//	}
+				//	else {
+				//		draw_trackers_usage.push_back(RESOURCE_USAGE_STORAGE_BUFFER_READ);
+				//	}
+				//}
+				//else {
+				//	untracked_usage[buffer_id] = RESOURCE_USAGE_STORAGE_BUFFER_READ;
+				//}
+
+				driver_uniform.ids.push_back(buffer->driver_id);
+				_check_transfer_worker_buffer(buffer);
+			} break;
+			case UNIFORM_TYPE_INPUT_ATTACHMENT: {
+				/*ERR_FAIL_COND_V_MSG(shader->pipeline_type != PIPELINE_TYPE_RASTERIZATION, RID(), "InputAttachment (binding: " + itos(uniform.binding) + ") supplied for non-render shader (this is not allowed).");
+
+				if (uniform.get_id_count() != (uint32_t)set_uniform.length) {
+					if (set_uniform.length > 1) {
+						ERR_FAIL_V_MSG(RID(), "InputAttachment (binding: " + itos(uniform.binding) + ") is an array of (" + itos(set_uniform.length) + ") textures, so it should be provided equal number of texture IDs to satisfy it (IDs provided: " + itos(uniform.get_id_count()) + ").");
+					}
+					else {
+						ERR_FAIL_V_MSG(RID(), "InputAttachment (binding: " + itos(uniform.binding) + ") should provide one ID referencing a texture (IDs provided: " + itos(uniform.get_id_count()) + ").");
+					}
+				}
+
+				for (uint32_t j = 0; j < uniform.get_id_count(); j++) {
+					RID texture_id = uniform.get_id(j);
+					Texture* texture = texture_owner.get_or_null(texture_id);
+
+					ERR_FAIL_NULL_V_MSG(texture, RID(),
+						"InputAttachment (binding: " + itos(uniform.binding) + ", index " + itos(j) + ") is not a valid texture.");
+
+					ERR_FAIL_COND_V_MSG(!(texture->usage_flags & TEXTURE_USAGE_SAMPLING_BIT), RID(),
+						"InputAttachment (binding: " + itos(uniform.binding) + ", index " + itos(j) + ") needs the TEXTURE_USAGE_SAMPLING_BIT usage flag set in order to be used as uniform.");
+
+					DEV_ASSERT(!texture->owner.is_valid() || texture_owner.get_or_null(texture->owner));
+
+					driver_uniform.ids.push_back(texture->driver_id);
+					_check_transfer_worker_texture(texture);
+				}*/
+			} break;
+			case UNIFORM_TYPE_ACCELERATION_STRUCTURE: {
+				//ERR_FAIL_COND_V_MSG(uniform.get_id_count() != 1, RID(),
+				//	"Acceleration structure supplied (binding: " + itos(uniform.binding) + ") must provide one ID (" + itos(uniform.get_id_count()) + " provided).");
+
+				//RID accel_id = uniform.get_id(0);
+				//AccelerationStructure* accel = acceleration_structure_owner.get_or_null(accel_id);
+				//ERR_FAIL_NULL_V_MSG(accel, RID(), "Acceleration Structure supplied (binding: " + itos(uniform.binding) + ") is invalid.");
+
+				//if (accel->draw_tracker != nullptr) {
+				//	draw_trackers.push_back(accel->draw_tracker);
+				//	// Acceleration structure is never going to be writable from raytracing shaders
+				//	draw_trackers_usage.push_back(RDG::RESOURCE_USAGE_ACCELERATION_STRUCTURE_READ);
+				//}
+
+				//driver_uniform.ids.push_back(accel->driver_id);
+			} break;
+			default: {
+			}
+			}
+		}
+
+		RDD::UniformSetID driver_uniform_set = driver->uniform_set_create(driver_uniforms, shader->driver_id, p_shader_set, p_linear_pool ? frame : -1);
+		ERR_FAIL_COND_V(!driver_uniform_set, RID());
+
+		UniformSet uniform_set;
+		uniform_set.driver_id = driver_uniform_set;
+		uniform_set.format = shader->set_formats[p_shader_set];
+		//uniform_set.attachable_textures = attachable_textures;
+		//uniform_set.draw_trackers = draw_trackers;
+		//uniform_set.draw_trackers_usage = draw_trackers_usage;
+		//uniform_set.untracked_usage = untracked_usage;
+		//uniform_set.shared_textures_to_update = shared_textures_to_update;
+		uniform_set.pending_clear_textures = pending_clear_textures;
+		uniform_set.shader_set = p_shader_set;
+		uniform_set.shader_id = p_shader;
+
+		RID id = uniform_set_owner.make_rid(uniform_set);
+#ifdef DEV_ENABLED
+		set_resource_name(id, "RID:" + itos(id.get_id()));
+#endif
+		// Add dependencies.
+		//_add_dependency(id, p_shader);
+		//for (uint32_t i = 0; i < uniform_count; i++) {
+		//	const Uniform& uniform = uniforms[i];
+		//	int id_count = uniform.get_id_count();
+		//	for (int j = 0; j < id_count; j++) {
+		//		_add_dependency(id, uniform.get_id(j));
+		//	}
+		//}
+	}
+
+	bool RenderingDevice::uniform_set_is_valid(RID p_uniform_set)
+	{
+		return uniform_set_owner.owns(p_uniform_set);
+	}
+
+	Error RenderingDevice::buffer_copy(RID p_src_buffer, RID p_dst_buffer, uint32_t p_src_offset, uint32_t p_dst_offset, uint32_t p_size)
+	{
+		Buffer* src_buffer = _get_buffer_from_owner(p_src_buffer);
+		if (!src_buffer) {
+			ERR_FAIL_V_MSG(ERR_INVALID_PARAMETER, "Source buffer argument is not a valid buffer of any type.");
+		}
+
+		Buffer* dst_buffer = _get_buffer_from_owner(p_dst_buffer);
+		if (!dst_buffer) {
+			ERR_FAIL_V_MSG(ERR_INVALID_PARAMETER, "Destination buffer argument is not a valid buffer of any type.");
+		}
+
+		// Validate the copy's dimensions for both buffers.
+		ERR_FAIL_COND_V_MSG((p_size + p_src_offset) > src_buffer->size, ERR_INVALID_PARAMETER, "Size is larger than the source buffer.");
+		ERR_FAIL_COND_V_MSG((p_size + p_dst_offset) > dst_buffer->size, ERR_INVALID_PARAMETER, "Size is larger than the destination buffer.");
+
+		_check_transfer_worker_buffer(src_buffer);
+		_check_transfer_worker_buffer(dst_buffer);
+
+		// Perform the copy.
+		RDD::BufferCopyRegion region;
+		region.src_offset = p_src_offset;
+		region.dst_offset = p_dst_offset;
+		region.size = p_size;
+
+		//if (_buffer_make_mutable(dst_buffer, p_dst_buffer)) {
+		//	// The destination buffer must be mutable to be used as a copy destination.
+		//	draw_graph.add_synchronization();
+		//}
+
+		driver->command_copy_buffer(get_current_command_buffer(), src_buffer->driver_id, dst_buffer->driver_id, { &region, 1 });
+
+		return OK;
+	}
+
+	Error RenderingDevice::buffer_update(RID p_buffer, uint32_t p_offset, uint32_t p_size, const void* p_data, bool p_skip_check /*= false*/)
+	{
+		//ERR_RENDER_THREAD_GUARD_V(ERR_UNAVAILABLE);
+
+		copy_bytes_count += p_size;
+
+		Buffer* buffer = _get_buffer_from_owner(p_buffer);
+		ERR_FAIL_NULL_V_MSG(buffer, ERR_INVALID_PARAMETER, "Buffer argument is not a valid buffer of any type.");
+		ERR_FAIL_COND_V_MSG(p_offset + p_size > buffer->size, ERR_INVALID_PARAMETER, std::format("Attempted to write buffer ({} bytes) past the end.", (p_offset + p_size) - buffer->size));
+
+		if (buffer->usage.has_flag(RDD::BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT)) {
+			uint8_t* dst_data = driver->buffer_persistent_map_advance(buffer->driver_id, frames_drawn);
+
+			memcpy(dst_data + p_offset, p_data, p_size);
+			//direct_copy_count++;
+			buffer_flush(p_buffer);
+			return OK;
+		}
+
+		_check_transfer_worker_buffer(buffer);
+
+		// Submitting may get chunked for various reasons, so convert this to a task.
+		size_t to_submit = p_size;
+		size_t submit_from = 0;
+
+		thread_local std::vector<RecordedBufferCopy> command_buffer_copies_vector;
+		command_buffer_copies_vector.clear();
+
+		const uint8_t* src_data = reinterpret_cast<const uint8_t*>(p_data);
+		const uint32_t required_align = 32;
+
+		while (to_submit > 0) {
+			uint32_t block_write_offset;
+			uint32_t block_write_amount;
+			StagingRequiredAction required_action;
+
+			Error err = _staging_buffer_allocate(upload_staging_buffers, MIN(to_submit, upload_staging_buffers.block_size), required_align, block_write_offset, block_write_amount, required_action);
+			if (err) {
+				return err;
+			}
+
+			if (!command_buffer_copies_vector.empty() && required_action == STAGING_REQUIRED_ACTION_FLUSH_AND_STALL_ALL) {
+				//if (_buffer_make_mutable(buffer, p_buffer)) {
+				//	// The buffer must be mutable to be used as a copy destination.
+				//	draw_graph.add_synchronization();
+				//}
+
+				//draw_graph.add_buffer_update(buffer->driver_id, buffer->draw_tracker, command_buffer_copies_vector);
+				for (uint32_t j = 0; j < command_buffer_copies_vector.size(); j++)
+				{
+					driver->command_copy_buffer(get_current_command_buffer(), command_buffer_copies_vector[j].source, buffer->driver_id, { &command_buffer_copies_vector[j].region, 1 });
+				}
+				command_buffer_copies_vector.clear();
+			}
+
+			_staging_buffer_execute_required_action(upload_staging_buffers, required_action);
+
+			// Copy to staging buffer.
+			memcpy(upload_staging_buffers.blocks[upload_staging_buffers.current].data_ptr + block_write_offset, src_data + submit_from, block_write_amount);
+
+			// Insert a command to copy this.
+			RDD::BufferCopyRegion region;
+			region.src_offset = block_write_offset;
+			region.dst_offset = submit_from + p_offset;
+			region.size = block_write_amount;
+
+			RecordedBufferCopy buffer_copy;
+			buffer_copy.source = upload_staging_buffers.blocks[upload_staging_buffers.current].driver_id;
+			buffer_copy.region = region;
+			command_buffer_copies_vector.push_back(buffer_copy);
+
+			upload_staging_buffers.blocks[upload_staging_buffers.current].fill_amount = block_write_offset + block_write_amount;
+
+			to_submit -= block_write_amount;
+			submit_from += block_write_amount;
+		}
+
+		if (!command_buffer_copies_vector.empty()) {
+			//if (_buffer_make_mutable(buffer, p_buffer)) {
+			//	// The buffer must be mutable to be used as a copy destination.
+			//	draw_graph.add_synchronization();
+			//}
+
+			//draw_graph.add_buffer_update(buffer->driver_id, buffer->draw_tracker, command_buffer_copies_vector);
+			for (uint32_t j = 0; j < command_buffer_copies_vector.size(); j++)
+			{
+				driver->command_copy_buffer(get_current_command_buffer(), command_buffer_copies_vector[j].source, buffer->driver_id, { &command_buffer_copies_vector[j].region, 1 });
+			}
+		}
+
+		gpu_copy_count++;
+	}
+
+	Error RenderingDevice::buffer_clear(RID p_buffer, uint32_t p_offset, uint32_t p_size)
+	{
+		Buffer* buffer = _get_buffer_from_owner(p_buffer);
+		if (!buffer) {
+			ERR_FAIL_V_MSG(ERR_INVALID_PARAMETER, "Buffer argument is not a valid buffer of any type.");
+		}
+
+		ERR_FAIL_COND_V_MSG(p_offset + p_size > buffer->size, ERR_INVALID_PARAMETER,
+			std::format("Attempted to write buffer ({} bytes) past the end.", (p_offset + p_size) - buffer->size));
+
+		_check_transfer_worker_buffer(buffer);
+
+		driver->command_clear_buffer(get_current_command_buffer(), buffer->driver_id, p_offset, p_size);
+
+		return OK;
+	}
+
+	void RenderingDevice::buffer_flush(RID p_buffer)
+	{
+		Buffer* buffer = _get_buffer_from_owner(p_buffer);
+		ERR_FAIL_NULL_MSG(buffer, "Buffer argument is not a valid buffer of any type.");
+		driver->buffer_flush(buffer->driver_id);
+	}
+
 	void RenderingDevice::swap_buffers(bool p_present)
 	{
 		end_frame();
@@ -1151,9 +1829,25 @@ namespace Rendering
 		}
 	}
 
+	void RenderingDevice::_stall_for_previous_frames()
+	{
+		for (uint32_t i = 0; i < frames.size(); i++) {
+			_stall_for_frame(i);
+		}
+	}
+
 	void RenderingDevice::_flush_and_stall_for_all_frames(bool p_begin_frame /*= true*/)
 	{
+		_stall_for_previous_frames();
+		end_frame();
+		execute_frame(false);
 
+		if (p_begin_frame) {
+			begin_frame();
+		}
+		else {
+			_stall_for_frame(frame);
+		}
 	}
 
 	uint32_t RenderingDevice::_get_swap_chain_desired_count() const {
@@ -2018,6 +2712,168 @@ namespace Rendering
 	void RenderingDevice::_save_pipeline_cache(void* p_data)
 	{
 
+	}
+
+	Error RenderingDevice::_staging_buffer_allocate(StagingBuffers& p_staging_buffers, uint32_t p_amount, uint32_t p_required_align, uint32_t& r_alloc_offset, uint32_t& r_alloc_size, StagingRequiredAction& r_required_action, bool p_can_segment /*= true*/)
+	{
+		r_alloc_size = p_amount;
+		r_required_action = STAGING_REQUIRED_ACTION_NONE;
+
+		while (true) {
+			r_alloc_offset = 0;
+
+			// See if we can use current block.
+			if (p_staging_buffers.blocks[p_staging_buffers.current].frame_used == frames_drawn) {
+				// We used this block this frame, let's see if there is still room.
+
+				uint32_t write_from = p_staging_buffers.blocks[p_staging_buffers.current].fill_amount;
+
+				{
+					uint32_t align_remainder = write_from % p_required_align;
+					if (align_remainder != 0) {
+						write_from += p_required_align - align_remainder;
+					}
+				}
+
+				int32_t available_bytes = int32_t(p_staging_buffers.block_size) - int32_t(write_from);
+
+				if ((int32_t)p_amount < available_bytes) {
+					// All is good, we should be ok, all will fit.
+					r_alloc_offset = write_from;
+				}
+				else if (p_can_segment && available_bytes >= (int32_t)p_required_align) {
+					// Ok all won't fit but at least we can fit a chunkie.
+					// All is good, update what needs to be written to.
+					r_alloc_offset = write_from;
+					r_alloc_size = available_bytes - (available_bytes % p_required_align);
+
+				}
+				else {
+					// Can't fit it into this buffer.
+					// Will need to try next buffer.
+
+					p_staging_buffers.current = (p_staging_buffers.current + 1) % p_staging_buffers.blocks.size();
+
+					// Before doing anything, though, let's check that we didn't manage to fill all blocks.
+					// Possible in a single frame.
+					if (p_staging_buffers.blocks[p_staging_buffers.current].frame_used == frames_drawn) {
+						// Guess we did.. ok, let's see if we can insert a new block.
+						if ((uint64_t)p_staging_buffers.blocks.size() * p_staging_buffers.block_size < p_staging_buffers.max_size) {
+							// We can, so we are safe.
+							Error err = _insert_staging_block(p_staging_buffers);
+							if (err) {
+								return err;
+							}
+							// Claim for this frame.
+							p_staging_buffers.blocks[p_staging_buffers.current].frame_used = frames_drawn;
+						}
+						else {
+							// Ok, worst case scenario, all the staging buffers belong to this frame
+							// and this frame is not even done.
+							// If this is the main thread, it means the user is likely loading a lot of resources at once,.
+							// Otherwise, the thread should just be blocked until the next frame (currently unimplemented).
+							r_required_action = STAGING_REQUIRED_ACTION_FLUSH_AND_STALL_ALL;
+						}
+
+					}
+					else {
+						// Not from current frame, so continue and try again.
+						continue;
+					}
+				}
+
+			}
+			else if (p_staging_buffers.blocks[p_staging_buffers.current].frame_used <= frames_drawn - frames.size()) {
+				// This is an old block, which was already processed, let's reuse.
+				p_staging_buffers.blocks[p_staging_buffers.current].frame_used = frames_drawn;
+				p_staging_buffers.blocks[p_staging_buffers.current].fill_amount = 0;
+			}
+			else {
+				// This block may still be in use, let's not touch it unless we have to, so.. can we create a new one?
+				if ((uint64_t)p_staging_buffers.blocks.size() * p_staging_buffers.block_size < p_staging_buffers.max_size) {
+					// We are still allowed to create a new block, so let's do that and insert it for current pos.
+					Error err = _insert_staging_block(p_staging_buffers);
+					if (err) {
+						return err;
+					}
+					// Claim for this frame.
+					p_staging_buffers.blocks[p_staging_buffers.current].frame_used = frames_drawn;
+				}
+				else {
+					// Oops, we are out of room and we can't create more.
+					// Let's flush older frames.
+					// The logic here is that if a game is loading a lot of data from the main thread, it will need to be stalled anyway.
+					// If loading from a separate thread, we can block that thread until next frame when more room is made (not currently implemented, though).
+					r_required_action = STAGING_REQUIRED_ACTION_STALL_PREVIOUS;
+				}
+			}
+
+			// All was good, break.
+			break;
+		}
+
+		p_staging_buffers.used = true;
+	}
+
+	void RenderingDevice::_staging_buffer_execute_required_action(StagingBuffers& p_staging_buffers, StagingRequiredAction p_required_action)
+	{
+		switch (p_required_action) {
+		case STAGING_REQUIRED_ACTION_NONE: {
+			// Do nothing.
+		} break;
+		case STAGING_REQUIRED_ACTION_FLUSH_AND_STALL_ALL: {
+			_flush_and_stall_for_all_frames();
+
+			// Clear the whole staging buffer.
+			for (int i = 0; i < p_staging_buffers.blocks.size(); i++) {
+				p_staging_buffers.blocks[i].frame_used = 0;
+				p_staging_buffers.blocks[i].fill_amount = 0;
+			}
+
+			// Claim for current frame.
+			p_staging_buffers.blocks[p_staging_buffers.current].frame_used = frames_drawn;
+		} break;
+		case STAGING_REQUIRED_ACTION_STALL_PREVIOUS: {
+			_stall_for_previous_frames();
+
+			for (int i = 0; i < p_staging_buffers.blocks.size(); i++) {
+				// Clear all blocks but the ones from this frame.
+				int block_idx = (i + p_staging_buffers.current) % p_staging_buffers.blocks.size();
+				if (p_staging_buffers.blocks[block_idx].frame_used == frames_drawn) {
+					break; // Ok, we reached something from this frame, abort.
+				}
+
+				p_staging_buffers.blocks[block_idx].frame_used = 0;
+				p_staging_buffers.blocks[block_idx].fill_amount = 0;
+			}
+
+			// Claim for current frame.
+			p_staging_buffers.blocks[p_staging_buffers.current].frame_used = frames_drawn;
+		} break;
+		default: {
+			DEV_ASSERT(false && "Unknown required action.");
+		} break;
+		}
+	}
+
+	Error RenderingDevice::_insert_staging_block(StagingBuffers& p_staging_buffers)
+	{
+		StagingBufferBlock block;
+
+		block.driver_id = driver->buffer_create(p_staging_buffers.block_size, p_staging_buffers.usage_bits, RDD::MEMORY_ALLOCATION_TYPE_CPU, frames_drawn);
+		ERR_FAIL_COND_V(!block.driver_id, ERR_CANT_CREATE);
+
+		block.frame_used = 0;
+		block.fill_amount = 0;
+		block.data_ptr = driver->buffer_map(block.driver_id);
+
+		if (block.data_ptr == nullptr) {
+			driver->buffer_free(block.driver_id);
+			return ERR_CANT_CREATE;
+		}
+
+		p_staging_buffers.blocks[p_staging_buffers.current] = block;
+		return OK;
 	}
 
 	RenderingDevice::RenderingDevice()
