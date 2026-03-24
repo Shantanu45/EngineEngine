@@ -13,6 +13,7 @@
 #include "vma/vk_mem_alloc.h"
 #include "application/application.h"
 #include "application/application_entry/application_entry.h"
+#include <cmath> 
 
 struct TriangleApplication : EE::Application
 {
@@ -93,10 +94,12 @@ struct TriangleApplication : EE::Application
 		auto wsi = get_wsi();
 		auto device = wsi->get_rendering_device();
 
+		double intpart;
+		double fracpart = std::modf(elapsed_time, &intpart);
 		UBO state;
 		state.x = 1.0;
 		state.y = 0.0;
-		state.z = 1.0;
+		state.z = fracpart;
 		auto err = device->buffer_update(state_uniform, 0, sizeof(UBO), &state);
 
 		device->begin_for_screen(DisplayServerEnums::MAIN_WINDOW_ID);

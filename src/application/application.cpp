@@ -82,13 +82,13 @@ namespace EE
 		application_wsi->pre_frame_loop();
 	}
 
-	void Application::run_frame()
+	void Application::run_frame(double frame_time, double elapsed_time)
 	{
 		application_wsi->pre_begin_frame();
 		if (!application_wsi->begin_frame())
 			return;
 
-		render_frame(0, 0);
+		render_frame(frame_time, elapsed_time);
 
 		application_wsi->end_frame();
 		application_wsi->post_end_frame();

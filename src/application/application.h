@@ -34,7 +34,7 @@ namespace EE
 		 */
 		virtual void render_frame(double frame_time, double elapsed_time) = 0;
 
-		void run_frame();
+		void run_frame(double frame_time, double elapsed_time);
 
 		virtual void post_frame();
 

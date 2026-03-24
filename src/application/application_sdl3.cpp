@@ -128,6 +128,7 @@ namespace EE
 			std::unique_ptr is = std::make_unique<InputSystem>();
 			set_input_handler(std::move(is));
 
+			get_frame_timer().reset();
 			return true;
 		}
 
@@ -238,9 +239,12 @@ namespace EE
 		{
 			while (alive())
 			{
+				frame_time = get_frame_timer().frame();
+				elapsed_time = get_frame_timer().get_elapsed();
+
 				poll_input();
 
-				app->run_frame();
+				app->run_frame(frame_time, elapsed_time);
 
 			}
 		}
@@ -259,6 +263,11 @@ namespace EE
 			request_tear_down.store(true);
 		}
 	
+		Util::FrameTimer& get_frame_timer()
+		{
+			return timer;
+		}
+
 	private:
 		std::unique_ptr<InputSystem> input;
 		uint32_t wake_event_type = 0;
@@ -275,6 +284,12 @@ namespace EE
 			VkApplicationInfo info = {};
 			std::string name;
 		} application;
+
+		Util::FrameTimer timer;
+
+
+		double frame_time;
+		double elapsed_time;
 	};
 }
 

@@ -192,6 +192,8 @@ namespace Rendering
 			ERR_FAIL_V_MSG(FAILED, "Failed to create frame data.");
 		}
 
+		frames_drawn = frames.size();
+
 		// Convert block size from KB.
 		//upload_staging_buffers.block_size = GLOBAL_GET("rendering/rendering_device/staging_buffer/block_size_kb");
 		upload_staging_buffers.block_size = MAX(4u, upload_staging_buffers.block_size);
@@ -223,8 +225,8 @@ namespace Rendering
 
 			err = _insert_staging_block(download_staging_buffers);
 			ERR_FAIL_COND_V(err, FAILED);
-			download_staging_buffers.current++;
-			upload_staging_buffers.current++;
+			//download_staging_buffers.current++;
+			//upload_staging_buffers.current++;
 		}
 		upload_staging_buffers.current = 0;
 
@@ -1813,8 +1815,11 @@ namespace Rendering
 		driver->command_buffer_end(command_buffer);
 		// Advance staging buffers if used.
 		if (upload_staging_buffers.used) {
+			LOGI("upload_stagin_buffers %d is used", upload_staging_buffers.used);
 			upload_staging_buffers.current = (upload_staging_buffers.current + 1) % upload_staging_buffers.blocks.size();
 			upload_staging_buffers.used = false;
+			LOGI("new block size %d", upload_staging_buffers.blocks.size());
+			LOGI("upload_stagin_buffers new value is %d", upload_staging_buffers.current);
 		}
 
 		if (download_staging_buffers.used) {
@@ -2935,8 +2940,16 @@ namespace Rendering
 			driver->buffer_free(block.driver_id);
 			return ERR_CANT_CREATE;
 		}
-		p_staging_buffers.blocks.push_back({});
+
+		if (p_staging_buffers.current >= p_staging_buffers.blocks.size())
+		{
+			p_staging_buffers.blocks.push_back(block);
+			p_staging_buffers.current++;
+			return OK;
+		}
+
 		p_staging_buffers.blocks[p_staging_buffers.current] = block;
+		
 		return OK;
 	}
 
