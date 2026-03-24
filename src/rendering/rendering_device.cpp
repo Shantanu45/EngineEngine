@@ -1815,11 +1815,8 @@ namespace Rendering
 		driver->command_buffer_end(command_buffer);
 		// Advance staging buffers if used.
 		if (upload_staging_buffers.used) {
-			LOGI("upload_stagin_buffers %d is used", upload_staging_buffers.used);
 			upload_staging_buffers.current = (upload_staging_buffers.current + 1) % upload_staging_buffers.blocks.size();
 			upload_staging_buffers.used = false;
-			LOGI("new block size %d", upload_staging_buffers.blocks.size());
-			LOGI("upload_stagin_buffers new value is %d", upload_staging_buffers.current);
 		}
 
 		if (download_staging_buffers.used) {

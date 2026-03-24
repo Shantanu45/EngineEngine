@@ -305,7 +305,8 @@ namespace EE
 		// Register real implementations
 		locator.provide<FilesystemInterface>(std::make_shared<Filesystem>());
 		std::shared_ptr<FilesystemInterface> fs = locator.get<FilesystemInterface>();
-		FileSystem::Filesystem::setup_default_filesystem(static_cast<Filesystem*>(fs.get()), "D:/DXProjects/EngineEngine/assets");		// 		D:/Code/CG/EngineEngine/assets
+		const std::string exe_path = Path::get_executable_path();
+		FileSystem::Filesystem::setup_default_filesystem(static_cast<Filesystem*>(fs.get()), Path::join(exe_path, "../../assets").c_str());		// 		default asstes directory for now`
 		//auto fs = Services::get().get<FilesystemInterface>();
 
 		// creates application
