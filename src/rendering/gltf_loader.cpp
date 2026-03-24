@@ -18,19 +18,20 @@ namespace Renderer
 		tinygltf::TinyGLTF loader;
 		std::string err, warn;
 
-		auto actual_path = fs_iface.get_filesystem_path(path);
-		
-		bool result = (FileSystem::Path::ext(path) == ".glb") ? loader.LoadBinaryFromFile(&m_model, &err, &warn, path) : loader.LoadASCIIFromFile(&m_model, &err, &warn, path);
+		const auto actual_path = fs_iface.get_filesystem_path(path);
+		bool is_glb = (FileSystem::Path::ext(actual_path) == "glb");
+		bool result = is_glb ? loader.LoadBinaryFromFile(&m_model, &err, &warn, actual_path) : loader.LoadASCIIFromFile(&m_model, &err, &warn, actual_path);
 
 
 		if (!result)
 		{
+			LOGE("[gltf]: %s\n", err.c_str());
 			return ERR_FILE_NOT_FOUND;
 		}
 
 		if (!warn.empty())
 		{
-			LOGW("[gltf] warning: %s\n", warn.c_str());
+			LOGW("[gltf]: %s\n", warn.c_str());
 		}
 
 		for (auto& mesh : m_model.meshes)
