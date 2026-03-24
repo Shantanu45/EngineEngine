@@ -3873,7 +3873,10 @@ namespace Vulkan
 		std::vector<VkWriteDescriptorSet> vk_writes_vec(p_uniforms.size());
 		VkWriteDescriptorSet* vk_writes = vk_writes_vec.data();
 		uint32_t writes_amount = 0;
-		std::vector<VkDescriptorBufferInfo> vk_buf_info_vec(1);
+		std::vector<VkDescriptorBufferInfo> vk_buf_info_vec;
+		std::vector<VkDescriptorImageInfo> vk_img_infos_vec;
+		std::vector<VkDescriptorBufferInfo> vk_buf_infos_vec;
+		std::vector<VkBufferView> vk_buf_views_vec;
 		for (uint32_t i = 0; i < p_uniforms.size(); i++) {
 			const BoundUniform& uniform = p_uniforms[i];
 
@@ -3891,7 +3894,7 @@ namespace Vulkan
 					add_write = false;
 				}
 				else {
-					std::vector<VkDescriptorImageInfo> vk_img_infos_vec(num_descriptors);
+					vk_img_infos_vec.resize(num_descriptors);
 
 					VkDescriptorImageInfo* vk_img_infos = vk_img_infos_vec.data();
 
@@ -3908,7 +3911,7 @@ namespace Vulkan
 			} break;
 			case UNIFORM_TYPE_SAMPLER_WITH_TEXTURE: {
 				num_descriptors = uniform.ids.size() / 2;
-				std::vector<VkDescriptorImageInfo> vk_img_infos_vec(num_descriptors);
+				vk_img_infos_vec.resize(num_descriptors);
 
 				VkDescriptorImageInfo* vk_img_infos = vk_img_infos_vec.data();
 
@@ -3929,7 +3932,7 @@ namespace Vulkan
 			} break;
 			case UNIFORM_TYPE_TEXTURE: {
 				num_descriptors = uniform.ids.size();
-				std::vector<VkDescriptorImageInfo> vk_img_infos_vec(num_descriptors);
+				vk_img_infos_vec.resize(num_descriptors);
 
 				VkDescriptorImageInfo* vk_img_infos = vk_img_infos_vec.data();
 
@@ -3949,7 +3952,7 @@ namespace Vulkan
 			} break;
 			case UNIFORM_TYPE_IMAGE: {
 				num_descriptors = uniform.ids.size();
-				std::vector<VkDescriptorImageInfo> vk_img_infos_vec(num_descriptors);
+				vk_img_infos_vec.resize(num_descriptors);
 				VkDescriptorImageInfo* vk_img_infos = vk_img_infos_vec.data();
 
 				for (uint32_t j = 0; j < num_descriptors; j++) {
@@ -3968,10 +3971,10 @@ namespace Vulkan
 			} break;
 			case UNIFORM_TYPE_TEXTURE_BUFFER: {
 				num_descriptors = uniform.ids.size();
-				std::vector<VkDescriptorBufferInfo> vk_buf_infos_vec(num_descriptors);
+				vk_buf_infos_vec.resize(num_descriptors);
 				VkDescriptorBufferInfo* vk_buf_infos = vk_buf_infos_vec.data();
 
-				std::vector<VkBufferView> vk_buf_views_vec(num_descriptors);
+				vk_buf_views_vec.resize(num_descriptors);
 				VkBufferView* vk_buf_views = vk_buf_views_vec.data();
 
 				for (uint32_t j = 0; j < num_descriptors; j++) {
@@ -3989,11 +3992,11 @@ namespace Vulkan
 			} break;
 			case UNIFORM_TYPE_SAMPLER_WITH_TEXTURE_BUFFER: {
 				num_descriptors = uniform.ids.size() / 2;
-				std::vector<VkDescriptorImageInfo> vk_img_infos_vec(num_descriptors);
+				vk_img_infos_vec.resize(num_descriptors);
 				VkDescriptorImageInfo* vk_img_infos = vk_img_infos_vec.data();
-				std::vector<VkDescriptorBufferInfo> vk_buf_infos_vec(num_descriptors);
+				vk_buf_infos_vec.resize(num_descriptors);
 				VkDescriptorBufferInfo* vk_buf_infos = vk_buf_infos_vec.data();
-				std::vector<VkBufferView> vk_buf_views_vec(num_descriptors);
+				vk_buf_views_vec.resize(num_descriptors);
 				VkBufferView* vk_buf_views = vk_buf_views_vec.data();
 
 				for (uint32_t j = 0; j < num_descriptors; j++) {
@@ -4018,7 +4021,7 @@ namespace Vulkan
 			} break;
 			case UNIFORM_TYPE_UNIFORM_BUFFER: {
 				const BufferInfo* buf_info = (const BufferInfo*)uniform.ids[0].id;
-				
+				vk_buf_info_vec.resize(1);
 				VkDescriptorBufferInfo* vk_buf_info = vk_buf_info_vec.data();
 				vk_buf_info->buffer = buf_info->vk_buffer;
 				vk_buf_info->range = buf_info->size;
@@ -4031,9 +4034,8 @@ namespace Vulkan
 			} break;
 			case UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC: {
 				const BufferInfo* buf_info = (const BufferInfo*)uniform.ids[0].id;
-				std::vector<VkDescriptorBufferInfo> vk_buf_info_vec;
+				vk_buf_info_vec.resize(1);
 				VkDescriptorBufferInfo* vk_buf_info = vk_buf_info_vec.data();
-				*vk_buf_info = {};
 				vk_buf_info->buffer = buf_info->vk_buffer;
 				vk_buf_info->range = buf_info->size;
 
@@ -4048,9 +4050,8 @@ namespace Vulkan
 			} break;
 			case UNIFORM_TYPE_STORAGE_BUFFER: {
 				const BufferInfo* buf_info = (const BufferInfo*)uniform.ids[0].id;
-				std::vector<VkDescriptorBufferInfo> vk_buf_info_vec;
+				vk_buf_info_vec.resize(1);
 				VkDescriptorBufferInfo* vk_buf_info = vk_buf_info_vec.data();
-				*vk_buf_info = {};
 				vk_buf_info->buffer = buf_info->vk_buffer;
 				vk_buf_info->range = buf_info->size;
 
@@ -4062,9 +4063,8 @@ namespace Vulkan
 			} break;
 			case UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC: {
 				const BufferInfo* buf_info = (const BufferInfo*)uniform.ids[0].id;
-				std::vector<VkDescriptorBufferInfo> vk_buf_info_vec;
+				vk_buf_info_vec.resize(1);
 				VkDescriptorBufferInfo* vk_buf_info = vk_buf_info_vec.data();
-				*vk_buf_info = {};
 				vk_buf_info->buffer = buf_info->vk_buffer;
 				vk_buf_info->range = buf_info->size;
 
@@ -4079,7 +4079,7 @@ namespace Vulkan
 			} break;
 			case UNIFORM_TYPE_INPUT_ATTACHMENT: {
 				num_descriptors = uniform.ids.size();
-				std::vector<VkDescriptorImageInfo> vk_img_infos_vec(num_descriptors);
+				vk_img_infos_vec.resize(num_descriptors);
 				VkDescriptorImageInfo* vk_img_infos = vk_img_infos_vec.data();
 
 				for (uint32_t j = 0; j < uniform.ids.size(); j++) {
