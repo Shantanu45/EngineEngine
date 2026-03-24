@@ -27,33 +27,32 @@ struct TriangleApplication : EE::Application
 
 		static const uint32_t triangle_vertex_count = 3;
 
-		static const float triangle_vertices[3 * 3] = {
+		static const float triangle_vertices[3 * 6] = {
 			// Vertex 0
-			0.0f,  1.0f, 0.0f,
-
+			0.0f,  1.0f, 0.0f, 1.0f, 0.0f, 0.0f,
 			// Vertex 1			
-		   -1.0f, -1.0f, 0.0f,
+		   -1.0f, -1.0f, 0.0f, 0.0f, 1.0f, 0.0f,
 
 		   // Vertex 2			
-		   1.0f, -1.0f, 0.0f,
+		   1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f
 		};
 
-		static const float triangle_vertices_color[3 * 3] = {
-			1.0f, 0.0f, 0.0f,  // red
+		//static const float triangle_vertices_color[3 * 3] = {
+		//	1.0f, 0.0f, 0.0f,  // red
 
-			//
-			0.0f, 1.0f, 0.0f,  // green
+		//	//
+		//	0.0f, 1.0f, 0.0f,  // green
 
-			//
-			0.0f, 0.0f, 1.0f   // blue
-		};
+		//	//
+		//	0.0f, 0.0f, 1.0f   // blue
+		//};
 
 		auto wsi = get_wsi();
 
-		wsi->set_vertex_data_mode(Rendering::VERTEX_DATA_MODE::SEPERATE);
+		wsi->set_vertex_data_mode(Rendering::VERTEX_DATA_MODE::INTERLEVED_DATA);
 
 		wsi->push_vertex_data((void*)triangle_vertices, sizeof(triangle_vertices));
-		wsi->push_vertex_data((void*)triangle_vertices_color, sizeof(triangle_vertices_color));
+		//wsi->push_vertex_data((void*)triangle_vertices_color, sizeof(triangle_vertices_color));
 		wsi->set_vertex_attribute(0, 0, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32B32_SFLOAT, 0, sizeof(float) * 6);
 		wsi->set_vertex_attribute(0, 1, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32B32_SFLOAT, sizeof(float) * 3, sizeof(float) * 6);
 
