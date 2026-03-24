@@ -154,13 +154,18 @@ namespace Rendering
 		memcpy(vertex_data.data() + offset, data, size);
 	}
 
-	void WSI::push_index_data(void* data, size_t size, RenderingDeviceCommons::IndexBufferFormat format)
+	void WSI::set_index_buffer_format(RenderingDeviceCommons::IndexBufferFormat format)
+	{
+		index_data_format = format;
+	}
+
+	void WSI::push_index_data(void* data, size_t size)
 	{
 		const size_t offset = index_data.size();
 		index_data.resize(offset + size);
 		memcpy(index_data.data() + offset, data, size);
 		
-		switch (format)
+		switch (index_data_format)
 		{
 		case Rendering::RenderingDeviceCommons::INDEX_BUFFER_FORMAT_UINT16:
 			index_count = index_data.size() / sizeof(uint16_t);
@@ -193,11 +198,14 @@ namespace Rendering
 		DEBUG_ASSERT(!shader_program.is_null());
 		DEBUG_ASSERT(!vertex_attributes.empty());
 		vertex_format = rendering_device->vertex_format_create(vertex_attributes);
+		RenderingDeviceCommons::PipelineRasterizationState rs;
+		rs.front_face = RenderingDeviceCommons::POLYGON_FRONT_FACE_COUNTER_CLOCKWISE;
+		rs.cull_mode = RenderingDeviceCommons::POLYGON_CULL_BACK;
 
 		auto blend_state = RenderingDeviceCommons::PipelineColorBlendState::create_blend();
 		pipeline = rendering_device->create_swapchain_pipeline(active_window, shader_program,
 			vertex_format, RenderingDeviceCommons::RENDER_PRIMITIVE_TRIANGLE_STRIPS,
-			{}, RenderingDeviceCommons::PipelineMultisampleState(),
+			rs, RenderingDeviceCommons::PipelineMultisampleState(),
 			RenderingDeviceCommons::PipelineDepthStencilState(), blend_state,
 			0);
 
@@ -288,7 +296,7 @@ namespace Rendering
 
 		triangle_vertex_array = rendering_device->vertex_array_create(triangle_vertex_count, vertex_format, buffers);
 
-		triangle_index_buffer = rendering_device->index_buffer_create(index_count, RenderingDeviceCommons::INDEX_BUFFER_FORMAT_UINT16, index_data);
+		triangle_index_buffer = rendering_device->index_buffer_create(index_count, index_data_format, index_data);
 
 		triangle_index_array = rendering_device->index_array_create(triangle_index_buffer, 0, index_count);
 		

@@ -60,7 +60,7 @@ namespace Rendering
 		void set_wsi_platform_data(DisplayServerEnums::WindowID window, WindowData data);
 
 		void push_vertex_data(void* vertex_data, size_t size);
-		void push_index_data(void* data, size_t size, RenderingDeviceCommons::IndexBufferFormat format);
+		void push_index_data(void* data, size_t size);
 
 		void clear_vertex_data() { vertex_data.clear(); }
 		void clear_index_data() { index_data.clear(); }
@@ -72,6 +72,9 @@ namespace Rendering
 		{
 			vertex_data_mode = mode;
 		};
+
+		void set_index_buffer_format(RenderingDeviceCommons::IndexBufferFormat format);
+
 		void teardown();
 
 		~WSI();
@@ -84,7 +87,6 @@ namespace Rendering
 		std::vector<uint8_t> _get_attrib_interleaved(const std::vector<RenderingDeviceCommons::VertexAttribute>& attribs, std::vector<uint8_t> vertex_data);
 
 		void _create_vertex_and_index_buffers();
-
 		std::unique_ptr<RenderingContextDriver> rendering_context = nullptr;
 		RenderingDevice* rendering_device = nullptr;
 
@@ -116,5 +118,7 @@ namespace Rendering
 		uint32_t index_count = 0;
 
 		VERTEX_DATA_MODE vertex_data_mode = VERTEX_DATA_MODE::INTERLEVED_DATA;
+
+		RenderingDeviceCommons::IndexBufferFormat index_data_format = RenderingDeviceCommons::IndexBufferFormat::INDEX_BUFFER_FORMAT_UINT32;
 	};
 }

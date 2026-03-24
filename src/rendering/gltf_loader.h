@@ -9,7 +9,7 @@
 #include "filesystem/filesystem.h"
 #include "filesystem/path_utils.h"
 
-namespace Renderer
+namespace Rendering
 {
 
 	struct Vertex {

@@ -5,7 +5,7 @@
 
 #include "gltf_loader.h"
 
-namespace Renderer
+namespace Rendering
 {
 
 	GltfLoader::GltfLoader(::FileSystem::FilesystemInterface& iface) : fs_iface(iface)
@@ -41,7 +41,7 @@ namespace Renderer
 		return OK;
 	}
 
-	Renderer::MeshPrimitive GltfLoader::extract_primitive(const tinygltf::Primitive& prim)
+	Rendering::MeshPrimitive GltfLoader::extract_primitive(const tinygltf::Primitive& prim)
 	{
 		MeshPrimitive out;
 

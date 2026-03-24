@@ -14,7 +14,9 @@
 #include "application/application.h"
 #include "application/application_entry/application_entry.h"
 #include "rendering/gltf_loader.h"
+#include "libassert/assert.hpp"
 #include <cmath> 
+#include <cstddef>
 
 struct TriangleApplication : EE::Application
 {
@@ -26,12 +28,12 @@ struct TriangleApplication : EE::Application
 	void pre_frame() override
 	{
 		auto fs = Services::get().get<FilesystemInterface>();
-		Renderer::GltfLoader loader(*fs);
-		DEV_ASSERT(loader.load("assets://gltf/cube.glb") == OK);
+		Rendering::GltfLoader loader(*fs);
 
-		static const uint32_t triangle_vertex_count = 3;
+		DEBUG_ASSERT(loader.load("assets://gltf/cube.glb") == OK);
+		prim = loader.primitives()[0];
 
-		static const float triangle_vertices[3 * 6] = {
+		const float triangle_vertices[3 * 6] = {
 			// Vertex 0
 			0.0f,  1.0f, 0.0f, 1.0f, 0.0f, 0.0f,
 			// Vertex 1			
@@ -41,31 +43,23 @@ struct TriangleApplication : EE::Application
 		   1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f
 		};
 
-		//static const float triangle_vertices_color[3 * 3] = {
-		//	1.0f, 0.0f, 0.0f,  // red
-
-		//	//
-		//	0.0f, 1.0f, 0.0f,  // green
-
-		//	//
-		//	0.0f, 0.0f, 1.0f   // blue
-		//};
 
 		auto wsi = get_wsi();
 
 		wsi->set_vertex_data_mode(Rendering::VERTEX_DATA_MODE::INTERLEVED_DATA);
+		wsi->set_index_buffer_format(Rendering::RenderingDeviceCommons::IndexBufferFormat::INDEX_BUFFER_FORMAT_UINT32);
 
-		wsi->push_vertex_data((void*)triangle_vertices, sizeof(triangle_vertices));
+		VkDeviceSize vbSize = prim.vertices.size() * sizeof(Rendering::Vertex);
+		VkDeviceSize ibSize = prim.indices.size() * sizeof(uint32_t);
+
+		wsi->push_vertex_data((void*)prim.vertices.data(), vbSize);
 		//wsi->push_vertex_data((void*)triangle_vertices_color, sizeof(triangle_vertices_color));
-		wsi->set_vertex_attribute(0, 0, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32B32_SFLOAT, 0, sizeof(float) * 6);
-		wsi->set_vertex_attribute(0, 1, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32B32_SFLOAT, sizeof(float) * 3, sizeof(float) * 6);
+		wsi->set_vertex_attribute(0, 0, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32B32_SFLOAT, offsetof(Rendering::Vertex, position), sizeof(Rendering::Vertex));
+		wsi->set_vertex_attribute(0, 1, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32B32_SFLOAT, offsetof(Rendering::Vertex, normal) , sizeof(Rendering::Vertex));
+		wsi->set_vertex_attribute(0, 2, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32_SFLOAT, offsetof(Rendering::Vertex, texcoord), sizeof(Rendering::Vertex));
+		wsi->set_vertex_attribute(0, 3, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32B32A32_SFLOAT, offsetof(Rendering::Vertex, tangent), sizeof(Rendering::Vertex));
 
-		const uint32_t triangle_triangle_count = 1;
-		const uint16_t triangle_triangle_indices[triangle_triangle_count * 3] = {
-			0, 1, 2
-		};
-
-		wsi->push_index_data((void*)triangle_triangle_indices, sizeof(triangle_triangle_indices), Rendering::RenderingDeviceCommons::INDEX_BUFFER_FORMAT_UINT32);
+		wsi->push_index_data((void*)prim.indices.data(), ibSize);
 
 		auto device = wsi->get_rendering_device();
 
@@ -86,8 +80,6 @@ struct TriangleApplication : EE::Application
 
 		uniform_set = device->uniform_set_create(uniforms, wsi->get_bound_shader(), 0);
 	
-
-
 		wsi->pipeline_create_default();
 
 		//wsi->pre_frame_loop();
@@ -113,13 +105,14 @@ struct TriangleApplication : EE::Application
 		wsi->bind_vbo_and_ibo();
 		device->bind_uniform_set(wsi->get_bound_shader(), uniform_set, 0);
 
-		device->render_draw_indexed(cmd_buffer, 3, 1, 0, 0, 0);
+		device->render_draw_indexed(cmd_buffer, prim.indices.size(), 1, 0, 0, 0);
 
 	}
 
 private:
 	RID state_uniform;
 	RID uniform_set;
+	Rendering::MeshPrimitive prim;
 };
 
 namespace EE
