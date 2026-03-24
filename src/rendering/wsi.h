@@ -11,6 +11,11 @@
 
 namespace Rendering
 {
+	enum class VERTEX_DATA_MODE
+	{
+		INTERLEVED_DATA,
+		SEPERATE
+	};
 	// display server windows
 	struct WindowData {
 		WindowPlatformData platfform_data;
@@ -63,6 +68,10 @@ namespace Rendering
 		void pipeline_create();
 		void pipeline_create_default();
 
+		inline void set_vertex_data_mode(VERTEX_DATA_MODE mode)
+		{
+			vertex_data_mode = mode;
+		};
 		void teardown();
 
 		~WSI();
@@ -105,5 +114,7 @@ namespace Rendering
 		std::vector<uint8_t> vertex_data{};
 		std::vector<uint8_t> index_data{};
 		uint32_t index_count = 0;
+
+		VERTEX_DATA_MODE vertex_data_mode = VERTEX_DATA_MODE::INTERLEVED_DATA;
 	};
 }

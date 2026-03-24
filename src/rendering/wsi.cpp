@@ -270,7 +270,16 @@ namespace Rendering
 		DEBUG_ASSERT(index_count > 0);
 		DEBUG_ASSERT(!vertex_data.empty());
 
-		auto interleved = _get_attrib_interleaved(vertex_attributes, vertex_data);
+		PackedByteArray interleved;
+
+		if (vertex_data_mode == VERTEX_DATA_MODE::SEPERATE)
+		{
+			 interleved = _get_attrib_interleaved(vertex_attributes, vertex_data);
+		}
+		else
+		{
+			interleved = vertex_data;
+		}
 		uint32_t triangle_vertex_count = vertex_data.size() / vertex_attributes[0].stride;
 		triangle_vertex_buffer = rendering_device->vertex_buffer_create(interleved.size(), interleved);
 

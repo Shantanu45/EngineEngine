@@ -50,6 +50,7 @@ struct TriangleApplication : EE::Application
 
 		auto wsi = get_wsi();
 
+		wsi->set_vertex_data_mode(Rendering::VERTEX_DATA_MODE::SEPERATE);
 
 		wsi->push_vertex_data((void*)triangle_vertices, sizeof(triangle_vertices));
 		wsi->push_vertex_data((void*)triangle_vertices_color, sizeof(triangle_vertices_color));
@@ -61,7 +62,7 @@ struct TriangleApplication : EE::Application
 			0, 1, 2
 		};
 
-		wsi->push_index_data((void*)triangle_triangle_indices, sizeof(triangle_triangle_indices), Rendering::RenderingDeviceCommons::INDEX_BUFFER_FORMAT_UINT16);
+		wsi->push_index_data((void*)triangle_triangle_indices, sizeof(triangle_triangle_indices), Rendering::RenderingDeviceCommons::INDEX_BUFFER_FORMAT_UINT32);
 
 		auto device = wsi->get_rendering_device();
 
