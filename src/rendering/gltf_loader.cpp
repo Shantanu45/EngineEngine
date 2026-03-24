@@ -2,25 +2,34 @@
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "gltf_loader.h"
+#include "filesystem/path_utils.h"
 
 namespace Renderer
 {
 
-	void GltfLoader::load(const std::string& path)
+	Error GltfLoader::load(const std::string& path)
 	{
 		tinygltf::TinyGLTF loader;
 		std::string err, warn;
+		
+		bool result = (FileSystem::Path::ext(path) == ".glb") ? loader.LoadBinaryFromFile(&m_model, &err, &warn, path) : loader.LoadASCIIFromFile(&m_model, &err, &warn, path);
 
-		bool ok = (path.size() >= 4 && path.substr(path.size() - 4) == ".glb")
-			? loader.LoadBinaryFromFile(&m_model, &err, &warn, path)
-			: loader.LoadASCIIFromFile(&m_model, &err, &warn, path);
 
-		if (!warn.empty()) fprintf(stderr, "[gltf] warning: %s\n", warn.c_str());
-		if (!ok)           throw std::runtime_error("[gltf] " + err);
+		if (!result)
+		{
+			return ERR_FILE_NOT_FOUND;
+		}
+
+		if (!warn.empty())
+		{
+			LOGW("[gltf] warning: %s\n", warn.c_str());
+		}
 
 		for (auto& mesh : m_model.meshes)
 			for (auto& prim : mesh.primitives)
 				m_primitives.push_back(extract_primitive(prim));
+
+		return OK;
 	}
 
 	Renderer::MeshPrimitive GltfLoader::extract_primitive(const tinygltf::Primitive& prim)

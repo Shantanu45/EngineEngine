@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 #include <stdexcept>
+#include "util/error_macros.h"
+
 #include "tiny_gltf.h"
 
 namespace Renderer
@@ -23,7 +25,7 @@ namespace Renderer
 
 	class GltfLoader {
 	public:
-		void load(const std::string& path);
+		Error load(const std::string& path);
 
 		const std::vector<MeshPrimitive>& primitives() const { return m_primitives; }
 
