@@ -306,6 +306,7 @@ namespace Rendering
 			ERR_FAIL_V_MSG(std::vector<uint8_t>(), "Shader language is not supported.");
 		}
 	}
+
 	RID RenderingDevice::shader_create_from_container_with_samplers(RenderingShaderContainer* shader_container, RID p_placeholder, const std::vector<PipelineImmutableSampler>& p_immutable_samplers)
 	{
 		//RenderingShaderContainer* shader_container = driver->get_shader_container_format().create_container();

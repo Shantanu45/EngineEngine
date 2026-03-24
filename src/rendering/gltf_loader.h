@@ -4,9 +4,10 @@
 #include <string>
 #include <vector>
 #include <stdexcept>
-#include "util/error_macros.h"
-
 #include "tiny_gltf.h"
+#include "util/error_macros.h"
+#include "filesystem/filesystem.h"
+#include "filesystem/path_utils.h"
 
 namespace Renderer
 {
@@ -25,6 +26,8 @@ namespace Renderer
 
 	class GltfLoader {
 	public:
+		GltfLoader(::FileSystem::FilesystemInterface& iface);
+
 		Error load(const std::string& path);
 
 		const std::vector<MeshPrimitive>& primitives() const { return m_primitives; }
@@ -43,6 +46,8 @@ namespace Renderer
 
 		const tinygltf::Accessor& accessor(const tinygltf::Primitive& prim,
 			const std::string& semantic);
+
+		FileSystem::FilesystemInterface& fs_iface;
 	};
 }
 

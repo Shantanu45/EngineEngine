@@ -122,6 +122,7 @@ namespace FileSystem
 	public:
 		virtual ~FilesystemInterface() = default;
 		virtual bool load_text_file(const std::string& path, std::string& str) = 0;
+		virtual std::string get_filesystem_path(const std::string& path) { return path; }
 	};
 
 	// main dispatcher that routes operations to the appropriate backend based on protocol (e.g., "file://", "blob://")
@@ -266,7 +267,7 @@ namespace FileSystem
 		 * \param path
 		 * \return
 		 */
-		std::string get_filesystem_path(const std::string& path);
+		std::string get_filesystem_path(const std::string& path) override;
 
 		/**
 		 * Iterates over all registered backends and calls poll_notifications() on each.

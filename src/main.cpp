@@ -13,6 +13,7 @@
 #include "vma/vk_mem_alloc.h"
 #include "application/application.h"
 #include "application/application_entry/application_entry.h"
+#include "rendering/gltf_loader.h"
 #include <cmath> 
 
 struct TriangleApplication : EE::Application
@@ -24,6 +25,9 @@ struct TriangleApplication : EE::Application
 
 	void pre_frame() override
 	{
+		auto fs = Services::get().get<FilesystemInterface>();
+		Renderer::GltfLoader loader(*fs);
+		loader.load("assets://gltf/cube.glb");
 
 		static const uint32_t triangle_vertex_count = 3;
 

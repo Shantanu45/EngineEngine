@@ -1,16 +1,24 @@
+
 #define TINYGLTF_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION
+
 #include "gltf_loader.h"
-#include "filesystem/path_utils.h"
 
 namespace Renderer
 {
+
+	GltfLoader::GltfLoader(::FileSystem::FilesystemInterface& iface) : fs_iface(iface)
+	{
+
+	}
 
 	Error GltfLoader::load(const std::string& path)
 	{
 		tinygltf::TinyGLTF loader;
 		std::string err, warn;
+
+		auto actual_path = fs_iface.get_filesystem_path(path);
 		
 		bool result = (FileSystem::Path::ext(path) == ".glb") ? loader.LoadBinaryFromFile(&m_model, &err, &warn, path) : loader.LoadASCIIFromFile(&m_model, &err, &warn, path);
 
