@@ -775,6 +775,7 @@ namespace Rendering
 		 */
 		void render_draw(RenderingDeviceDriver::CommandBufferID p_command_buffer, uint32_t p_vertex_count, uint32_t p_instance_count);
 
+		void render_draw_indexed(RenderingDeviceDriver::CommandBufferID p_command_buffer, uint32_t p_index_count, uint32_t p_instance_count, uint32_t p_first_index, int32_t p_vertex_offset, uint32_t p_first_instance);
 		void submit();
 
 		void sync();

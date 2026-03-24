@@ -1581,8 +1581,12 @@ namespace Rendering
 	void RenderingDevice::render_draw(RenderingDeviceDriver::CommandBufferID p_command_buffer, uint32_t p_vertex_count, uint32_t p_instance_count)
 	{
 		//TODO: re
-		//driver->command_render_draw(p_command_buffer, p_vertex_count, p_instance_count, 0, 0);
-		driver->command_render_draw_indexed(p_command_buffer, 3, 1, 0, 0, 0);
+		driver->command_render_draw(p_command_buffer, p_vertex_count, p_instance_count, 0, 0);
+	}
+
+	void RenderingDevice::render_draw_indexed(RenderingDeviceDriver::CommandBufferID p_command_buffer, uint32_t p_index_count, uint32_t p_instance_count, uint32_t p_first_index, int32_t p_vertex_offset, uint32_t p_first_instance)
+	{
+		driver->command_render_draw_indexed(p_command_buffer, p_index_count, p_instance_count, p_first_index, p_vertex_offset, p_first_instance);
 	}
 
 	Rendering::RenderingDevice::VertexFormatID RenderingDevice::vertex_format_create(const std::vector<VertexAttribute>& p_vertex_descriptions)

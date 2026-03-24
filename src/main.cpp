@@ -27,7 +27,7 @@ struct TriangleApplication : EE::Application
 	{
 		auto fs = Services::get().get<FilesystemInterface>();
 		Renderer::GltfLoader loader(*fs);
-		loader.load("assets://gltf/cube.glb");
+		DEV_ASSERT(loader.load("assets://gltf/cube.glb") == OK);
 
 		static const uint32_t triangle_vertex_count = 3;
 
@@ -113,7 +113,7 @@ struct TriangleApplication : EE::Application
 		wsi->bind_vbo_and_ibo();
 		device->bind_uniform_set(wsi->get_bound_shader(), uniform_set, 0);
 
-		device->render_draw(cmd_buffer, 3, 1);
+		device->render_draw_indexed(cmd_buffer, 3, 1, 0, 0, 0);
 
 	}
 
