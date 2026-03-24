@@ -12,6 +12,12 @@
 
 namespace Rendering
 {
+	struct MeshRange {
+		uint32_t vertexOffset;  // offset into the big vertex buffer
+		uint32_t indexOffset;   // offset into the big index buffer
+		uint32_t indexCount;
+	};
+
 	enum class VERTEX_DATA_MODE
 	{
 		INTERLEVED_DATA,
@@ -127,8 +133,11 @@ namespace Rendering
 
 		RID_Owner<MeshPrimitive, true> mesh_owner;
 
-		std::unordered_set<RID> primitives;
+		std::unordered_map<RID, MeshRange> primitives;
 
 		std::unique_ptr<GltfLoader> gltf_loader = nullptr;
+
+		uint32_t totalVertices = 0;
+		uint32_t totalIndices = 0;
 	};
 }

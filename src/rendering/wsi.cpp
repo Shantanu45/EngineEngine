@@ -229,7 +229,8 @@ namespace Rendering
 		auto prims = gltf_loader->primitives();
 		for (auto p: prims)
 		{
-			primitives.insert(mesh_owner.make_rid(p));
+			MeshRange range = { totalVertices, totalIndices, (uint32_t)p.indices.size() };
+			primitives.insert({ mesh_owner.make_rid(p), range });
 
 			uint64_t vbSize = p.vertices.size() * sizeof(Rendering::Vertex);
 			uint64_t ibSize = p.indices.size() * sizeof(uint32_t);
@@ -291,7 +292,6 @@ namespace Rendering
 				src_offset = (i  * src_attrib_offset) + (vert_pos * size);
 
 				memcpy(interleved_data.data() + dst_offset, vertex_data.data() + src_offset, size);
-				LOGI("dst %d, src %d, size %d", dst_offset, src_offset, size);
 				src_attrib_offset += (size * vert_num);
 			}
 			auto last_attrib_size = attribs.back().stride - attribs.back().offset;
@@ -300,7 +300,6 @@ namespace Rendering
 			src_offset = (src_attrib_offset) + (vert_pos * last_attrib_size);
 
 			memcpy(interleved_data.data() + dst_offset, vertex_data.data() + src_offset, last_attrib_size);
-			LOGI("last dst %d, src %d, size %d", dst_offset, src_offset, last_attrib_size);
 
 		}
 
@@ -328,9 +327,9 @@ namespace Rendering
 		std::vector<RID> buffers;
 		buffers.push_back(triangle_vertex_buffer);
 
-		vertex_array = rendering_device->vertex_array_create(triangle_vertex_count, vertex_format, buffers);
-
 		triangle_index_buffer = rendering_device->index_buffer_create(index_count, index_data_format, index_data);
+
+		vertex_array = rendering_device->vertex_array_create(triangle_vertex_count, vertex_format, buffers);
 
 		index_array = rendering_device->index_array_create(triangle_index_buffer, 0, index_count);
 		
