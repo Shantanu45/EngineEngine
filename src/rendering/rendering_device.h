@@ -742,10 +742,7 @@ namespace Rendering
 #pragma endregion
 
 		RID vertex_buffer_create(uint32_t p_size_bytes, std::span<uint8_t> p_data = {}, BitField<BufferCreationBits> p_creation_bits = 0);
-		bool _buffer_make_mutable(Buffer* p_buffer, RID p_buffer_id);
-		RID _vertex_buffer_create(uint32_t p_size_bytes, std::vector<uint8_t>& p_data, BitField<BufferCreationBits> p_creation_bits = 0) {
-			return vertex_buffer_create(p_size_bytes, p_data, p_creation_bits);
-		}
+
 
 		RID uniform_buffer_create(uint32_t p_size_bytes, std::span<uint8_t> p_data = {}, BitField<BufferCreationBits> p_creation_bits = 0);
 		RID uniform_set_create(const std::span<Uniform>& p_uniforms, RID p_shader, uint32_t p_shader_set, bool p_linear_pool = false);
@@ -799,14 +796,7 @@ namespace Rendering
 
 		void end_frame();
 
-		/**
-		 * Execute and present.
-		 * 
-		 * \param p_present
-		 */
 		void execute_frame(bool p_present);
-
-		std::vector<uint8_t> _shader_compile_binary_from_spirv(const RDShaderSPIRV* p_bytecode, const std::string& p_shader_name = "");
 
 		RID vertex_array_create(uint32_t p_vertex_count, VertexFormatID p_vertex_format, const std::vector<RID>& p_src_buffers, const std::vector<uint64_t>& p_offsets = std::vector<uint64_t>());
 
@@ -816,23 +806,35 @@ namespace Rendering
 		RID index_array_create(RID p_index_buffer, uint32_t p_index_offset, uint32_t p_index_count);
 
 		void bind_vertex_array(RID p_vertex_array);
+
 		void bind_index_array(RID p_index_array);
+
 		void bind_uniform_set(RID p_shader_id, RID p_uniform_set_id, uint32_t set_index);
+
 		void add_draw_list_bind_uniform_sets(RDD::ShaderID p_shader, std::span<RDD::UniformSetID> p_uniform_sets, uint32_t p_first_index, uint32_t p_set_count);
+
 		// TODO: #temp
 		void _submit_transfer_workers(RDD::CommandBufferID p_draw_command_buffer = RDD::CommandBufferID());
 
 		void update_pipeline_cache(bool p_closing = false);
 
 	private:
+		bool _buffer_make_mutable(Buffer* p_buffer, RID p_buffer_id);
+		RID _vertex_buffer_create(uint32_t p_size_bytes, std::vector<uint8_t>& p_data, BitField<BufferCreationBits> p_creation_bits = 0) {
+			return vertex_buffer_create(p_size_bytes, p_data, p_creation_bits);
+		}
 
 		RID _index_buffer_create(uint32_t p_index_count, IndexBufferFormat p_format, std::vector<uint8_t>& p_data,
 			bool p_use_restart_indices = false, BitField<BufferCreationBits> p_creation_bits = 0) {
 			return index_buffer_create(p_index_count, p_format, p_data, p_use_restart_indices, p_creation_bits);
 		}
+
 		void _stall_for_frame(uint32_t p_frame);
+
 		void _stall_for_previous_frames();
+
 		void _flush_and_stall_for_all_frames(bool p_begin_frame = true);
+
 		uint32_t _get_swap_chain_desired_count() const;
 
 		static RDD::TextureLayout _vrs_layout_from_method(VRSMethod p_method);
@@ -866,12 +868,15 @@ namespace Rendering
 #pragma endregion
 
 		std::vector<uint8_t> _load_pipeline_cache();
+
 		static void _save_pipeline_cache(void* p_data);
 
-		Error _staging_buffer_allocate(StagingBuffers& p_staging_buffers, uint32_t p_amount, uint32_t p_required_align, uint32_t& r_alloc_offset, uint32_t& r_alloc_size, StagingRequiredAction& r_required_action, bool p_can_segment = true);
-		void _staging_buffer_execute_required_action(StagingBuffers& p_staging_buffers, StagingRequiredAction p_required_action);
-		Error _insert_staging_block(StagingBuffers& p_staging_buffers);
+		Error _staging_buffer_allocate(StagingBuffers& p_staging_buffers, uint32_t p_amount, uint32_t p_required_align, 
+			uint32_t& r_alloc_offset, uint32_t& r_alloc_size, StagingRequiredAction& r_required_action, bool p_can_segment = true);
 
+		void _staging_buffer_execute_required_action(StagingBuffers& p_staging_buffers, StagingRequiredAction p_required_action);
+
+		Error _insert_staging_block(StagingBuffers& p_staging_buffers);
 
 		RenderingDevice();
 		~RenderingDevice();

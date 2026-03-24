@@ -73,9 +73,6 @@ struct TriangleApplication : EE::Application
 		u.append_id(state_uniform);
 		uniforms.push_back(u);
 
-
-
-
 		DEV_ASSERT(rendering_device != nullptr);
 
 		device->screen_create(DisplayServerEnums::MAIN_WINDOW_ID);
@@ -84,6 +81,7 @@ struct TriangleApplication : EE::Application
 
 		uniform_set = device->uniform_set_create(uniforms, wsi->get_bound_shader(), 0);
 	
+
 
 		wsi->pipeline_create_default();
 
@@ -94,6 +92,7 @@ struct TriangleApplication : EE::Application
 	{
 		auto wsi = get_wsi();
 		auto device = wsi->get_rendering_device();
+
 		UBO state;
 		state.x = 1.0;
 		state.y = 0.0;
