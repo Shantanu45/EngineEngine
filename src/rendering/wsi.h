@@ -8,6 +8,7 @@
 #include <map>
 #include "rendering_device_driver.h"
 #include "rendering_device.h"
+#include "rendering/gltf_loader.h"
 
 namespace Rendering
 {
@@ -16,16 +17,16 @@ namespace Rendering
 		INTERLEVED_DATA,
 		SEPERATE
 	};
+
 	// display server windows
 	struct WindowData {
 		WindowPlatformData platfform_data;
 		Size2i window_resolution;
 	};
 
-	class WSI /*: protected RenderingDeviceCommons*/
+	class WSI
 	{
 	public:
-		//WSI(const std::string& p_rendering_driver, DisplayServerEnums::WindowMode p_mode, DisplayServerEnums::VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i* p_position, const Vector2i& p_resolution, int p_screen, DisplayServerEnums::Context p_context, int64_t p_parent_window, Error& r_error);
 		WSI();
 		Error initialize(const std::string& p_rendering_driver, DisplayServerEnums::WindowMode p_mode, DisplayServerEnums::VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i* p_position, const Vector2i& p_resolution, int p_screen, DisplayServerEnums::Context p_context, int64_t p_parent_window);
 
@@ -77,6 +78,9 @@ namespace Rendering
 
 		void teardown();
 
+		Error load_gltf(std::string path);
+
+		void set_default_vertex_attribute();
 		~WSI();
 	private:
 
@@ -106,8 +110,8 @@ namespace Rendering
 
 		RID triangle_vertex_buffer;
 		RID triangle_index_buffer;
-		RID triangle_vertex_array;
-		RID triangle_index_array;
+		RID vertex_array;
+		RID index_array;
 		RenderingDevice::VertexFormatID vertex_format;
 
 		DisplayServerEnums::WindowID active_window = DisplayServerEnums::INVALID_WINDOW_ID;
@@ -120,5 +124,11 @@ namespace Rendering
 		VERTEX_DATA_MODE vertex_data_mode = VERTEX_DATA_MODE::INTERLEVED_DATA;
 
 		RenderingDeviceCommons::IndexBufferFormat index_data_format = RenderingDeviceCommons::IndexBufferFormat::INDEX_BUFFER_FORMAT_UINT32;
+
+		RID_Owner<MeshPrimitive, true> mesh_owner;
+
+		std::unordered_set<RID> primitives;
+
+		std::unique_ptr<GltfLoader> gltf_loader = nullptr;
 	};
 }

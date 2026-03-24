@@ -14,6 +14,7 @@ add_subdirectory(application_entry)
 
 find_package(SDL3 REQUIRED)
 find_package(xxHash REQUIRED)
+find_package(TinyGLTF REQUIRED)
 
 
 set(INCLUDES 
@@ -33,6 +34,7 @@ set(ADDITIONAL_LIBRARY_DEPENDENCIES
 	input
 	vulkan
 	xxHash::xxhash
+	TinyGLTF::TinyGLTF
 	
 )
 

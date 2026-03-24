@@ -10,6 +10,7 @@
 #include "vulkan/vulkan_device.h"
 #include "libassert/assert.hpp"
 #include "compiler/compiler.h"
+#include "application/service_locator.h"
 
 namespace Rendering
 {
@@ -47,6 +48,10 @@ namespace Rendering
 					return FAILED;
 				}
 			}
+
+			// initialize TinyGltf
+			auto fs = Services::get().get<FilesystemInterface>();
+			gltf_loader = std::make_unique<GltfLoader>(*fs);
 		}
 		return OK;
 	}
@@ -119,7 +124,6 @@ namespace Rendering
 		RenderingDeviceCommons::VertexAttribute va;
 		va.format = format;
 		va.stride = stride;// RenderingDeviceCommons::get_format_vertex_size(format);
-		//va.stride = sizeof(float) * 6;
 		va.binding = binding;
 		va.location = location;
 		va.offset = offset;
@@ -138,8 +142,8 @@ namespace Rendering
  
 	void WSI::bind_vbo_and_ibo()
 	{
-		rendering_device->bind_vertex_array(triangle_vertex_array);
-		rendering_device->bind_index_array(triangle_index_array);
+		rendering_device->bind_vertex_array(vertex_array);
+		rendering_device->bind_index_array(index_array);
 	}
 
 	void WSI::set_wsi_platform_data(DisplayServerEnums::WindowID window, WindowData data)
@@ -215,6 +219,36 @@ namespace Rendering
 
 	void WSI::teardown()
 	{
+	}
+
+	Error WSI::load_gltf(std::string path)
+	{
+		if(gltf_loader->load("assets://gltf/cube.glb") == OK)
+			return ERR_FILE_NOT_FOUND;
+
+		auto prims = gltf_loader->primitives();
+		for (auto p: prims)
+		{
+			primitives.insert(mesh_owner.make_rid(p));
+
+			uint64_t vbSize = p.vertices.size() * sizeof(Rendering::Vertex);
+			uint64_t ibSize = p.indices.size() * sizeof(uint32_t);
+			push_vertex_data(p.vertices.data(), vbSize);
+			push_index_data(p.indices.data(), ibSize);
+
+		}
+		return OK;
+	}
+
+	void WSI::set_default_vertex_attribute()
+	{
+		set_vertex_data_mode(Rendering::VERTEX_DATA_MODE::INTERLEVED_DATA);
+		set_index_buffer_format(Rendering::RenderingDeviceCommons::IndexBufferFormat::INDEX_BUFFER_FORMAT_UINT32);
+
+		set_vertex_attribute(0, 0, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32B32_SFLOAT, offsetof(Rendering::Vertex, position), sizeof(Rendering::Vertex));
+		set_vertex_attribute(0, 1, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32B32_SFLOAT, offsetof(Rendering::Vertex, normal), sizeof(Rendering::Vertex));
+		set_vertex_attribute(0, 2, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32_SFLOAT, offsetof(Rendering::Vertex, texcoord), sizeof(Rendering::Vertex));
+		set_vertex_attribute(0, 3, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32B32A32_SFLOAT, offsetof(Rendering::Vertex, tangent), sizeof(Rendering::Vertex));
 	}
 
 	WSI::~WSI()
@@ -294,11 +328,11 @@ namespace Rendering
 		std::vector<RID> buffers;
 		buffers.push_back(triangle_vertex_buffer);
 
-		triangle_vertex_array = rendering_device->vertex_array_create(triangle_vertex_count, vertex_format, buffers);
+		vertex_array = rendering_device->vertex_array_create(triangle_vertex_count, vertex_format, buffers);
 
 		triangle_index_buffer = rendering_device->index_buffer_create(index_count, index_data_format, index_data);
 
-		triangle_index_array = rendering_device->index_array_create(triangle_index_buffer, 0, index_count);
+		index_array = rendering_device->index_array_create(triangle_index_buffer, 0, index_count);
 		
 	}
 

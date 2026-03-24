@@ -33,33 +33,21 @@ struct TriangleApplication : EE::Application
 		DEBUG_ASSERT(loader.load("assets://gltf/cube.glb") == OK);
 		prim = loader.primitives()[0];
 
-		const float triangle_vertices[3 * 6] = {
-			// Vertex 0
-			0.0f,  1.0f, 0.0f, 1.0f, 0.0f, 0.0f,
-			// Vertex 1			
-		   -1.0f, -1.0f, 0.0f, 0.0f, 1.0f, 0.0f,
-
-		   // Vertex 2			
-		   1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f
-		};
-
-
 		auto wsi = get_wsi();
 
 		wsi->set_vertex_data_mode(Rendering::VERTEX_DATA_MODE::INTERLEVED_DATA);
 		wsi->set_index_buffer_format(Rendering::RenderingDeviceCommons::IndexBufferFormat::INDEX_BUFFER_FORMAT_UINT32);
 
-		VkDeviceSize vbSize = prim.vertices.size() * sizeof(Rendering::Vertex);
-		VkDeviceSize ibSize = prim.indices.size() * sizeof(uint32_t);
+		uint64_t vbSize = prim.vertices.size() * sizeof(Rendering::Vertex);
+		uint64_t ibSize = prim.indices.size() * sizeof(uint32_t);
 
-		wsi->push_vertex_data((void*)prim.vertices.data(), vbSize);
-		//wsi->push_vertex_data((void*)triangle_vertices_color, sizeof(triangle_vertices_color));
+		wsi->push_vertex_data(prim.vertices.data(), vbSize);
 		wsi->set_vertex_attribute(0, 0, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32B32_SFLOAT, offsetof(Rendering::Vertex, position), sizeof(Rendering::Vertex));
 		wsi->set_vertex_attribute(0, 1, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32B32_SFLOAT, offsetof(Rendering::Vertex, normal) , sizeof(Rendering::Vertex));
 		wsi->set_vertex_attribute(0, 2, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32_SFLOAT, offsetof(Rendering::Vertex, texcoord), sizeof(Rendering::Vertex));
 		wsi->set_vertex_attribute(0, 3, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32B32A32_SFLOAT, offsetof(Rendering::Vertex, tangent), sizeof(Rendering::Vertex));
 
-		wsi->push_index_data((void*)prim.indices.data(), ibSize);
+		wsi->push_index_data(prim.indices.data(), ibSize);
 
 		auto device = wsi->get_rendering_device();
 
@@ -81,8 +69,6 @@ struct TriangleApplication : EE::Application
 		uniform_set = device->uniform_set_create(uniforms, wsi->get_bound_shader(), 0);
 	
 		wsi->pipeline_create_default();
-
-		//wsi->pre_frame_loop();
 	}
 	
 	void render_frame(double frame_time, double elapsed_time) override
