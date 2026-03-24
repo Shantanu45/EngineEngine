@@ -14,10 +14,13 @@
 #include "application/application.h"
 #include "application/application_entry/application_entry.h"
 
-
-
 struct TriangleApplication : EE::Application
 {
+	struct alignas(16) UBO {
+		float x, y, z;
+		float _pad;  // pad to 16 bytes
+	};
+
 	void pre_frame() override
 	{
 
@@ -59,22 +62,58 @@ struct TriangleApplication : EE::Application
 
 		wsi->push_index_data((void*)triangle_triangle_indices, sizeof(triangle_triangle_indices), Rendering::RenderingDeviceCommons::INDEX_BUFFER_FORMAT_UINT16);
 
-		wsi->pre_frame_loop();
+		auto device = wsi->get_rendering_device();
+
+		state_uniform = device->uniform_buffer_create(sizeof(UBO));
+
+		std::vector<Rendering::RenderingDevice::Uniform> uniforms;
+		Rendering::RenderingDevice::Uniform u;
+		u.uniform_type = Rendering::RenderingDeviceCommons::UNIFORM_TYPE_UNIFORM_BUFFER;
+		u.binding = 0;
+		u.append_id(state_uniform);
+		uniforms.push_back(u);
+
+
+
+
+		DEV_ASSERT(rendering_device != nullptr);
+
+		device->screen_create(DisplayServerEnums::MAIN_WINDOW_ID);
+
+		wsi->set_program({ "assets://shaders/triangle_v2.vert", "assets://shaders/triangle_v2.frag" });
+
+		uniform_set = device->uniform_set_create(uniforms, wsi->get_bound_shader(), 0);
+	
+
+		wsi->pipeline_create_default();
+
+		//wsi->pre_frame_loop();
 	}
 	
 	void render_frame(double frame_time, double elapsed_time) override
 	{
 		auto wsi = get_wsi();
 		auto device = wsi->get_rendering_device();
+		UBO state;
+		state.x = 1.0;
+		state.y = 0.0;
+		state.z = 1.0;
+		auto err = device->buffer_update(state_uniform, 0, sizeof(UBO), &state);
+
 		device->begin_for_screen(DisplayServerEnums::MAIN_WINDOW_ID);
 		auto cmd_buffer = device->get_current_command_buffer();
 
 		device->bind_render_pipeline(cmd_buffer, wsi->get_current_pipeline());
 		wsi->bind_vbo_and_ibo();
+		device->bind_uniform_set(wsi->get_bound_shader(), uniform_set, 0);
 
 		device->render_draw(cmd_buffer, 3, 1);
 
 	}
+
+private:
+	RID state_uniform;
+	RID uniform_set;
 };
 
 namespace EE

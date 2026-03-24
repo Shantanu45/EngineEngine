@@ -3873,6 +3873,7 @@ namespace Vulkan
 		std::vector<VkWriteDescriptorSet> vk_writes_vec(p_uniforms.size());
 		VkWriteDescriptorSet* vk_writes = vk_writes_vec.data();
 		uint32_t writes_amount = 0;
+		std::vector<VkDescriptorBufferInfo> vk_buf_info_vec(1);
 		for (uint32_t i = 0; i < p_uniforms.size(); i++) {
 			const BoundUniform& uniform = p_uniforms[i];
 
@@ -4017,9 +4018,8 @@ namespace Vulkan
 			} break;
 			case UNIFORM_TYPE_UNIFORM_BUFFER: {
 				const BufferInfo* buf_info = (const BufferInfo*)uniform.ids[0].id;
-				std::vector<VkDescriptorBufferInfo> vk_buf_info_vec;
+				
 				VkDescriptorBufferInfo* vk_buf_info = vk_buf_info_vec.data();
-				*vk_buf_info = {};
 				vk_buf_info->buffer = buf_info->vk_buffer;
 				vk_buf_info->range = buf_info->size;
 
@@ -4118,8 +4118,13 @@ namespace Vulkan
 		}
 
 		bool linear_pool = p_linear_pool_index >= 0;
-		DescriptorSetPools::iterator pool_sets_it = linear_pool ? linear_descriptor_set_pools[p_linear_pool_index].find(pool_key) : descriptor_set_pools.find(pool_key);
-		if (pool_sets_it == linear_descriptor_set_pools[p_linear_pool_index].end()) {
+		auto& pool = linear_pool
+			? linear_descriptor_set_pools[p_linear_pool_index]
+			: descriptor_set_pools;
+
+		auto pool_sets_it = pool.find(pool_key);
+
+		if (pool_sets_it == pool.end()) {
 			if (linear_pool) {
 				pool_sets_it = linear_descriptor_set_pools[p_linear_pool_index].insert({ pool_key, std::unordered_map<VkDescriptorPool, uint32_t>() }).first;
 			}

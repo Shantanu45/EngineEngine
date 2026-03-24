@@ -192,6 +192,43 @@ namespace Rendering
 			ERR_FAIL_V_MSG(FAILED, "Failed to create frame data.");
 		}
 
+		// Convert block size from KB.
+		//upload_staging_buffers.block_size = GLOBAL_GET("rendering/rendering_device/staging_buffer/block_size_kb");
+		upload_staging_buffers.block_size = MAX(4u, upload_staging_buffers.block_size);
+		upload_staging_buffers.block_size *= 1024;
+
+		// Convert staging buffer size from MB.
+		//upload_staging_buffers.max_size = GLOBAL_GET("rendering/rendering_device/staging_buffer/max_size_mb");
+		upload_staging_buffers.max_size = MAX(1u, upload_staging_buffers.max_size);
+		upload_staging_buffers.max_size *= 1024 * 1024;
+		upload_staging_buffers.max_size = MAX(upload_staging_buffers.max_size, upload_staging_buffers.block_size * 4);
+
+		// Copy the sizes to the download staging buffers.
+		download_staging_buffers.block_size = upload_staging_buffers.block_size;
+		download_staging_buffers.max_size = upload_staging_buffers.max_size;
+
+		// Ensure current staging block is valid and at least one per frame exists.
+		upload_staging_buffers.current = 0;
+		upload_staging_buffers.used = false;
+		upload_staging_buffers.usage_bits = RDD::BUFFER_USAGE_TRANSFER_FROM_BIT;
+
+		download_staging_buffers.current = 0;
+		download_staging_buffers.used = false;
+		download_staging_buffers.usage_bits = RDD::BUFFER_USAGE_TRANSFER_TO_BIT;
+
+		for (uint32_t i = 0; i < frames.size(); i++) {
+			// Staging was never used, create the blocks.
+			err = _insert_staging_block(upload_staging_buffers);
+			ERR_FAIL_COND_V(err, FAILED);
+
+			err = _insert_staging_block(download_staging_buffers);
+			ERR_FAIL_COND_V(err, FAILED);
+			download_staging_buffers.current++;
+			upload_staging_buffers.current++;
+		}
+		upload_staging_buffers.current = 0;
+
+		download_staging_buffers.current = 0;
 		return OK;
 	}
 
@@ -906,7 +943,7 @@ namespace Rendering
 			buffer_memory += buffer.size;
 		//_THREAD_SAFE_UNLOCK_
 
-			RID id = uniform_buffer_owner.make_rid(buffer);
+		RID id = uniform_buffer_owner.make_rid(buffer);
 #ifdef DEV_ENABLED
 		set_resource_name(id, "RID:" + itos(id.get_id()));
 #endif
@@ -1215,53 +1252,53 @@ namespace Rendering
 			} break;
 			case UNIFORM_TYPE_UNIFORM_BUFFER:
 			case UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC: {
-				/*	ERR_FAIL_COND_V_MSG(uniform.get_id_count() != 1, RID(),
-						"Uniform buffer supplied (binding: " + itos(uniform.binding) + ") must provide one ID (" + itos(uniform.get_id_count()) + " provided).");
+				ERR_FAIL_COND_V_MSG(uniform.get_id_count() != 1, RID(),
+					std::format("Uniform buffer supplied (binding: {}) must provide one ID ({} provided).", uniform.binding, uniform.get_id_count()));
 
-					RID buffer_id = uniform.get_id(0);
-					Buffer* buffer = uniform_buffer_owner.get_or_null(buffer_id);
-					ERR_FAIL_NULL_V_MSG(buffer, RID(), "Uniform buffer supplied (binding: " + itos(uniform.binding) + ") is invalid.");
+				RID buffer_id = uniform.get_id(0);
+				Buffer* buffer = uniform_buffer_owner.get_or_null(buffer_id);
+				ERR_FAIL_NULL_V_MSG(buffer, RID(), std::format("Uniform buffer supplied (binding: {}) is invalid.", uniform.binding));
 
-					ERR_FAIL_COND_V_MSG(buffer->size < (uint32_t)set_uniform.length, RID(),
-						"Uniform buffer supplied (binding: " + itos(uniform.binding) + ") size (" + itos(buffer->size) + ") is smaller than size of shader uniform: (" + itos(set_uniform.length) + ").");
+				ERR_FAIL_COND_V_MSG(buffer->size < (uint32_t)set_uniform.length, RID(),
+					std::format("Uniform buffer supplied (binding: {}) size ({}) is smaller than size of shader uniform: ({}).", uniform.binding, buffer->size, set_uniform.length));
 
-					if (buffer->draw_tracker != nullptr) {
-						draw_trackers.push_back(buffer->draw_tracker);
-						draw_trackers_usage.push_back(RDG::RESOURCE_USAGE_UNIFORM_BUFFER_READ);
-					}
-					else {
-						untracked_usage[buffer_id] = RDG::RESOURCE_USAGE_UNIFORM_BUFFER_READ;
-					}
+				//if (buffer->draw_tracker != nullptr) {
+				//	draw_trackers.push_back(buffer->draw_tracker);
+				//	draw_trackers_usage.push_back(RDG::RESOURCE_USAGE_UNIFORM_BUFFER_READ);
+				//}
+				//else {
+				//	untracked_usage[buffer_id] = RDG::RESOURCE_USAGE_UNIFORM_BUFFER_READ;
+				//}
 
-					driver_uniform.ids.push_back(buffer->driver_id);
-					_check_transfer_worker_buffer(buffer);*/
+				driver_uniform.ids.push_back(buffer->driver_id);
+				_check_transfer_worker_buffer(buffer);
 			} break;
 			case UNIFORM_TYPE_STORAGE_BUFFER:
 			case UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC: {
-				ERR_FAIL_COND_V_MSG(uniform.get_id_count() != 1, RID(),
-					std::format("Storage buffer supplied (binding: {}) must provide one ID ({} provided).", uniform.binding, uniform.get_id_count()));
+				//ERR_FAIL_COND_V_MSG(uniform.get_id_count() != 1, RID(),
+				//	std::format("Storage buffer supplied (binding: {}) must provide one ID ({} provided).", uniform.binding, uniform.get_id_count()));
 
-				Buffer* buffer = nullptr;
+				//Buffer* buffer = nullptr;
 
-				RID buffer_id = uniform.get_id(0);
-				if (storage_buffer_owner.owns(buffer_id)) {
-					buffer = storage_buffer_owner.get_or_null(buffer_id);
-				}
-				else if (vertex_buffer_owner.owns(buffer_id)) {
-					buffer = vertex_buffer_owner.get_or_null(buffer_id);
+				//RID buffer_id = uniform.get_id(0);
+				//if (storage_buffer_owner.owns(buffer_id)) {
+				//	buffer = storage_buffer_owner.get_or_null(buffer_id);
+				//}
+				//else if (vertex_buffer_owner.owns(buffer_id)) {
+				//	buffer = vertex_buffer_owner.get_or_null(buffer_id);
 
-					ERR_FAIL_COND_V_MSG(!(buffer->usage.has_flag(RDD::BUFFER_USAGE_STORAGE_BIT)), RID(), std::format("Vertex buffer supplied (binding: {}) was not created with storage flag.", uniform.binding));
-				}
-				ERR_FAIL_NULL_V_MSG(buffer, RID(), std::format("Storage buffer supplied (binding: {}) is invalid.", uniform.binding));
+				//	ERR_FAIL_COND_V_MSG(!(buffer->usage.has_flag(RDD::BUFFER_USAGE_STORAGE_BIT)), RID(), std::format("Vertex buffer supplied (binding: {}) was not created with storage flag.", uniform.binding));
+				//}
+				//ERR_FAIL_NULL_V_MSG(buffer, RID(), std::format("Storage buffer supplied (binding: {}) is invalid.", uniform.binding));
 
-				// If 0, then it's sized on link time.
-				ERR_FAIL_COND_V_MSG(set_uniform.length > 0 && buffer->size != (uint32_t)set_uniform.length, RID(),
-					std::format("Storage buffer supplied (binding: {}) size ({}) does not match size of shader uniform: ({}).", uniform.binding, buffer->size, set_uniform.length));
+				//// If 0, then it's sized on link time.
+				//ERR_FAIL_COND_V_MSG(set_uniform.length > 0 && buffer->size != (uint32_t)set_uniform.length, RID(),
+				//	std::format("Storage buffer supplied (binding: {}) size ({}) does not match size of shader uniform: ({}).", uniform.binding, buffer->size, set_uniform.length));
 
-				if (set_uniform.writable && _buffer_make_mutable(buffer, buffer_id)) {
+				//if (set_uniform.writable && _buffer_make_mutable(buffer, buffer_id)) {
 					// The buffer must be mutable if it's used for writing.
 					//draw_graph.add_synchronization();
-				}
+				//}
 
 				//if (buffer->draw_tracker != nullptr) {
 				//	draw_trackers.push_back(buffer->draw_tracker);
@@ -1277,8 +1314,8 @@ namespace Rendering
 				//	untracked_usage[buffer_id] = RESOURCE_USAGE_STORAGE_BUFFER_READ;
 				//}
 
-				driver_uniform.ids.push_back(buffer->driver_id);
-				_check_transfer_worker_buffer(buffer);
+				//driver_uniform.ids.push_back(buffer->driver_id);
+				//_check_transfer_worker_buffer(buffer);
 			} break;
 			case UNIFORM_TYPE_INPUT_ATTACHMENT: {
 				/*ERR_FAIL_COND_V_MSG(shader->pipeline_type != PIPELINE_TYPE_RASTERIZATION, RID(), "InputAttachment (binding: " + itos(uniform.binding) + ") supplied for non-render shader (this is not allowed).");
@@ -1357,6 +1394,7 @@ namespace Rendering
 		//		_add_dependency(id, uniform.get_id(j));
 		//	}
 		//}
+		return id;
 	}
 
 	bool RenderingDevice::uniform_set_is_valid(RID p_uniform_set)
@@ -1490,6 +1528,7 @@ namespace Rendering
 		}
 
 		gpu_copy_count++;
+		return OK;
 	}
 
 	Error RenderingDevice::buffer_clear(RID p_buffer, uint32_t p_offset, uint32_t p_size)
@@ -1790,6 +1829,17 @@ namespace Rendering
 		driver->command_end_render_pass(command_buffer);
 
 		driver->command_buffer_end(command_buffer);
+		// Advance staging buffers if used.
+		if (upload_staging_buffers.used) {
+			upload_staging_buffers.current = (upload_staging_buffers.current + 1) % upload_staging_buffers.blocks.size();
+			upload_staging_buffers.used = false;
+		}
+
+		if (download_staging_buffers.used) {
+			download_staging_buffers.current = (download_staging_buffers.current + 1) % download_staging_buffers.blocks.size();
+			download_staging_buffers.used = false;
+		}
+
 	}
 
 	void RenderingDevice::execute_frame(bool p_present)
@@ -2145,9 +2195,9 @@ namespace Rendering
 		else if (index_buffer_owner.owns(p_buffer)) {
 			buffer = index_buffer_owner.get_or_null(p_buffer);
 		}
-		//else if (uniform_buffer_owner.owns(p_buffer)) {
-		//	buffer = uniform_buffer_owner.get_or_null(p_buffer);
-		//}
+		else if (uniform_buffer_owner.owns(p_buffer)) {
+			buffer = uniform_buffer_owner.get_or_null(p_buffer);
+		}
 		//else if (texture_buffer_owner.owns(p_buffer)) {
 		//	DEV_ASSERT(false && "FIXME: Broken.");
 		//	//buffer = texture_buffer_owner.get_or_null(p_buffer)->buffer;
@@ -2384,6 +2434,18 @@ namespace Rendering
 	{
 		IndexArray* index_array = index_array_owner.get_or_null(p_index_array);
 		driver->command_render_bind_index_buffer(frames[frame].command_buffer, index_array->driver_id, index_array->format, index_array->offset);
+	}
+
+	void RenderingDevice::bind_uniform_set(RID p_shader_id, RID p_uniform_set_id, uint32_t set_index) {
+		auto shader = shader_owner.get_or_null(p_shader_id);
+		auto uniform_set = uniform_set_owner.get_or_null(p_uniform_set_id);
+		add_draw_list_bind_uniform_sets(shader->driver_id, { &uniform_set->driver_id, 1 }, set_index, 1);
+	}
+
+	void RenderingDevice::add_draw_list_bind_uniform_sets(RDD::ShaderID p_shader, std::span<RDD::UniformSetID> p_uniform_sets, uint32_t p_first_index, uint32_t p_set_count) {
+		DEV_ASSERT(p_uniform_sets.size() >= p_set_count);
+
+		driver->command_bind_render_uniform_sets(get_current_command_buffer(), p_uniform_sets, p_shader, p_first_index, p_set_count, driver->uniform_sets_get_dynamic_offsets(p_uniform_sets, p_shader, p_first_index, p_set_count));
 	}
 
 #pragma region Transfer worker
@@ -2813,6 +2875,8 @@ namespace Rendering
 		}
 
 		p_staging_buffers.used = true;
+
+		return OK;
 	}
 
 	void RenderingDevice::_staging_buffer_execute_required_action(StagingBuffers& p_staging_buffers, StagingRequiredAction p_required_action)
@@ -2871,7 +2935,7 @@ namespace Rendering
 			driver->buffer_free(block.driver_id);
 			return ERR_CANT_CREATE;
 		}
-
+		p_staging_buffers.blocks.push_back({});
 		p_staging_buffers.blocks[p_staging_buffers.current] = block;
 		return OK;
 	}

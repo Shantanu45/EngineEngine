@@ -48,6 +48,10 @@ namespace Rendering
 
 		RenderingDevice* get_rendering_device() { return rendering_device; }
 
+		RID get_bound_shader() {
+			return shader_program;
+		};
+
 		void set_wsi_platform_data(DisplayServerEnums::WindowID window, WindowData data);
 
 		void push_vertex_data(void* vertex_data, size_t size);
