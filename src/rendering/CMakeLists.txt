@@ -19,6 +19,7 @@ find_package(shaderc REQUIRED)
 find_package(xxHash REQUIRED)
 find_package(spirv-reflect-static REQUIRED)
 find_package(TinyGLTF REQUIRED)
+find_package(stb REQUIRED)
 
 
 set(INCLUDES 
@@ -42,6 +43,7 @@ set(ADDITIONAL_LIBRARY_DEPENDENCIES
 	filesystem
 	compiler
 	TinyGLTF::TinyGLTF
+	stb::stb
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE ${ADDITIONAL_LIBRARY_DEPENDENCIES})

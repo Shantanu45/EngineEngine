@@ -10,6 +10,7 @@ vulkan-memory-allocator/3.3.0
 xxhash/0.8.3
 spirv-reflect/1.4.313.0
 tinygltf/2.9.7
+stb/cci.20240531
 
 [generators]
 CMakeDeps

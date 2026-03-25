@@ -15,7 +15,7 @@ add_subdirectory(application_entry)
 find_package(SDL3 REQUIRED)
 find_package(xxHash REQUIRED)
 find_package(TinyGLTF REQUIRED)
-
+find_package(stb REQUIRED)
 
 set(INCLUDES 
 	"${PROJECT_SOURCE_DIR}/src"
@@ -35,7 +35,7 @@ set(ADDITIONAL_LIBRARY_DEPENDENCIES
 	vulkan
 	xxHash::xxhash
 	TinyGLTF::TinyGLTF
-	
+	stb::stb
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE ${ADDITIONAL_LIBRARY_DEPENDENCIES})

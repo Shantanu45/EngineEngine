@@ -14,6 +14,7 @@
 #include "application/application.h"
 #include "application/application_entry/application_entry.h"
 #include "libassert/assert.hpp"
+#include "rendering/image_loader.h"
 #include <cmath> 
 #include <cstddef>
 
@@ -36,12 +37,32 @@ struct TriangleApplication : EE::Application
 
 		state_uniform = device->uniform_buffer_create(sizeof(UBO));
 
+		auto fs = Services::get().get<FilesystemInterface>();
+		Rendering::ImageLoader img_loader(*fs);
+		auto image = img_loader.load_from_file("assets://textures/wall.jpg");
+
+		Rendering::RenderingDeviceCommons::TextureFormat tf;
+		tf.width = image.width;
+		tf.height = image.height;
+		tf.array_layers = 1;
+		tf.texture_type = Rendering::RenderingDeviceCommons::TEXTURE_TYPE_2D_ARRAY;
+		tf.usage_bits = Rendering::RenderingDeviceCommons::TEXTURE_USAGE_SAMPLING_BIT | Rendering::RenderingDeviceCommons::TEXTURE_USAGE_CAN_UPDATE_BIT;
+		tf.format = Rendering::RenderingDeviceCommons::DATA_FORMAT_R8G8B8A8_UNORM;
+
+		texture_uniform = device->texture_create(tf, Rendering::RenderingDevice::TextureView(), { image.pixels });
+
 		std::vector<Rendering::RenderingDevice::Uniform> uniforms;
 		Rendering::RenderingDevice::Uniform u;
 		u.uniform_type = Rendering::RenderingDeviceCommons::UNIFORM_TYPE_UNIFORM_BUFFER;
 		u.binding = 0;
 		u.append_id(state_uniform);
 		uniforms.push_back(u);
+
+		//Rendering::RenderingDevice::Uniform tu;
+		//tu.uniform_type = Rendering::RenderingDeviceCommons::UNIFORM_TYPE_TEXTURE;
+		//tu.binding = 2;
+		//tu.append_id(texture_uniform);
+		//uniforms.push_back(u);
 
 		DEV_ASSERT(rendering_device != nullptr);
 
@@ -78,6 +99,7 @@ struct TriangleApplication : EE::Application
 
 private:
 	RID state_uniform;
+	RID texture_uniform;
 	RID uniform_set;
 	Rendering::MeshPrimitive prim;
 };
