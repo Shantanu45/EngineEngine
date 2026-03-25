@@ -57,8 +57,6 @@ namespace Rendering
 
 		RenderingShaderContainerFormat* create_shader_container_format();
 
-		void bind_vbo_and_ibo();
-
 		void bind_and_draw_indexed(RenderingDeviceDriver::CommandBufferID p_command_buffer);
 		RenderingDevice* get_rendering_device() { return rendering_device; }
 
@@ -87,7 +85,6 @@ namespace Rendering
 		void set_index_buffer_format(RenderingDeviceCommons::IndexBufferFormat format);
 
 		void teardown();
-
 
 		~WSI();
 	private:
