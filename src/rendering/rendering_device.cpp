@@ -60,6 +60,26 @@ namespace Rendering
 		}
 	}
 
+	uint32_t greatest_common_denominator(uint32_t a, uint32_t b) {
+		// Euclidean algorithm.
+		uint32_t t;
+		while (b != 0) {
+			t = b;
+			b = a % b;
+			a = t;
+		}
+
+		return a;
+	}
+
+	uint32_t least_common_multiple(uint32_t a, uint32_t b) {
+		if (a == 0 || b == 0) {
+			return 0;
+		}
+
+		return (a / greatest_common_denominator(a, b)) * b;
+	}
+
 	Error RenderingDevice::initialize(RenderingContextDriver* p_context, DisplayServerEnums::WindowID p_main_window)
 	{
 		Error err;
@@ -1578,6 +1598,208 @@ namespace Rendering
 		driver->buffer_flush(buffer->driver_id);
 	}
 
+	RID RenderingDevice::vertex_array_create(uint32_t p_vertex_count, VertexFormatID p_vertex_format, const std::vector<RID>& p_src_buffers, const std::vector<uint64_t>& p_offsets /*= std::vector<uint64_t>()*/)
+	{
+		ERR_FAIL_COND_V(!vertex_formats.contains(p_vertex_format), RID());
+		const VertexDescriptionCache& vd = vertex_formats[p_vertex_format];
+
+		VertexArray vertex_array;
+
+		if (p_offsets.empty()) {
+			vertex_array.offsets.resize(p_src_buffers.size());
+		}
+		else {
+			ERR_FAIL_COND_V(p_offsets.size() != p_src_buffers.size(), RID());
+			vertex_array.offsets = p_offsets;
+		}
+
+		vertex_array.vertex_count = p_vertex_count;
+		vertex_array.description = p_vertex_format;
+		vertex_array.max_instances_allowed = 0xFFFFFFFF; // By default as many as you want.
+		vertex_array.buffers.resize(p_src_buffers.size());
+
+		std::unordered_set<RID> unique_buffers;
+		unique_buffers.reserve(p_src_buffers.size());
+
+		for (const VertexAttribute& atf : vd.vertex_formats) {
+			ERR_FAIL_COND_V_MSG(atf.binding >= p_src_buffers.size(), RID(), std::format("Vertex attribute location ({}) is missing a buffer for binding ({}).", atf.location, atf.binding));
+			RID buf = p_src_buffers[atf.binding];
+			ERR_FAIL_COND_V(!vertex_buffer_owner.owns(buf), RID());
+
+			Buffer* buffer = vertex_buffer_owner.get_or_null(buf);
+
+			// Validate with buffer.
+			{
+				uint32_t element_size = get_format_vertex_size(atf.format);
+				ERR_FAIL_COND_V(element_size == 0, RID()); // Should never happen since this was prevalidated.
+
+				if (atf.frequency == VERTEX_FREQUENCY_VERTEX) {
+					// Validate size for regular drawing.
+					uint64_t total_size = uint64_t(atf.stride) * (p_vertex_count - 1) + atf.offset + element_size;
+					ERR_FAIL_COND_V_MSG(total_size > buffer->size, RID(),
+						std::format("Vertex attribute ({}) will read past the end of the buffer.", atf.location));
+
+				}
+				else {
+					// Validate size for instances drawing.
+					uint64_t available = buffer->size - atf.offset;
+					ERR_FAIL_COND_V_MSG(available < element_size, RID(),
+						std::format("Vertex attribute ({}) uses instancing, but it's just too small.", atf.location));
+
+					uint32_t instances_allowed = available / atf.stride;
+					vertex_array.max_instances_allowed = MIN(instances_allowed, vertex_array.max_instances_allowed);
+				}
+			}
+
+			vertex_array.buffers[atf.binding] = buffer->driver_id;
+
+			if (unique_buffers.contains(buf)) {
+				// No need to add dependencies multiple times.
+				continue;
+			}
+
+			unique_buffers.insert(buf);
+
+			//if (buffer->draw_tracker != nullptr) {
+			//	vertex_array.draw_trackers.push_back(buffer->draw_tracker);
+			//}
+			//else {
+				vertex_array.untracked_buffers.insert(buf);
+			//}
+
+			if (buffer->transfer_worker_index >= 0) {
+				vertex_array.transfer_worker_indices.push_back(buffer->transfer_worker_index);
+				vertex_array.transfer_worker_operations.push_back(buffer->transfer_worker_operation);
+			}
+		}
+
+		RID id = vertex_array_owner.make_rid(vertex_array);
+		//for (const RID& buf : unique_buffers) {
+		//	_add_dependency(id, buf);
+		//}
+
+		return id;
+	}
+
+	RID RenderingDevice::index_buffer_create(uint32_t p_index_count, IndexBufferFormat p_format, std::span<uint8_t> p_data /*= {}*/, bool p_use_restart_indices /*= false*/, BitField<BufferCreationBits> p_creation_bits /*= 0*/)
+	{
+		ERR_FAIL_COND_V(p_index_count == 0, RID());
+
+		IndexBuffer index_buffer;
+		index_buffer.format = p_format;
+		index_buffer.supports_restart_indices = p_use_restart_indices;
+		index_buffer.index_count = p_index_count;
+		uint32_t size_bytes = p_index_count * ((p_format == INDEX_BUFFER_FORMAT_UINT16) ? 2 : 4);
+#ifdef DEBUG_ENABLED
+		if (p_data.size()) {
+			index_buffer.max_index = 0;
+			ERR_FAIL_COND_V_MSG((uint32_t)p_data.size() != size_bytes, RID(),
+				"Default index buffer initializer array size (" + itos(p_data.size()) + ") does not match format required size (" + itos(size_bytes) + ").");
+			const uint8_t* r = p_data.ptr();
+			if (p_format == INDEX_BUFFER_FORMAT_UINT16) {
+				const uint16_t* index16 = (const uint16_t*)r;
+				for (uint32_t i = 0; i < p_index_count; i++) {
+					if (p_use_restart_indices && index16[i] == 0xFFFF) {
+						continue; // Restart index, ignore.
+					}
+					index_buffer.max_index = MAX(index16[i], index_buffer.max_index);
+				}
+			}
+			else {
+				const uint32_t* index32 = (const uint32_t*)r;
+				for (uint32_t i = 0; i < p_index_count; i++) {
+					if (p_use_restart_indices && index32[i] == 0xFFFFFFFF) {
+						continue; // Restart index, ignore.
+					}
+					index_buffer.max_index = MAX(index32[i], index_buffer.max_index);
+				}
+			}
+		}
+		else {
+			index_buffer.max_index = 0xFFFFFFFF;
+		}
+#else
+		index_buffer.max_index = 0xFFFFFFFF;
+#endif
+		index_buffer.size = size_bytes;
+		index_buffer.usage = (RDD::BUFFER_USAGE_TRANSFER_FROM_BIT | RDD::BUFFER_USAGE_TRANSFER_TO_BIT | RDD::BUFFER_USAGE_INDEX_BIT);
+		if (p_creation_bits.has_flag(BUFFER_CREATION_AS_STORAGE_BIT)) {
+			index_buffer.usage.set_flag(RDD::BUFFER_USAGE_STORAGE_BIT);
+		}
+		if (p_creation_bits.has_flag(BUFFER_CREATION_DEVICE_ADDRESS_BIT)) {
+			index_buffer.usage.set_flag(RDD::BUFFER_USAGE_DEVICE_ADDRESS_BIT);
+		}
+		if (p_creation_bits.has_flag(BUFFER_CREATION_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT)) {
+			index_buffer.usage.set_flag(RDD::BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT);
+		}
+		index_buffer.driver_id = driver->buffer_create(index_buffer.size, index_buffer.usage, RDD::MEMORY_ALLOCATION_TYPE_GPU, frames_drawn);
+		ERR_FAIL_COND_V(!index_buffer.driver_id, RID());
+
+		// Index buffers are assumed to be immutable unless they don't have initial data.
+		//if (p_data.empty()) {
+		//	index_buffer.draw_tracker = RDG::resource_tracker_create();
+		//	index_buffer.draw_tracker->buffer_driver_id = index_buffer.driver_id;
+		//}
+
+		if (p_data.size()) {
+			_buffer_initialize(&index_buffer, p_data);
+		}
+
+		//_THREAD_SAFE_LOCK_
+			buffer_memory += index_buffer.size;
+		//_THREAD_SAFE_UNLOCK_
+
+			RID id = index_buffer_owner.make_rid(index_buffer);
+#ifdef DEV_ENABLED
+		set_resource_name(id, "RID:" + itos(id.get_id()));
+#endif
+		return id;
+	}
+
+	RID RenderingDevice::index_array_create(RID p_index_buffer, uint32_t p_index_offset, uint32_t p_index_count)
+	{
+		ERR_FAIL_COND_V(!index_buffer_owner.owns(p_index_buffer), RID());
+
+		IndexBuffer* index_buffer = index_buffer_owner.get_or_null(p_index_buffer);
+
+		ERR_FAIL_COND_V(p_index_count == 0, RID());
+		ERR_FAIL_COND_V(p_index_offset + p_index_count > index_buffer->index_count, RID());
+
+		IndexArray index_array;
+		index_array.max_index = index_buffer->max_index;
+		index_array.driver_id = index_buffer->driver_id;
+		//index_array.draw_tracker = index_buffer->draw_tracker;
+		index_array.offset = p_index_offset;
+		index_array.indices = p_index_count;
+		index_array.format = index_buffer->format;
+		index_array.supports_restart_indices = index_buffer->supports_restart_indices;
+		index_array.transfer_worker_index = index_buffer->transfer_worker_index;
+		index_array.transfer_worker_operation = index_buffer->transfer_worker_operation;
+
+		RID id = index_array_owner.make_rid(index_array);
+		//_add_dependency(id, p_index_buffer);
+		return id;
+	}
+
+	void RenderingDevice::bind_vertex_array(RID p_vertex_array)
+	{
+		VertexArray* vertex_array = vertex_array_owner.get_or_null(p_vertex_array);
+		driver->command_render_bind_vertex_buffers(frames[frame].command_buffer, vertex_array->buffers.size(), vertex_array->buffers.data(), vertex_array->offsets.data(), 0);
+	}
+
+	void RenderingDevice::bind_index_array(RID p_index_array)
+	{
+		IndexArray* index_array = index_array_owner.get_or_null(p_index_array);
+		uint64_t byte_offset = index_array->offset * (index_array->format == INDEX_BUFFER_FORMAT_UINT16 ? 2 : 4);
+		driver->command_render_bind_index_buffer(frames[frame].command_buffer, index_array->driver_id, index_array->format, byte_offset);
+	}
+
+	void RenderingDevice::bind_uniform_set(RID p_shader_id, RID p_uniform_set_id, uint32_t set_index) {
+		auto shader = shader_owner.get_or_null(p_shader_id);
+		auto uniform_set = uniform_set_owner.get_or_null(p_uniform_set_id);
+		add_draw_list_bind_uniform_sets(shader->driver_id, { &uniform_set->driver_id, 1 }, set_index, 1);
+	}
+
 	RID RenderingDevice::texture_buffer_create(uint32_t p_size_elements, DataFormat p_format, std::span<uint8_t> p_data /*= {}*/)
 	{
 		uint32_t element_size = get_format_vertex_size(p_format);
@@ -2454,221 +2676,19 @@ namespace Rendering
 		}
 	}
 
-	RID RenderingDevice::vertex_array_create(uint32_t p_vertex_count, VertexFormatID p_vertex_format, const std::vector<RID>& p_src_buffers, const std::vector<uint64_t>& p_offsets /*= std::vector<uint64_t>()*/)
+	void RenderingDevice::set_push_constant(const void* p_data, uint32_t p_data_size, RID p_shader)
 	{
-		ERR_FAIL_COND_V(!vertex_formats.contains(p_vertex_format), RID());
-		const VertexDescriptionCache& vd = vertex_formats[p_vertex_format];
-
-		VertexArray vertex_array;
-
-		if (p_offsets.empty()) {
-			vertex_array.offsets.resize(p_src_buffers.size());
-		}
-		else {
-			ERR_FAIL_COND_V(p_offsets.size() != p_src_buffers.size(), RID());
-			vertex_array.offsets = p_offsets;
-		}
-
-		vertex_array.vertex_count = p_vertex_count;
-		vertex_array.description = p_vertex_format;
-		vertex_array.max_instances_allowed = 0xFFFFFFFF; // By default as many as you want.
-		vertex_array.buffers.resize(p_src_buffers.size());
-
-		std::unordered_set<RID> unique_buffers;
-		unique_buffers.reserve(p_src_buffers.size());
-
-		for (const VertexAttribute& atf : vd.vertex_formats) {
-			ERR_FAIL_COND_V_MSG(atf.binding >= p_src_buffers.size(), RID(), std::format("Vertex attribute location ({}) is missing a buffer for binding ({}).", atf.location, atf.binding));
-			RID buf = p_src_buffers[atf.binding];
-			ERR_FAIL_COND_V(!vertex_buffer_owner.owns(buf), RID());
-
-			Buffer* buffer = vertex_buffer_owner.get_or_null(buf);
-
-			// Validate with buffer.
-			{
-				uint32_t element_size = get_format_vertex_size(atf.format);
-				ERR_FAIL_COND_V(element_size == 0, RID()); // Should never happen since this was prevalidated.
-
-				if (atf.frequency == VERTEX_FREQUENCY_VERTEX) {
-					// Validate size for regular drawing.
-					uint64_t total_size = uint64_t(atf.stride) * (p_vertex_count - 1) + atf.offset + element_size;
-					ERR_FAIL_COND_V_MSG(total_size > buffer->size, RID(),
-						std::format("Vertex attribute ({}) will read past the end of the buffer.", atf.location));
-
-				}
-				else {
-					// Validate size for instances drawing.
-					uint64_t available = buffer->size - atf.offset;
-					ERR_FAIL_COND_V_MSG(available < element_size, RID(),
-						std::format("Vertex attribute ({}) uses instancing, but it's just too small.", atf.location));
-
-					uint32_t instances_allowed = available / atf.stride;
-					vertex_array.max_instances_allowed = MIN(instances_allowed, vertex_array.max_instances_allowed);
-				}
-			}
-
-			vertex_array.buffers[atf.binding] = buffer->driver_id;
-
-			if (unique_buffers.contains(buf)) {
-				// No need to add dependencies multiple times.
-				continue;
-			}
-
-			unique_buffers.insert(buf);
-
-			//if (buffer->draw_tracker != nullptr) {
-			//	vertex_array.draw_trackers.push_back(buffer->draw_tracker);
-			//}
-			//else {
-				vertex_array.untracked_buffers.insert(buf);
-			//}
-
-			if (buffer->transfer_worker_index >= 0) {
-				vertex_array.transfer_worker_indices.push_back(buffer->transfer_worker_index);
-				vertex_array.transfer_worker_operations.push_back(buffer->transfer_worker_operation);
-			}
-		}
-
-		RID id = vertex_array_owner.make_rid(vertex_array);
-		//for (const RID& buf : unique_buffers) {
-		//	_add_dependency(id, buf);
-		//}
-
-		return id;
-	}
-
-	RID RenderingDevice::index_buffer_create(uint32_t p_index_count, IndexBufferFormat p_format, std::span<uint8_t> p_data /*= {}*/, bool p_use_restart_indices /*= false*/, BitField<BufferCreationBits> p_creation_bits /*= 0*/)
-	{
-		ERR_FAIL_COND_V(p_index_count == 0, RID());
-
-		IndexBuffer index_buffer;
-		index_buffer.format = p_format;
-		index_buffer.supports_restart_indices = p_use_restart_indices;
-		index_buffer.index_count = p_index_count;
-		uint32_t size_bytes = p_index_count * ((p_format == INDEX_BUFFER_FORMAT_UINT16) ? 2 : 4);
 #ifdef DEBUG_ENABLED
-		if (p_data.size()) {
-			index_buffer.max_index = 0;
-			ERR_FAIL_COND_V_MSG((uint32_t)p_data.size() != size_bytes, RID(),
-				"Default index buffer initializer array size (" + itos(p_data.size()) + ") does not match format required size (" + itos(size_bytes) + ").");
-			const uint8_t* r = p_data.ptr();
-			if (p_format == INDEX_BUFFER_FORMAT_UINT16) {
-				const uint16_t* index16 = (const uint16_t*)r;
-				for (uint32_t i = 0; i < p_index_count; i++) {
-					if (p_use_restart_indices && index16[i] == 0xFFFF) {
-						continue; // Restart index, ignore.
-					}
-					index_buffer.max_index = MAX(index16[i], index_buffer.max_index);
-				}
-			}
-			else {
-				const uint32_t* index32 = (const uint32_t*)r;
-				for (uint32_t i = 0; i < p_index_count; i++) {
-					if (p_use_restart_indices && index32[i] == 0xFFFFFFFF) {
-						continue; // Restart index, ignore.
-					}
-					index_buffer.max_index = MAX(index32[i], index_buffer.max_index);
-				}
-			}
-		}
-		else {
-			index_buffer.max_index = 0xFFFFFFFF;
-		}
-#else
-		index_buffer.max_index = 0xFFFFFFFF;
+		ERR_FAIL_COND_MSG(p_data_size != draw_list.validation.pipeline_push_constant_size,
+			"This render pipeline requires (" + itos(draw_list.validation.pipeline_push_constant_size) + ") bytes of push constant data, supplied: (" + itos(p_data_size) + ")");
 #endif
-		index_buffer.size = size_bytes;
-		index_buffer.usage = (RDD::BUFFER_USAGE_TRANSFER_FROM_BIT | RDD::BUFFER_USAGE_TRANSFER_TO_BIT | RDD::BUFFER_USAGE_INDEX_BIT);
-		if (p_creation_bits.has_flag(BUFFER_CREATION_AS_STORAGE_BIT)) {
-			index_buffer.usage.set_flag(RDD::BUFFER_USAGE_STORAGE_BIT);
-		}
-		if (p_creation_bits.has_flag(BUFFER_CREATION_DEVICE_ADDRESS_BIT)) {
-			index_buffer.usage.set_flag(RDD::BUFFER_USAGE_DEVICE_ADDRESS_BIT);
-		}
-		if (p_creation_bits.has_flag(BUFFER_CREATION_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT)) {
-			index_buffer.usage.set_flag(RDD::BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT);
-		}
-		index_buffer.driver_id = driver->buffer_create(index_buffer.size, index_buffer.usage, RDD::MEMORY_ALLOCATION_TYPE_GPU, frames_drawn);
-		ERR_FAIL_COND_V(!index_buffer.driver_id, RID());
+		auto shader = shader_owner.get_or_null(p_shader);
+		std::vector<uint32_t> push_constant_data_view(reinterpret_cast<const uint32_t*>(p_data), (reinterpret_cast<const uint32_t*>(p_data)) + p_data_size / sizeof(uint32_t));
+		driver->command_bind_push_constants(get_current_command_buffer(), shader->driver_id, 0, push_constant_data_view);
 
-		// Index buffers are assumed to be immutable unless they don't have initial data.
-		//if (p_data.empty()) {
-		//	index_buffer.draw_tracker = RDG::resource_tracker_create();
-		//	index_buffer.draw_tracker->buffer_driver_id = index_buffer.driver_id;
-		//}
-
-		if (p_data.size()) {
-			_buffer_initialize(&index_buffer, p_data);
-		}
-
-		//_THREAD_SAFE_LOCK_
-			buffer_memory += index_buffer.size;
-		//_THREAD_SAFE_UNLOCK_
-
-			RID id = index_buffer_owner.make_rid(index_buffer);
-#ifdef DEV_ENABLED
-		set_resource_name(id, "RID:" + itos(id.get_id()));
+#ifdef DEBUG_ENABLED
+		draw_list.validation.pipeline_push_constant_supplied = true;
 #endif
-		return id;
-	}
-
-	RID RenderingDevice::index_array_create(RID p_index_buffer, uint32_t p_index_offset, uint32_t p_index_count)
-	{
-		ERR_FAIL_COND_V(!index_buffer_owner.owns(p_index_buffer), RID());
-
-		IndexBuffer* index_buffer = index_buffer_owner.get_or_null(p_index_buffer);
-
-		ERR_FAIL_COND_V(p_index_count == 0, RID());
-		ERR_FAIL_COND_V(p_index_offset + p_index_count > index_buffer->index_count, RID());
-
-		IndexArray index_array;
-		index_array.max_index = index_buffer->max_index;
-		index_array.driver_id = index_buffer->driver_id;
-		//index_array.draw_tracker = index_buffer->draw_tracker;
-		index_array.offset = p_index_offset;
-		index_array.indices = p_index_count;
-		index_array.format = index_buffer->format;
-		index_array.supports_restart_indices = index_buffer->supports_restart_indices;
-		index_array.transfer_worker_index = index_buffer->transfer_worker_index;
-		index_array.transfer_worker_operation = index_buffer->transfer_worker_operation;
-
-		RID id = index_array_owner.make_rid(index_array);
-		//_add_dependency(id, p_index_buffer);
-		return id;
-	}
-
-	void RenderingDevice::bind_vertex_array(RID p_vertex_array)
-	{
-		VertexArray* vertex_array = vertex_array_owner.get_or_null(p_vertex_array);
-		driver->command_render_bind_vertex_buffers(frames[frame].command_buffer, vertex_array->buffers.size(), vertex_array->buffers.data(), vertex_array->offsets.data(), 0);
-	}
-
-	void RenderingDevice::bind_index_array(RID p_index_array)
-	{
-		IndexArray* index_array = index_array_owner.get_or_null(p_index_array);
-		uint64_t byte_offset = index_array->offset * (index_array->format == INDEX_BUFFER_FORMAT_UINT16 ? 2 : 4);
-		driver->command_render_bind_index_buffer(frames[frame].command_buffer, index_array->driver_id, index_array->format, byte_offset);
-	}
-
-	void RenderingDevice::bind_uniform_set(RID p_shader_id, RID p_uniform_set_id, uint32_t set_index) {
-		auto shader = shader_owner.get_or_null(p_shader_id);
-		auto uniform_set = uniform_set_owner.get_or_null(p_uniform_set_id);
-		add_draw_list_bind_uniform_sets(shader->driver_id, { &uniform_set->driver_id, 1 }, set_index, 1);
-	}
-
-	void RenderingDevice::set_push_constant(const void* p_data, uint32_t p_data_size)
-	{
-//#ifdef DEBUG_ENABLED
-//		ERR_FAIL_COND_MSG(p_data_size != draw_list.validation.pipeline_push_constant_size,
-//			"This render pipeline requires (" + itos(draw_list.validation.pipeline_push_constant_size) + ") bytes of push constant data, supplied: (" + itos(p_data_size) + ")");
-//#endif
-//
-//		std::vector<uint32_t> push_constant_data_view(reinterpret_cast<const uint32_t*>(p_data), p_data_size / sizeof(uint32_t));
-//		driver->command_bind_push_constants(get_current_command_buffer(), /*shader*/, 0, push_constant_data_view);
-//
-//#ifdef DEBUG_ENABLED
-//		draw_list.validation.pipeline_push_constant_supplied = true;
-//#endif
 	}
 
 	void RenderingDevice::add_draw_list_bind_uniform_sets(RDD::ShaderID p_shader, std::span<RDD::UniformSetID> p_uniform_sets, uint32_t p_first_index, uint32_t p_set_count) {
@@ -2715,6 +2735,14 @@ namespace Rendering
 					_flush_barriers_for_transfer_worker(worker);
 				}
 			}
+		}
+	}
+
+	void RenderingDevice::_submit_transfer_barriers(RDD::CommandBufferID p_draw_command_buffer) {
+		std::lock_guard transfer_worker_lock(transfer_worker_pool_texture_barriers_mutex);
+		if (!transfer_worker_pool_texture_barriers.empty()) {
+			driver->command_pipeline_barrier(p_draw_command_buffer, RDD::PIPELINE_STAGE_COPY_BIT, RDD::PIPELINE_STAGE_ALL_COMMANDS_BIT, {}, {}, transfer_worker_pool_texture_barriers, {});
+			transfer_worker_pool_texture_barriers.clear();
 		}
 	}
 
@@ -2960,14 +2988,6 @@ namespace Rendering
 		}
 	}
 
-	void RenderingDevice::_submit_transfer_barriers(RDD::CommandBufferID p_draw_command_buffer) {
-		std::lock_guard transfer_worker_lock(transfer_worker_pool_texture_barriers_mutex);
-		if (!transfer_worker_pool_texture_barriers.empty()) {
-			driver->command_pipeline_barrier(p_draw_command_buffer, RDD::PIPELINE_STAGE_COPY_BIT, RDD::PIPELINE_STAGE_ALL_COMMANDS_BIT, {}, {}, transfer_worker_pool_texture_barriers, {});
-			transfer_worker_pool_texture_barriers.clear();
-		}
-	}
-
 	void RenderingDevice::_wait_for_transfer_workers() {
 		std::lock_guard transfer_worker_lock(transfer_worker_pool_mutex);
 		for (uint32_t i = 0; i < transfer_worker_pool_size; i++) {
@@ -3039,288 +3059,6 @@ namespace Rendering
 	uint32_t RenderingDevice::_get_swap_chain_desired_count() const {
 		return 2;
 	}
-
-	RDD::TextureLayout RenderingDevice::_vrs_layout_from_method(VRSMethod p_method) {
-		switch (p_method) {
-		case VRS_METHOD_FRAGMENT_SHADING_RATE:
-			return RDD::TEXTURE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL;
-		case VRS_METHOD_FRAGMENT_DENSITY_MAP:
-			return RDD::TEXTURE_LAYOUT_FRAGMENT_DENSITY_MAP_ATTACHMENT_OPTIMAL;
-		default:
-			return RDD::TEXTURE_LAYOUT_UNDEFINED;
-		}
-	}
-
-	RDD::RenderPassID RenderingDevice::_render_pass_create(RenderingDeviceDriver* p_driver, const std::vector<AttachmentFormat>& p_attachments, 
-		const std::vector<FramebufferPass>& p_passes, std::span<RDD::AttachmentLoadOp> p_load_ops, std::span<RDD::AttachmentStoreOp> p_store_ops, 
-		uint32_t p_view_count /*= 1*/, VRSMethod p_vrs_method /*= VRS_METHOD_NONE*/, int32_t p_vrs_attachment /*= -1*/, 
-		Size2i p_vrs_texel_size /*= Size2i()*/, std::vector<TextureSamples>* r_samples /*= nullptr*/)
-	{
-		// NOTE:
-		// Before the refactor to RenderingDevice-RenderingDeviceDriver, there was commented out code to
-		// specify dependencies to external subpasses. Since it had been unused for a long timel it wasn't ported
-		// to the new architecture.
-
-		std::vector<int32_t> attachment_last_pass;
-		attachment_last_pass.resize(p_attachments.size());
-
-		if (p_view_count > 1) {
-			const RDD::MultiviewCapabilities& capabilities = {};// p_driver->get_multiview_capabilities();TODO
-
-			// This only works with multiview!
-			ERR_FAIL_COND_V_MSG(!capabilities.is_supported, RDD::RenderPassID(), "Multiview not supported");
-
-			// Make sure we limit this to the number of views we support.
-			ERR_FAIL_COND_V_MSG(p_view_count > capabilities.max_view_count, RDD::RenderPassID(), "Hardware does not support requested number of views for Multiview render pass");
-		}
-
-		std::vector<RDD::Attachment> attachments;
-		std::vector<uint32_t> attachment_remap;
-
-		for (int i = 0; i < p_attachments.size(); i++) {
-			if (p_attachments[i].usage_flags == AttachmentFormat::UNUSED_ATTACHMENT) {
-				attachment_remap.push_back(RDD::AttachmentReference::UNUSED);
-				continue;
-			}
-
-			ERR_FAIL_INDEX_V(p_attachments[i].format, DATA_FORMAT_MAX, RDD::RenderPassID());
-			ERR_FAIL_INDEX_V(p_attachments[i].samples, TEXTURE_SAMPLES_MAX, RDD::RenderPassID());
-			ERR_FAIL_COND_V_MSG(!(p_attachments[i].usage_flags & (TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | TEXTURE_USAGE_DEPTH_RESOLVE_ATTACHMENT_BIT | TEXTURE_USAGE_INPUT_ATTACHMENT_BIT | TEXTURE_USAGE_VRS_ATTACHMENT_BIT)),
-				RDD::RenderPassID(), std::format("Texture format for index {} requires an attachment (color, depth-stencil, input or VRS) bit set.", std::to_string(i)));
-
-			RDD::Attachment description;
-			description.format = p_attachments[i].format;
-			description.samples = p_attachments[i].samples;
-
-			// We can setup a framebuffer where we write to our VRS texture to set it up.
-			// We make the assumption here that if our texture is actually used as our VRS attachment.
-			// It is used as such for each subpass. This is fairly certain seeing the restrictions on subpasses.
-			bool is_vrs = (p_attachments[i].usage_flags & TEXTURE_USAGE_VRS_ATTACHMENT_BIT) && i == p_vrs_attachment;
-			if (is_vrs) {
-				description.load_op = RDD::ATTACHMENT_LOAD_OP_LOAD;
-				description.store_op = RDD::ATTACHMENT_STORE_OP_DONT_CARE;
-				description.stencil_load_op = RDD::ATTACHMENT_LOAD_OP_DONT_CARE;
-				description.stencil_store_op = RDD::ATTACHMENT_STORE_OP_DONT_CARE;
-				description.initial_layout = _vrs_layout_from_method(p_vrs_method);
-				description.final_layout = _vrs_layout_from_method(p_vrs_method);
-			}
-			else {
-				if (p_attachments[i].usage_flags & TEXTURE_USAGE_COLOR_ATTACHMENT_BIT) {
-					description.load_op = p_load_ops[i];
-					description.store_op = p_store_ops[i];
-					description.stencil_load_op = RDD::ATTACHMENT_LOAD_OP_DONT_CARE;
-					description.stencil_store_op = RDD::ATTACHMENT_STORE_OP_DONT_CARE;
-					description.initial_layout = RDD::TEXTURE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-					description.final_layout = RDD::TEXTURE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-				}
-				else if (p_attachments[i].usage_flags & TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) {
-					description.load_op = p_load_ops[i];
-					description.store_op = p_store_ops[i];
-					description.stencil_load_op = p_load_ops[i];
-					description.stencil_store_op = p_store_ops[i];
-					description.initial_layout = RDD::TEXTURE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-					description.final_layout = RDD::TEXTURE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-				}
-				else if (p_attachments[i].usage_flags & TEXTURE_USAGE_DEPTH_RESOLVE_ATTACHMENT_BIT) {
-					description.load_op = p_load_ops[i];
-					description.store_op = p_store_ops[i];
-					description.stencil_load_op = p_load_ops[i];
-					description.stencil_store_op = p_store_ops[i];
-					description.initial_layout = RDD::TEXTURE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-					description.final_layout = RDD::TEXTURE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-				}
-				else {
-					description.load_op = RDD::ATTACHMENT_LOAD_OP_DONT_CARE;
-					description.store_op = RDD::ATTACHMENT_STORE_OP_DONT_CARE;
-					description.stencil_load_op = RDD::ATTACHMENT_LOAD_OP_DONT_CARE;
-					description.stencil_store_op = RDD::ATTACHMENT_STORE_OP_DONT_CARE;
-					description.initial_layout = RDD::TEXTURE_LAYOUT_UNDEFINED;
-					description.final_layout = RDD::TEXTURE_LAYOUT_UNDEFINED;
-				}
-			}
-
-			attachment_last_pass[i] = -1;
-			attachment_remap.push_back(attachments.size());
-			attachments.push_back(description);
-		}
-
-		std::vector<RDD::Subpass> subpasses;
-		subpasses.resize(p_passes.size());
-		std::vector<RDD::SubpassDependency> subpass_dependencies;
-
-		for (int i = 0; i < p_passes.size(); i++) {
-			const FramebufferPass* pass = &p_passes[i];
-			RDD::Subpass& subpass = subpasses[i];
-
-			TextureSamples texture_samples = TEXTURE_SAMPLES_1;
-			bool is_multisample_first = true;
-
-			for (int j = 0; j < pass->color_attachments.size(); j++) {
-				int32_t attachment = pass->color_attachments[j];
-				RDD::AttachmentReference reference;
-				if (attachment == ATTACHMENT_UNUSED) {
-					reference.attachment = RDD::AttachmentReference::UNUSED;
-					reference.layout = RDD::TEXTURE_LAYOUT_UNDEFINED;
-				}
-				else {
-					ERR_FAIL_INDEX_V_MSG(attachment, p_attachments.size(), RDD::RenderPassID(), std::format("Invalid framebuffer format attachment( %s ), in pass {}, color attachment {}.", std::to_string(attachment), std::to_string(i), std::to_string(j)).c_str());
-					ERR_FAIL_COND_V_MSG(!(p_attachments[attachment].usage_flags & TEXTURE_USAGE_COLOR_ATTACHMENT_BIT), RDD::RenderPassID(), std::format("Invalid framebuffer format attachment{}, in pass {}, it's marked as depth, but it's not usable as color attachment.", std::to_string(attachment), std::to_string(i)));
-					ERR_FAIL_COND_V_MSG(attachment_last_pass[attachment] == i, RDD::RenderPassID(), std::format("Invalid framebuffer format attachment{}, in pass {}, it already was used for something else before in this pass.", std::to_string(attachment), std::to_string(i)));
-
-					if (is_multisample_first) {
-						texture_samples = p_attachments[attachment].samples;
-						is_multisample_first = false;
-					}
-					else {
-						ERR_FAIL_COND_V_MSG(texture_samples != p_attachments[attachment].samples, RDD::RenderPassID(), std::format("Invalid framebuffer format attachment{}, in pass {}, if an attachment is marked as multisample, all of them should be multisample and use the same number of samples.", std::to_string(attachment), std::to_string(i)));
-					}
-					reference.attachment = attachment_remap[attachment];
-					reference.layout = RDD::TEXTURE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-					attachment_last_pass[attachment] = i;
-				}
-				reference.aspect = RDD::TEXTURE_ASPECT_COLOR_BIT;
-				subpass.color_references.push_back(reference);
-			}
-
-			for (int j = 0; j < pass->input_attachments.size(); j++) {
-				int32_t attachment = pass->input_attachments[j];
-				RDD::AttachmentReference reference;
-				if (attachment == ATTACHMENT_UNUSED) {
-					reference.attachment = RDD::AttachmentReference::UNUSED;
-					reference.layout = RDD::TEXTURE_LAYOUT_UNDEFINED;
-				}
-				else {
-					ERR_FAIL_INDEX_V_MSG(attachment, p_attachments.size(), RDD::RenderPassID(), std::format("Invalid framebuffer format attachment{}, in pass {}, input attachment {}.", std::to_string(attachment), std::to_string(i), std::to_string(j)).c_str());
-					ERR_FAIL_COND_V_MSG(!(p_attachments[attachment].usage_flags & TEXTURE_USAGE_INPUT_ATTACHMENT_BIT), RDD::RenderPassID(), std::format("Invalid framebuffer format attachment{}, in pass {}, it isn't marked as an input texture.", std::to_string(attachment), std::to_string(i)));
-					ERR_FAIL_COND_V_MSG(attachment_last_pass[attachment] == i, RDD::RenderPassID(), std::format("Invalid framebuffer format attachment{}, in pass {}, it already was used for something else before in this pass.", std::to_string(attachment), std::to_string(i)));
-					reference.attachment = attachment_remap[attachment];
-					reference.layout = RDD::TEXTURE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-					attachment_last_pass[attachment] = i;
-				}
-				reference.aspect = RDD::TEXTURE_ASPECT_COLOR_BIT;
-				subpass.input_references.push_back(reference);
-			}
-
-			if (pass->resolve_attachments.size() > 0) {
-				ERR_FAIL_COND_V_MSG(pass->resolve_attachments.size() != pass->color_attachments.size(), RDD::RenderPassID(), std::format("The amount of resolve attachments {} must match the number of color attachments {}.", std::to_string(pass->resolve_attachments.size()), std::to_string(pass->color_attachments.size())));
-				ERR_FAIL_COND_V_MSG(texture_samples == TEXTURE_SAMPLES_1, RDD::RenderPassID(), std::format("Resolve attachments specified, but color attachments are not multisample."));
-			}
-			for (int j = 0; j < pass->resolve_attachments.size(); j++) {
-				int32_t attachment = pass->resolve_attachments[j];
-				attachments[attachment].load_op = RDD::ATTACHMENT_LOAD_OP_DONT_CARE;
-
-				RDD::AttachmentReference reference;
-				if (attachment == ATTACHMENT_UNUSED) {
-					reference.attachment = RDD::AttachmentReference::UNUSED;
-					reference.layout = RDD::TEXTURE_LAYOUT_UNDEFINED;
-				}
-				else {
-					ERR_FAIL_INDEX_V_MSG(attachment, p_attachments.size(), RDD::RenderPassID(), std::format("Invalid framebuffer format attachment{}, in pass {}, resolve attachment {}.", std::to_string(attachment), std::to_string(i), std::to_string(j)).c_str());
-					ERR_FAIL_COND_V_MSG(pass->color_attachments[j] == ATTACHMENT_UNUSED, RDD::RenderPassID(), std::format("Invalid framebuffer format attachment{}, in pass {}, resolve attachment {}, the respective color attachment is marked as unused.", std::to_string(attachment), std::to_string(i), std::to_string(j)));
-					ERR_FAIL_COND_V_MSG(!(p_attachments[attachment].usage_flags & TEXTURE_USAGE_COLOR_ATTACHMENT_BIT), RDD::RenderPassID(), std::format("Invalid framebuffer format attachment{}, in pass {}, resolve attachment, it isn't marked as a color texture.", std::to_string(attachment), std::to_string(i)));
-					ERR_FAIL_COND_V_MSG(attachment_last_pass[attachment] == i, RDD::RenderPassID(), std::format("Invalid framebuffer format attachment{}, in pass {}, it already was used for something else before in this pass.", std::to_string(attachment), std::to_string(i)));
-					bool multisample = p_attachments[attachment].samples > TEXTURE_SAMPLES_1;
-					ERR_FAIL_COND_V_MSG(multisample, RDD::RenderPassID(), std::format("Invalid framebuffer format attachment{}, in pass {}, resolve attachments can't be multisample.", std::to_string(attachment), std::to_string(i)));
-					reference.attachment = attachment_remap[attachment];
-					reference.layout = RDD::TEXTURE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL; // RDD::TEXTURE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-					attachment_last_pass[attachment] = i;
-				}
-				reference.aspect = RDD::TEXTURE_ASPECT_COLOR_BIT;
-				subpass.resolve_references.push_back(reference);
-			}
-
-			if (pass->depth_attachment != ATTACHMENT_UNUSED) {
-				int32_t attachment = pass->depth_attachment;
-				ERR_FAIL_INDEX_V_MSG(attachment, p_attachments.size(), RDD::RenderPassID(), std::format("Invalid framebuffer depth format attachment{}, in pass {}, depth attachment.", std::to_string(attachment), std::to_string(i)).c_str());
-				ERR_FAIL_COND_V_MSG(!(p_attachments[attachment].usage_flags & TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT), RDD::RenderPassID(), std::format("Invalid framebuffer depth format attachment{}, in pass {}, it's marked as depth, but it's not a depth attachment.", std::to_string(attachment), std::to_string(i)));
-				ERR_FAIL_COND_V_MSG(attachment_last_pass[attachment] == i, RDD::RenderPassID(), std::format("Invalid framebuffer depth format attachment{}, in pass {}, it already was used for something else before in this pass.", std::to_string(attachment), std::to_string(i)));
-				subpass.depth_stencil_reference.attachment = attachment_remap[attachment];
-				subpass.depth_stencil_reference.layout = RDD::TEXTURE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-				attachment_last_pass[attachment] = i;
-
-				if (is_multisample_first) {
-					texture_samples = p_attachments[attachment].samples;
-					is_multisample_first = false;
-				}
-				else {
-					ERR_FAIL_COND_V_MSG(texture_samples != p_attachments[attachment].samples, RDD::RenderPassID(), std::format("Invalid framebuffer depth format attachment{}, in pass {}, if an attachment is marked as multisample, all of them should be multisample and use the same number of samples including the depth.", std::to_string(attachment), std::to_string(i)));
-				}
-
-				if (pass->depth_resolve_attachment != ATTACHMENT_UNUSED) {
-					attachment = pass->depth_resolve_attachment;
-
-					// As our fallbacks are handled outside of our pass, we should never be setting up a render pass with a depth resolve attachment when not supported.
-					ERR_FAIL_COND_V_MSG(!p_driver->has_feature(SUPPORTS_FRAMEBUFFER_DEPTH_RESOLVE), RDD::RenderPassID(), std::format("Invalid framebuffer depth format attachment{}, in pass {}, a depth resolve attachment was supplied when driver doesn't support this feature.", std::to_string(attachment), std::to_string(i)));
-
-					ERR_FAIL_INDEX_V_MSG(attachment, p_attachments.size(), RDD::RenderPassID(), std::format("Invalid framebuffer depth resolve format attachment{}, in pass {}, depth resolve attachment.", std::to_string(attachment), std::to_string(i)).c_str());
-					ERR_FAIL_COND_V_MSG(!(p_attachments[attachment].usage_flags & TEXTURE_USAGE_DEPTH_RESOLVE_ATTACHMENT_BIT), RDD::RenderPassID(), std::format("Invalid framebuffer depth resolve format attachment{}, in pass {}, it's marked as depth, but it's not a depth resolve attachment.", std::to_string(attachment), std::to_string(i)));
-					ERR_FAIL_COND_V_MSG(attachment_last_pass[attachment] == i, RDD::RenderPassID(), std::format("Invalid framebuffer depth resolve format attachment{}, in pass {}, it already was used for something else before in this pass.", std::to_string(attachment), std::to_string(i)));
-
-					subpass.depth_resolve_reference.attachment = attachment_remap[attachment];
-					subpass.depth_resolve_reference.layout = RDD::TEXTURE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-					attachment_last_pass[attachment] = i;
-				}
-
-			}
-			else {
-				subpass.depth_stencil_reference.attachment = RDD::AttachmentReference::UNUSED;
-				subpass.depth_stencil_reference.layout = RDD::TEXTURE_LAYOUT_UNDEFINED;
-			}
-
-			if (p_vrs_method == VRS_METHOD_FRAGMENT_SHADING_RATE && p_vrs_attachment >= 0) {
-				int32_t attachment = p_vrs_attachment;
-				ERR_FAIL_INDEX_V_MSG(attachment, p_attachments.size(), RDD::RenderPassID(), std::format("Invalid framebuffer VRS format attachment{}, in pass {}, VRS attachment.", std::to_string(attachment), std::to_string(i)).c_str());
-				ERR_FAIL_COND_V_MSG(!(p_attachments[attachment].usage_flags & TEXTURE_USAGE_VRS_ATTACHMENT_BIT), RDD::RenderPassID(), std::format("Invalid framebuffer VRS format attachment{}, in pass {}, it's marked as VRS, but it's not a VRS attachment.", std::to_string(attachment), std::to_string(i)));
-				ERR_FAIL_COND_V_MSG(attachment_last_pass[attachment] == i, RDD::RenderPassID(), std::format("Invalid framebuffer VRS attachment{}, in pass {}, it already was used for something else before in this pass.", std::to_string(attachment), std::to_string(i)));
-
-				subpass.fragment_shading_rate_reference.attachment = attachment_remap[attachment];
-				subpass.fragment_shading_rate_reference.layout = RDD::TEXTURE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL;
-				subpass.fragment_shading_rate_texel_size = p_vrs_texel_size;
-
-				attachment_last_pass[attachment] = i;
-			}
-
-			for (int j = 0; j < pass->preserve_attachments.size(); j++) {
-				int32_t attachment = pass->preserve_attachments[j];
-
-				ERR_FAIL_COND_V_MSG(attachment == ATTACHMENT_UNUSED, RDD::RenderPassID(), std::format("Invalid framebuffer format attachment{}, in pass {}, preserve attachment {}. Preserve attachments can't be unused.", std::to_string(attachment), std::to_string(i), std::to_string(j)));
-
-				ERR_FAIL_INDEX_V_MSG(attachment, p_attachments.size(), RDD::RenderPassID(), std::format("Invalid framebuffer format attachment{}, in pass {}, preserve attachment {}.", std::to_string(attachment), std::to_string(i), std::to_string(j)).c_str());
-
-				if (attachment_last_pass[attachment] != i) {
-					// Preserve can still be used to keep depth or color from being discarded after use.
-					attachment_last_pass[attachment] = i;
-					subpasses[i].preserve_attachments.push_back(attachment);
-				}
-			}
-
-			if (r_samples) {
-				r_samples->push_back(texture_samples);
-			}
-
-			if (i > 0) {
-				RDD::SubpassDependency dependency;
-				dependency.src_subpass = i - 1;
-				dependency.dst_subpass = i;
-				dependency.src_stages = (RDD::PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | RDD::PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | RDD::PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT);
-				dependency.dst_stages = (RDD::PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | RDD::PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | RDD::PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT | RDD::PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
-				dependency.src_access = (RDD::BARRIER_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | RDD::BARRIER_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT);
-				dependency.dst_access = (RDD::BARRIER_ACCESS_COLOR_ATTACHMENT_READ_BIT | RDD::BARRIER_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | RDD::BARRIER_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | RDD::BARRIER_ACCESS_INPUT_ATTACHMENT_READ_BIT);
-				subpass_dependencies.push_back(dependency);
-			}
-		}
-
-		RDD::AttachmentReference fragment_density_map_attachment_reference;
-		if (p_vrs_method == VRS_METHOD_FRAGMENT_DENSITY_MAP && p_vrs_attachment >= 0) {
-			fragment_density_map_attachment_reference.attachment = p_vrs_attachment;
-			fragment_density_map_attachment_reference.layout = RDD::TEXTURE_LAYOUT_FRAGMENT_DENSITY_MAP_ATTACHMENT_OPTIMAL;
-		}
-
-		RDD::RenderPassID render_pass = p_driver->render_pass_create(attachments, subpasses, subpass_dependencies, p_view_count, fragment_density_map_attachment_reference);
-		ERR_FAIL_COND_V(!render_pass, RDD::RenderPassID());
-
-		return render_pass;
-	}	
 
 	Rendering::RenderingDevice::Buffer* RenderingDevice::_get_buffer_from_owner(RID p_buffer)
 	{
@@ -3571,26 +3309,6 @@ namespace Rendering
 		default:
 			return p_texture->layers;
 		}
-	}
-
-	uint32_t greatest_common_denominator(uint32_t a, uint32_t b) {
-		// Euclidean algorithm.
-		uint32_t t;
-		while (b != 0) {
-			t = b;
-			b = a % b;
-			a = t;
-		}
-
-		return a;
-	}
-
-	uint32_t least_common_multiple(uint32_t a, uint32_t b) {
-		if (a == 0 || b == 0) {
-			return 0;
-		}
-
-		return (a / greatest_common_denominator(a, b)) * b;
 	}
 
 	uint32_t RenderingDevice::_texture_alignment(Texture* p_texture) const
@@ -3994,6 +3712,288 @@ namespace Rendering
 			return 0;
 		}
 	}
+
+	RDD::TextureLayout RenderingDevice::_vrs_layout_from_method(VRSMethod p_method) {
+		switch (p_method) {
+		case VRS_METHOD_FRAGMENT_SHADING_RATE:
+			return RDD::TEXTURE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL;
+		case VRS_METHOD_FRAGMENT_DENSITY_MAP:
+			return RDD::TEXTURE_LAYOUT_FRAGMENT_DENSITY_MAP_ATTACHMENT_OPTIMAL;
+		default:
+			return RDD::TEXTURE_LAYOUT_UNDEFINED;
+		}
+	}
+
+	RDD::RenderPassID RenderingDevice::_render_pass_create(RenderingDeviceDriver* p_driver, const std::vector<AttachmentFormat>& p_attachments, 
+		const std::vector<FramebufferPass>& p_passes, std::span<RDD::AttachmentLoadOp> p_load_ops, std::span<RDD::AttachmentStoreOp> p_store_ops, 
+		uint32_t p_view_count /*= 1*/, VRSMethod p_vrs_method /*= VRS_METHOD_NONE*/, int32_t p_vrs_attachment /*= -1*/, 
+		Size2i p_vrs_texel_size /*= Size2i()*/, std::vector<TextureSamples>* r_samples /*= nullptr*/)
+	{
+		// NOTE:
+		// Before the refactor to RenderingDevice-RenderingDeviceDriver, there was commented out code to
+		// specify dependencies to external subpasses. Since it had been unused for a long timel it wasn't ported
+		// to the new architecture.
+
+		std::vector<int32_t> attachment_last_pass;
+		attachment_last_pass.resize(p_attachments.size());
+
+		if (p_view_count > 1) {
+			const RDD::MultiviewCapabilities& capabilities = {};// p_driver->get_multiview_capabilities();TODO
+
+			// This only works with multiview!
+			ERR_FAIL_COND_V_MSG(!capabilities.is_supported, RDD::RenderPassID(), "Multiview not supported");
+
+			// Make sure we limit this to the number of views we support.
+			ERR_FAIL_COND_V_MSG(p_view_count > capabilities.max_view_count, RDD::RenderPassID(), "Hardware does not support requested number of views for Multiview render pass");
+		}
+
+		std::vector<RDD::Attachment> attachments;
+		std::vector<uint32_t> attachment_remap;
+
+		for (int i = 0; i < p_attachments.size(); i++) {
+			if (p_attachments[i].usage_flags == AttachmentFormat::UNUSED_ATTACHMENT) {
+				attachment_remap.push_back(RDD::AttachmentReference::UNUSED);
+				continue;
+			}
+
+			ERR_FAIL_INDEX_V(p_attachments[i].format, DATA_FORMAT_MAX, RDD::RenderPassID());
+			ERR_FAIL_INDEX_V(p_attachments[i].samples, TEXTURE_SAMPLES_MAX, RDD::RenderPassID());
+			ERR_FAIL_COND_V_MSG(!(p_attachments[i].usage_flags & (TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | TEXTURE_USAGE_DEPTH_RESOLVE_ATTACHMENT_BIT | TEXTURE_USAGE_INPUT_ATTACHMENT_BIT | TEXTURE_USAGE_VRS_ATTACHMENT_BIT)),
+				RDD::RenderPassID(), std::format("Texture format for index {} requires an attachment (color, depth-stencil, input or VRS) bit set.", std::to_string(i)));
+
+			RDD::Attachment description;
+			description.format = p_attachments[i].format;
+			description.samples = p_attachments[i].samples;
+
+			// We can setup a framebuffer where we write to our VRS texture to set it up.
+			// We make the assumption here that if our texture is actually used as our VRS attachment.
+			// It is used as such for each subpass. This is fairly certain seeing the restrictions on subpasses.
+			bool is_vrs = (p_attachments[i].usage_flags & TEXTURE_USAGE_VRS_ATTACHMENT_BIT) && i == p_vrs_attachment;
+			if (is_vrs) {
+				description.load_op = RDD::ATTACHMENT_LOAD_OP_LOAD;
+				description.store_op = RDD::ATTACHMENT_STORE_OP_DONT_CARE;
+				description.stencil_load_op = RDD::ATTACHMENT_LOAD_OP_DONT_CARE;
+				description.stencil_store_op = RDD::ATTACHMENT_STORE_OP_DONT_CARE;
+				description.initial_layout = _vrs_layout_from_method(p_vrs_method);
+				description.final_layout = _vrs_layout_from_method(p_vrs_method);
+			}
+			else {
+				if (p_attachments[i].usage_flags & TEXTURE_USAGE_COLOR_ATTACHMENT_BIT) {
+					description.load_op = p_load_ops[i];
+					description.store_op = p_store_ops[i];
+					description.stencil_load_op = RDD::ATTACHMENT_LOAD_OP_DONT_CARE;
+					description.stencil_store_op = RDD::ATTACHMENT_STORE_OP_DONT_CARE;
+					description.initial_layout = RDD::TEXTURE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+					description.final_layout = RDD::TEXTURE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+				}
+				else if (p_attachments[i].usage_flags & TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+					description.load_op = p_load_ops[i];
+					description.store_op = p_store_ops[i];
+					description.stencil_load_op = p_load_ops[i];
+					description.stencil_store_op = p_store_ops[i];
+					description.initial_layout = RDD::TEXTURE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+					description.final_layout = RDD::TEXTURE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+				}
+				else if (p_attachments[i].usage_flags & TEXTURE_USAGE_DEPTH_RESOLVE_ATTACHMENT_BIT) {
+					description.load_op = p_load_ops[i];
+					description.store_op = p_store_ops[i];
+					description.stencil_load_op = p_load_ops[i];
+					description.stencil_store_op = p_store_ops[i];
+					description.initial_layout = RDD::TEXTURE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+					description.final_layout = RDD::TEXTURE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+				}
+				else {
+					description.load_op = RDD::ATTACHMENT_LOAD_OP_DONT_CARE;
+					description.store_op = RDD::ATTACHMENT_STORE_OP_DONT_CARE;
+					description.stencil_load_op = RDD::ATTACHMENT_LOAD_OP_DONT_CARE;
+					description.stencil_store_op = RDD::ATTACHMENT_STORE_OP_DONT_CARE;
+					description.initial_layout = RDD::TEXTURE_LAYOUT_UNDEFINED;
+					description.final_layout = RDD::TEXTURE_LAYOUT_UNDEFINED;
+				}
+			}
+
+			attachment_last_pass[i] = -1;
+			attachment_remap.push_back(attachments.size());
+			attachments.push_back(description);
+		}
+
+		std::vector<RDD::Subpass> subpasses;
+		subpasses.resize(p_passes.size());
+		std::vector<RDD::SubpassDependency> subpass_dependencies;
+
+		for (int i = 0; i < p_passes.size(); i++) {
+			const FramebufferPass* pass = &p_passes[i];
+			RDD::Subpass& subpass = subpasses[i];
+
+			TextureSamples texture_samples = TEXTURE_SAMPLES_1;
+			bool is_multisample_first = true;
+
+			for (int j = 0; j < pass->color_attachments.size(); j++) {
+				int32_t attachment = pass->color_attachments[j];
+				RDD::AttachmentReference reference;
+				if (attachment == ATTACHMENT_UNUSED) {
+					reference.attachment = RDD::AttachmentReference::UNUSED;
+					reference.layout = RDD::TEXTURE_LAYOUT_UNDEFINED;
+				}
+				else {
+					ERR_FAIL_INDEX_V_MSG(attachment, p_attachments.size(), RDD::RenderPassID(), std::format("Invalid framebuffer format attachment( %s ), in pass {}, color attachment {}.", std::to_string(attachment), std::to_string(i), std::to_string(j)).c_str());
+					ERR_FAIL_COND_V_MSG(!(p_attachments[attachment].usage_flags & TEXTURE_USAGE_COLOR_ATTACHMENT_BIT), RDD::RenderPassID(), std::format("Invalid framebuffer format attachment{}, in pass {}, it's marked as depth, but it's not usable as color attachment.", std::to_string(attachment), std::to_string(i)));
+					ERR_FAIL_COND_V_MSG(attachment_last_pass[attachment] == i, RDD::RenderPassID(), std::format("Invalid framebuffer format attachment{}, in pass {}, it already was used for something else before in this pass.", std::to_string(attachment), std::to_string(i)));
+
+					if (is_multisample_first) {
+						texture_samples = p_attachments[attachment].samples;
+						is_multisample_first = false;
+					}
+					else {
+						ERR_FAIL_COND_V_MSG(texture_samples != p_attachments[attachment].samples, RDD::RenderPassID(), std::format("Invalid framebuffer format attachment{}, in pass {}, if an attachment is marked as multisample, all of them should be multisample and use the same number of samples.", std::to_string(attachment), std::to_string(i)));
+					}
+					reference.attachment = attachment_remap[attachment];
+					reference.layout = RDD::TEXTURE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+					attachment_last_pass[attachment] = i;
+				}
+				reference.aspect = RDD::TEXTURE_ASPECT_COLOR_BIT;
+				subpass.color_references.push_back(reference);
+			}
+
+			for (int j = 0; j < pass->input_attachments.size(); j++) {
+				int32_t attachment = pass->input_attachments[j];
+				RDD::AttachmentReference reference;
+				if (attachment == ATTACHMENT_UNUSED) {
+					reference.attachment = RDD::AttachmentReference::UNUSED;
+					reference.layout = RDD::TEXTURE_LAYOUT_UNDEFINED;
+				}
+				else {
+					ERR_FAIL_INDEX_V_MSG(attachment, p_attachments.size(), RDD::RenderPassID(), std::format("Invalid framebuffer format attachment{}, in pass {}, input attachment {}.", std::to_string(attachment), std::to_string(i), std::to_string(j)).c_str());
+					ERR_FAIL_COND_V_MSG(!(p_attachments[attachment].usage_flags & TEXTURE_USAGE_INPUT_ATTACHMENT_BIT), RDD::RenderPassID(), std::format("Invalid framebuffer format attachment{}, in pass {}, it isn't marked as an input texture.", std::to_string(attachment), std::to_string(i)));
+					ERR_FAIL_COND_V_MSG(attachment_last_pass[attachment] == i, RDD::RenderPassID(), std::format("Invalid framebuffer format attachment{}, in pass {}, it already was used for something else before in this pass.", std::to_string(attachment), std::to_string(i)));
+					reference.attachment = attachment_remap[attachment];
+					reference.layout = RDD::TEXTURE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+					attachment_last_pass[attachment] = i;
+				}
+				reference.aspect = RDD::TEXTURE_ASPECT_COLOR_BIT;
+				subpass.input_references.push_back(reference);
+			}
+
+			if (pass->resolve_attachments.size() > 0) {
+				ERR_FAIL_COND_V_MSG(pass->resolve_attachments.size() != pass->color_attachments.size(), RDD::RenderPassID(), std::format("The amount of resolve attachments {} must match the number of color attachments {}.", std::to_string(pass->resolve_attachments.size()), std::to_string(pass->color_attachments.size())));
+				ERR_FAIL_COND_V_MSG(texture_samples == TEXTURE_SAMPLES_1, RDD::RenderPassID(), std::format("Resolve attachments specified, but color attachments are not multisample."));
+			}
+			for (int j = 0; j < pass->resolve_attachments.size(); j++) {
+				int32_t attachment = pass->resolve_attachments[j];
+				attachments[attachment].load_op = RDD::ATTACHMENT_LOAD_OP_DONT_CARE;
+
+				RDD::AttachmentReference reference;
+				if (attachment == ATTACHMENT_UNUSED) {
+					reference.attachment = RDD::AttachmentReference::UNUSED;
+					reference.layout = RDD::TEXTURE_LAYOUT_UNDEFINED;
+				}
+				else {
+					ERR_FAIL_INDEX_V_MSG(attachment, p_attachments.size(), RDD::RenderPassID(), std::format("Invalid framebuffer format attachment{}, in pass {}, resolve attachment {}.", std::to_string(attachment), std::to_string(i), std::to_string(j)).c_str());
+					ERR_FAIL_COND_V_MSG(pass->color_attachments[j] == ATTACHMENT_UNUSED, RDD::RenderPassID(), std::format("Invalid framebuffer format attachment{}, in pass {}, resolve attachment {}, the respective color attachment is marked as unused.", std::to_string(attachment), std::to_string(i), std::to_string(j)));
+					ERR_FAIL_COND_V_MSG(!(p_attachments[attachment].usage_flags & TEXTURE_USAGE_COLOR_ATTACHMENT_BIT), RDD::RenderPassID(), std::format("Invalid framebuffer format attachment{}, in pass {}, resolve attachment, it isn't marked as a color texture.", std::to_string(attachment), std::to_string(i)));
+					ERR_FAIL_COND_V_MSG(attachment_last_pass[attachment] == i, RDD::RenderPassID(), std::format("Invalid framebuffer format attachment{}, in pass {}, it already was used for something else before in this pass.", std::to_string(attachment), std::to_string(i)));
+					bool multisample = p_attachments[attachment].samples > TEXTURE_SAMPLES_1;
+					ERR_FAIL_COND_V_MSG(multisample, RDD::RenderPassID(), std::format("Invalid framebuffer format attachment{}, in pass {}, resolve attachments can't be multisample.", std::to_string(attachment), std::to_string(i)));
+					reference.attachment = attachment_remap[attachment];
+					reference.layout = RDD::TEXTURE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL; // RDD::TEXTURE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+					attachment_last_pass[attachment] = i;
+				}
+				reference.aspect = RDD::TEXTURE_ASPECT_COLOR_BIT;
+				subpass.resolve_references.push_back(reference);
+			}
+
+			if (pass->depth_attachment != ATTACHMENT_UNUSED) {
+				int32_t attachment = pass->depth_attachment;
+				ERR_FAIL_INDEX_V_MSG(attachment, p_attachments.size(), RDD::RenderPassID(), std::format("Invalid framebuffer depth format attachment{}, in pass {}, depth attachment.", std::to_string(attachment), std::to_string(i)).c_str());
+				ERR_FAIL_COND_V_MSG(!(p_attachments[attachment].usage_flags & TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT), RDD::RenderPassID(), std::format("Invalid framebuffer depth format attachment{}, in pass {}, it's marked as depth, but it's not a depth attachment.", std::to_string(attachment), std::to_string(i)));
+				ERR_FAIL_COND_V_MSG(attachment_last_pass[attachment] == i, RDD::RenderPassID(), std::format("Invalid framebuffer depth format attachment{}, in pass {}, it already was used for something else before in this pass.", std::to_string(attachment), std::to_string(i)));
+				subpass.depth_stencil_reference.attachment = attachment_remap[attachment];
+				subpass.depth_stencil_reference.layout = RDD::TEXTURE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+				attachment_last_pass[attachment] = i;
+
+				if (is_multisample_first) {
+					texture_samples = p_attachments[attachment].samples;
+					is_multisample_first = false;
+				}
+				else {
+					ERR_FAIL_COND_V_MSG(texture_samples != p_attachments[attachment].samples, RDD::RenderPassID(), std::format("Invalid framebuffer depth format attachment{}, in pass {}, if an attachment is marked as multisample, all of them should be multisample and use the same number of samples including the depth.", std::to_string(attachment), std::to_string(i)));
+				}
+
+				if (pass->depth_resolve_attachment != ATTACHMENT_UNUSED) {
+					attachment = pass->depth_resolve_attachment;
+
+					// As our fallbacks are handled outside of our pass, we should never be setting up a render pass with a depth resolve attachment when not supported.
+					ERR_FAIL_COND_V_MSG(!p_driver->has_feature(SUPPORTS_FRAMEBUFFER_DEPTH_RESOLVE), RDD::RenderPassID(), std::format("Invalid framebuffer depth format attachment{}, in pass {}, a depth resolve attachment was supplied when driver doesn't support this feature.", std::to_string(attachment), std::to_string(i)));
+
+					ERR_FAIL_INDEX_V_MSG(attachment, p_attachments.size(), RDD::RenderPassID(), std::format("Invalid framebuffer depth resolve format attachment{}, in pass {}, depth resolve attachment.", std::to_string(attachment), std::to_string(i)).c_str());
+					ERR_FAIL_COND_V_MSG(!(p_attachments[attachment].usage_flags & TEXTURE_USAGE_DEPTH_RESOLVE_ATTACHMENT_BIT), RDD::RenderPassID(), std::format("Invalid framebuffer depth resolve format attachment{}, in pass {}, it's marked as depth, but it's not a depth resolve attachment.", std::to_string(attachment), std::to_string(i)));
+					ERR_FAIL_COND_V_MSG(attachment_last_pass[attachment] == i, RDD::RenderPassID(), std::format("Invalid framebuffer depth resolve format attachment{}, in pass {}, it already was used for something else before in this pass.", std::to_string(attachment), std::to_string(i)));
+
+					subpass.depth_resolve_reference.attachment = attachment_remap[attachment];
+					subpass.depth_resolve_reference.layout = RDD::TEXTURE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+					attachment_last_pass[attachment] = i;
+				}
+
+			}
+			else {
+				subpass.depth_stencil_reference.attachment = RDD::AttachmentReference::UNUSED;
+				subpass.depth_stencil_reference.layout = RDD::TEXTURE_LAYOUT_UNDEFINED;
+			}
+
+			if (p_vrs_method == VRS_METHOD_FRAGMENT_SHADING_RATE && p_vrs_attachment >= 0) {
+				int32_t attachment = p_vrs_attachment;
+				ERR_FAIL_INDEX_V_MSG(attachment, p_attachments.size(), RDD::RenderPassID(), std::format("Invalid framebuffer VRS format attachment{}, in pass {}, VRS attachment.", std::to_string(attachment), std::to_string(i)).c_str());
+				ERR_FAIL_COND_V_MSG(!(p_attachments[attachment].usage_flags & TEXTURE_USAGE_VRS_ATTACHMENT_BIT), RDD::RenderPassID(), std::format("Invalid framebuffer VRS format attachment{}, in pass {}, it's marked as VRS, but it's not a VRS attachment.", std::to_string(attachment), std::to_string(i)));
+				ERR_FAIL_COND_V_MSG(attachment_last_pass[attachment] == i, RDD::RenderPassID(), std::format("Invalid framebuffer VRS attachment{}, in pass {}, it already was used for something else before in this pass.", std::to_string(attachment), std::to_string(i)));
+
+				subpass.fragment_shading_rate_reference.attachment = attachment_remap[attachment];
+				subpass.fragment_shading_rate_reference.layout = RDD::TEXTURE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL;
+				subpass.fragment_shading_rate_texel_size = p_vrs_texel_size;
+
+				attachment_last_pass[attachment] = i;
+			}
+
+			for (int j = 0; j < pass->preserve_attachments.size(); j++) {
+				int32_t attachment = pass->preserve_attachments[j];
+
+				ERR_FAIL_COND_V_MSG(attachment == ATTACHMENT_UNUSED, RDD::RenderPassID(), std::format("Invalid framebuffer format attachment{}, in pass {}, preserve attachment {}. Preserve attachments can't be unused.", std::to_string(attachment), std::to_string(i), std::to_string(j)));
+
+				ERR_FAIL_INDEX_V_MSG(attachment, p_attachments.size(), RDD::RenderPassID(), std::format("Invalid framebuffer format attachment{}, in pass {}, preserve attachment {}.", std::to_string(attachment), std::to_string(i), std::to_string(j)).c_str());
+
+				if (attachment_last_pass[attachment] != i) {
+					// Preserve can still be used to keep depth or color from being discarded after use.
+					attachment_last_pass[attachment] = i;
+					subpasses[i].preserve_attachments.push_back(attachment);
+				}
+			}
+
+			if (r_samples) {
+				r_samples->push_back(texture_samples);
+			}
+
+			if (i > 0) {
+				RDD::SubpassDependency dependency;
+				dependency.src_subpass = i - 1;
+				dependency.dst_subpass = i;
+				dependency.src_stages = (RDD::PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | RDD::PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | RDD::PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT);
+				dependency.dst_stages = (RDD::PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | RDD::PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | RDD::PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT | RDD::PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+				dependency.src_access = (RDD::BARRIER_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | RDD::BARRIER_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT);
+				dependency.dst_access = (RDD::BARRIER_ACCESS_COLOR_ATTACHMENT_READ_BIT | RDD::BARRIER_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | RDD::BARRIER_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | RDD::BARRIER_ACCESS_INPUT_ATTACHMENT_READ_BIT);
+				subpass_dependencies.push_back(dependency);
+			}
+		}
+
+		RDD::AttachmentReference fragment_density_map_attachment_reference;
+		if (p_vrs_method == VRS_METHOD_FRAGMENT_DENSITY_MAP && p_vrs_attachment >= 0) {
+			fragment_density_map_attachment_reference.attachment = p_vrs_attachment;
+			fragment_density_map_attachment_reference.layout = RDD::TEXTURE_LAYOUT_FRAGMENT_DENSITY_MAP_ATTACHMENT_OPTIMAL;
+		}
+
+		RDD::RenderPassID render_pass = p_driver->render_pass_create(attachments, subpasses, subpass_dependencies, p_view_count, fragment_density_map_attachment_reference);
+		ERR_FAIL_COND_V(!render_pass, RDD::RenderPassID());
+
+		return render_pass;
+	}	
 
 	RenderingDevice::RenderingDevice()
 	{

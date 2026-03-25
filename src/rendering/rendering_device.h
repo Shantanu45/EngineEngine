@@ -163,6 +163,12 @@ namespace Rendering
 			BUFFER_CREATION_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT = (1 << 3),
 		};
 
+		enum StagingRequiredAction {
+			STAGING_REQUIRED_ACTION_NONE,
+			STAGING_REQUIRED_ACTION_FLUSH_AND_STALL_ALL,
+			STAGING_REQUIRED_ACTION_STALL_PREVIOUS,
+		};
+
 		struct Uniform {
 			UniformType uniform_type = UNIFORM_TYPE_IMAGE;
 			uint32_t binding = 0; // Binding index as specified in shader.
@@ -378,6 +384,35 @@ namespace Rendering
 			std::vector<int32_t> preserve_attachments;
 			int32_t depth_attachment = ATTACHMENT_UNUSED;
 			int32_t depth_resolve_attachment = ATTACHMENT_UNUSED;
+		};
+
+		struct TextureView {
+			DataFormat format_override = DATA_FORMAT_MAX; // // Means, use same as format.
+			TextureSwizzle swizzle_r = TEXTURE_SWIZZLE_R;
+			TextureSwizzle swizzle_g = TEXTURE_SWIZZLE_G;
+			TextureSwizzle swizzle_b = TEXTURE_SWIZZLE_B;
+			TextureSwizzle swizzle_a = TEXTURE_SWIZZLE_A;
+
+			bool operator==(const TextureView& p_other) const {
+				if (format_override != p_other.format_override) {
+					return false;
+				}
+				else if (swizzle_r != p_other.swizzle_r) {
+					return false;
+				}
+				else if (swizzle_g != p_other.swizzle_g) {
+					return false;
+				}
+				else if (swizzle_b != p_other.swizzle_b) {
+					return false;
+				}
+				else if (swizzle_a != p_other.swizzle_a) {
+					return false;
+				}
+				else {
+					return true;
+				}
+			}
 		};
 
 		struct FramebufferFormatKey {
@@ -642,11 +677,6 @@ namespace Rendering
 			void* invalidated_callback_userdata = nullptr;
 		};
 
-		enum StagingRequiredAction {
-			STAGING_REQUIRED_ACTION_NONE,
-			STAGING_REQUIRED_ACTION_FLUSH_AND_STALL_ALL,
-			STAGING_REQUIRED_ACTION_STALL_PREVIOUS,
-		};
 
 		struct StagingBufferBlock {
 			RDD::BufferID driver_id;
@@ -818,6 +848,7 @@ namespace Rendering
 
 #pragma endregion
 
+#pragma region Buffer
 		RID vertex_buffer_create(uint32_t p_size_bytes, std::span<uint8_t> p_data = {}, BitField<BufferCreationBits> p_creation_bits = 0);
 
 
@@ -830,43 +861,30 @@ namespace Rendering
 		Error buffer_clear(RID p_buffer, uint32_t p_offset, uint32_t p_size);
 		void buffer_flush(RID p_buffer);
 
+		RID vertex_array_create(uint32_t p_vertex_count, VertexFormatID p_vertex_format, const std::vector<RID>& p_src_buffers, const std::vector<uint64_t>& p_offsets = std::vector<uint64_t>());
 
-		struct TextureView {
-			DataFormat format_override = DATA_FORMAT_MAX; // // Means, use same as format.
-			TextureSwizzle swizzle_r = TEXTURE_SWIZZLE_R;
-			TextureSwizzle swizzle_g = TEXTURE_SWIZZLE_G;
-			TextureSwizzle swizzle_b = TEXTURE_SWIZZLE_B;
-			TextureSwizzle swizzle_a = TEXTURE_SWIZZLE_A;
+		RID index_buffer_create(uint32_t p_index_count, IndexBufferFormat p_format, std::span<uint8_t> p_data = {},
+			bool p_use_restart_indices = false, BitField<BufferCreationBits> p_creation_bits = 0);
 
-			bool operator==(const TextureView& p_other) const {
-				if (format_override != p_other.format_override) {
-					return false;
-				}
-				else if (swizzle_r != p_other.swizzle_r) {
-					return false;
-				}
-				else if (swizzle_g != p_other.swizzle_g) {
-					return false;
-				}
-				else if (swizzle_b != p_other.swizzle_b) {
-					return false;
-				}
-				else if (swizzle_a != p_other.swizzle_a) {
-					return false;
-				}
-				else {
-					return true;
-				}
-			}
-		};
+		RID index_array_create(RID p_index_buffer, uint32_t p_index_offset, uint32_t p_index_count);
+
+		void bind_vertex_array(RID p_vertex_array);
+
+		void bind_index_array(RID p_index_array);
+
+		void bind_uniform_set(RID p_shader_id, RID p_uniform_set_id, uint32_t set_index);
+
+#pragma endregion
+
+#pragma region Texture
 
 		RID texture_buffer_create(uint32_t p_size_elements, DataFormat p_format, std::span<uint8_t> p_data = {});
 		RID texture_create(const TextureFormat& p_format, const TextureView& p_view, const std::vector<std::vector<uint8_t>>& p_data = std::vector<std::vector<uint8_t>>());
 		RID texture_create_shared(const TextureView& p_view, RID p_with_texture);
-		RID texture_create_from_extension(TextureType p_type, DataFormat p_format, TextureSamples p_samples, BitField<RenderingDevice::TextureUsageBits> p_usage, 
+		RID texture_create_from_extension(TextureType p_type, DataFormat p_format, TextureSamples p_samples, BitField<RenderingDevice::TextureUsageBits> p_usage,
 			uint64_t p_image, uint64_t p_width, uint64_t p_height, uint64_t p_depth, uint64_t p_layers, uint64_t p_mipmaps = 1);
 
-		RID texture_create_shared_from_slice(const TextureView& p_view, RID p_with_texture, uint32_t p_layer, uint32_t p_mipmap, uint32_t p_mipmaps = 1, 
+		RID texture_create_shared_from_slice(const TextureView& p_view, RID p_with_texture, uint32_t p_layer, uint32_t p_mipmap, uint32_t p_mipmaps = 1,
 			TextureSliceType p_slice_type = TEXTURE_SLICE_2D, uint32_t p_layers = 0);
 		Error texture_update(RID p_texture, uint32_t p_layer, const std::vector<uint8_t>& p_data);
 		std::vector<uint8_t> texture_get_data(RID p_texture, uint32_t p_layer); // CPU textures will return immediately, while GPU textures will most likely force a flush
@@ -874,6 +892,8 @@ namespace Rendering
 
 		RID sampler_create(const SamplerState& p_state);
 		bool sampler_is_format_supported_for_filter(DataFormat p_format, SamplerFilter p_sampler_filter) const;
+
+#pragma endregion Texture
 
 		void swap_buffers(bool p_present);
 
@@ -921,20 +941,7 @@ namespace Rendering
 
 		void execute_frame(bool p_present);
 
-		RID vertex_array_create(uint32_t p_vertex_count, VertexFormatID p_vertex_format, const std::vector<RID>& p_src_buffers, const std::vector<uint64_t>& p_offsets = std::vector<uint64_t>());
-
-		RID index_buffer_create(uint32_t p_index_count, IndexBufferFormat p_format, std::span<uint8_t> p_data = {},
-			bool p_use_restart_indices = false, BitField<BufferCreationBits> p_creation_bits = 0);
-
-		RID index_array_create(RID p_index_buffer, uint32_t p_index_offset, uint32_t p_index_count);
-
-		void bind_vertex_array(RID p_vertex_array);
-
-		void bind_index_array(RID p_index_array);
-
-		void bind_uniform_set(RID p_shader_id, RID p_uniform_set_id, uint32_t set_index);
-
-		void set_push_constant(const void* p_data, uint32_t p_data_size);
+		void set_push_constant(const void* p_data, uint32_t p_data_size, RID p_shader);
 
 		void add_draw_list_bind_uniform_sets(RDD::ShaderID p_shader, std::span<RDD::UniformSetID> p_uniform_sets, uint32_t p_first_index, uint32_t p_set_count);
 
@@ -956,22 +963,10 @@ namespace Rendering
 		}
 
 		void _stall_for_frame(uint32_t p_frame);
-
 		void _stall_for_previous_frames();
-
 		void _flush_and_stall_for_all_frames(bool p_begin_frame = true);
-
 		uint32_t _get_swap_chain_desired_count() const;
-
-		static RDD::TextureLayout _vrs_layout_from_method(VRSMethod p_method);
-
-		static RDD::RenderPassID _render_pass_create(RenderingDeviceDriver* p_driver, const std::vector<AttachmentFormat>& p_attachments,
-			const std::vector<FramebufferPass>& p_passes, std::span<RDD::AttachmentLoadOp> p_load_ops,
-			std::span<RDD::AttachmentStoreOp> p_store_ops, uint32_t p_view_count = 1, VRSMethod p_vrs_method = VRS_METHOD_NONE,
-			int32_t p_vrs_attachment = -1, Size2i p_vrs_texel_size = Size2i(), std::vector<TextureSamples>* r_samples = nullptr);
-
 		Buffer* _get_buffer_from_owner(RID p_buffer);
-
 		Error _buffer_initialize(Buffer* p_buffer, std::span<uint8_t> p_data, uint32_t p_required_align = 32);
 
 #pragma region Transfer Worker
@@ -993,16 +988,13 @@ namespace Rendering
 #pragma endregion
 
 		std::vector<uint8_t> _load_pipeline_cache();
-
 		static void _save_pipeline_cache(void* p_data);
-
 		Error _staging_buffer_allocate(StagingBuffers& p_staging_buffers, uint32_t p_amount, uint32_t p_required_align, 
 			uint32_t& r_alloc_offset, uint32_t& r_alloc_size, StagingRequiredAction& r_required_action, bool p_can_segment = true);
-
 		void _staging_buffer_execute_required_action(StagingBuffers& p_staging_buffers, StagingRequiredAction p_required_action);
-
 		Error _insert_staging_block(StagingBuffers& p_staging_buffers);
 
+#pragma region Texture
 		uint32_t _texture_layer_count(Texture* p_texture) const;
 		uint32_t _texture_alignment(Texture* p_texture) const;
 		Error _texture_initialize(RID p_texture, uint32_t p_layer, const std::vector<uint8_t>& p_data, RDD::TextureLayout p_dst_layout, bool p_immediate_flush);
@@ -1016,6 +1008,13 @@ namespace Rendering
 		void _texture_clear_depth_stencil(RID p_texture_rid, Texture* p_texture, float p_depth, uint8_t p_stencil, uint32_t p_base_mipmap, uint32_t p_mipmaps, uint32_t p_base_layer, uint32_t p_layers);
 		uint32_t _texture_vrs_method_to_usage_bits() const;
 		void _texture_ensure_shareable_format(RID p_texture, const DataFormat& p_shareable_format);
+#pragma endregion Texture
+		
+		static RDD::TextureLayout _vrs_layout_from_method(VRSMethod p_method);
+		static RDD::RenderPassID _render_pass_create(RenderingDeviceDriver* p_driver, const std::vector<AttachmentFormat>& p_attachments,
+			const std::vector<FramebufferPass>& p_passes, std::span<RDD::AttachmentLoadOp> p_load_ops,
+			std::span<RDD::AttachmentStoreOp> p_store_ops, uint32_t p_view_count = 1, VRSMethod p_vrs_method = VRS_METHOD_NONE,
+			int32_t p_vrs_attachment = -1, Size2i p_vrs_texel_size = Size2i(), std::vector<TextureSamples>* r_samples = nullptr);
 
 		RenderingDevice();
 		~RenderingDevice();
