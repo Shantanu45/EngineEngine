@@ -571,7 +571,7 @@ namespace Rendering
 		struct IndexBuffer : public Buffer {
 			uint32_t max_index = 0; // Used for validation.
 			uint32_t index_count = 0;
-			IndexBufferFormat format = INDEX_BUFFER_FORMAT_UINT16;
+			IndexBufferFormat format = INDEX_BUFFER_FORMAT_UINT32;
 			bool supports_restart_indices = false;
 		};
 
@@ -581,7 +581,7 @@ namespace Rendering
 			//RDG::ResourceTracker* draw_tracker = nullptr; // Not owned, inherited from index buffer.
 			uint32_t offset = 0;
 			uint32_t indices = 0;
-			IndexBufferFormat format = INDEX_BUFFER_FORMAT_UINT16;
+			IndexBufferFormat format = INDEX_BUFFER_FORMAT_UINT32;
 			bool supports_restart_indices = false;
 			int32_t transfer_worker_index = -1;
 			uint64_t transfer_worker_operation = 0;

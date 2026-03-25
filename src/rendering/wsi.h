@@ -14,8 +14,9 @@ namespace Rendering
 {
 	struct MeshRange {
 		uint32_t vertexOffset;  // offset into the big vertex buffer
+		uint64_t vertex_byte_offset;
 		uint32_t indexOffset;   // offset into the big index buffer
-		uint32_t indexCount;
+		uint32_t index_count;
 	};
 
 	enum class VERTEX_DATA_MODE
@@ -58,6 +59,7 @@ namespace Rendering
 
 		void bind_vbo_and_ibo();
 
+		void bind_and_draw_indexed(RenderingDeviceDriver::CommandBufferID p_command_buffer);
 		RenderingDevice* get_rendering_device() { return rendering_device; }
 
 		RID get_bound_shader() {
@@ -66,6 +68,8 @@ namespace Rendering
 
 		void set_wsi_platform_data(DisplayServerEnums::WindowID window, WindowData data);
 
+		Error load_gltf(std::string path);
+		void set_default_vertex_attribute();
 		void push_vertex_data(void* vertex_data, size_t size);
 		void push_index_data(void* data, size_t size);
 
@@ -84,9 +88,7 @@ namespace Rendering
 
 		void teardown();
 
-		Error load_gltf(std::string path);
 
-		void set_default_vertex_attribute();
 		~WSI();
 	private:
 
@@ -114,10 +116,6 @@ namespace Rendering
 		bool main_window_created = false;
 		RID shader_program;
 
-		RID triangle_vertex_buffer;
-		RID triangle_index_buffer;
-		RID vertex_array;
-		RID index_array;
 		RenderingDevice::VertexFormatID vertex_format;
 
 		DisplayServerEnums::WindowID active_window = DisplayServerEnums::INVALID_WINDOW_ID;
@@ -137,7 +135,10 @@ namespace Rendering
 
 		std::unique_ptr<GltfLoader> gltf_loader = nullptr;
 
-		uint32_t totalVertices = 0;
-		uint32_t totalIndices = 0;
+		uint32_t total_vertices = 0;
+		uint32_t total_indices = 0;
+
+		std::unordered_map<RID, RID> vertex_arrays;		// prim to array
+		std::unordered_map<RID, RID> index_arrays;
 	};
 }

@@ -13,7 +13,6 @@
 #include "vma/vk_mem_alloc.h"
 #include "application/application.h"
 #include "application/application_entry/application_entry.h"
-#include "rendering/gltf_loader.h"
 #include "libassert/assert.hpp"
 #include <cmath> 
 #include <cstddef>
@@ -27,27 +26,11 @@ struct TriangleApplication : EE::Application
 
 	void pre_frame() override
 	{
-		auto fs = Services::get().get<FilesystemInterface>();
-		Rendering::GltfLoader loader(*fs);
-
-		DEBUG_ASSERT(loader.load("assets://gltf/cube.glb") == OK);
-		prim = loader.primitives()[0];
-
 		auto wsi = get_wsi();
 
-		wsi->set_vertex_data_mode(Rendering::VERTEX_DATA_MODE::INTERLEVED_DATA);
-		wsi->set_index_buffer_format(Rendering::RenderingDeviceCommons::IndexBufferFormat::INDEX_BUFFER_FORMAT_UINT32);
+		wsi->set_default_vertex_attribute();
 
-		uint64_t vbSize = prim.vertices.size() * sizeof(Rendering::Vertex);
-		uint64_t ibSize = prim.indices.size() * sizeof(uint32_t);
-
-		wsi->push_vertex_data(prim.vertices.data(), vbSize);
-		wsi->set_vertex_attribute(0, 0, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32B32_SFLOAT, offsetof(Rendering::Vertex, position), sizeof(Rendering::Vertex));
-		wsi->set_vertex_attribute(0, 1, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32B32_SFLOAT, offsetof(Rendering::Vertex, normal) , sizeof(Rendering::Vertex));
-		wsi->set_vertex_attribute(0, 2, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32_SFLOAT, offsetof(Rendering::Vertex, texcoord), sizeof(Rendering::Vertex));
-		wsi->set_vertex_attribute(0, 3, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32B32A32_SFLOAT, offsetof(Rendering::Vertex, tangent), sizeof(Rendering::Vertex));
-
-		wsi->push_index_data(prim.indices.data(), ibSize);
+		wsi->load_gltf("assets://gltf/two_cubes.glb");
 
 		auto device = wsi->get_rendering_device();
 
@@ -88,10 +71,8 @@ struct TriangleApplication : EE::Application
 		auto cmd_buffer = device->get_current_command_buffer();
 
 		device->bind_render_pipeline(cmd_buffer, wsi->get_current_pipeline());
-		wsi->bind_vbo_and_ibo();
 		device->bind_uniform_set(wsi->get_bound_shader(), uniform_set, 0);
-
-		device->render_draw_indexed(cmd_buffer, prim.indices.size(), 1, 0, 0, 0);
+		wsi->bind_and_draw_indexed(cmd_buffer);
 
 	}
 

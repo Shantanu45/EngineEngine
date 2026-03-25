@@ -2052,7 +2052,8 @@ namespace Rendering
 	void RenderingDevice::bind_index_array(RID p_index_array)
 	{
 		IndexArray* index_array = index_array_owner.get_or_null(p_index_array);
-		driver->command_render_bind_index_buffer(frames[frame].command_buffer, index_array->driver_id, index_array->format, index_array->offset);
+		uint64_t byte_offset = index_array->offset * (index_array->format == INDEX_BUFFER_FORMAT_UINT16 ? 2 : 4);
+		driver->command_render_bind_index_buffer(frames[frame].command_buffer, index_array->driver_id, index_array->format, byte_offset);
 	}
 
 	void RenderingDevice::bind_uniform_set(RID p_shader_id, RID p_uniform_set_id, uint32_t set_index) {

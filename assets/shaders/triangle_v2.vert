@@ -13,5 +13,5 @@ layout(location = 0) out vec3 fragCol;
 
 void main() {
     gl_Position = vec4(inPosition, 1.0);
-    fragCol = ubo.value;
+    fragCol = inPosition;
 }
