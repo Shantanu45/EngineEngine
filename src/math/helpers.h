@@ -1,6 +1,7 @@
 #pragma once
 #include "math_common.h"
 #include <glm/gtc/epsilon.hpp>
+#include "glm/gtc/round.hpp"
 #include <string>
 
 namespace math_helpers
@@ -38,4 +39,14 @@ namespace math_helpers
         oss << ")";
         return oss.str();
     }
+
+
+	template<typename T>
+	T nearest_power_of_two(T v)
+	{
+		T lower = glm::floorPowerOfTwo(v);
+		T upper = glm::ceilPowerOfTwo(v);
+
+		return (v - lower < upper - v) ? lower : upper;
+	}
 }

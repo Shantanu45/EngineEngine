@@ -9,7 +9,7 @@
 #include "vulkan/shader_container.h"
 #include "application/service_locator.h"
 #include <set>
-#include "glm/gtc/round.hpp"
+#include "math\helpers.h"
 
 namespace Rendering
 {
@@ -27,6 +27,38 @@ namespace Rendering
 	"UniformBufferDynamic",
 	"StorageBufferDynamic",
 	};
+
+	static _ALWAYS_INLINE_ void _copy_region(uint8_t const* __restrict p_src, uint8_t* __restrict p_dst, uint32_t p_src_x, uint32_t p_src_y, uint32_t p_src_w, uint32_t p_src_h, uint32_t p_src_full_w, uint32_t p_dst_pitch, uint32_t p_unit_size) {
+		uint32_t src_offset = (p_src_y * p_src_full_w + p_src_x) * p_unit_size;
+		uint32_t dst_offset = 0;
+		for (uint32_t y = p_src_h; y > 0; y--) {
+			uint8_t const* __restrict src = p_src + src_offset;
+			uint8_t* __restrict dst = p_dst + dst_offset;
+			for (uint32_t x = p_src_w * p_unit_size; x > 0; x--) {
+				*dst = *src;
+				src++;
+				dst++;
+			}
+			src_offset += p_src_full_w * p_unit_size;
+			dst_offset += p_dst_pitch;
+		}
+	}
+
+	static _ALWAYS_INLINE_ void _copy_region_block_or_regular(const uint8_t* p_read_ptr, uint8_t* p_write_ptr, uint32_t p_x, uint32_t p_y, uint32_t p_width, uint32_t p_region_w, uint32_t p_region_h, uint32_t p_block_w, uint32_t p_block_h, uint32_t p_dst_pitch, uint32_t p_pixel_size, uint32_t p_block_size) {
+		if (p_block_w != 1 || p_block_h != 1) {
+			// Block format.
+			uint32_t xb = p_x / p_block_w;
+			uint32_t yb = p_y / p_block_h;
+			uint32_t wb = p_width / p_block_w;
+			uint32_t region_wb = p_region_w / p_block_w;
+			uint32_t region_hb = p_region_h / p_block_h;
+			_copy_region(p_read_ptr, p_write_ptr, xb, yb, region_wb, region_hb, wb, p_dst_pitch, p_block_size);
+		}
+		else {
+			// Regular format.
+			_copy_region(p_read_ptr, p_write_ptr, p_x, p_y, p_region_w, p_region_h, p_width, p_dst_pitch, p_pixel_size);
+		}
+	}
 
 	Error RenderingDevice::initialize(RenderingContextDriver* p_context, DisplayServerEnums::WindowID p_main_window)
 	{
@@ -208,6 +240,12 @@ namespace Rendering
 		// Copy the sizes to the download staging buffers.
 		download_staging_buffers.block_size = upload_staging_buffers.block_size;
 		download_staging_buffers.max_size = upload_staging_buffers.max_size;
+
+		//texture_upload_region_size_px = GLOBAL_GET("rendering/rendering_device/staging_buffer/texture_upload_region_size_px");
+		texture_upload_region_size_px = math_helpers::nearest_power_of_two(texture_upload_region_size_px);
+
+		//texture_download_region_size_px = GLOBAL_GET("rendering/rendering_device/staging_buffer/texture_download_region_size_px");
+		texture_download_region_size_px = math_helpers::nearest_power_of_two(texture_download_region_size_px);
 
 		// Ensure current staging block is valid and at least one per frame exists.
 		upload_staging_buffers.current = 0;
@@ -1540,6 +1578,534 @@ namespace Rendering
 		driver->buffer_flush(buffer->driver_id);
 	}
 
+	RID RenderingDevice::texture_buffer_create(uint32_t p_size_elements, DataFormat p_format, std::span<uint8_t> p_data /*= {}*/)
+	{
+		uint32_t element_size = get_format_vertex_size(p_format);
+		ERR_FAIL_COND_V_MSG(element_size == 0, RID(), "Format requested is not supported for texture buffers");
+		uint64_t size_bytes = uint64_t(element_size) * p_size_elements;
+
+		ERR_FAIL_COND_V(p_data.size() && (uint32_t)p_data.size() != size_bytes, RID());
+
+		Buffer texture_buffer;
+		texture_buffer.size = size_bytes;
+		BitField<RDD::BufferUsageBits> usage = (RDD::BUFFER_USAGE_TRANSFER_FROM_BIT | RDD::BUFFER_USAGE_TRANSFER_TO_BIT | RDD::BUFFER_USAGE_TEXEL_BIT);
+		texture_buffer.driver_id = driver->buffer_create(size_bytes, usage, RDD::MEMORY_ALLOCATION_TYPE_GPU, frames_drawn);
+		ERR_FAIL_COND_V(!texture_buffer.driver_id, RID());
+
+		// Texture buffers are assumed to be immutable unless they don't have initial data.
+		//if (p_data.empty()) {
+		//	texture_buffer.draw_tracker = RDG::resource_tracker_create();
+		//	texture_buffer.draw_tracker->buffer_driver_id = texture_buffer.driver_id;
+		//}
+
+		bool ok = driver->buffer_set_texel_format(texture_buffer.driver_id, p_format);
+		if (!ok) {
+			driver->buffer_free(texture_buffer.driver_id);
+			ERR_FAIL_V(RID());
+		}
+
+		if (p_data.size()) {
+			_buffer_initialize(&texture_buffer, p_data);
+		}
+
+		//_THREAD_SAFE_LOCK_
+			buffer_memory += size_bytes;
+		//_THREAD_SAFE_UNLOCK_
+
+			RID id = texture_buffer_owner.make_rid(texture_buffer);
+#ifdef DEV_ENABLED
+		set_resource_name(id, "RID:" + itos(id.get_id()));
+#endif
+		return id;
+	}
+
+	RID RenderingDevice::texture_create(const TextureFormat& p_format, const TextureView& p_view, const std::vector<std::vector<uint8_t>>& p_data /*= std::vector<std::vector<uint8_t>>()*/)
+	{
+		TextureFormat format = p_format;
+
+		if (format.shareable_formats.size()) {
+			ERR_FAIL_COND_V_MSG((std::find(format.shareable_formats.begin(), format.shareable_formats.end(), format.format) == format.shareable_formats.end()), RID(),
+				"If supplied a list of shareable formats, the current format must be present in the list");
+			ERR_FAIL_COND_V_MSG(p_view.format_override != DATA_FORMAT_MAX && (std::find(format.shareable_formats.begin(), format.shareable_formats.end(), p_view.format_override) == format.shareable_formats.end()), RID(),
+				"If supplied a list of shareable formats, the current view format override must be present in the list");
+		}
+
+		ERR_FAIL_INDEX_V(format.texture_type, RDD::TEXTURE_TYPE_MAX, RID());
+
+		ERR_FAIL_COND_V_MSG(format.width < 1, RID(), "Width must be equal or greater than 1 for all textures");
+
+		if (format.texture_type != TEXTURE_TYPE_1D && format.texture_type != TEXTURE_TYPE_1D_ARRAY) {
+			ERR_FAIL_COND_V_MSG(format.height < 1, RID(), "Height must be equal or greater than 1 for 2D and 3D textures");
+		}
+
+		if (format.texture_type == TEXTURE_TYPE_3D) {
+			ERR_FAIL_COND_V_MSG(format.depth < 1, RID(), "Depth must be equal or greater than 1 for 3D textures");
+		}
+
+		ERR_FAIL_COND_V(format.mipmaps < 1, RID());
+
+		if (format.texture_type == TEXTURE_TYPE_1D_ARRAY || format.texture_type == TEXTURE_TYPE_2D_ARRAY || format.texture_type == TEXTURE_TYPE_CUBE_ARRAY || format.texture_type == TEXTURE_TYPE_CUBE) {
+			ERR_FAIL_COND_V_MSG(format.array_layers < 1, RID(),
+				"Number of layers must be equal or greater than 1 for arrays and cubemaps.");
+			ERR_FAIL_COND_V_MSG((format.texture_type == TEXTURE_TYPE_CUBE_ARRAY || format.texture_type == TEXTURE_TYPE_CUBE) && (format.array_layers % 6) != 0, RID(),
+				"Cubemap and cubemap array textures must provide a layer number that is multiple of 6");
+			ERR_FAIL_COND_V_MSG(((format.texture_type == TEXTURE_TYPE_CUBE_ARRAY || format.texture_type == TEXTURE_TYPE_CUBE)) && (format.width != format.height), RID(),
+				"Cubemap and cubemap array textures must have equal width and height.");
+			ERR_FAIL_COND_V_MSG(format.array_layers > driver->limit_get(LIMIT_MAX_TEXTURE_ARRAY_LAYERS), RID(), "Number of layers exceeds device maximum.");
+		}
+		else {
+			format.array_layers = 1;
+		}
+
+		ERR_FAIL_INDEX_V(format.samples, TEXTURE_SAMPLES_MAX, RID());
+
+		ERR_FAIL_COND_V_MSG(format.usage_bits == 0, RID(), "No usage bits specified (at least one is needed)");
+
+		format.height = format.texture_type != TEXTURE_TYPE_1D && format.texture_type != TEXTURE_TYPE_1D_ARRAY ? format.height : 1;
+		format.depth = format.texture_type == TEXTURE_TYPE_3D ? format.depth : 1;
+
+		uint64_t size_max = 0;
+		switch (format.texture_type) {
+		case TEXTURE_TYPE_1D:
+		case TEXTURE_TYPE_1D_ARRAY:
+			size_max = driver->limit_get(LIMIT_MAX_TEXTURE_SIZE_1D);
+			break;
+		case TEXTURE_TYPE_2D:
+		case TEXTURE_TYPE_2D_ARRAY:
+			size_max = driver->limit_get(LIMIT_MAX_TEXTURE_SIZE_2D);
+			break;
+		case TEXTURE_TYPE_CUBE:
+		case TEXTURE_TYPE_CUBE_ARRAY:
+			size_max = driver->limit_get(LIMIT_MAX_TEXTURE_SIZE_CUBE);
+			break;
+		case TEXTURE_TYPE_3D:
+			size_max = driver->limit_get(LIMIT_MAX_TEXTURE_SIZE_3D);
+			break;
+		case TEXTURE_TYPE_MAX:
+			break;
+		}
+		ERR_FAIL_COND_V_MSG(format.width > size_max || format.height > size_max || format.depth > size_max, RID(), "Texture dimensions exceed device maximum.");
+
+		uint32_t required_mipmaps = get_image_required_mipmaps(format.width, format.height, format.depth);
+
+		ERR_FAIL_COND_V_MSG(required_mipmaps < format.mipmaps, RID(),
+			std::format("Too many mipmaps requested for texture format and dimensions ({}), maximum allowed: ({}).", format.mipmaps, required_mipmaps));
+
+		std::vector<std::vector<uint8_t>> data = p_data;
+		bool immediate_flush = false;
+
+		// If this is a VRS texture, we make sure that it is created with valid initial data. This prevents a crash on Qualcomm Snapdragon XR2 Gen 1
+		// (used in Quest 2, Quest Pro, Pico 4, HTC Vive XR Elite and others) where the driver will read the texture before we've had time to finish updating it.
+		if (data.empty() && (p_format.usage_bits & TEXTURE_USAGE_VRS_ATTACHMENT_BIT)) {
+			immediate_flush = true;
+			for (uint32_t i = 0; i < format.array_layers; i++) {
+				uint32_t required_size = get_image_format_required_size(format.format, format.width, format.height, format.depth, format.mipmaps);
+				std::vector<uint8_t> layer;
+				layer.resize(required_size);
+				std::fill(layer.begin(), layer.end(), 255);
+				data.push_back(layer);
+			}
+		}
+
+		uint32_t forced_usage_bits = _texture_vrs_method_to_usage_bits();
+		if (data.size()) {
+			ERR_FAIL_COND_V_MSG(data.size() != (int)format.array_layers, RID(),
+				std::format("Default supplied data for image format is of invalid length ({}), should be ({}).", data.size(), format.array_layers));
+
+			for (uint32_t i = 0; i < format.array_layers; i++) {
+				uint32_t required_size = get_image_format_required_size(format.format, format.width, format.height, format.depth, format.mipmaps);
+				ERR_FAIL_COND_V_MSG((uint32_t)data[i].size() != required_size, RID(),
+					std::format("Data for slice index {} (mapped to layer {}) differs in size (supplied: {}) than what is required by the format ({}).", i, i, data[i].size(), required_size));
+			}
+
+			ERR_FAIL_COND_V_MSG(format.usage_bits & TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, RID(),
+				"Textures created as depth attachments can't be initialized with data directly. Use RenderingDevice::texture_update() instead.");
+
+			if (!(format.usage_bits & TEXTURE_USAGE_CAN_UPDATE_BIT)) {
+				forced_usage_bits |= TEXTURE_USAGE_CAN_UPDATE_BIT;
+			}
+		}
+
+		{
+			// Validate that this image is supported for the intended use.
+			bool cpu_readable = (format.usage_bits & RDD::TEXTURE_USAGE_CPU_READ_BIT);
+			BitField<RDD::TextureUsageBits> supported_usage = driver->texture_get_usages_supported_by_format(format.format, cpu_readable);
+
+			std::string format_text = "'" + std::string(FORMAT_NAMES[format.format]) + "'";
+
+			if ((format.usage_bits & TEXTURE_USAGE_SAMPLING_BIT) && !supported_usage.has_flag(TEXTURE_USAGE_SAMPLING_BIT)) {
+				ERR_FAIL_V_MSG(RID(), "Format " + format_text + " does not support usage as sampling texture.");
+			}
+			if ((format.usage_bits & TEXTURE_USAGE_COLOR_ATTACHMENT_BIT) && !supported_usage.has_flag(TEXTURE_USAGE_COLOR_ATTACHMENT_BIT)) {
+				ERR_FAIL_V_MSG(RID(), "Format " + format_text + " does not support usage as color attachment.");
+			}
+			if ((format.usage_bits & TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) && !supported_usage.has_flag(TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) {
+				ERR_FAIL_V_MSG(RID(), "Format " + format_text + " does not support usage as depth-stencil attachment.");
+			}
+			if ((format.usage_bits & TEXTURE_USAGE_STORAGE_BIT) && !supported_usage.has_flag(TEXTURE_USAGE_STORAGE_BIT)) {
+				ERR_FAIL_V_MSG(RID(), "Format " + format_text + " does not support usage as storage image.");
+			}
+			if ((format.usage_bits & TEXTURE_USAGE_STORAGE_ATOMIC_BIT) && !supported_usage.has_flag(TEXTURE_USAGE_STORAGE_ATOMIC_BIT)) {
+				ERR_FAIL_V_MSG(RID(), "Format " + format_text + " does not support usage as atomic storage image.");
+			}
+			if ((format.usage_bits & TEXTURE_USAGE_VRS_ATTACHMENT_BIT) && !supported_usage.has_flag(TEXTURE_USAGE_VRS_ATTACHMENT_BIT)) {
+				ERR_FAIL_V_MSG(RID(), "Format " + format_text + " does not support usage as variable shading rate attachment.");
+			}
+		}
+
+		// Transfer and validate view info.
+
+		RDD::TextureView tv;
+		if (p_view.format_override == DATA_FORMAT_MAX) {
+			tv.format = format.format;
+		}
+		else {
+			ERR_FAIL_INDEX_V(p_view.format_override, DATA_FORMAT_MAX, RID());
+			tv.format = p_view.format_override;
+		}
+		ERR_FAIL_INDEX_V(p_view.swizzle_r, TEXTURE_SWIZZLE_MAX, RID());
+		ERR_FAIL_INDEX_V(p_view.swizzle_g, TEXTURE_SWIZZLE_MAX, RID());
+		ERR_FAIL_INDEX_V(p_view.swizzle_b, TEXTURE_SWIZZLE_MAX, RID());
+		ERR_FAIL_INDEX_V(p_view.swizzle_a, TEXTURE_SWIZZLE_MAX, RID());
+		tv.swizzle_r = p_view.swizzle_r;
+		tv.swizzle_g = p_view.swizzle_g;
+		tv.swizzle_b = p_view.swizzle_b;
+		tv.swizzle_a = p_view.swizzle_a;
+
+		// Create.
+
+		Texture texture;
+		format.usage_bits |= forced_usage_bits;
+		texture.driver_id = driver->texture_create(format, tv);
+		ERR_FAIL_COND_V(!texture.driver_id, RID());
+		texture.type = format.texture_type;
+		texture.format = format.format;
+		texture.width = format.width;
+		texture.height = format.height;
+		texture.depth = format.depth;
+		texture.layers = format.array_layers;
+		texture.mipmaps = format.mipmaps;
+		texture.base_mipmap = 0;
+		texture.base_layer = 0;
+		texture.is_resolve_buffer = format.is_resolve_buffer;
+		texture.is_discardable = format.is_discardable;
+		texture.usage_flags = format.usage_bits & ~forced_usage_bits;
+		texture.samples = format.samples;
+		texture.allowed_shared_formats = format.shareable_formats;
+		texture.has_initial_data = !data.empty();
+
+		if (driver->api_trait_get(RDD::API_TRAIT_TEXTURE_OUTPUTS_REQUIRE_CLEARS)) {
+			// Check if a clear for this texture must be performed the first time it's used if the driver requires explicit clears after initialization.
+			texture.pending_clear = !texture.has_initial_data && (format.usage_bits & (TEXTURE_USAGE_STORAGE_BIT | TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT));
+		}
+
+		if ((format.usage_bits & (TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | TEXTURE_USAGE_DEPTH_RESOLVE_ATTACHMENT_BIT))) {
+			texture.read_aspect_flags.set_flag(RDD::TEXTURE_ASPECT_DEPTH_BIT);
+			texture.barrier_aspect_flags.set_flag(RDD::TEXTURE_ASPECT_DEPTH_BIT);
+			if (format_has_stencil(format.format)) {
+				texture.barrier_aspect_flags.set_flag(RDD::TEXTURE_ASPECT_STENCIL_BIT);
+			}
+		}
+		else {
+			texture.read_aspect_flags.set_flag(RDD::TEXTURE_ASPECT_COLOR_BIT);
+			texture.barrier_aspect_flags.set_flag(RDD::TEXTURE_ASPECT_COLOR_BIT);
+		}
+
+		texture.bound = false;
+
+		// Textures are only assumed to be immutable if they have initial data and none of the other bits that indicate write usage are enabled.
+		bool texture_mutable_by_default = texture.usage_flags & (TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | TEXTURE_USAGE_DEPTH_RESOLVE_ATTACHMENT_BIT | TEXTURE_USAGE_STORAGE_BIT | TEXTURE_USAGE_STORAGE_ATOMIC_BIT);
+		if (data.empty() || texture_mutable_by_default) {
+			//TODO: re
+			//_texture_make_mutable(&texture, RID());
+		}
+
+		texture_memory += driver->texture_get_allocation_size(texture.driver_id);
+
+		RID id = texture_owner.make_rid(texture);
+#ifdef DEV_ENABLED
+		set_resource_name(id, "RID:" + itos(id.get_id()));
+#endif
+
+		if (data.size()) {
+			const bool use_general_in_copy_queues = driver->api_trait_get(RDD::API_TRAIT_USE_GENERAL_IN_COPY_QUEUES);
+			const RDD::TextureLayout dst_layout = use_general_in_copy_queues ? RDD::TEXTURE_LAYOUT_GENERAL : RDD::TEXTURE_LAYOUT_COPY_DST_OPTIMAL;
+			for (uint32_t i = 0; i < format.array_layers; i++) {
+				_texture_initialize(id, i, data[i], dst_layout, immediate_flush);
+			}
+
+			//if (texture.draw_tracker != nullptr) {
+			//	texture.draw_tracker->usage = use_general_in_copy_queues ? RDG::RESOURCE_USAGE_GENERAL : RDG::RESOURCE_USAGE_COPY_TO;
+			//}
+		}
+
+		return id;
+	}
+
+	Error RenderingDevice::texture_update(RID p_texture, uint32_t p_layer, const std::vector<uint8_t>& p_data)
+	{
+
+		Texture* texture = texture_owner.get_or_null(p_texture);
+		ERR_FAIL_NULL_V(texture, ERR_INVALID_PARAMETER);
+
+		if (texture->owner != RID()) {
+			p_texture = texture->owner;
+			texture = texture_owner.get_or_null(texture->owner);
+			ERR_FAIL_NULL_V(texture, ERR_BUG); // This is a bug.
+		}
+
+		ERR_FAIL_COND_V_MSG(texture->bound, ERR_CANT_ACQUIRE_RESOURCE,
+			"Texture can't be updated while a draw list that uses it as part of a framebuffer is being created. Ensure the draw list is finalized (and that the color/depth texture using it is not set to `RenderingDevice.FINAL_ACTION_CONTINUE`) to update this texture.");
+
+		ERR_FAIL_COND_V_MSG(!(texture->usage_flags & TEXTURE_USAGE_CAN_UPDATE_BIT), ERR_INVALID_PARAMETER, "Texture requires the `RenderingDevice.TEXTURE_USAGE_CAN_UPDATE_BIT` to be set to be updatable.");
+
+		uint32_t layer_count = _texture_layer_count(texture);
+		ERR_FAIL_COND_V(p_layer >= layer_count, ERR_INVALID_PARAMETER);
+
+		uint32_t width, height;
+		uint32_t tight_mip_size = get_image_format_required_size(texture->format, texture->width, texture->height, texture->depth, texture->mipmaps, &width, &height);
+		uint32_t required_size = tight_mip_size;
+		uint32_t required_align = _texture_alignment(texture);
+
+		ERR_FAIL_COND_V_MSG(required_size != (uint32_t)p_data.size(), ERR_INVALID_PARAMETER,
+			std::format("Required size for texture update ({}) does not match data supplied size ({}).", required_size, p_data.size()));
+
+		// Clear the texture if the driver requires it during its first use.
+		_texture_check_pending_clear(p_texture, texture);
+
+		_check_transfer_worker_texture(texture);
+
+		uint32_t block_w, block_h;
+		get_compressed_image_format_block_dimensions(texture->format, block_w, block_h);
+
+		uint32_t pixel_size = get_image_format_pixel_size(texture->format);
+		uint32_t pixel_rshift = get_compressed_image_format_pixel_rshift(texture->format);
+		uint32_t block_size = get_compressed_image_format_block_byte_size(texture->format);
+
+		uint32_t region_size = texture_upload_region_size_px;
+
+		const uint8_t* read_ptr = p_data.data();
+
+		thread_local std::vector<RecordedBufferToTextureCopy> command_buffer_to_texture_copies_vector;
+		command_buffer_to_texture_copies_vector.clear();
+
+		// Indicate the texture will get modified for the shared texture fallback.
+		_texture_update_shared_fallback(p_texture, texture, true);
+
+		uint32_t mipmap_offset = 0;
+
+		uint32_t logic_width = texture->width;
+		uint32_t logic_height = texture->height;
+
+		for (uint32_t mm_i = 0; mm_i < texture->mipmaps; mm_i++) {
+			uint32_t depth = 0;
+			uint32_t image_total = get_image_format_required_size(texture->format, texture->width, texture->height, texture->depth, mm_i + 1, &width, &height, &depth);
+
+			const uint8_t* read_ptr_mipmap = read_ptr + mipmap_offset;
+			tight_mip_size = image_total - mipmap_offset;
+
+			for (uint32_t z = 0; z < depth; z++) {
+				const uint8_t* read_ptr_mipmap_layer = read_ptr_mipmap + (tight_mip_size / depth) * z;
+				for (uint32_t y = 0; y < height; y += region_size) {
+					for (uint32_t x = 0; x < width; x += region_size) {
+						uint32_t region_w = MIN(region_size, width - x);
+						uint32_t region_h = MIN(region_size, height - y);
+
+						uint32_t region_logic_w = MIN(region_size, logic_width - x);
+						uint32_t region_logic_h = MIN(region_size, logic_height - y);
+
+						uint32_t region_pitch = (region_w * pixel_size * block_w) >> pixel_rshift;
+						uint32_t pitch_step = driver->api_trait_get(RDD::API_TRAIT_TEXTURE_DATA_ROW_PITCH_STEP);
+						region_pitch = STEPIFY(region_pitch, pitch_step);
+						uint32_t to_allocate = region_pitch * region_h;
+						uint32_t alloc_offset = 0, alloc_size = 0;
+						StagingRequiredAction required_action;
+						Error err = _staging_buffer_allocate(upload_staging_buffers, to_allocate, required_align, alloc_offset, alloc_size, required_action, false);
+						ERR_FAIL_COND_V(err, ERR_CANT_CREATE);
+
+						if (!command_buffer_to_texture_copies_vector.empty() && required_action == STAGING_REQUIRED_ACTION_FLUSH_AND_STALL_ALL) {
+							//if (_texture_make_mutable(texture, p_texture)) {
+							//	// The texture must be mutable to be used as a copy destination.
+							//	draw_graph.add_synchronization();
+							//}
+
+							// If the staging buffer requires flushing everything, we submit the command early and clear the current vector.
+							//draw_graph.add_texture_update(texture->driver_id, texture->draw_tracker, command_buffer_to_texture_copies_vector);
+							for (auto& tex_c: command_buffer_to_texture_copies_vector)
+							{
+								driver->command_copy_buffer_to_texture(get_current_command_buffer(), tex_c.from_buffer, texture->driver_id, RDD::TEXTURE_LAYOUT_COPY_DST_OPTIMAL, { &tex_c.region, 1 });
+							}
+							command_buffer_to_texture_copies_vector.clear();
+						}
+
+						_staging_buffer_execute_required_action(upload_staging_buffers, required_action);
+
+						uint8_t* write_ptr = upload_staging_buffers.blocks[upload_staging_buffers.current].data_ptr + alloc_offset;
+
+						ERR_FAIL_COND_V(region_w % block_w, ERR_BUG);
+						ERR_FAIL_COND_V(region_h % block_h, ERR_BUG);
+
+						_copy_region_block_or_regular(read_ptr_mipmap_layer, write_ptr, x, y, width, region_w, region_h, block_w, block_h, region_pitch, pixel_size, block_size);
+
+						RDD::BufferTextureCopyRegion copy_region;
+						copy_region.buffer_offset = alloc_offset;
+						copy_region.row_pitch = region_pitch;
+						copy_region.texture_subresource.aspect = texture->read_aspect_flags.has_flag(RDD::TEXTURE_ASPECT_DEPTH_BIT) ? RDD::TEXTURE_ASPECT_DEPTH : RDD::TEXTURE_ASPECT_COLOR;
+						copy_region.texture_subresource.mipmap = mm_i;
+						copy_region.texture_subresource.layer = p_layer;
+						copy_region.texture_offset = Vector3i(x, y, z);
+						copy_region.texture_region_size = Vector3i(region_logic_w, region_logic_h, 1);
+
+						RecordedBufferToTextureCopy buffer_to_texture_copy;
+						buffer_to_texture_copy.from_buffer = upload_staging_buffers.blocks[upload_staging_buffers.current].driver_id;
+						buffer_to_texture_copy.region = copy_region;
+						command_buffer_to_texture_copies_vector.push_back(buffer_to_texture_copy);
+
+						upload_staging_buffers.blocks[upload_staging_buffers.current].fill_amount = alloc_offset + alloc_size;
+					}
+				}
+			}
+
+			mipmap_offset = image_total;
+			logic_width = MAX(1u, logic_width >> 1);
+			logic_height = MAX(1u, logic_height >> 1);
+		}
+
+		//if (_texture_make_mutable(texture, p_texture)) {
+		//	// The texture must be mutable to be used as a copy destination.
+		//	draw_graph.add_synchronization();
+		//}
+
+		//draw_graph.add_texture_update(texture->driver_id, texture->draw_tracker, command_buffer_to_texture_copies_vector);
+		for (auto& tex_c : command_buffer_to_texture_copies_vector)
+		{
+			driver->command_copy_buffer_to_texture(get_current_command_buffer(), tex_c.from_buffer, texture->driver_id, RDD::TEXTURE_LAYOUT_COPY_DST_OPTIMAL, { &tex_c.region, 1 });
+		}
+		return OK;
+	}
+
+	std::vector<uint8_t> RenderingDevice::texture_get_data(RID p_texture, uint32_t p_layer)
+	{
+		//ERR_RENDER_THREAD_GUARD_V(std::vector<uint8_t>());
+
+		Texture* tex = texture_owner.get_or_null(p_texture);
+		ERR_FAIL_NULL_V(tex, std::vector<uint8_t>());
+
+		ERR_FAIL_COND_V_MSG(tex->bound, std::vector<uint8_t>(),
+			"Texture can't be retrieved while a draw list that uses it as part of a framebuffer is being created. Ensure the draw list is finalized (and that the color/depth texture using it is not set to `RenderingDevice.FINAL_ACTION_CONTINUE`) to retrieve this texture.");
+		ERR_FAIL_COND_V_MSG(!(tex->usage_flags & TEXTURE_USAGE_CAN_COPY_FROM_BIT), std::vector<uint8_t>(),
+			"Texture requires the `RenderingDevice.TEXTURE_USAGE_CAN_COPY_FROM_BIT` to be set to be retrieved.");
+
+		ERR_FAIL_COND_V(p_layer >= tex->layers, std::vector<uint8_t>());
+
+		// Clear the texture if the driver requires it during its first use.
+		_texture_check_pending_clear(p_texture, tex);
+
+		_check_transfer_worker_texture(tex);
+
+		if (tex->usage_flags & TEXTURE_USAGE_CPU_READ_BIT) {
+			return driver->texture_get_data(tex->driver_id, p_layer);
+		}
+		else {
+			RDD::TextureAspect aspect = tex->read_aspect_flags.has_flag(RDD::TEXTURE_ASPECT_DEPTH_BIT) ? RDD::TEXTURE_ASPECT_DEPTH : RDD::TEXTURE_ASPECT_COLOR;
+			uint32_t mip_alignment = driver->api_trait_get(RDD::API_TRAIT_TEXTURE_TRANSFER_ALIGNMENT);
+			uint32_t buffer_size = 0;
+
+			thread_local std::vector<RDD::TextureCopyableLayout> mip_layouts;
+			thread_local std::vector<RDD::BufferTextureCopyRegion> copy_regions;
+			mip_layouts.resize(tex->mipmaps);
+			copy_regions.resize(tex->mipmaps);
+
+			for (uint32_t i = 0; i < tex->mipmaps; i++) {
+				RDD::TextureSubresource subres;
+				subres.aspect = aspect;
+				subres.layer = p_layer;
+				subres.mipmap = i;
+
+				RDD::TextureCopyableLayout& mip_layout = mip_layouts[i];
+				driver->texture_get_copyable_layout(tex->driver_id, subres, &mip_layout);
+
+				uint32_t mip_offset = STEPIFY(buffer_size, mip_alignment);
+				buffer_size = mip_offset + mip_layout.size;
+
+				RDD::BufferTextureCopyRegion& copy_region = copy_regions[i];
+				copy_region.buffer_offset = mip_offset;
+				copy_region.row_pitch = mip_layout.row_pitch;
+				copy_region.texture_subresource.aspect = aspect;
+				copy_region.texture_subresource.mipmap = i;
+				copy_region.texture_subresource.layer = p_layer;
+				copy_region.texture_region_size.x = MAX(1u, tex->width >> i);
+				copy_region.texture_region_size.y = MAX(1u, tex->height >> i);
+				copy_region.texture_region_size.z = MAX(1u, tex->depth >> i);
+			}
+
+			RDD::BufferID tmp_buffer = driver->buffer_create(buffer_size, RDD::BUFFER_USAGE_TRANSFER_TO_BIT, RDD::MEMORY_ALLOCATION_TYPE_CPU, frames_drawn);
+			ERR_FAIL_COND_V(!tmp_buffer, std::vector<uint8_t>());
+
+			//if (_texture_make_mutable(tex, p_texture)) {
+			//	// The texture must be mutable to be used as a copy source due to layout transitions.
+			//	draw_graph.add_synchronization();
+			//}
+
+			//draw_graph.add_texture_get_data(tex->driver_id, tex->draw_tracker, tmp_buffer, copy_regions);
+
+			// Flush everything so memory can be safely mapped.
+			_flush_and_stall_for_all_frames();
+
+			const uint8_t* read_ptr = driver->buffer_map(tmp_buffer);
+			ERR_FAIL_NULL_V(read_ptr, std::vector<uint8_t>());
+
+			uint32_t block_w = 0;
+			uint32_t block_h = 0;
+			get_compressed_image_format_block_dimensions(tex->format, block_w, block_h);
+
+			std::vector<uint8_t> buffer_data;
+			uint32_t tight_buffer_size = get_image_format_required_size(tex->format, tex->width, tex->height, tex->depth, tex->mipmaps);
+			buffer_data.resize(tight_buffer_size);
+
+			uint8_t* write_ptr = buffer_data.data();
+
+			for (uint32_t i = 0; i < tex->mipmaps; i++) {
+				uint32_t width = 0, height = 0, depth = 0;
+
+				uint32_t tight_mip_size = get_image_format_required_size(
+					tex->format,
+					MAX(1u, tex->width >> i),
+					MAX(1u, tex->height >> i),
+					MAX(1u, tex->depth >> i),
+					1,
+					&width,
+					&height,
+					&depth);
+
+				uint32_t row_count = (height / block_h) * depth;
+				uint32_t tight_row_pitch = tight_mip_size / row_count;
+
+				const uint8_t* rp = read_ptr + copy_regions[i].buffer_offset;
+				uint32_t row_pitch = mip_layouts[i].row_pitch;
+
+				if (tight_row_pitch == row_pitch) {
+					// Same row pitch, we can copy directly.
+					memcpy(write_ptr, rp, tight_mip_size);
+					write_ptr += tight_mip_size;
+				}
+				else {
+					// Copy row-by-row to erase padding.
+					for (uint32_t j = 0; j < row_count; j++) {
+						memcpy(write_ptr, rp, tight_row_pitch);
+						rp += row_pitch;
+						write_ptr += tight_row_pitch;
+					}
+				}
+			}
+
+			driver->buffer_unmap(tmp_buffer);
+			driver->buffer_free(tmp_buffer);
+
+			return buffer_data;
+		}
+	}
+
 	void RenderingDevice::swap_buffers(bool p_present)
 	{
 		end_frame();
@@ -2325,6 +2891,14 @@ namespace Rendering
 		}
 	}
 
+	void RenderingDevice::_check_transfer_worker_texture(Texture* p_texture)
+	{
+		if (p_texture->transfer_worker_index >= 0) {
+			_check_transfer_worker_operation(p_texture->transfer_worker_index, p_texture->transfer_worker_operation);
+			p_texture->transfer_worker_index = -1;
+		}
+	}
+
 	void RenderingDevice::_check_transfer_worker_vertex_array(VertexArray* p_vertex_array) {
 		if (!p_vertex_array->transfer_worker_indices.empty()) {
 			for (int i = 0; i < p_vertex_array->transfer_worker_indices.size(); i++) {
@@ -2386,20 +2960,7 @@ namespace Rendering
 	}
 
 	bool RenderingDevice::_buffer_make_mutable(Buffer* p_buffer, RID p_buffer_id) {
-		//if (p_buffer->draw_tracker != nullptr) {
-		//	// Buffer already has a tracker.
-		//	return false;
-		//}
-		//else {
-		//	// Create a tracker for the buffer and make all its dependencies mutable.
-		//	p_buffer->draw_tracker = RDG::resource_tracker_create();
-		//	p_buffer->draw_tracker->buffer_driver_id = p_buffer->driver_id;
-		//	if (p_buffer_id.is_valid()) {
-		//		_dependencies_make_mutable(p_buffer_id, p_buffer->draw_tracker);
-		//	}
-
-		//	return true;
-		//}
+		//TODO:
 		return true;
 	}
 
@@ -2453,9 +3014,9 @@ namespace Rendering
 		Size2i p_vrs_texel_size /*= Size2i()*/, std::vector<TextureSamples>* r_samples /*= nullptr*/)
 	{
 		// NOTE:
-	// Before the refactor to RenderingDevice-RenderingDeviceDriver, there was commented out code to
-	// specify dependencies to external subpasses. Since it had been unused for a long timel it wasn't ported
-	// to the new architecture.
+		// Before the refactor to RenderingDevice-RenderingDeviceDriver, there was commented out code to
+		// specify dependencies to external subpasses. Since it had been unused for a long timel it wasn't ported
+		// to the new architecture.
 
 		std::vector<int32_t> attachment_last_pass;
 		attachment_last_pass.resize(p_attachments.size());
@@ -2954,6 +3515,441 @@ namespace Rendering
 		p_staging_buffers.blocks[p_staging_buffers.current] = block;
 		
 		return OK;
+	}
+
+
+
+	uint32_t RenderingDevice::_texture_layer_count(Texture* p_texture) const
+	{
+		switch (p_texture->type) {
+		case TEXTURE_TYPE_CUBE:
+		case TEXTURE_TYPE_CUBE_ARRAY:
+			return p_texture->layers * 6;
+		default:
+			return p_texture->layers;
+		}
+	}
+
+	uint32_t greatest_common_denominator(uint32_t a, uint32_t b) {
+		// Euclidean algorithm.
+		uint32_t t;
+		while (b != 0) {
+			t = b;
+			b = a % b;
+			a = t;
+		}
+
+		return a;
+	}
+
+	uint32_t least_common_multiple(uint32_t a, uint32_t b) {
+		if (a == 0 || b == 0) {
+			return 0;
+		}
+
+		return (a / greatest_common_denominator(a, b)) * b;
+	}
+
+	uint32_t RenderingDevice::_texture_alignment(Texture* p_texture) const
+	{
+		uint32_t alignment = get_compressed_image_format_block_byte_size(p_texture->format);
+		if (alignment == 1) {
+			alignment = get_image_format_pixel_size(p_texture->format);
+		}
+
+		return least_common_multiple(alignment, driver->api_trait_get(RDD::API_TRAIT_TEXTURE_TRANSFER_ALIGNMENT));
+	}
+
+	Error RenderingDevice::_texture_initialize(RID p_texture, uint32_t p_layer, const std::vector<uint8_t>& p_data, RDD::TextureLayout p_dst_layout, bool p_immediate_flush)
+	{
+		Texture* texture = texture_owner.get_or_null(p_texture);
+		ERR_FAIL_NULL_V(texture, ERR_INVALID_PARAMETER);
+
+		if (texture->owner != RID()) {
+			p_texture = texture->owner;
+			texture = texture_owner.get_or_null(texture->owner);
+			ERR_FAIL_NULL_V(texture, ERR_BUG); // This is a bug.
+		}
+
+		uint32_t layer_count = _texture_layer_count(texture);
+		ERR_FAIL_COND_V(p_layer >= layer_count, ERR_INVALID_PARAMETER);
+
+		uint32_t width, height;
+		uint32_t tight_mip_size = get_image_format_required_size(texture->format, texture->width, texture->height, texture->depth, texture->mipmaps, &width, &height);
+		uint32_t required_size = tight_mip_size;
+		uint32_t required_align = _texture_alignment(texture);
+
+		ERR_FAIL_COND_V_MSG(required_size != (uint32_t)p_data.size(), ERR_INVALID_PARAMETER,
+			"Required size for texture update ({}) does not match data supplied size ({}).", required_size, p_data.size());
+
+		uint32_t block_w, block_h;
+		get_compressed_image_format_block_dimensions(texture->format, block_w, block_h);
+
+		uint32_t pixel_size = get_image_format_pixel_size(texture->format);
+		uint32_t pixel_rshift = get_compressed_image_format_pixel_rshift(texture->format);
+		uint32_t block_size = get_compressed_image_format_block_byte_size(texture->format);
+
+		// The algorithm operates on two passes, one to figure out the total size the staging buffer will require to allocate and another one where the copy is actually performed.
+		uint32_t staging_worker_offset = 0;
+		uint32_t staging_local_offset = 0;
+		TransferWorker* transfer_worker = nullptr;
+		const uint8_t* read_ptr = p_data.data();
+		uint8_t* write_ptr = nullptr;
+		for (uint32_t pass = 0; pass < 2; pass++) {
+			const bool copy_pass = (pass == 1);
+			if (copy_pass) {
+				transfer_worker = _acquire_transfer_worker(staging_local_offset, required_align, staging_worker_offset);
+				texture->transfer_worker_index = transfer_worker->index;
+
+				{
+					std::lock_guard lock(transfer_worker->operations_mutex);
+					texture->transfer_worker_operation = ++transfer_worker->operations_counter;
+				}
+
+				staging_local_offset = 0;
+
+				write_ptr = driver->buffer_map(transfer_worker->staging_buffer);
+				ERR_FAIL_NULL_V(write_ptr, ERR_CANT_CREATE);
+
+				if (driver->api_trait_get(RDD::API_TRAIT_HONORS_PIPELINE_BARRIERS)) {
+					// Transition the texture to the optimal layout.
+					RDD::TextureBarrier tb;
+					tb.texture = texture->driver_id;
+					tb.dst_access = RDD::BARRIER_ACCESS_COPY_WRITE_BIT;
+					tb.prev_layout = RDD::TEXTURE_LAYOUT_UNDEFINED;
+					tb.next_layout = p_dst_layout;
+					tb.subresources.aspect = texture->barrier_aspect_flags;
+					tb.subresources.mipmap_count = texture->mipmaps;
+					tb.subresources.base_layer = p_layer;
+					tb.subresources.layer_count = 1;
+					driver->command_pipeline_barrier(transfer_worker->command_buffer, RDD::PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, RDD::PIPELINE_STAGE_COPY_BIT, {}, {}, { &tb, 1 }, {});
+				}
+			}
+
+			uint32_t mipmap_offset = 0;
+			uint32_t logic_width = texture->width;
+			uint32_t logic_height = texture->height;
+			for (uint32_t mm_i = 0; mm_i < texture->mipmaps; mm_i++) {
+				uint32_t depth = 0;
+				uint32_t image_total = get_image_format_required_size(texture->format, texture->width, texture->height, texture->depth, mm_i + 1, &width, &height, &depth);
+
+				const uint8_t* read_ptr_mipmap = read_ptr + mipmap_offset;
+				tight_mip_size = image_total - mipmap_offset;
+
+				for (uint32_t z = 0; z < depth; z++) {
+					if (required_align > 0) {
+						uint32_t align_offset = staging_local_offset % required_align;
+						if (align_offset != 0) {
+							staging_local_offset += required_align - align_offset;
+						}
+					}
+
+					uint32_t pitch = (width * pixel_size * block_w) >> pixel_rshift;
+					uint32_t pitch_step = driver->api_trait_get(RDD::API_TRAIT_TEXTURE_DATA_ROW_PITCH_STEP);
+					pitch = STEPIFY(pitch, pitch_step);
+					uint32_t to_allocate = pitch * height;
+					to_allocate >>= pixel_rshift;
+
+					if (copy_pass) {
+						const uint8_t* read_ptr_mipmap_layer = read_ptr_mipmap + (tight_mip_size / depth) * z;
+						uint64_t staging_buffer_offset = staging_worker_offset + staging_local_offset;
+						uint8_t* write_ptr_mipmap_layer = write_ptr + staging_buffer_offset;
+						_copy_region_block_or_regular(read_ptr_mipmap_layer, write_ptr_mipmap_layer, 0, 0, width, width, height, block_w, block_h, pitch, pixel_size, block_size);
+
+						RDD::BufferTextureCopyRegion copy_region;
+						copy_region.buffer_offset = staging_buffer_offset;
+						copy_region.row_pitch = pitch;
+						copy_region.texture_subresource.aspect = texture->read_aspect_flags.has_flag(RDD::TEXTURE_ASPECT_DEPTH_BIT) ? RDD::TEXTURE_ASPECT_DEPTH : RDD::TEXTURE_ASPECT_COLOR;
+						copy_region.texture_subresource.mipmap = mm_i;
+						copy_region.texture_subresource.layer = p_layer;
+						copy_region.texture_offset = Vector3i(0, 0, z);
+						copy_region.texture_region_size = Vector3i(logic_width, logic_height, 1);
+						driver->command_copy_buffer_to_texture(transfer_worker->command_buffer, transfer_worker->staging_buffer, texture->driver_id, p_dst_layout, { &copy_region, 1 });
+					}
+
+					staging_local_offset += to_allocate;
+				}
+
+				mipmap_offset = image_total;
+				logic_width = MAX(1u, logic_width >> 1);
+				logic_height = MAX(1u, logic_height >> 1);
+			}
+
+			if (copy_pass) {
+				driver->buffer_unmap(transfer_worker->staging_buffer);
+
+				// If the texture does not have a tracker, it means it must be transitioned to the sampling state.
+				// TODO: re draw_tracker
+				if (/*texture->draw_tracker == nullptr &&*/ driver->api_trait_get(RDD::API_TRAIT_HONORS_PIPELINE_BARRIERS)) {
+					RDD::TextureBarrier tb;
+					tb.texture = texture->driver_id;
+					tb.src_access = RDD::BARRIER_ACCESS_COPY_WRITE_BIT;
+					tb.prev_layout = p_dst_layout;
+					tb.next_layout = RDD::TEXTURE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+					tb.subresources.aspect = texture->barrier_aspect_flags;
+					tb.subresources.mipmap_count = texture->mipmaps;
+					tb.subresources.base_layer = p_layer;
+					tb.subresources.layer_count = 1;
+					transfer_worker->texture_barriers.push_back(tb);
+				}
+
+				if (p_immediate_flush) {
+					_end_transfer_worker(transfer_worker);
+					_submit_transfer_worker(transfer_worker);
+					_wait_for_transfer_worker(transfer_worker);
+				}
+
+				_release_transfer_worker(transfer_worker);
+			}
+		}
+
+		return OK;
+	}
+
+	void RenderingDevice::_texture_update_shared_fallback(RID p_texture_rid, Texture* p_texture, bool p_for_writing)
+	{
+		if (p_texture->shared_fallback == nullptr) {
+			// This texture does not use any of the shared texture fallbacks.
+			return;
+		}
+
+		if (p_texture->owner.is_valid()) {
+			Texture* owner_texture = texture_owner.get_or_null(p_texture->owner);
+			ERR_FAIL_NULL(owner_texture);
+			if (p_for_writing) {
+				// Only the main texture is used for writing when using the shared fallback.
+				owner_texture->shared_fallback->revision++;
+			}
+			else if (p_texture->shared_fallback->revision != owner_texture->shared_fallback->revision) {
+				// Copy the contents of the main texture into the shared texture fallback slice. Update the revision.
+				_texture_copy_shared(p_texture->owner, owner_texture, p_texture_rid, p_texture);
+				p_texture->shared_fallback->revision = owner_texture->shared_fallback->revision;
+			}
+		}
+		else if (p_for_writing) {
+			// Increment the revision of the texture so shared texture fallback slices must be updated.
+			p_texture->shared_fallback->revision++;
+		}
+	}
+
+	void RenderingDevice::_texture_copy_shared(RID p_src_texture_rid, Texture* p_src_texture, RID p_dst_texture_rid, Texture* p_dst_texture)
+	{
+		// The only type of copying allowed is from the main texture to the slice texture, as slice textures are not allowed to be used for writing when using this fallback.
+		DEV_ASSERT(p_src_texture != nullptr);
+		DEV_ASSERT(p_dst_texture != nullptr);
+		DEV_ASSERT(p_src_texture->owner.is_null());
+		DEV_ASSERT(p_dst_texture->owner == p_src_texture_rid);
+
+		//bool src_made_mutable = _texture_make_mutable(p_src_texture, p_src_texture_rid);
+		//bool dst_made_mutable = _texture_make_mutable(p_dst_texture, p_dst_texture_rid);
+		//if (src_made_mutable || dst_made_mutable) {
+		//	draw_graph.add_synchronization();
+		//}
+
+		if (p_dst_texture->shared_fallback->raw_reinterpretation) {
+			// If one of the textures is a main texture and they have a reinterpret buffer, we prefer using that as it's guaranteed to be big enough to hold
+			// anything and it's how the shared textures that don't use slices are created.
+			bool src_has_buffer = p_src_texture->shared_fallback->buffer.id != 0;
+			bool dst_has_buffer = p_dst_texture->shared_fallback->buffer.id != 0;
+			bool from_src = p_src_texture->owner.is_null() && src_has_buffer;
+			bool from_dst = p_dst_texture->owner.is_null() && dst_has_buffer;
+			if (!from_src && !from_dst) {
+				// If neither texture passed the condition, we just pick whichever texture has a reinterpretation buffer.
+				from_src = src_has_buffer;
+				from_dst = dst_has_buffer;
+			}
+
+			// Pick the buffer and tracker to use from the right texture.
+			RDD::BufferID shared_buffer;
+			//RDG::ResourceTracker* shared_buffer_tracker = nullptr;
+			if (from_src) {
+				shared_buffer = p_src_texture->shared_fallback->buffer;
+				//shared_buffer_tracker = p_src_texture->shared_fallback->buffer_tracker;
+			}
+			else if (from_dst) {
+				shared_buffer = p_dst_texture->shared_fallback->buffer;
+				//shared_buffer_tracker = p_dst_texture->shared_fallback->buffer_tracker;
+			}
+			else {
+				DEV_ASSERT(false && "This path should not be reachable.");
+			}
+
+			// Copying each mipmap from main texture to a buffer and then to the slice texture.
+			thread_local std::vector<RDD::BufferTextureCopyRegion> get_data_vector;
+			thread_local std::vector<RecordedBufferToTextureCopy> update_vector;
+			get_data_vector.clear();
+			update_vector.clear();
+
+			uint32_t buffer_size = 0;
+			uint32_t transfer_alignment = driver->api_trait_get(RDD::API_TRAIT_TEXTURE_TRANSFER_ALIGNMENT);
+
+			for (uint32_t i = 0; i < p_dst_texture->layers; i++) {
+				for (uint32_t j = 0; j < p_dst_texture->mipmaps; j++) {
+					// FIXME: When using reinterpretation buffers, the only texture aspect supported is color. Depth or stencil contents won't get copied.
+					RDD::TextureSubresource texture_subresource;
+					texture_subresource.aspect = RDD::TEXTURE_ASPECT_COLOR;
+					texture_subresource.layer = i;
+					texture_subresource.mipmap = j;
+
+					RDD::TextureCopyableLayout copyable_layout;
+					driver->texture_get_copyable_layout(p_dst_texture->shared_fallback->texture, texture_subresource, &copyable_layout);
+
+					uint32_t mipmap = p_dst_texture->base_mipmap + j;
+
+					RDD::BufferTextureCopyRegion get_data_region;
+					get_data_region.buffer_offset = STEPIFY(buffer_size, transfer_alignment);
+					get_data_region.row_pitch = copyable_layout.row_pitch;
+					get_data_region.texture_subresource.aspect = RDD::TEXTURE_ASPECT_COLOR;
+					get_data_region.texture_subresource.layer = p_dst_texture->base_layer + i;
+					get_data_region.texture_subresource.mipmap = mipmap;
+					get_data_region.texture_region_size.x = MAX(1U, p_src_texture->width >> mipmap);
+					get_data_region.texture_region_size.y = MAX(1U, p_src_texture->height >> mipmap);
+					get_data_region.texture_region_size.z = MAX(1U, p_src_texture->depth >> mipmap);
+					get_data_vector.push_back(get_data_region);
+
+					RecordedBufferToTextureCopy update_copy;
+					update_copy.from_buffer = shared_buffer;
+					update_copy.region.buffer_offset = get_data_region.buffer_offset;
+					update_copy.region.row_pitch = get_data_region.row_pitch;
+					update_copy.region.texture_subresource.aspect = RDD::TEXTURE_ASPECT_COLOR;
+					update_copy.region.texture_subresource.layer = texture_subresource.layer;
+					update_copy.region.texture_subresource.mipmap = texture_subresource.mipmap;
+					update_copy.region.texture_region_size.x = get_data_region.texture_region_size.x;
+					update_copy.region.texture_region_size.y = get_data_region.texture_region_size.y;
+					update_copy.region.texture_region_size.z = get_data_region.texture_region_size.z;
+					update_vector.push_back(update_copy);
+
+					buffer_size = get_data_region.buffer_offset + copyable_layout.size;
+				}
+			}
+
+			DEV_ASSERT(buffer_size <= driver->buffer_get_allocation_size(shared_buffer));
+
+			driver->command_copy_texture_to_buffer(get_current_command_buffer(), p_src_texture->driver_id, RDD::TEXTURE_LAYOUT_COPY_SRC_OPTIMAL, shared_buffer, get_data_vector);
+
+			for (auto& tex_c : update_vector)
+			{
+				driver->command_copy_buffer_to_texture(get_current_command_buffer(), tex_c.from_buffer, p_dst_texture->shared_fallback->texture, RDD::TEXTURE_LAYOUT_COPY_DST_OPTIMAL, { &tex_c.region, 1 });
+			}
+		}
+		else {
+			// Raw reinterpretation is not required. Use a regular texture copy.
+			RDD::TextureCopyRegion copy_region;
+			copy_region.src_subresources.aspect = p_src_texture->read_aspect_flags;
+			copy_region.src_subresources.base_layer = p_dst_texture->base_layer;
+			copy_region.src_subresources.layer_count = p_dst_texture->layers;
+			copy_region.dst_subresources.aspect = p_dst_texture->read_aspect_flags;
+			copy_region.dst_subresources.base_layer = 0;
+			copy_region.dst_subresources.layer_count = copy_region.src_subresources.layer_count;
+
+			// Copying each mipmap from main texture to to the slice texture.
+			thread_local std::vector<RDD::TextureCopyRegion> region_vector;
+			region_vector.clear();
+			for (uint32_t i = 0; i < p_dst_texture->mipmaps; i++) {
+				uint32_t mipmap = p_dst_texture->base_mipmap + i;
+				copy_region.src_subresources.mipmap = mipmap;
+				copy_region.dst_subresources.mipmap = i;
+				copy_region.size.x = MAX(1U, p_src_texture->width >> mipmap);
+				copy_region.size.y = MAX(1U, p_src_texture->height >> mipmap);
+				copy_region.size.z = MAX(1U, p_src_texture->depth >> mipmap);
+				region_vector.push_back(copy_region);
+			}
+
+			//draw_graph.add_texture_copy(p_src_texture->driver_id, p_src_texture->draw_tracker, p_dst_texture->shared_fallback->texture, p_dst_texture->shared_fallback->texture_tracker, region_vector);
+			driver->command_copy_texture(get_current_command_buffer(), p_src_texture->driver_id, RDD::TEXTURE_LAYOUT_COPY_SRC_OPTIMAL, p_dst_texture->shared_fallback->texture, RDD::TEXTURE_LAYOUT_COPY_DST_OPTIMAL, region_vector);
+		}
+	}
+
+	void RenderingDevice::_texture_check_pending_clear(RID p_texture_rid, Texture* p_texture)
+	{
+		DEV_ASSERT(p_texture != nullptr);
+
+		if (!p_texture->pending_clear) {
+			return;
+		}
+
+		bool clear = true;
+		p_texture->pending_clear = false;
+
+		if (p_texture->owner.is_valid()) {
+			// Check the owner texture instead if it exists.
+			p_texture_rid = p_texture->owner;
+			p_texture = texture_owner.get_or_null(p_texture_rid);
+			clear = p_texture->pending_clear;
+		}
+
+		if (p_texture != nullptr && clear) {
+			if (p_texture->usage_flags & TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+				_texture_clear_depth_stencil(p_texture_rid, p_texture, 0.0f, 0, 0, p_texture->mipmaps, 0, p_texture->layers);
+			}
+			else {
+				_texture_clear_color(p_texture_rid, p_texture, Color(), 0, p_texture->mipmaps, 0, p_texture->layers);
+			}
+			p_texture->pending_clear = false;
+		}
+	}
+
+	void RenderingDevice::_texture_clear_color(RID p_texture_rid, Texture* p_texture, const Color& p_color, uint32_t p_base_mipmap, uint32_t p_mipmaps, uint32_t p_base_layer, uint32_t p_layers)
+	{
+		_check_transfer_worker_texture(p_texture);
+
+		RDD::TextureSubresourceRange range;
+		range.aspect = RDD::TEXTURE_ASPECT_COLOR_BIT;
+		range.base_mipmap = p_texture->base_mipmap + p_base_mipmap;
+		range.mipmap_count = p_mipmaps;
+		range.base_layer = p_texture->base_layer + p_base_layer;
+		range.layer_count = p_layers;
+
+		// Indicate the texture will get modified for the shared texture fallback.
+		_texture_update_shared_fallback(p_texture_rid, p_texture, true);
+
+		//if (_texture_make_mutable(p_texture, p_texture_rid)) {
+		//	// The texture must be mutable to be used as a clear destination.
+		//	draw_graph.add_synchronization();
+		//}
+
+		//draw_graph.add_texture_clear_color(p_texture->driver_id, p_texture->draw_tracker, p_color, range);
+		driver->command_clear_color_texture(get_current_command_buffer(), p_texture->driver_id, RDD::TEXTURE_LAYOUT_COPY_DST_OPTIMAL, p_color, range);
+	}
+
+	void RenderingDevice::_texture_clear_depth_stencil(RID p_texture_rid, Texture* p_texture, float p_depth, uint8_t p_stencil, uint32_t p_base_mipmap, uint32_t p_mipmaps, uint32_t p_base_layer, uint32_t p_layers)
+	{
+		_check_transfer_worker_texture(p_texture);
+
+		RDD::TextureSubresourceRange range;
+		if (format_has_depth(p_texture->format)) {
+			range.aspect.set_flag(RDD::TEXTURE_ASPECT_DEPTH_BIT);
+		}
+		if (format_has_stencil(p_texture->format)) {
+			range.aspect.set_flag(RDD::TEXTURE_ASPECT_STENCIL_BIT);
+		}
+		range.base_mipmap = p_texture->base_mipmap + p_base_mipmap;
+		range.mipmap_count = p_mipmaps;
+		range.base_layer = p_texture->base_layer + p_base_layer;
+		range.layer_count = p_layers;
+
+		// Indicate the texture will get modified for the shared texture fallback.
+		_texture_update_shared_fallback(p_texture_rid, p_texture, true);
+
+		//if (_texture_make_mutable(p_texture, p_texture_rid)) {
+		//	// The texture must be mutable to be used as a clear destination.
+		//	draw_graph.add_synchronization();
+		//}
+
+		//draw_graph.add_texture_clear_depth_stencil(p_texture->driver_id, p_texture->draw_tracker, p_depth, p_stencil, range);
+		driver->command_clear_depth_stencil_texture(get_current_command_buffer(), p_texture->driver_id, RDD::TEXTURE_LAYOUT_COPY_DST_OPTIMAL, p_depth, p_stencil, range);
+	}
+
+	uint32_t RenderingDevice::_texture_vrs_method_to_usage_bits() const
+	{
+		switch (vrs_method) {
+		case VRS_METHOD_FRAGMENT_SHADING_RATE:
+			return RDD::TEXTURE_USAGE_VRS_FRAGMENT_SHADING_RATE_BIT;
+		case VRS_METHOD_FRAGMENT_DENSITY_MAP:
+			return RDD::TEXTURE_USAGE_VRS_FRAGMENT_DENSITY_MAP_BIT;
+		default:
+			return 0;
+		}
 	}
 
 	RenderingDevice::RenderingDevice()

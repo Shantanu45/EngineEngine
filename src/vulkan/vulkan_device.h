@@ -546,6 +546,9 @@ namespace Vulkan
 
 		virtual bool has_feature(Features p_feature) override final;
 
+		virtual uint64_t limit_get(Limit p_limit) override final;
+
+
 	private:
 		void _register_requested_device_extension(const std::string& p_extension_name, bool p_required);
 		Error _initialize_device_extensions();

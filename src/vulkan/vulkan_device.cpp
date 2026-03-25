@@ -3721,6 +3721,109 @@ namespace Vulkan
 		}
 	}
 
+	uint64_t RenderingDeviceDriverVulkan::limit_get(Limit p_limit)
+	{
+		const VkPhysicalDeviceLimits& limits = physical_device_properties.limits;
+		uint64_t safe_unbounded = ((uint64_t)1 << 30);
+		switch (p_limit)
+		{
+		case LIMIT_MAX_BOUND_UNIFORM_SETS:
+			return limits.maxBoundDescriptorSets;
+		case LIMIT_MAX_FRAMEBUFFER_COLOR_ATTACHMENTS:
+			return limits.maxColorAttachments;
+		case LIMIT_MAX_TEXTURES_PER_UNIFORM_SET:
+			return limits.maxDescriptorSetSampledImages;
+		case LIMIT_MAX_SAMPLERS_PER_UNIFORM_SET:
+			return limits.maxDescriptorSetSamplers;
+		case LIMIT_MAX_STORAGE_BUFFERS_PER_UNIFORM_SET:
+			return limits.maxDescriptorSetStorageBuffers;
+		case LIMIT_MAX_STORAGE_IMAGES_PER_UNIFORM_SET:
+			return limits.maxDescriptorSetStorageImages;
+		case LIMIT_MAX_UNIFORM_BUFFERS_PER_UNIFORM_SET:
+			return limits.maxDescriptorSetUniformBuffers;
+		case LIMIT_MAX_DRAW_INDEXED_INDEX:
+			return limits.maxDrawIndexedIndexValue;
+		case LIMIT_MAX_FRAMEBUFFER_HEIGHT:
+			return limits.maxFramebufferHeight;
+		case LIMIT_MAX_FRAMEBUFFER_WIDTH:
+			return limits.maxFramebufferWidth;
+		case LIMIT_MAX_TEXTURE_ARRAY_LAYERS:
+			return limits.maxImageArrayLayers;
+		case LIMIT_MAX_TEXTURE_SIZE_1D:
+			return limits.maxImageDimension1D;
+		case LIMIT_MAX_TEXTURE_SIZE_2D:
+			return limits.maxImageDimension2D;
+		case LIMIT_MAX_TEXTURE_SIZE_3D:
+			return limits.maxImageDimension3D;
+		case LIMIT_MAX_TEXTURE_SIZE_CUBE:
+			return limits.maxImageDimensionCube;
+		case LIMIT_MAX_TEXTURES_PER_SHADER_STAGE:
+			return limits.maxPerStageDescriptorSampledImages;
+		case LIMIT_MAX_SAMPLERS_PER_SHADER_STAGE:
+			return limits.maxPerStageDescriptorSamplers;
+		case LIMIT_MAX_STORAGE_BUFFERS_PER_SHADER_STAGE:
+			return limits.maxPerStageDescriptorStorageBuffers;
+		case LIMIT_MAX_STORAGE_IMAGES_PER_SHADER_STAGE:
+			return limits.maxPerStageDescriptorStorageImages;
+		case LIMIT_MAX_UNIFORM_BUFFERS_PER_SHADER_STAGE:
+			return limits.maxPerStageDescriptorUniformBuffers;
+		case LIMIT_MAX_PUSH_CONSTANT_SIZE:
+			return limits.maxPushConstantsSize;
+		case LIMIT_MAX_UNIFORM_BUFFER_SIZE:
+			return limits.maxUniformBufferRange;
+		case LIMIT_MAX_VERTEX_INPUT_ATTRIBUTE_OFFSET:
+			return limits.maxVertexInputAttributeOffset;
+		case LIMIT_MAX_VERTEX_INPUT_ATTRIBUTES:
+			return limits.maxVertexInputAttributes;
+		case LIMIT_MAX_VERTEX_INPUT_BINDINGS:
+			return limits.maxVertexInputBindings;
+		case LIMIT_MAX_VERTEX_INPUT_BINDING_STRIDE:
+			return limits.maxVertexInputBindingStride;
+		case LIMIT_MIN_UNIFORM_BUFFER_OFFSET_ALIGNMENT:
+			return limits.minUniformBufferOffsetAlignment;
+		case LIMIT_MAX_COMPUTE_WORKGROUP_COUNT_X:
+			return limits.maxComputeWorkGroupCount[0];
+		case LIMIT_MAX_COMPUTE_WORKGROUP_COUNT_Y:
+			return limits.maxComputeWorkGroupCount[1];
+		case LIMIT_MAX_COMPUTE_WORKGROUP_COUNT_Z:
+			return limits.maxComputeWorkGroupCount[2];
+		case LIMIT_MAX_COMPUTE_WORKGROUP_INVOCATIONS:
+			return limits.maxComputeWorkGroupInvocations;
+		case LIMIT_MAX_COMPUTE_WORKGROUP_SIZE_X:
+			return limits.maxComputeWorkGroupSize[0];
+		case LIMIT_MAX_COMPUTE_WORKGROUP_SIZE_Y:
+			return limits.maxComputeWorkGroupSize[1];
+		case LIMIT_MAX_COMPUTE_WORKGROUP_SIZE_Z:
+			return limits.maxComputeWorkGroupSize[2];
+		case LIMIT_MAX_COMPUTE_SHARED_MEMORY_SIZE:
+			return limits.maxComputeSharedMemorySize;
+		case LIMIT_MAX_VIEWPORT_DIMENSIONS_X:
+			return limits.maxViewportDimensions[0];
+		case LIMIT_MAX_VIEWPORT_DIMENSIONS_Y:
+			return limits.maxViewportDimensions[1];
+		case LIMIT_SUBGROUP_SIZE:
+			//return subgroup_capabilities.size;
+		case LIMIT_SUBGROUP_MIN_SIZE:
+			//return subgroup_capabilities.min_size;
+		case LIMIT_SUBGROUP_MAX_SIZE:
+			//return subgroup_capabilities.max_size;
+		case LIMIT_SUBGROUP_IN_SHADERS:
+			//return subgroup_capabilities.supported_stages_flags_rd();
+		case LIMIT_SUBGROUP_OPERATIONS:
+			//return subgroup_capabilities.supported_operations_flags_rd();
+		case LIMIT_MAX_SHADER_VARYINGS:
+			// The Vulkan spec states that built in varyings like gl_FragCoord should count against this, but in
+			// practice, that doesn't seem to be the case. The validation layers don't even complain.
+			return MIN(limits.maxVertexOutputComponents / 4, limits.maxFragmentInputComponents / 4);
+		default: {
+#ifdef DEV_ENABLED
+			WARN_PRINT("Returning maximum value for unknown limit " + itos(p_limit) + ".");
+#endif
+			return safe_unbounded;
+		}
+		}
+	}
+
 #pragma endregion
 
 #pragma region Uniform Set

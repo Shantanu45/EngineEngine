@@ -670,6 +670,83 @@ namespace Rendering
 			RenderingDeviceDriver::BufferCopyRegion region;
 		};
 
+		struct RecordedBufferToTextureCopy {
+			RDD::BufferID from_buffer;
+			RDD::BufferTextureCopyRegion region;
+		};
+
+		struct Texture {
+			struct SharedFallback {
+				uint32_t revision = 1;
+				RDD::TextureID texture;
+				//RDG::ResourceTracker* texture_tracker = nullptr;
+				RDD::BufferID buffer;
+				//RDG::ResourceTracker* buffer_tracker = nullptr;
+				bool raw_reinterpretation = false;
+			};
+
+			RDD::TextureID driver_id;
+
+			TextureType type = TEXTURE_TYPE_MAX;
+			DataFormat format = DATA_FORMAT_MAX;
+			TextureSamples samples = TEXTURE_SAMPLES_MAX;
+			TextureSliceType slice_type = TEXTURE_SLICE_MAX;
+			Rect2i slice_rect;
+			uint32_t width = 0;
+			uint32_t height = 0;
+			uint32_t depth = 0;
+			uint32_t layers = 0;
+			uint32_t mipmaps = 0;
+			uint32_t usage_flags = 0;
+			uint32_t base_mipmap = 0;
+			uint32_t base_layer = 0;
+
+			std::vector<DataFormat> allowed_shared_formats;
+
+			bool is_resolve_buffer = false;
+			bool is_discardable = false;
+			bool has_initial_data = false;
+			bool pending_clear = false;
+
+			BitField<RDD::TextureAspectBits> read_aspect_flags = {};
+			BitField<RDD::TextureAspectBits> barrier_aspect_flags = {};
+			bool bound = false; // Bound to framebuffer.
+			RID owner;
+
+			//RDG::ResourceTracker* draw_tracker = nullptr;
+			//HashMap<Rect2i, RDG::ResourceTracker*>* slice_trackers = nullptr;
+			SharedFallback* shared_fallback = nullptr;
+			int32_t transfer_worker_index = -1;
+			uint64_t transfer_worker_operation = 0;
+
+			RDD::TextureSubresourceRange barrier_range() const {
+				RDD::TextureSubresourceRange r;
+				r.aspect = barrier_aspect_flags;
+				r.base_mipmap = base_mipmap;
+				r.mipmap_count = mipmaps;
+				r.base_layer = base_layer;
+				r.layer_count = layers;
+				return r;
+			}
+
+			TextureFormat texture_format() const {
+				TextureFormat tf;
+				tf.format = format;
+				tf.width = width;
+				tf.height = height;
+				tf.depth = depth;
+				tf.array_layers = layers;
+				tf.mipmaps = mipmaps;
+				tf.texture_type = type;
+				tf.samples = samples;
+				tf.usage_bits = usage_flags;
+				tf.shareable_formats = allowed_shared_formats;
+				tf.is_resolve_buffer = is_resolve_buffer;
+				tf.is_discardable = is_discardable;
+				return tf;
+			}
+		};
+
 	public:
 
 		static RenderingDevice* get_singleton() {
@@ -752,6 +829,45 @@ namespace Rendering
 		Error buffer_update(RID p_buffer, uint32_t p_offset, uint32_t p_size, const void* p_data, bool p_skip_check = false);
 		Error buffer_clear(RID p_buffer, uint32_t p_offset, uint32_t p_size);
 		void buffer_flush(RID p_buffer);
+
+
+		struct TextureView {
+			DataFormat format_override = DATA_FORMAT_MAX; // // Means, use same as format.
+			TextureSwizzle swizzle_r = TEXTURE_SWIZZLE_R;
+			TextureSwizzle swizzle_g = TEXTURE_SWIZZLE_G;
+			TextureSwizzle swizzle_b = TEXTURE_SWIZZLE_B;
+			TextureSwizzle swizzle_a = TEXTURE_SWIZZLE_A;
+
+			bool operator==(const TextureView& p_other) const {
+				if (format_override != p_other.format_override) {
+					return false;
+				}
+				else if (swizzle_r != p_other.swizzle_r) {
+					return false;
+				}
+				else if (swizzle_g != p_other.swizzle_g) {
+					return false;
+				}
+				else if (swizzle_b != p_other.swizzle_b) {
+					return false;
+				}
+				else if (swizzle_a != p_other.swizzle_a) {
+					return false;
+				}
+				else {
+					return true;
+				}
+			}
+		};
+
+		RID texture_buffer_create(uint32_t p_size_elements, DataFormat p_format, std::span<uint8_t> p_data = {});
+		RID texture_create(const TextureFormat& p_format, const TextureView& p_view, const std::vector<std::vector<uint8_t>>& p_data = std::vector<std::vector<uint8_t>>());
+		RID texture_create_shared(const TextureView& p_view, RID p_with_texture);
+		RID texture_create_from_extension(TextureType p_type, DataFormat p_format, TextureSamples p_samples, BitField<RenderingDevice::TextureUsageBits> p_usage, uint64_t p_image, uint64_t p_width, uint64_t p_height, uint64_t p_depth, uint64_t p_layers, uint64_t p_mipmaps = 1);
+		RID texture_create_shared_from_slice(const TextureView& p_view, RID p_with_texture, uint32_t p_layer, uint32_t p_mipmap, uint32_t p_mipmaps = 1, TextureSliceType p_slice_type = TEXTURE_SLICE_2D, uint32_t p_layers = 0);
+		Error texture_update(RID p_texture, uint32_t p_layer, const std::vector<uint8_t>& p_data);
+		std::vector<uint8_t> texture_get_data(RID p_texture, uint32_t p_layer); // CPU textures will return immediately, while GPU textures will most likely force a flush
+		//Error texture_get_data_async(RID p_texture, uint32_t p_layer, const Callable& p_callback);
 
 		void swap_buffers(bool p_present);
 
@@ -859,7 +975,7 @@ namespace Rendering
 		void _flush_barriers_for_transfer_worker(TransferWorker* p_transfer_worker);
 		void _check_transfer_worker_operation(uint32_t p_transfer_worker_index, uint64_t p_transfer_worker_operation);
 		void _check_transfer_worker_buffer(Buffer* p_buffer);
-		//void _check_transfer_worker_texture(Texture* p_texture);
+		void _check_transfer_worker_texture(Texture* p_texture);
 		void _check_transfer_worker_vertex_array(VertexArray* p_vertex_array);
 		void _check_transfer_worker_index_array(IndexArray* p_index_array);
 		void _submit_transfer_barriers(RDD::CommandBufferID p_draw_command_buffer);
@@ -878,6 +994,20 @@ namespace Rendering
 		void _staging_buffer_execute_required_action(StagingBuffers& p_staging_buffers, StagingRequiredAction p_required_action);
 
 		Error _insert_staging_block(StagingBuffers& p_staging_buffers);
+
+		uint32_t _texture_layer_count(Texture* p_texture) const;
+		uint32_t _texture_alignment(Texture* p_texture) const;
+		Error _texture_initialize(RID p_texture, uint32_t p_layer, const std::vector<uint8_t>& p_data, RDD::TextureLayout p_dst_layout, bool p_immediate_flush);
+		void _texture_check_shared_fallback(Texture* p_texture);
+		void _texture_update_shared_fallback(RID p_texture_rid, Texture* p_texture, bool p_for_writing);
+		void _texture_free_shared_fallback(Texture* p_texture);
+		void _texture_copy_shared(RID p_src_texture_rid, Texture* p_src_texture, RID p_dst_texture_rid, Texture* p_dst_texture);
+		void _texture_create_reinterpret_buffer(Texture* p_texture);
+		void _texture_check_pending_clear(RID p_texture_rid, Texture* p_texture);
+		void _texture_clear_color(RID p_texture_rid, Texture* p_texture, const Color& p_color, uint32_t p_base_mipmap, uint32_t p_mipmaps, uint32_t p_base_layer, uint32_t p_layers);
+		void _texture_clear_depth_stencil(RID p_texture_rid, Texture* p_texture, float p_depth, uint8_t p_stencil, uint32_t p_base_mipmap, uint32_t p_mipmaps, uint32_t p_base_layer, uint32_t p_layers);
+		uint32_t _texture_vrs_method_to_usage_bits() const;
+		void _texture_ensure_shareable_format(RID p_texture, const DataFormat& p_shareable_format);
 
 		RenderingDevice();
 		~RenderingDevice();
@@ -927,8 +1057,6 @@ namespace Rendering
 		int frame = 0;
 		uint64_t frames_drawn = 0;
 
-		uint64_t buffer_memory = 0;
-
 		std::unique_ptr<Compiler::GLSLCompiler> compiler;
 
 		// Flag for batching descriptor sets.
@@ -945,6 +1073,12 @@ namespace Rendering
 
 		StagingBuffers upload_staging_buffers;
 		StagingBuffers download_staging_buffers;
+
+
+		uint64_t texture_memory = 0;
+		uint64_t buffer_memory = 0;
+		uint32_t texture_upload_region_size_px = 0;
+		uint32_t texture_download_region_size_px = 0;
 
 		RID_Owner<RDD::SamplerID, true> sampler_owner;
 
@@ -968,6 +1102,7 @@ namespace Rendering
 
 		RID_Owner<UniformSet, true> uniform_set_owner;
 
+		RID_Owner<Texture, true> texture_owner;
 
 	};
 }
