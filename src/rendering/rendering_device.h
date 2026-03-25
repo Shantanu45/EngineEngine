@@ -934,6 +934,8 @@ namespace Rendering
 
 		void bind_uniform_set(RID p_shader_id, RID p_uniform_set_id, uint32_t set_index);
 
+		void set_push_constant(const void* p_data, uint32_t p_data_size);
+
 		void add_draw_list_bind_uniform_sets(RDD::ShaderID p_shader, std::span<RDD::UniformSetID> p_uniform_sets, uint32_t p_first_index, uint32_t p_set_count);
 
 		// TODO: #temp

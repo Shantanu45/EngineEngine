@@ -2656,6 +2656,21 @@ namespace Rendering
 		add_draw_list_bind_uniform_sets(shader->driver_id, { &uniform_set->driver_id, 1 }, set_index, 1);
 	}
 
+	void RenderingDevice::set_push_constant(const void* p_data, uint32_t p_data_size)
+	{
+//#ifdef DEBUG_ENABLED
+//		ERR_FAIL_COND_MSG(p_data_size != draw_list.validation.pipeline_push_constant_size,
+//			"This render pipeline requires (" + itos(draw_list.validation.pipeline_push_constant_size) + ") bytes of push constant data, supplied: (" + itos(p_data_size) + ")");
+//#endif
+//
+//		std::vector<uint32_t> push_constant_data_view(reinterpret_cast<const uint32_t*>(p_data), p_data_size / sizeof(uint32_t));
+//		driver->command_bind_push_constants(get_current_command_buffer(), /*shader*/, 0, push_constant_data_view);
+//
+//#ifdef DEBUG_ENABLED
+//		draw_list.validation.pipeline_push_constant_supplied = true;
+//#endif
+	}
+
 	void RenderingDevice::add_draw_list_bind_uniform_sets(RDD::ShaderID p_shader, std::span<RDD::UniformSetID> p_uniform_sets, uint32_t p_first_index, uint32_t p_set_count) {
 		DEV_ASSERT(p_uniform_sets.size() >= p_set_count);
 
