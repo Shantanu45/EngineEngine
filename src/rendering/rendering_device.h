@@ -872,6 +872,9 @@ namespace Rendering
 		std::vector<uint8_t> texture_get_data(RID p_texture, uint32_t p_layer); // CPU textures will return immediately, while GPU textures will most likely force a flush
 		//Error texture_get_data_async(RID p_texture, uint32_t p_layer, const Callable& p_callback);
 
+		RID sampler_create(const SamplerState& p_state);
+		bool sampler_is_format_supported_for_filter(DataFormat p_format, SamplerFilter p_sampler_filter) const;
+
 		void swap_buffers(bool p_present);
 
 		/**
@@ -935,6 +938,7 @@ namespace Rendering
 
 		// TODO: #temp
 		void _submit_transfer_workers(RDD::CommandBufferID p_draw_command_buffer = RDD::CommandBufferID());
+		void _submit_transfer_barriers(RDD::CommandBufferID p_draw_command_buffer);
 
 		void update_pipeline_cache(bool p_closing = false);
 
@@ -981,7 +985,6 @@ namespace Rendering
 		void _check_transfer_worker_texture(Texture* p_texture);
 		void _check_transfer_worker_vertex_array(VertexArray* p_vertex_array);
 		void _check_transfer_worker_index_array(IndexArray* p_index_array);
-		void _submit_transfer_barriers(RDD::CommandBufferID p_draw_command_buffer);
 		void _wait_for_transfer_workers();
 		void _free_transfer_workers();
 

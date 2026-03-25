@@ -45,11 +45,18 @@ struct TriangleApplication : EE::Application
 		tf.width = image.width;
 		tf.height = image.height;
 		tf.array_layers = 1;
-		tf.texture_type = Rendering::RenderingDeviceCommons::TEXTURE_TYPE_2D_ARRAY;
+		tf.texture_type = Rendering::RenderingDeviceCommons::TEXTURE_TYPE_2D;
 		tf.usage_bits = Rendering::RenderingDeviceCommons::TEXTURE_USAGE_SAMPLING_BIT | Rendering::RenderingDeviceCommons::TEXTURE_USAGE_CAN_UPDATE_BIT;
 		tf.format = Rendering::RenderingDeviceCommons::DATA_FORMAT_R8G8B8A8_UNORM;
 
 		texture_uniform = device->texture_create(tf, Rendering::RenderingDevice::TextureView(), { image.pixels });
+
+		Rendering::RenderingDeviceCommons::SamplerState s;
+		s.mag_filter = Rendering::RenderingDeviceCommons::SAMPLER_FILTER_LINEAR;
+		s.min_filter = Rendering::RenderingDeviceCommons::SAMPLER_FILTER_LINEAR;
+		s.max_lod = 0;
+
+		sampler = device->sampler_create(s);
 
 		std::vector<Rendering::RenderingDevice::Uniform> uniforms;
 		Rendering::RenderingDevice::Uniform u;
@@ -58,11 +65,17 @@ struct TriangleApplication : EE::Application
 		u.append_id(state_uniform);
 		uniforms.push_back(u);
 
-		//Rendering::RenderingDevice::Uniform tu;
-		//tu.uniform_type = Rendering::RenderingDeviceCommons::UNIFORM_TYPE_TEXTURE;
-		//tu.binding = 2;
-		//tu.append_id(texture_uniform);
-		//uniforms.push_back(u);
+		Rendering::RenderingDevice::Uniform tu;
+		tu.uniform_type = Rendering::RenderingDeviceCommons::UNIFORM_TYPE_TEXTURE;
+		tu.binding = 1;
+		tu.append_id(texture_uniform);
+		uniforms.push_back(tu);
+
+		Rendering::RenderingDevice::Uniform su;
+		su.uniform_type = Rendering::RenderingDevice::UNIFORM_TYPE_SAMPLER;
+		su.binding = 2;
+		su.append_id(sampler);
+		uniforms.push_back(su);
 
 		DEV_ASSERT(rendering_device != nullptr);
 
@@ -88,6 +101,9 @@ struct TriangleApplication : EE::Application
 		state.z = fracpart;
 		auto err = device->buffer_update(state_uniform, 0, sizeof(UBO), &state);
 
+		device->_submit_transfer_barriers(device->get_current_command_buffer());
+
+
 		device->begin_for_screen(DisplayServerEnums::MAIN_WINDOW_ID);
 		auto cmd_buffer = device->get_current_command_buffer();
 
@@ -100,6 +116,7 @@ struct TriangleApplication : EE::Application
 private:
 	RID state_uniform;
 	RID texture_uniform;
+	RID sampler;
 	RID uniform_set;
 	Rendering::MeshPrimitive prim;
 };

@@ -1029,21 +1029,21 @@ namespace Rendering
 
 			switch (uniform.uniform_type) {
 			case UNIFORM_TYPE_SAMPLER: {
-				/*if (uniform.get_id_count() != (uint32_t)set_uniform.length) {
+				if (uniform.get_id_count() != (uint32_t)set_uniform.length) {
 					if (set_uniform.length > 1) {
-						ERR_FAIL_V_MSG(RID(), "Sampler (binding: " + itos(uniform.binding) + ") is an array of (" + itos(set_uniform.length) + ") sampler elements, so it should be provided equal number of sampler IDs to satisfy it (IDs provided: " + itos(uniform.get_id_count()) + ").");
+						ERR_FAIL_V_MSG(RID(), std::format("Sampler (binding: {}) is an array of ({}) sampler elements, so it should be provided equal number of sampler IDs to satisfy it (IDs provided: {}).", uniform.binding, set_uniform.length, uniform.get_id_count()));
 					}
 					else {
-						ERR_FAIL_V_MSG(RID(), "Sampler (binding: " + itos(uniform.binding) + ") should provide one ID referencing a sampler (IDs provided: " + itos(uniform.get_id_count()) + ").");
+						ERR_FAIL_V_MSG(RID(), "Sampler (binding: {}) should provide one ID referencing a sampler (IDs provided: {}).", uniform.binding, uniform.get_id_count());
 					}
 				}
 
 				for (uint32_t j = 0; j < uniform.get_id_count(); j++) {
 					RDD::SamplerID* sampler_driver_id = sampler_owner.get_or_null(uniform.get_id(j));
-					ERR_FAIL_NULL_V_MSG(sampler_driver_id, RID(), "Sampler (binding: " + itos(uniform.binding) + ", index " + itos(j) + ") is not a valid sampler.");
+					ERR_FAIL_NULL_V_MSG(sampler_driver_id, RID(), "Sampler (binding: {}, index {}) is not a valid sampler.", uniform.binding, j);
 
 					driver_uniform.ids.push_back(*sampler_driver_id);
-				}*/
+				}
 			} break;
 			case UNIFORM_TYPE_SAMPLER_WITH_TEXTURE: {
 				/*if (uniform.get_id_count() != (uint32_t)set_uniform.length * 2) {
@@ -2104,6 +2104,34 @@ namespace Rendering
 
 			return buffer_data;
 		}
+	}
+
+	RID RenderingDevice::sampler_create(const SamplerState& p_state)
+	{
+		//_THREAD_SAFE_METHOD_
+
+		ERR_FAIL_INDEX_V(p_state.repeat_u, SAMPLER_REPEAT_MODE_MAX, RID());
+		ERR_FAIL_INDEX_V(p_state.repeat_v, SAMPLER_REPEAT_MODE_MAX, RID());
+		ERR_FAIL_INDEX_V(p_state.repeat_w, SAMPLER_REPEAT_MODE_MAX, RID());
+		ERR_FAIL_INDEX_V(p_state.compare_op, COMPARE_OP_MAX, RID());
+		ERR_FAIL_INDEX_V(p_state.border_color, SAMPLER_BORDER_COLOR_MAX, RID());
+
+		RDD::SamplerID sampler = driver->sampler_create(p_state);
+		ERR_FAIL_COND_V(!sampler, RID());
+
+		RID id = sampler_owner.make_rid(sampler);
+#ifdef DEV_ENABLED
+		set_resource_name(id, "RID:" + itos(id.get_id()));
+#endif
+		return id;
+	}
+
+	bool RenderingDevice::sampler_is_format_supported_for_filter(DataFormat p_format, SamplerFilter p_sampler_filter) const {
+		//_THREAD_SAFE_METHOD_
+
+		ERR_FAIL_INDEX_V(p_format, DATA_FORMAT_MAX, false);
+
+		return driver->sampler_is_format_supported_for_filter(p_format, p_sampler_filter);
 	}
 
 	void RenderingDevice::swap_buffers(bool p_present)

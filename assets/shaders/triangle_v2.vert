@@ -10,8 +10,10 @@ layout(binding = 0) uniform UBO {
 } ubo;
 
 layout(location = 0) out vec3 fragCol;
+layout(location = 1) out vec2 fragUV;
 
 void main() {
     gl_Position = vec4(inPosition, 1.0);
+    fragUV = inTexcoord;
     fragCol = inPosition;
 }

@@ -3977,6 +3977,8 @@ namespace Vulkan
 		VkWriteDescriptorSet* vk_writes = vk_writes_vec.data();
 		uint32_t writes_amount = 0;
 		std::vector<VkDescriptorBufferInfo> vk_buf_info_vec;
+		std::vector<VkDescriptorImageInfo> vk_img_infos_vec_sampler;
+		std::vector<VkDescriptorImageInfo> vk_img_infos_vec_texture;
 		std::vector<VkDescriptorImageInfo> vk_img_infos_vec;
 		std::vector<VkDescriptorBufferInfo> vk_buf_infos_vec;
 		std::vector<VkBufferView> vk_buf_views_vec;
@@ -3997,9 +3999,9 @@ namespace Vulkan
 					add_write = false;
 				}
 				else {
-					vk_img_infos_vec.resize(num_descriptors);
+					vk_img_infos_vec_sampler.resize(num_descriptors);
 
-					VkDescriptorImageInfo* vk_img_infos = vk_img_infos_vec.data();
+					VkDescriptorImageInfo* vk_img_infos = vk_img_infos_vec_sampler.data();
 
 					for (uint32_t j = 0; j < num_descriptors; j++) {
 						vk_img_infos[j] = {};
@@ -4035,9 +4037,9 @@ namespace Vulkan
 			} break;
 			case UNIFORM_TYPE_TEXTURE: {
 				num_descriptors = uniform.ids.size();
-				vk_img_infos_vec.resize(num_descriptors);
+				vk_img_infos_vec_texture.resize(num_descriptors);
 
-				VkDescriptorImageInfo* vk_img_infos = vk_img_infos_vec.data();
+				VkDescriptorImageInfo* vk_img_infos = vk_img_infos_vec_texture.data();
 
 				for (uint32_t j = 0; j < num_descriptors; j++) {
 #ifdef DEBUG_ENABLED
