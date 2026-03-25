@@ -1101,22 +1101,22 @@ namespace Rendering
 				}*/
 			} break;
 			case UNIFORM_TYPE_TEXTURE: {
-				/*if (uniform.get_id_count() != (uint32_t)set_uniform.length) {
+				if (uniform.get_id_count() != (uint32_t)set_uniform.length) {
 					if (set_uniform.length > 1) {
-						ERR_FAIL_V_MSG(RID(), "Texture (binding: " + itos(uniform.binding) + ") is an array of (" + itos(set_uniform.length) + ") textures, so it should be provided equal number of texture IDs to satisfy it (IDs provided: " + itos(uniform.get_id_count()) + ").");
+						ERR_FAIL_V_MSG(RID(), std::format("Texture (binding: {}) is an array of ({}) textures, so it should be provided equal number of texture IDs to satisfy it (IDs provided: {}).", uniform.binding, set_uniform.length, uniform.get_id_count()));
 					}
 					else {
-						ERR_FAIL_V_MSG(RID(), "Texture (binding: " + itos(uniform.binding) + ") should provide one ID referencing a texture (IDs provided: " + itos(uniform.get_id_count()) + ").");
+						ERR_FAIL_V_MSG(RID(), std::format("Texture (binding: {}) should provide one ID referencing a texture (IDs provided: {}).", uniform.binding, uniform.get_id_count()));
 					}
 				}
 
 				for (uint32_t j = 0; j < uniform.get_id_count(); j++) {
 					RID texture_id = uniform.get_id(j);
 					Texture* texture = texture_owner.get_or_null(texture_id);
-					ERR_FAIL_NULL_V_MSG(texture, RID(), "Texture (binding: " + itos(uniform.binding) + ", index " + itos(j) + ") is not a valid texture.");
+					ERR_FAIL_NULL_V_MSG(texture, RID(), std::format("Texture (binding: {}, index {}) is not a valid texture.", uniform.binding, uniform.binding), uniform.binding, j);
 
 					ERR_FAIL_COND_V_MSG(!(texture->usage_flags & TEXTURE_USAGE_SAMPLING_BIT), RID(),
-						"Texture (binding: " + itos(uniform.binding) + ", index " + itos(j) + ") needs the TEXTURE_USAGE_SAMPLING_BIT usage flag set in order to be used as uniform.");
+						std::format("Texture (binding: {}, index {}) needs the TEXTURE_USAGE_SAMPLING_BIT usage flag set in order to be used as uniform.", uniform.binding, j));
 
 					if ((texture->usage_flags & (TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | TEXTURE_USAGE_DEPTH_RESOLVE_ATTACHMENT_BIT | TEXTURE_USAGE_INPUT_ATTACHMENT_BIT))) {
 						UniformSet::AttachableTexture attachable_texture;
@@ -1130,26 +1130,26 @@ namespace Rendering
 					}
 
 					RDD::TextureID driver_id = texture->driver_id;
-					RDG::ResourceTracker* tracker = texture->draw_tracker;
+					//RDG::ResourceTracker* tracker = texture->draw_tracker;
 					if (texture->shared_fallback != nullptr && texture->shared_fallback->texture.id != 0) {
 						driver_id = texture->shared_fallback->texture;
-						tracker = texture->shared_fallback->texture_tracker;
+						//tracker = texture->shared_fallback->texture_tracker;
 						shared_textures_to_update.push_back({ false, texture_id });
 					}
 
-					if (tracker != nullptr) {
-						draw_trackers.push_back(tracker);
-						draw_trackers_usage.push_back(RDG::RESOURCE_USAGE_TEXTURE_SAMPLE);
-					}
-					else {
-						untracked_usage[texture_id] = RDG::RESOURCE_USAGE_TEXTURE_SAMPLE;
-					}
+					//if (tracker != nullptr) {
+					//	draw_trackers.push_back(tracker);
+					//	draw_trackers_usage.push_back(RDG::RESOURCE_USAGE_TEXTURE_SAMPLE);
+					//}
+					//else {
+					//	untracked_usage[texture_id] = RDG::RESOURCE_USAGE_TEXTURE_SAMPLE;
+					//}
 
 					DEV_ASSERT(!texture->owner.is_valid() || texture_owner.get_or_null(texture->owner));
 
 					driver_uniform.ids.push_back(driver_id);
 					_check_transfer_worker_texture(texture);
-				}*/
+				}
 			} break;
 			case UNIFORM_TYPE_IMAGE: {
 				//if (uniform.get_id_count() != (uint32_t)set_uniform.length) {
