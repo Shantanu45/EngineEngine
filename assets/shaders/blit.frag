@@ -7,5 +7,5 @@ layout(binding = 0) uniform sampler2D src_rt;
 
 void main()
 {
-    color = texture(src_rt, uv);
+    color = vec4(1.0, 1.0, 0.0, 1.0);//texture(src_rt, uv);
 }

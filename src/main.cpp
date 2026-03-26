@@ -37,7 +37,7 @@ struct TriangleApplication : EE::Application
 
 		wsi->set_default_vertex_attribute();
 
-		wsi->load_gltf("assets://gltf/two_cubes.glb");
+		wsi->load_gltf("assets://gltf/plane.glb");
 
 		auto device = wsi->get_rendering_device();
 
