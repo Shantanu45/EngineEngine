@@ -5,6 +5,8 @@
  * \author Shantanu Kumar
  * \date   March 2026
  *********************************************************************/
+#pragma  once
+
 #include <map>
 #include "rendering_device_driver.h"
 #include "rendering_device.h"
@@ -13,33 +15,6 @@
 
 namespace Rendering
 {
-	struct BlitToScreen {
-		RID render_target;
-		Rect2 src_rect = Rect2(0.0, 0.0, 1.0, 1.0);
-		Rect2i dst_rect;
-
-		struct {
-			bool use_layer = false;
-			uint32_t layer = 0;
-		} multi_view;
-
-	};
-
-
-
-	struct MeshRange {
-		uint32_t vertexOffset;  // offset into the big vertex buffer
-		uint64_t vertex_byte_offset;
-		uint32_t indexOffset;   // offset into the big index buffer
-		uint32_t index_count;
-	};
-
-	enum class VERTEX_DATA_MODE
-	{
-		INTERLEVED_DATA,
-		SEPERATE
-	};
-
 	// display server windows
 	struct WindowData {
 		WindowPlatformData platfform_data;
@@ -48,15 +23,18 @@ namespace Rendering
 
 	class WSI
 	{
-		struct Blit {
-			//BlitPushConstant push_constant;
-			RID shader;
-			//RID shader_version;
-			//HashMap<RenderingDevice::FramebufferFormatID, BlitPipelines> pipelines_by_format;
-			RID index_buffer;
-			RID array;
-			RID sampler;
-		} blit;
+		struct MeshRange {
+			uint32_t vertexOffset;  // offset into the big vertex buffer
+			uint64_t vertex_byte_offset;
+			uint32_t indexOffset;   // offset into the big index buffer
+			uint32_t index_count;
+		};
+
+		enum class VERTEX_DATA_MODE
+		{
+			INTERLEVED_DATA,
+			SEPERATE
+		};
 
 	public:
 		WSI();
@@ -101,8 +79,7 @@ namespace Rendering
 		void clear_index_data() { index_data.clear(); }
 
 		void pipeline_create();
-		void blit_initialize();
-		void blit_render_target_to_screen(DisplayServerEnums::WindowID p_screen, const BlitToScreen* p_render_targets);
+
 		void pipeline_create_default();
 
 		inline void set_vertex_data_mode(VERTEX_DATA_MODE mode)
@@ -165,10 +142,5 @@ namespace Rendering
 
 		std::unordered_map<RID, RID> vertex_arrays;		// prim to array
 		std::unordered_map<RID, RID> index_arrays;
-
-		std::unordered_map<RID, RID> render_target_descriptors;
-		RID blit_pipeline;
-
-		std::vector<uint8_t> pv;
 	};
 }

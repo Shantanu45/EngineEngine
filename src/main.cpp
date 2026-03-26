@@ -17,6 +17,7 @@
 #include "rendering/image_loader.h"
 #include <cmath> 
 #include <cstddef>
+#include "rendering/renderer_compositor.h"
 
 struct TriangleApplication : EE::Application
 {
@@ -101,8 +102,8 @@ struct TriangleApplication : EE::Application
 		//wsi->set_program({ "assets://shaders/triangle_v2.vert", "assets://shaders/triangle_v2.frag" });
 
 		//uniform_set = device->uniform_set_create(uniforms, wsi->get_bound_shader(), 0);
-	
-		wsi->blit_initialize();
+		rd = Rendering::RendererCompositor();
+		rd.initailize(DisplayServerEnums::MAIN_WINDOW_ID);
 
 		//wsi->pipeline_create_default();
 	}
@@ -136,7 +137,7 @@ struct TriangleApplication : EE::Application
 		device->_submit_transfer_barriers(device->get_current_command_buffer());
 		Rendering::BlitToScreen blit;
 		blit.render_target = texture_uniform;
-		wsi->blit_render_target_to_screen(DisplayServerEnums::MAIN_WINDOW_ID, &blit);
+		rd.blit_render_targets_to_screen(&blit);
 
 		//device->begin_for_screen(DisplayServerEnums::MAIN_WINDOW_ID);
 		//auto cmd_buffer = device->get_current_command_buffer();
@@ -154,6 +155,8 @@ private:
 	RID uniform_set;
 
 	Rendering::MeshPrimitive prim;
+
+	Rendering::RendererCompositor rd;
 };
 
 namespace EE

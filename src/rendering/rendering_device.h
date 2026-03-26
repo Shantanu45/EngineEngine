@@ -622,36 +622,6 @@ namespace Rendering
 			uint64_t transfer_worker_operation = 0;
 		};
 
-		struct Frame {
-			// The command pool used by the command buffer.
-			RenderingDeviceDriver::CommandPoolID command_pool;
-
-			// The command buffer used by the main thread when recording the frame.
-			RenderingDeviceDriver::CommandBufferID command_buffer;
-
-			// Signaled by the command buffer submission. Present must wait on this semaphore.
-			RenderingDeviceDriver::SemaphoreID semaphore;
-
-			// Signaled by the command buffer submission. Must wait on this fence before beginning command recording for the frame.
-			RenderingDeviceDriver::FenceID fence;
-			bool fence_signaled = false;
-
-			// Semaphores the frame must wait on before executing the command buffer.
-			std::vector<RenderingDeviceDriver::SemaphoreID> semaphores_to_wait_on;
-			//  Swap chains prepared for drawing during the frame that must be presented.
-			std::vector<RenderingDeviceDriver::SwapChainID> swap_chains_to_present;
-
-			// Semaphores the transfer workers can use to wait before rendering the frame.
-			// This must have the same size of the transfer worker pool.
-			std::vector<RenderingDeviceDriver::SemaphoreID> transfer_worker_semaphores;
-
-			// Extra command buffer pool used for driver workarounds or to reduce GPU bubbles by
-			// splitting the final render pass to the swapchain into its own cmd buffer.
-			//Device::CommandBufferPool command_buffer_pool;
-
-			uint64_t index = 0;
-		};
-
 		struct UniformSet {
 			uint32_t format = 0;
 			RID shader_id;
@@ -777,6 +747,44 @@ namespace Rendering
 			}
 		};
 
+		struct Frame {
+			std::list<Buffer> buffers_to_dispose_of;
+			std::list<Texture> textures_to_dispose_of;
+			std::list<Framebuffer> framebuffers_to_dispose_of;
+			std::list<RDD::SamplerID> samplers_to_dispose_of;
+			std::list<Shader> shaders_to_dispose_of;
+			std::list<UniformSet> uniform_sets_to_dispose_of;
+			std::list<RenderPipeline> render_pipelines_to_dispose_of;
+
+			// The command pool used by the command buffer.
+			RenderingDeviceDriver::CommandPoolID command_pool;
+
+			// The command buffer used by the main thread when recording the frame.
+			RenderingDeviceDriver::CommandBufferID command_buffer;
+
+			// Signaled by the command buffer submission. Present must wait on this semaphore.
+			RenderingDeviceDriver::SemaphoreID semaphore;
+
+			// Signaled by the command buffer submission. Must wait on this fence before beginning command recording for the frame.
+			RenderingDeviceDriver::FenceID fence;
+			bool fence_signaled = false;
+
+			// Semaphores the frame must wait on before executing the command buffer.
+			std::vector<RenderingDeviceDriver::SemaphoreID> semaphores_to_wait_on;
+			//  Swap chains prepared for drawing during the frame that must be presented.
+			std::vector<RenderingDeviceDriver::SwapChainID> swap_chains_to_present;
+
+			// Semaphores the transfer workers can use to wait before rendering the frame.
+			// This must have the same size of the transfer worker pool.
+			std::vector<RenderingDeviceDriver::SemaphoreID> transfer_worker_semaphores;
+
+			// Extra command buffer pool used for driver workarounds or to reduce GPU bubbles by
+			// splitting the final render pass to the swapchain into its own cmd buffer.
+			//Device::CommandBufferPool command_buffer_pool;
+
+			uint64_t index = 0;
+		};
+
 	public:
 
 		static RenderingDevice* get_singleton() {
@@ -788,6 +796,8 @@ namespace Rendering
 		void finalize();
 
 #pragma region Shader
+		RID create_program(const std::vector<std::string> programs);
+
 		RDShaderSPIRV* shader_compile_spirv_from_shader_source(const RDShaderSource* p_source, bool p_allow_cache = true);
 
 		RID shader_create_from_spirv(const RDShaderSPIRV* p_spirv, const std::string& p_shader_name = "");
@@ -893,7 +903,7 @@ namespace Rendering
 		RID sampler_create(const SamplerState& p_state);
 		bool sampler_is_format_supported_for_filter(DataFormat p_format, SamplerFilter p_sampler_filter) const;
 
-#pragma endregion Texture
+#pragma endregion
 
 		void swap_buffers(bool p_present);
 
@@ -950,6 +960,8 @@ namespace Rendering
 		void _submit_transfer_barriers(RDD::CommandBufferID p_draw_command_buffer);
 
 		void update_pipeline_cache(bool p_closing = false);
+
+		void free_rid(RID p_rid);
 
 	private:
 		bool _buffer_make_mutable(Buffer* p_buffer, RID p_buffer_id);
@@ -1015,6 +1027,10 @@ namespace Rendering
 			const std::vector<FramebufferPass>& p_passes, std::span<RDD::AttachmentLoadOp> p_load_ops,
 			std::span<RDD::AttachmentStoreOp> p_store_ops, uint32_t p_view_count = 1, VRSMethod p_vrs_method = VRS_METHOD_NONE,
 			int32_t p_vrs_attachment = -1, Size2i p_vrs_texel_size = Size2i(), std::vector<TextureSamples>* r_samples = nullptr);
+
+		void _free_internal(RID p_id);
+		void _add_dependency(RID p_id, RID p_depends_on);
+		void _free_dependencies(RID p_id);
 
 		RenderingDevice();
 		~RenderingDevice();

@@ -298,6 +298,19 @@ namespace Rendering
 
 #pragma region Shader
 
+	RID RenderingDevice::create_program(const std::vector<std::string> programs)
+	{
+		RDShaderSource* shaders = new RDShaderSource();
+		shaders->set_language(RenderingDeviceCommons::SHADER_LANGUAGE_GLSL);
+		for (auto shader_path : programs)
+		{
+			auto stage = shader_stage_from_compiler_stage(Compiler::stage_from_path(shader_path));
+			ERR_FAIL_COND_V_MSG(stage == RenderingDeviceCommons::SHADER_STAGE_MAX, RID(), "could not evaluate shader stage from path!!");
+			shaders->set_stage_source(stage, shader_path);
+		}
+		return shader_create_from_spirv(shader_compile_spirv_from_shader_source(shaders), "traingle_shader");
+	}
+
 	Rendering::RDShaderSPIRV* RenderingDevice::shader_compile_spirv_from_shader_source(const RDShaderSource* p_source, bool p_allow_cache /*= true*/)
 	{
 		//ERR_FAIL_COND_V(p_source == nullptr, &RDShaderSPIRV());
@@ -3021,6 +3034,12 @@ namespace Rendering
 
 	}
 
+	void RenderingDevice::free_rid(RID p_rid)
+	{
+		_free_dependencies(p_rid); // Recursively erase dependencies first, to avoid potential API problems.
+		_free_internal(p_rid);
+	}
+
 	bool RenderingDevice::_buffer_make_mutable(Buffer* p_buffer, RID p_buffer_id) {
 		//TODO:
 		return true;
@@ -3991,6 +4010,141 @@ namespace Rendering
 
 		return render_pass;
 	}	
+
+	void RenderingDevice::_free_internal(RID p_id)
+	{
+#ifdef DEV_ENABLED
+		String resource_name;
+		if (resource_names.has(p_id)) {
+			resource_name = resource_names[p_id];
+			resource_names.erase(p_id);
+		}
+#endif
+
+		// Push everything so it's disposed of next time this frame index is processed (means, it's safe to do it).
+		if (texture_owner.owns(p_id)) {
+			Texture* texture = texture_owner.get_or_null(p_id);
+			_check_transfer_worker_texture(texture);
+
+			//RDG::ResourceTracker* draw_tracker = texture->draw_tracker;
+			//if (draw_tracker != nullptr) {
+			//	draw_tracker->reference_count--;
+			//	if (draw_tracker->reference_count == 0) {
+			//		RDG::resource_tracker_free(draw_tracker);
+
+			//		if (texture->owner.is_valid() && (texture->slice_type != TEXTURE_SLICE_MAX)) {
+			//			// If this was a texture slice, erase the tracker from the map.
+			//			Texture* owner_texture = texture_owner.get_or_null(texture->owner);
+			//			if (owner_texture != nullptr && owner_texture->slice_trackers != nullptr) {
+			//				owner_texture->slice_trackers->erase(texture->slice_rect);
+
+			//				if (owner_texture->slice_trackers->is_empty()) {
+			//					memdelete(owner_texture->slice_trackers);
+			//					owner_texture->slice_trackers = nullptr;
+			//				}
+			//			}
+			//		}
+			//	}
+			//}
+
+			frames[frame].textures_to_dispose_of.push_back(*texture);
+			texture_owner.free(p_id);
+		}
+		else if (framebuffer_owner.owns(p_id)) {
+			Framebuffer* framebuffer = framebuffer_owner.get_or_null(p_id);
+			frames[frame].framebuffers_to_dispose_of.push_back(*framebuffer);
+
+			if (framebuffer->invalidated_callback != nullptr) {
+				framebuffer->invalidated_callback(framebuffer->invalidated_callback_userdata);
+			}
+
+			framebuffer_owner.free(p_id);
+		}
+		else if (sampler_owner.owns(p_id)) {
+			RDD::SamplerID sampler_driver_id = *sampler_owner.get_or_null(p_id);
+			frames[frame].samplers_to_dispose_of.push_back(sampler_driver_id);
+			sampler_owner.free(p_id);
+		}
+		else if (vertex_buffer_owner.owns(p_id)) {
+			Buffer* vertex_buffer = vertex_buffer_owner.get_or_null(p_id);
+			_check_transfer_worker_buffer(vertex_buffer);
+
+			//RDG::resource_tracker_free(vertex_buffer->draw_tracker);
+			frames[frame].buffers_to_dispose_of.push_back(*vertex_buffer);
+			vertex_buffer_owner.free(p_id);
+		}
+		else if (vertex_array_owner.owns(p_id)) {
+			vertex_array_owner.free(p_id);
+		}
+		else if (index_buffer_owner.owns(p_id)) {
+			IndexBuffer* index_buffer = index_buffer_owner.get_or_null(p_id);
+			_check_transfer_worker_buffer(index_buffer);
+
+			//RDG::resource_tracker_free(index_buffer->draw_tracker);
+			frames[frame].buffers_to_dispose_of.push_back(*index_buffer);
+			index_buffer_owner.free(p_id);
+		}
+		else if (index_array_owner.owns(p_id)) {
+			index_array_owner.free(p_id);
+		}
+		else if (shader_owner.owns(p_id)) {
+			Shader* shader = shader_owner.get_or_null(p_id);
+			if (shader->driver_id) { // Not placeholder?
+				frames[frame].shaders_to_dispose_of.push_back(*shader);
+			}
+			shader_owner.free(p_id);
+		}
+		else if (uniform_buffer_owner.owns(p_id)) {
+			Buffer* uniform_buffer = uniform_buffer_owner.get_or_null(p_id);
+			_check_transfer_worker_buffer(uniform_buffer);
+
+			//RDG::resource_tracker_free(uniform_buffer->draw_tracker);
+			frames[frame].buffers_to_dispose_of.push_back(*uniform_buffer);
+			uniform_buffer_owner.free(p_id);
+		}
+		else if (texture_buffer_owner.owns(p_id)) {
+			Buffer* texture_buffer = texture_buffer_owner.get_or_null(p_id);
+			_check_transfer_worker_buffer(texture_buffer);
+
+			//RDG::resource_tracker_free(texture_buffer->draw_tracker);
+			frames[frame].buffers_to_dispose_of.push_back(*texture_buffer);
+			texture_buffer_owner.free(p_id);
+		}
+		else if (storage_buffer_owner.owns(p_id)) {
+			Buffer* storage_buffer = storage_buffer_owner.get_or_null(p_id);
+			_check_transfer_worker_buffer(storage_buffer);
+
+			//RDG::resource_tracker_free(storage_buffer->draw_tracker);
+			frames[frame].buffers_to_dispose_of.push_back(*storage_buffer);
+			storage_buffer_owner.free(p_id);
+		}
+		else if (uniform_set_owner.owns(p_id)) {
+			UniformSet* uniform_set = uniform_set_owner.get_or_null(p_id);
+			frames[frame].uniform_sets_to_dispose_of.push_back(*uniform_set);
+			uniform_set_owner.free(p_id);
+
+			if (uniform_set->invalidated_callback != nullptr) {
+				uniform_set->invalidated_callback(uniform_set->invalidated_callback_userdata);
+			}
+		}
+		else {
+#ifdef DEV_ENABLED
+			ERR_PRINT("Attempted to free invalid ID: " + itos(p_id.get_id()) + " " + resource_name);
+#else
+			ERR_PRINT(std::format("Attempted to free invalid ID: {}", p_id.get_id()));
+#endif
+		}
+	}
+
+	void RenderingDevice::_add_dependency(RID p_id, RID p_depends_on)
+	{
+
+	}
+
+	void RenderingDevice::_free_dependencies(RID p_id)
+	{
+
+	}
 
 	RenderingDevice::RenderingDevice()
 	{

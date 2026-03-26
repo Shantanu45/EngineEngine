@@ -193,13 +193,13 @@ namespace Rendering
 
 	void WSI::set_default_vertex_attribute()
 	{
-		set_vertex_data_mode(Rendering::VERTEX_DATA_MODE::INTERLEVED_DATA);
+		set_vertex_data_mode(VERTEX_DATA_MODE::INTERLEVED_DATA);
 		set_index_buffer_format(Rendering::RenderingDeviceCommons::IndexBufferFormat::INDEX_BUFFER_FORMAT_UINT32);
 
-		//set_vertex_attribute(0, 0, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32B32_SFLOAT, offsetof(Rendering::Vertex, position), sizeof(Rendering::Vertex));
-		//set_vertex_attribute(0, 1, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32B32_SFLOAT, offsetof(Rendering::Vertex, normal), sizeof(Rendering::Vertex));
-		//set_vertex_attribute(0, 2, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32_SFLOAT, offsetof(Rendering::Vertex, texcoord), sizeof(Rendering::Vertex));
-		//set_vertex_attribute(0, 3, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32B32A32_SFLOAT, offsetof(Rendering::Vertex, tangent), sizeof(Rendering::Vertex));
+		set_vertex_attribute(0, 0, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32B32_SFLOAT, offsetof(Rendering::Vertex, position), sizeof(Rendering::Vertex));
+		set_vertex_attribute(0, 1, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32B32_SFLOAT, offsetof(Rendering::Vertex, normal), sizeof(Rendering::Vertex));
+		set_vertex_attribute(0, 2, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32_SFLOAT, offsetof(Rendering::Vertex, texcoord), sizeof(Rendering::Vertex));
+		set_vertex_attribute(0, 3, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32B32A32_SFLOAT, offsetof(Rendering::Vertex, tangent), sizeof(Rendering::Vertex));
 	}
 
 	void WSI::push_vertex_data(void* data, size_t size)
@@ -241,98 +241,6 @@ namespace Rendering
 			{}, RenderingDeviceCommons::PipelineMultisampleState(),
 			RenderingDeviceCommons::PipelineDepthStencilState(), blend_state,
 			0);
-	}
-
-	void WSI::blit_initialize()
-	{
-		//Vector<String> blit_modes;
-		//blit_modes.push_back("\n");
-		//blit_modes.push_back("\n#define USE_LAYER\n");
-		//blit_modes.push_back("\n#define USE_LAYER\n#define APPLY_LENS_DISTORTION\n");
-		//blit_modes.push_back("\n");
-
-		// TODO: set proper blit shader
-		blit.shader = create_program({"assets://shaders/blit.vert", "assets://shaders/blit.frag"});
-		ERR_FAIL_COND_MSG(blit.shader.is_null(), "could not create blit shader module");
-		// blit.shader_version = blit.shader.version_create();
-
-		RenderingDeviceCommons::PipelineRasterizationState rs;
-		rs.front_face = RenderingDeviceCommons::POLYGON_FRONT_FACE_COUNTER_CLOCKWISE;
-		rs.cull_mode = RenderingDeviceCommons::POLYGON_CULL_DISABLED;
-
-		vertex_format = rendering_device->vertex_format_create(vertex_attributes);
-
-		auto blend_state = RenderingDeviceCommons::PipelineColorBlendState::create_blend();
-		blit_pipeline = rendering_device->create_swapchain_pipeline(active_window, blit.shader,
-			-1, RenderingDeviceCommons::RENDER_PRIMITIVE_TRIANGLES,
-			rs, RenderingDeviceCommons::PipelineMultisampleState(),
-			RenderingDeviceCommons::PipelineDepthStencilState(), blend_state,
-			0);
-
-		std::vector<uint8_t> pv;
-		pv.resize(6 * 4);
-		{
-			uint8_t* w = pv.data();
-			uint32_t* p32 = (uint32_t*)w;
-			p32[0] = 0;
-			p32[1] = 1;
-			p32[2] = 2;
-			p32[3] = 0;
-			p32[4] = 2;
-			p32[5] = 3;
-		}
-		blit.index_buffer = rendering_device->index_buffer_create(6, RenderingDevice::INDEX_BUFFER_FORMAT_UINT32, pv);
-		blit.array = rendering_device->index_array_create(blit.index_buffer, 0, 6);
-
-		blit.sampler = rendering_device->sampler_create(RenderingDevice::SamplerState());
-
-		//create index array for copy shader
-
-		///_create_vertex_and_index_buffers();
-		rendering_device->_submit_transfer_workers();
-		//for (auto& p : primitives)
-		//{
-		//	blit.array = index_arrays[p.first];
-		//}
-		
-
-		blit.sampler = rendering_device->sampler_create(RenderingDevice::SamplerState());
-	}
-
-	void WSI::blit_render_target_to_screen(DisplayServerEnums::WindowID p_screen, const BlitToScreen* p_render_targets)
-	{
-		//Error err = rendering_device->screen_prepare_for_drawing(p_screen);
-		//if (err != OK) {
-		//	// Window is minimized and does not have valid swapchain, skip drawing without printing errors.
-		//	return;
-		//}
-
-		rendering_device->begin_for_screen(p_screen);
-
-		RID rd_texture = p_render_targets[0].render_target;		// 0 for now
-
-		std::unordered_map<RID, RID>::iterator it = render_target_descriptors.find(rd_texture);
-		if (it == render_target_descriptors.end() || !rendering_device->uniform_set_is_valid(it->second)) {
-			std::vector<RenderingDevice::Uniform> uniforms;
-			RenderingDevice::Uniform u;
-			u.uniform_type = RenderingDevice::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
-			u.binding = 0;
-			u.append_id(blit.sampler);
-			u.append_id(rd_texture);
-			uniforms.push_back(u);
-			RID uniform_set = rendering_device->uniform_set_create(uniforms, blit.shader, 0);
-
-			it = render_target_descriptors.insert({ rd_texture, uniform_set }).first;
-		}
-
-		Size2 screen_size(rendering_device->screen_get_width(p_screen), rendering_device->screen_get_height(p_screen));
-
-		rendering_device->bind_render_pipeline(rendering_device->get_current_command_buffer(), blit_pipeline);
-		rendering_device->bind_index_array(blit.array);
-		rendering_device->bind_uniform_set(blit.shader, it->second, 0);
-		//bind_and_draw_indexed(rendering_device->get_current_command_buffer());
-		rendering_device->render_draw_indexed(rendering_device->get_current_command_buffer(), 6, 1, 0, 0, 0);
-		//rendering_device->render_draw(rendering_device->get_current_command_buffer(), 6, 1);
 	}
 
 	void WSI::pipeline_create_default()
