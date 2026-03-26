@@ -181,7 +181,7 @@ namespace Rendering
 			primitives.insert({ mesh_owner.make_rid(p), range });
 
 			uint64_t vbSize = p.vertices.size() * sizeof(Rendering::Vertex);
-			uint64_t ibSize = p.indices.size() * sizeof(uint32_t);
+			uint64_t ibSize = p.indices.size() * ((index_data_format == Rendering::RenderingDeviceCommons::IndexBufferFormat::INDEX_BUFFER_FORMAT_UINT16)  ?  sizeof(uint16_t) : sizeof(uint32_t));
 			push_vertex_data(p.vertices.data(), vbSize);
 			push_index_data(p.indices.data(), ibSize);
 

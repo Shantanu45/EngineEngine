@@ -20,9 +20,15 @@
 
 struct TriangleApplication : EE::Application
 {
+	//struct alignas(16) UBO {
+	//	float x, y, z;
+	//	float _pad;  // pad to 16 bytes
+	//};
+
 	struct alignas(16) UBO {
-		float x, y, z;
-		float _pad;  // pad to 16 bytes
+		glm::mat4 model;
+		glm::mat4 view;
+		glm::mat4 projection;
 	};
 
 	void pre_frame() override
@@ -108,11 +114,23 @@ struct TriangleApplication : EE::Application
 
 		double intpart;
 		double fracpart = std::modf(elapsed_time, &intpart);
-		UBO state;
-		state.x = 1.0;
-		state.y = 0.0;
-		state.z = fracpart;
-		auto err = device->buffer_update(state_uniform, 0, sizeof(UBO), &state);
+
+		UBO ubo{};
+		ubo.model = glm::mat4(1.0f); // identity for now
+		ubo.view = glm::lookAt(
+			glm::vec3(0.0f, 0.0f, 3.0f),  // camera position
+			glm::vec3(0.0f, 0.0f, 0.0f),  // look at origin
+			glm::vec3(0.0f, 1.0f, 0.0f)   // up vector
+		);
+		ubo.projection = glm::perspective(glm::radians(45.0f),
+			(float)device->screen_get_width() / (float)device->screen_get_height(),         // aspect ratio
+			0.1f,                          // near
+			100.0f                         // far
+		);
+
+		// Vulkan clip space fix - flip Y
+		ubo.projection[1][1] *= -1;
+		auto err = device->buffer_update(state_uniform, 0, sizeof(UBO), &ubo);
 
 		// needs to be outside render pass begin - end
 		device->_submit_transfer_barriers(device->get_current_command_buffer());
