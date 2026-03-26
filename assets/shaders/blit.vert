@@ -1,14 +1,10 @@
 #version 450
 
-layout(location = 0) in vec3 inPosition;
-layout(location = 1) in vec3 inNormal;
-layout(location = 2) in vec2 inTexcoord;
-layout(location = 3) in vec4 inTangent;
-
-layout(location = 0) out vec2 fragUV;
+layout(location = 0) out vec2 uv;
 
 void main()
 {
-    fragUV = inTexcoord;
-    gl_Position = vec4(inPosition, 1.0);
+	vec2 base_arr[4] = vec2[](vec2(0.0, 0.0), vec2(0.0, 1.0), vec2(1.0, 1.0), vec2(1.0, 0.0));
+    uv = base_arr[gl_VertexIndex];
+    gl_Position =  vec4(base_arr[gl_VertexIndex] * 2.0 - 1.0, 0.0, 1.0);
 }

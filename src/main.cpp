@@ -37,7 +37,7 @@ struct TriangleApplication : EE::Application
 
 		wsi->set_default_vertex_attribute();
 
-		wsi->load_gltf("assets://gltf/plane.glb");
+		//wsi->load_gltf("assets://gltf/plane.glb");
 
 		auto device = wsi->get_rendering_device();
 
@@ -115,22 +115,22 @@ struct TriangleApplication : EE::Application
 		double intpart;
 		double fracpart = std::modf(elapsed_time, &intpart);
 
-		UBO ubo{};
-		ubo.model = glm::mat4(1.0f); // identity for now
-		ubo.view = glm::lookAt(
-			glm::vec3(0.0f, 0.0f, 3.0f),  // camera position
-			glm::vec3(0.0f, 0.0f, 0.0f),  // look at origin
-			glm::vec3(0.0f, 1.0f, 0.0f)   // up vector
-		);
-		ubo.projection = glm::perspective(glm::radians(45.0f),
-			(float)device->screen_get_width() / (float)device->screen_get_height(),         // aspect ratio
-			0.1f,                          // near
-			100.0f                         // far
-		);
+		//UBO ubo{};
+		//ubo.model = glm::mat4(1.0f); // identity for now
+		//ubo.view = glm::lookAt(
+		//	glm::vec3(0.0f, 0.0f, 3.0f),  // camera position
+		//	glm::vec3(0.0f, 0.0f, 0.0f),  // look at origin
+		//	glm::vec3(0.0f, 1.0f, 0.0f)   // up vector
+		//);
+		//ubo.projection = glm::perspective(glm::radians(45.0f),
+		//	(float)device->screen_get_width() / (float)device->screen_get_height(),         // aspect ratio
+		//	0.1f,                          // near
+		//	100.0f                         // far
+		//);
 
-		// Vulkan clip space fix - flip Y
-		ubo.projection[1][1] *= -1;
-		auto err = device->buffer_update(state_uniform, 0, sizeof(UBO), &ubo);
+		//// Vulkan clip space fix - flip Y
+		//ubo.projection[1][1] *= -1;
+		//auto err = device->buffer_update(state_uniform, 0, sizeof(UBO), &ubo);
 
 		// needs to be outside render pass begin - end
 		device->_submit_transfer_barriers(device->get_current_command_buffer());
