@@ -257,31 +257,27 @@ namespace Rendering
 		// blit.shader_version = blit.shader.version_create();
 
 		RenderingDeviceCommons::PipelineRasterizationState rs;
-		rs.front_face = RenderingDeviceCommons::POLYGON_FRONT_FACE_CLOCKWISE;
+		rs.front_face = RenderingDeviceCommons::POLYGON_FRONT_FACE_COUNTER_CLOCKWISE;
 		rs.cull_mode = RenderingDeviceCommons::POLYGON_CULL_DISABLED;
+
+		vertex_format = rendering_device->vertex_format_create(vertex_attributes);
 
 		auto blend_state = RenderingDeviceCommons::PipelineColorBlendState::create_blend();
 		blit_pipeline = rendering_device->create_swapchain_pipeline(active_window, blit.shader,
-			-1, RenderingDeviceCommons::RENDER_PRIMITIVE_TRIANGLE_STRIPS,
+			vertex_format, RenderingDeviceCommons::RENDER_PRIMITIVE_TRIANGLE_STRIPS,
 			rs, RenderingDeviceCommons::PipelineMultisampleState(),
 			RenderingDeviceCommons::PipelineDepthStencilState(), blend_state,
 			0);
 
 		//create index array for copy shader
 
-		pv.resize(6 * 4);
-		{
-			uint8_t* w = pv.data();
-			uint32_t* p32 = (uint32_t*)w;
-			p32[0] = 0;
-			p32[1] = 1;
-			p32[2] = 2;
-			p32[3] = 0;
-			p32[4] = 2;
-			p32[5] = 3;
-		}
-		blit.index_buffer = rendering_device->index_buffer_create(6, RenderingDevice::INDEX_BUFFER_FORMAT_UINT32, pv);
-		blit.array = rendering_device->index_array_create(blit.index_buffer, 0, 6);
+		_create_vertex_and_index_buffers();
+		rendering_device->_submit_transfer_workers();
+		//for (auto& p : primitives)
+		//{
+		//	blit.array = index_arrays[p.first];
+		//}
+		
 
 		blit.sampler = rendering_device->sampler_create(RenderingDevice::SamplerState());
 	}
@@ -317,8 +313,9 @@ namespace Rendering
 		rendering_device->bind_render_pipeline(rendering_device->get_current_command_buffer(), blit_pipeline);
 		//rendering_device->bind_index_array(blit.array);
 		rendering_device->bind_uniform_set(blit.shader, it->second, 0);
+		bind_and_draw_indexed(rendering_device->get_current_command_buffer());
 		//rendering_device->render_draw_indexed(rendering_device->get_current_command_buffer(), 6, 1, 0, 0, 0);
-		rendering_device->render_draw(rendering_device->get_current_command_buffer(), 6, 1);
+		//rendering_device->render_draw(rendering_device->get_current_command_buffer(), 6, 1);
 	}
 
 	void WSI::pipeline_create_default()
