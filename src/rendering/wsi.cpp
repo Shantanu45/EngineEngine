@@ -6,7 +6,7 @@
  * \date   March 2026
  *********************************************************************/
 #include "wsi.h"
-#include "vulkan/vulkan_context.h"
+//#include "vulkan/vulkan_context.h"
 #include "vulkan/vulkan_device.h"
 #include "libassert/assert.hpp"
 #include "compiler/compiler.h"
@@ -270,6 +270,7 @@ namespace Rendering
 
 	void WSI::teardown()
 	{
+		rendering_device->finalize();
 	}
 
 	WSI::~WSI()

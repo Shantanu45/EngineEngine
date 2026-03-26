@@ -1031,12 +1031,16 @@ namespace Rendering
 		void _free_internal(RID p_id);
 		void _add_dependency(RID p_id, RID p_depends_on);
 		void _free_dependencies(RID p_id);
+		template <typename T>
+		void _free_rids(T& p_owner, const char* p_type);
+		void _free_pending_resources(int p_frame);
 
 		RenderingDevice();
 		~RenderingDevice();
 
 	private:
 		bool is_main_instance = false;
+		bool pipeline_cache_enabled = false;
 
 		RenderingContextDriver* context = nullptr;
 		RenderingDeviceDriver* driver = nullptr;
@@ -1129,6 +1133,28 @@ namespace Rendering
 		RID_Owner<UniformSet, true> uniform_set_owner;
 
 		RID_Owner<Texture, true> texture_owner;
-
 	};
+
+	template <typename T>
+	void Rendering::RenderingDevice::_free_rids(T& p_owner, const char* p_type)
+	{
+		std::vector<RID> owned = p_owner.get_owned_list();
+		if (owned.size()) {
+			if (owned.size() == 1) {
+				WARN_PRINT(std::format("1 RID of type '{}' was leaked.", p_type));
+			}
+			else {
+				WARN_PRINT(std::format("%d RIDs of type '{}' were leaked.", owned.size(), p_type));
+			}
+			for (const RID& rid : owned) {
+#ifdef DEV_ENABLED
+				if (resource_names.has(rid)) {
+					print_line(String(" - ") + resource_names[rid]);
+				}
+#endif
+				free_rid(rid);
+			}
+		}
+	}
+
 }

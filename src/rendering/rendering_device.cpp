@@ -293,7 +293,118 @@ namespace Rendering
 	}
 
 	void RenderingDevice::finalize() {
+		_submit_transfer_workers();
+		_wait_for_transfer_workers();
 
+		// Delete everything the graph has created.
+		//draw_graph.finalize();
+
+		// Free all resources.
+		_free_rids(render_pipeline_owner, "Pipeline");
+		//_free_rids(compute_pipeline_owner, "Compute");
+		_free_rids(uniform_set_owner, "UniformSet");
+		_free_rids(texture_buffer_owner, "TextureBuffer");
+		_free_rids(storage_buffer_owner, "StorageBuffer");
+		//_free_rids(instances_buffer_owner, "InstancesBuffer");
+		_free_rids(uniform_buffer_owner, "UniformBuffer");
+		_free_rids(shader_owner, "Shader");
+		_free_rids(index_array_owner, "IndexArray");
+		_free_rids(index_buffer_owner, "IndexBuffer");
+		_free_rids(vertex_array_owner, "VertexArray");
+		_free_rids(vertex_buffer_owner, "VertexBuffer");
+		_free_rids(framebuffer_owner, "Framebuffer");
+		_free_rids(sampler_owner, "Sampler");
+
+
+		_free_transfer_workers();
+
+		// Free everything pending.
+		for (uint32_t i = 0; i < frames.size(); i++) {
+			int f = (frame + i) % frames.size();
+			_free_pending_resources(f);
+			driver->command_pool_free(frames[i].command_pool);
+			//driver->timestamp_query_pool_free(frames[i].timestamp_pool);
+			driver->semaphore_free(frames[i].semaphore);
+			driver->fence_free(frames[i].fence);
+
+			//RDG::CommandBufferPool& buffer_pool = frames[i].command_buffer_pool;
+			//for (uint32_t j = 0; j < buffer_pool.buffers.size(); j++) {
+			//	driver->semaphore_free(buffer_pool.semaphores[j]);
+			//}
+
+			for (uint32_t j = 0; j < frames[i].transfer_worker_semaphores.size(); j++) {
+				driver->semaphore_free(frames[i].transfer_worker_semaphores[j]);
+			}
+		}
+
+		if (pipeline_cache_enabled) {
+			update_pipeline_cache(true);
+			driver->pipeline_cache_free();
+		}
+
+		frames.clear();
+
+		for (int i = 0; i < upload_staging_buffers.blocks.size(); i++) {
+			driver->buffer_unmap(upload_staging_buffers.blocks[i].driver_id);
+			driver->buffer_free(upload_staging_buffers.blocks[i].driver_id);
+		}
+
+		for (int i = 0; i < download_staging_buffers.blocks.size(); i++) {
+			driver->buffer_unmap(download_staging_buffers.blocks[i].driver_id);
+			driver->buffer_free(download_staging_buffers.blocks[i].driver_id);
+		}
+
+		while (vertex_formats.size()) {
+			std::unordered_map<VertexFormatID, VertexDescriptionCache>::iterator temp = vertex_formats.begin();
+			driver->vertex_format_free(temp->second.driver_id);
+			vertex_formats.erase(temp);
+		}
+
+		for (std::pair<FramebufferFormatID, FramebufferFormat> E : framebuffer_formats) {
+			driver->render_pass_free(E.second.render_pass);
+		}
+		framebuffer_formats.clear();
+
+		// Delete the swap chains created for the screens.
+		for (const std::pair<DisplayServerEnums::WindowID, RDD::SwapChainID> it : screen_swap_chains) {
+			driver->swap_chain_free(it.second);
+		}
+
+		screen_swap_chains.clear();
+
+		// Delete the command queues.
+		if (present_queue) {
+			if (main_queue != present_queue) {
+				// Only delete the present queue if it's unique.
+				driver->command_queue_free(present_queue);
+			}
+
+			present_queue = RDD::CommandQueueID();
+		}
+
+		if (transfer_queue) {
+			if (main_queue != transfer_queue) {
+				// Only delete the transfer queue if it's unique.
+				driver->command_queue_free(transfer_queue);
+			}
+
+			transfer_queue = RDD::CommandQueueID();
+		}
+
+		if (main_queue) {
+			driver->command_queue_free(main_queue);
+			main_queue = RDD::CommandQueueID();
+		}
+
+		// Delete the driver once everything else has been deleted.
+		if (driver != nullptr) {
+			context->driver_free(driver);
+			driver = nullptr;
+		}
+
+		// All these should be clear at this point.
+		//ERR_FAIL_COND(dependency_map.size());
+		//ERR_FAIL_COND(reverse_dependency_map.size());
 	}
 
 #pragma region Shader
@@ -3509,6 +3620,32 @@ namespace Rendering
 		}
 	}
 
+	void RenderingDevice::_texture_free_shared_fallback(Texture* p_texture)
+	{
+		if (p_texture->shared_fallback != nullptr) {
+			//if (p_texture->shared_fallback->texture_tracker != nullptr) {
+			//	RDG::resource_tracker_free(p_texture->shared_fallback->texture_tracker);
+			//}
+
+			//if (p_texture->shared_fallback->buffer_tracker != nullptr) {
+			//	RDG::resource_tracker_free(p_texture->shared_fallback->buffer_tracker);
+			//}
+
+			if (p_texture->shared_fallback->texture.id != 0) {
+				texture_memory -= driver->texture_get_allocation_size(p_texture->shared_fallback->texture);
+				driver->texture_free(p_texture->shared_fallback->texture);
+			}
+
+			if (p_texture->shared_fallback->buffer.id != 0) {
+				buffer_memory -= driver->buffer_get_allocation_size(p_texture->shared_fallback->buffer);
+				driver->buffer_free(p_texture->shared_fallback->buffer);
+			}
+
+			delete p_texture->shared_fallback;
+			p_texture->shared_fallback = nullptr;
+		}
+	}
+
 	void RenderingDevice::_texture_copy_shared(RID p_src_texture_rid, Texture* p_src_texture, RID p_dst_texture_rid, Texture* p_dst_texture)
 	{
 		// The only type of copying allowed is from the main texture to the slice texture, as slice textures are not allowed to be used for writing when using this fallback.
@@ -4146,6 +4283,115 @@ namespace Rendering
 
 	}
 
+	void RenderingDevice::_free_pending_resources(int p_frame)
+	{
+		// Free in dependency usage order, so nothing weird happens.
+	// Pipelines.
+		while (!frames[p_frame].render_pipelines_to_dispose_of.empty()) {
+			RenderPipeline* pipeline = &(frames[p_frame]).render_pipelines_to_dispose_of.front();
+
+			driver->pipeline_free(pipeline->driver_id);
+
+			frames[p_frame].render_pipelines_to_dispose_of.pop_front();
+		}
+
+		//while (frames[p_frame].compute_pipelines_to_dispose_of.front()) {
+		//	ComputePipeline* pipeline = &frames[p_frame].compute_pipelines_to_dispose_of.front()->get();
+
+		//	driver->pipeline_free(pipeline->driver_id);
+
+		//	frames[p_frame].compute_pipelines_to_dispose_of.pop_front();
+		//}
+
+		//while (frames[p_frame].raytracing_pipelines_to_dispose_of.front()) {
+		//	RaytracingPipeline* pipeline = &frames[p_frame].raytracing_pipelines_to_dispose_of.front()->get();
+
+		//	driver->raytracing_pipeline_free(pipeline->driver_id);
+
+		//	frames[p_frame].raytracing_pipelines_to_dispose_of.pop_front();
+		//}
+
+		// Acceleration structures.
+		//while (frames[p_frame].acceleration_structures_to_dispose_of.front()) {
+		//	AccelerationStructure& acceleration_structure = frames[p_frame].acceleration_structures_to_dispose_of.front()->get();
+
+		//	driver->acceleration_structure_free(acceleration_structure.driver_id);
+
+		//	if (acceleration_structure.scratch_buffer) {
+		//		size_t scratch_size = driver->buffer_get_allocation_size(acceleration_structure.scratch_buffer);
+		//		_THREAD_SAFE_LOCK_
+		//			buffer_memory -= scratch_size;
+		//		_THREAD_SAFE_UNLOCK_
+
+		//			driver->buffer_free(acceleration_structure.scratch_buffer);
+		//	}
+
+		//	frames[p_frame].acceleration_structures_to_dispose_of.pop_front();
+		//}
+
+		// Uniform sets.
+		while (!frames[p_frame].uniform_sets_to_dispose_of.empty()) {
+			UniformSet* uniform_set = &(frames[p_frame]).uniform_sets_to_dispose_of.front();
+
+			driver->uniform_set_free(uniform_set->driver_id);
+
+			frames[p_frame].uniform_sets_to_dispose_of.pop_front();
+		}
+
+		// Shaders.
+		while (!frames[p_frame].shaders_to_dispose_of.empty()) {
+			Shader* shader = &(frames[p_frame]).shaders_to_dispose_of.front();
+
+			driver->shader_free(shader->driver_id);
+
+			frames[p_frame].shaders_to_dispose_of.pop_front();
+		}
+
+		// Samplers.
+		while (!frames[p_frame].samplers_to_dispose_of.empty()) {
+			RDD::SamplerID sampler = frames[p_frame].samplers_to_dispose_of.front();
+
+			driver->sampler_free(sampler);
+
+			frames[p_frame].samplers_to_dispose_of.pop_front();
+		}
+
+		// Framebuffers.
+		while (!frames[p_frame].framebuffers_to_dispose_of.empty()) {
+			Framebuffer* framebuffer = &frames[p_frame].framebuffers_to_dispose_of.front();
+			//draw_graph.framebuffer_cache_free(driver, framebuffer->framebuffer_cache);
+			frames[p_frame].framebuffers_to_dispose_of.pop_front();
+		}
+
+		// Textures.
+		while (!frames[p_frame].textures_to_dispose_of.empty()) {
+			Texture* texture = &frames[p_frame].textures_to_dispose_of.front();
+			if (texture->bound) {
+				WARN_PRINT("Deleted a texture while it was bound.");
+			}
+
+			_texture_free_shared_fallback(texture);
+
+			texture_memory -= driver->texture_get_allocation_size(texture->driver_id);
+			driver->texture_free(texture->driver_id);
+
+			frames[p_frame].textures_to_dispose_of.pop_front();
+		}
+
+		// Buffers.
+		while (!frames[p_frame].buffers_to_dispose_of.empty()) {
+			Buffer& buffer = frames[p_frame].buffers_to_dispose_of.front();
+			driver->buffer_free(buffer.driver_id);
+			buffer_memory -= buffer.size;
+
+			frames[p_frame].buffers_to_dispose_of.pop_front();
+		}
+
+		//if (frames_pending_resources_for_processing > 0u) {
+		//	--frames_pending_resources_for_processing;
+		//}
+	}
+
 	RenderingDevice::RenderingDevice()
 	{
 		auto fs = Services::get().get<FilesystemInterface>();
@@ -4154,7 +4400,7 @@ namespace Rendering
 	}
 
 	RenderingDevice::~RenderingDevice() {
-		finalize();
+		//finalize();
 	}
 
 }
