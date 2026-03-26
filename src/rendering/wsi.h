@@ -168,5 +168,7 @@ namespace Rendering
 
 		std::unordered_map<RID, RID> render_target_descriptors;
 		RID blit_pipeline;
+
+		std::vector<uint8_t> pv;
 	};
 }
