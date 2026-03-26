@@ -5173,14 +5173,15 @@ namespace Vulkan
 								std::span<PipelineSpecializationConstant> p_specialization_constants) {
 		// Vertex.
 		const VkPipelineVertexInputStateCreateInfo* vertex_input_state_create_info = nullptr;
+		std::vector< VkPipelineVertexInputStateCreateInfo> null_vertex_input_state_vec;
+
 		if (p_vertex_format.id) {
 			const VertexFormatInfo* vf_info = (const VertexFormatInfo*)p_vertex_format.id;
 			vertex_input_state_create_info = &vf_info->vk_create_info;
 		}
 		else {
-			std::vector< VkPipelineVertexInputStateCreateInfo> null_vertex_input_state_vec;
+			null_vertex_input_state_vec.resize(1);
 			VkPipelineVertexInputStateCreateInfo* null_vertex_input_state = null_vertex_input_state_vec.data();
-			*null_vertex_input_state = {};
 			null_vertex_input_state->sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 			vertex_input_state_create_info = null_vertex_input_state;
 		}

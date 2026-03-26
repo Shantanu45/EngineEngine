@@ -92,11 +92,13 @@ struct TriangleApplication : EE::Application
 
 		device->screen_create(DisplayServerEnums::MAIN_WINDOW_ID);
 
-		wsi->set_program({ "assets://shaders/triangle_v2.vert", "assets://shaders/triangle_v2.frag" });
+		//wsi->set_program({ "assets://shaders/triangle_v2.vert", "assets://shaders/triangle_v2.frag" });
 
-		uniform_set = device->uniform_set_create(uniforms, wsi->get_bound_shader(), 0);
+		//uniform_set = device->uniform_set_create(uniforms, wsi->get_bound_shader(), 0);
 	
-		wsi->pipeline_create_default();
+		wsi->blit_initialize();
+
+		//wsi->pipeline_create_default();
 	}
 	
 	void render_frame(double frame_time, double elapsed_time) override
@@ -114,13 +116,15 @@ struct TriangleApplication : EE::Application
 
 		// needs to be outside render pass begin - end
 		device->_submit_transfer_barriers(device->get_current_command_buffer());
+		Rendering::BlitToScreen blit;
+		blit.render_target = texture_uniform;
+		wsi->blit_render_target_to_screen(DisplayServerEnums::MAIN_WINDOW_ID, &blit);
+		//device->begin_for_screen(DisplayServerEnums::MAIN_WINDOW_ID);
+		//auto cmd_buffer = device->get_current_command_buffer();
 
-		device->begin_for_screen(DisplayServerEnums::MAIN_WINDOW_ID);
-		auto cmd_buffer = device->get_current_command_buffer();
-
-		device->bind_render_pipeline(cmd_buffer, wsi->get_current_pipeline());
-		device->bind_uniform_set(wsi->get_bound_shader(), uniform_set, 0);
-		wsi->bind_and_draw_indexed(cmd_buffer);
+		//device->bind_render_pipeline(cmd_buffer, wsi->get_current_pipeline());
+		//device->bind_uniform_set(wsi->get_bound_shader(), uniform_set, 0);
+		//wsi->bind_and_draw_indexed(cmd_buffer);
 
 	}
 
