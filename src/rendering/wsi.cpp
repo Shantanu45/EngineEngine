@@ -330,7 +330,7 @@ namespace Rendering
 		rendering_device->bind_render_pipeline(rendering_device->get_current_command_buffer(), blit_pipeline);
 		rendering_device->bind_index_array(blit.array);
 		rendering_device->bind_uniform_set(blit.shader, it->second, 0);
-		bind_and_draw_indexed(rendering_device->get_current_command_buffer());
+		//bind_and_draw_indexed(rendering_device->get_current_command_buffer());
 		rendering_device->render_draw_indexed(rendering_device->get_current_command_buffer(), 6, 1, 0, 0, 0);
 		//rendering_device->render_draw(rendering_device->get_current_command_buffer(), 6, 1);
 	}
