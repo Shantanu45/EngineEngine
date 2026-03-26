@@ -6,7 +6,7 @@
 
 namespace math_helpers
 {
-    glm::vec2 orthogonal(const glm::vec2& v) {
+    _FORCE_INLINE_ glm::vec2 orthogonal(const glm::vec2& v) {
         return glm::vec2(v.y, -v.x);  // or (-v.y, v.x)
     }
 

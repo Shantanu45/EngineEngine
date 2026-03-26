@@ -48,7 +48,7 @@ namespace Rendering
 					return FAILED;
 				}
 			}
-
+			
 			// initialize TinyGltf
 			auto fs = Services::get().get<FilesystemInterface>();
 			gltf_loader = std::make_unique<GltfLoader>(*fs);
@@ -117,6 +117,19 @@ namespace Rendering
 			shaders->set_stage_source(stage, shader_path);
 		}
 		shader_program = rendering_device->shader_create_from_spirv(rendering_device->shader_compile_spirv_from_shader_source(shaders), "traingle_shader");
+	}
+
+	RID WSI::create_program(const std::vector<std::string> programs)
+	{
+		RDShaderSource* shaders = new RDShaderSource();
+		shaders->set_language(RenderingDeviceCommons::SHADER_LANGUAGE_GLSL);
+		for (auto shader_path : programs)
+		{
+			auto stage = shader_stage_from_compiler_stage(Compiler::stage_from_path(shader_path));
+			ERR_FAIL_COND_V_MSG(stage == RenderingDeviceCommons::SHADER_STAGE_MAX, RID(), "could not evaluate shader stage from path!!");
+			shaders->set_stage_source(stage, shader_path);
+		}
+		return rendering_device->shader_create_from_spirv(rendering_device->shader_compile_spirv_from_shader_source(shaders), "traingle_shader");
 	}
 
 	void WSI::set_vertex_attribute(const uint32_t binding, const uint32_t location, const RenderingDeviceCommons::DataFormat format, const uint32_t offset, const uint32_t stride)
@@ -230,6 +243,79 @@ namespace Rendering
 			0);
 	}
 
+	void WSI::blit_initialize()
+	{
+		//Vector<String> blit_modes;
+		//blit_modes.push_back("\n");
+		//blit_modes.push_back("\n#define USE_LAYER\n");
+		//blit_modes.push_back("\n#define USE_LAYER\n#define APPLY_LENS_DISTORTION\n");
+		//blit_modes.push_back("\n");
+
+		// TODO: set proper blit shader
+		blit.shader = create_program({"assets://shaders/blit.vert", "assets://shaders/blit.frag"});
+		ERR_FAIL_COND_MSG(blit.shader.is_null(), "could not create blit shader module");
+		// blit.shader_version = blit.shader.version_create();
+
+		auto blend_state = RenderingDeviceCommons::PipelineColorBlendState::create_blend();
+		blit_pipeline = rendering_device->create_swapchain_pipeline(active_window, blit.shader,
+			{}, RenderingDeviceCommons::RENDER_PRIMITIVE_TRIANGLE_STRIPS,
+			{}, RenderingDeviceCommons::PipelineMultisampleState(),
+			RenderingDeviceCommons::PipelineDepthStencilState(), blend_state,
+			0);
+
+		//create index array for copy shader
+		std::vector<uint8_t> pv;
+		pv.resize(6 * 2);
+		{
+			uint8_t* w = pv.data();
+			uint16_t* p16 = (uint16_t*)w;
+			p16[0] = 0;
+			p16[1] = 1;
+			p16[2] = 2;
+			p16[3] = 0;
+			p16[4] = 2;
+			p16[5] = 3;
+		}
+		blit.index_buffer = rendering_device->index_buffer_create(6, RenderingDevice::INDEX_BUFFER_FORMAT_UINT32, pv);
+		blit.array = rendering_device->index_array_create(blit.index_buffer, 0, 6);
+
+		blit.sampler = rendering_device->sampler_create(RenderingDevice::SamplerState());
+	}
+
+	void WSI::blit_render_target_to_screen(DisplayServerEnums::WindowID p_screen, const BlitToScreen* p_render_targets)
+	{
+		Error err = rendering_device->screen_prepare_for_drawing(p_screen);
+		if (err != OK) {
+			// Window is minimized and does not have valid swapchain, skip drawing without printing errors.
+			return;
+		}
+
+		rendering_device->begin_for_screen(p_screen);
+
+		RID rd_texture = p_render_targets[0].render_target;		// 0 for now
+
+		std::unordered_map<RID, RID>::iterator it = render_target_descriptors.find(rd_texture);
+		if (it == render_target_descriptors.end() || !RenderingDevice::get_singleton()->uniform_set_is_valid(it->second)) {
+			std::vector<RenderingDevice::Uniform> uniforms;
+			RenderingDevice::Uniform u;
+			u.uniform_type = RenderingDevice::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+			u.binding = 0;
+			u.append_id(blit.sampler);
+			u.append_id(rd_texture);
+			uniforms.push_back(u);
+			RID uniform_set = rendering_device->uniform_set_create(uniforms, blit.shader, 0);
+
+			it = render_target_descriptors.insert({ rd_texture, uniform_set }).first;
+		}
+
+		Size2 screen_size(rendering_device->screen_get_width(p_screen), rendering_device->screen_get_height(p_screen));
+
+		rendering_device->bind_render_pipeline(rendering_device->get_current_command_buffer(), blit_pipeline);
+
+		rendering_device->bind_uniform_set(blit.shader, it->second, 0);
+		bind_and_draw_indexed(rendering_device->get_current_command_buffer());
+	}
+
 	void WSI::pipeline_create_default()
 	{
 		DEBUG_ASSERT(!shader_program.is_null());
@@ -258,8 +344,6 @@ namespace Rendering
 	void WSI::teardown()
 	{
 	}
-
-
 
 	WSI::~WSI()
 	{

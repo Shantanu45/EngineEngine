@@ -9,9 +9,24 @@
 #include "rendering_device_driver.h"
 #include "rendering_device.h"
 #include "rendering/gltf_loader.h"
+#include "math/rect2.h"
 
 namespace Rendering
 {
+	struct BlitToScreen {
+		RID render_target;
+		Rect2 src_rect = Rect2(0.0, 0.0, 1.0, 1.0);
+		Rect2i dst_rect;
+
+		struct {
+			bool use_layer = false;
+			uint32_t layer = 0;
+		} multi_view;
+
+	};
+
+
+
 	struct MeshRange {
 		uint32_t vertexOffset;  // offset into the big vertex buffer
 		uint64_t vertex_byte_offset;
@@ -33,6 +48,16 @@ namespace Rendering
 
 	class WSI
 	{
+		struct Blit {
+			//BlitPushConstant push_constant;
+			RID shader;
+			//RID shader_version;
+			//HashMap<RenderingDevice::FramebufferFormatID, BlitPipelines> pipelines_by_format;
+			RID index_buffer;
+			RID array;
+			RID sampler;
+		} blit;
+
 	public:
 		WSI();
 		Error initialize(const std::string& p_rendering_driver, DisplayServerEnums::WindowMode p_mode, DisplayServerEnums::VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i* p_position, const Vector2i& p_resolution, int p_screen, DisplayServerEnums::Context p_context, int64_t p_parent_window);
@@ -51,6 +76,7 @@ namespace Rendering
 
 		void set_program(const std::vector<std::string> programs);
 
+		RID create_program(const std::vector<std::string> programs);
 		void set_vertex_attribute(const uint32_t binding, const uint32_t location, const RenderingDeviceCommons::DataFormat format, const uint32_t offset, const uint32_t stride);
 
 		RID get_current_pipeline();
@@ -75,6 +101,8 @@ namespace Rendering
 		void clear_index_data() { index_data.clear(); }
 
 		void pipeline_create();
+		void blit_initialize();
+		void blit_render_target_to_screen(DisplayServerEnums::WindowID p_screen, const BlitToScreen* p_render_targets);
 		void pipeline_create_default();
 
 		inline void set_vertex_data_mode(VERTEX_DATA_MODE mode)
@@ -137,5 +165,8 @@ namespace Rendering
 
 		std::unordered_map<RID, RID> vertex_arrays;		// prim to array
 		std::unordered_map<RID, RID> index_arrays;
+
+		std::unordered_map<RID, RID> render_target_descriptors;
+		RID blit_pipeline;
 	};
 }

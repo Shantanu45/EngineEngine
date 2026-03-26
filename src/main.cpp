@@ -37,6 +37,17 @@ struct TriangleApplication : EE::Application
 
 		state_uniform = device->uniform_buffer_create(sizeof(UBO));
 
+		//Rendering::RenderingDeviceCommons::TextureFormat c_tf;
+		//c_tf.width = device->screen_get_width();
+		//c_tf.height = device->screen_get_height();
+		//c_tf.array_layers = 1;
+		//c_tf.texture_type = Rendering::RenderingDeviceCommons::TEXTURE_TYPE_2D;
+		//c_tf.usage_bits = Rendering::RenderingDeviceCommons::TEXTURE_USAGE_CPU_READ_BIT | Rendering::RenderingDeviceCommons::TEXTURE_USAGE_CAN_COPY_FROM_BIT;
+		//c_tf.format = Rendering::RenderingDeviceCommons::DATA_FORMAT_R8G8B8A8_UNORM;
+
+		//copy_texture = device->texture_create(c_tf, Rendering::RenderingDevice::TextureView());
+
+
 		auto fs = Services::get().get<FilesystemInterface>();
 		Rendering::ImageLoader img_loader(*fs);
 		auto image = img_loader.load_from_file("assets://textures/wall.jpg");
@@ -118,6 +129,7 @@ private:
 	RID texture_uniform;
 	RID sampler;
 	RID uniform_set;
+
 	Rendering::MeshPrimitive prim;
 };
 

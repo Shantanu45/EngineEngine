@@ -3980,6 +3980,7 @@ namespace Vulkan
 		std::vector<VkDescriptorImageInfo> vk_img_infos_vec_sampler;
 		std::vector<VkDescriptorImageInfo> vk_img_infos_vec_texture;
 		std::vector<VkDescriptorImageInfo> vk_img_infos_vec;
+		std::vector<VkDescriptorImageInfo> vk_img_infos_vec_texture_sampler;
 		std::vector<VkDescriptorBufferInfo> vk_buf_infos_vec;
 		std::vector<VkBufferView> vk_buf_views_vec;
 		for (uint32_t i = 0; i < p_uniforms.size(); i++) {
@@ -4016,9 +4017,9 @@ namespace Vulkan
 			} break;
 			case UNIFORM_TYPE_SAMPLER_WITH_TEXTURE: {
 				num_descriptors = uniform.ids.size() / 2;
-				vk_img_infos_vec.resize(num_descriptors);
+				vk_img_infos_vec_texture_sampler.resize(num_descriptors);
 
-				VkDescriptorImageInfo* vk_img_infos = vk_img_infos_vec.data();
+				VkDescriptorImageInfo* vk_img_infos = vk_img_infos_vec_texture_sampler.data();
 
 				for (uint32_t j = 0; j < num_descriptors; j++) {
 #ifdef DEBUG_ENABLED
