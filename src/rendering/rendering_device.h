@@ -934,6 +934,10 @@ namespace Rendering
 		 */
 		bool begin_for_screen(DisplayServerEnums::WindowID p_screen = 0, const Color& p_clear_color = Color());
 
+		RDD::FramebufferID create_framebuffer(RDD::RenderPassID p_render_pass, std::span<RDD::TextureID> p_attachments, uint32_t p_width, uint32_t p_height);
+		RDD::FramebufferID create_framebuffer_from_format_id(FramebufferFormatID p_format_id, std::vector<RID> p_attachments, uint32_t p_width, uint32_t p_height);
+		RDD::RenderPassID render_pass_from_format_id(FramebufferFormatID p_format_id);
+		bool begin_render_pass(RDD::RenderPassID p_render_pass, RDD::FramebufferID p_frame_buffer, Rect2i p_region, const Color& p_clear_color);
 		RDD::CommandBufferID get_current_command_buffer();
 
 		/**
@@ -967,6 +971,7 @@ namespace Rendering
 
 		void end_frame();
 
+		void end_render_pass(RDD::CommandBufferID cmd);
 		void execute_frame(bool p_present);
 
 		void set_push_constant(const void* p_data, uint32_t p_data_size, RID p_shader);
@@ -981,7 +986,8 @@ namespace Rendering
 
 		void free_rid(RID p_rid);
 
-
+		void apply_image_barrier(RDD::CommandBufferID p_cmd_buffer, BitField<RenderingDeviceDriver::PipelineStageBits> p_src_stages, BitField<RenderingDeviceDriver::PipelineStageBits> p_dst_stages, std::span<RenderingDeviceDriver::TextureBarrier> p_texture_barriers);
+		RDD::TextureID texture_id_from_rid(RID texture);
 
 	private:
 		bool _buffer_make_mutable(Buffer* p_buffer, RID p_buffer_id);

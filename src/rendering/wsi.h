@@ -13,8 +13,11 @@
 #include "rendering/gltf_loader.h"
 #include "math/rect2.h"
 
+
 namespace Rendering
 {
+	class RendererCompositor;
+
 	// display server windows
 	struct WindowData {
 		WindowPlatformData platfform_data;
@@ -42,10 +45,13 @@ namespace Rendering
 
 		bool pre_frame_loop();
 
+		void blit_render_target_to_screen(RID texture);
+
 		bool pre_begin_frame();
 
 		bool begin_frame();
 
+		bool end_render_pass(RDD::CommandBufferID cmd);
 		bool end_frame(bool p_present);
 
 		bool post_end_frame();
@@ -89,6 +95,21 @@ namespace Rendering
 		void set_index_buffer_format(RenderingDeviceCommons::IndexBufferFormat format);
 
 		void teardown();
+
+		RDD::RenderPassID get_current_render_pass()
+		{
+			return render_pass;
+		}
+
+		RDD::FramebufferID get_current_frame_buffer()
+		{
+			return frame_buffer;
+		}
+
+		RID get_texture_fb()
+		{
+			return texture_fb;
+		}
 
 		~WSI();
 	private:
@@ -141,5 +162,11 @@ namespace Rendering
 
 		std::unordered_map<RID, RID> vertex_arrays;		// prim to array
 		std::unordered_map<RID, RID> index_arrays;
+
+		std::unique_ptr<RendererCompositor> rd;
+
+		RDD::RenderPassID render_pass; 
+		RDD::FramebufferID frame_buffer;
+		RID texture_fb;
 	};
 }

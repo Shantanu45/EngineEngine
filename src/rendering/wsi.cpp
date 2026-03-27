@@ -11,6 +11,7 @@
 #include "libassert/assert.hpp"
 #include "compiler/compiler.h"
 #include "application/service_locator.h"
+#include "rendering/renderer_compositor.h"
 
 namespace Rendering
 {
@@ -63,34 +64,46 @@ namespace Rendering
 			DEV_ASSERT(rendering_device != nullptr);
 
 			rendering_device->screen_create(active_window);
-
-			//set_program({ "assets://shaders/triangle_v2.vert", "assets://shaders/triangle_v2.frag" });
-
-			//pipeline_create_default();
-
+			rd = std::make_unique<RendererCompositor>();
+			rd->initailize(DisplayServerEnums::MAIN_WINDOW_ID);
 			return true;
 		}
 		return false;
 	}
 
+	void WSI::blit_render_target_to_screen(RID texture)
+	{
+		Rendering::BlitToScreen blit;
+		blit.render_target = texture;
+		rd->blit_render_targets_to_screen(&blit);
+	}
+
 	bool WSI::pre_begin_frame()
 	{
-		// TODO
-		return false;
+		return true;
 	}
 
 	bool WSI::begin_frame()
 	{
 		rendering_device->begin_frame();
+		rd->begin_frame();
+		rendering_device->_submit_transfer_barriers(rendering_device->get_current_command_buffer());
+
 		rendering_device->screen_prepare_for_drawing(active_window);
 
 		return true;
 	}
 
+	bool WSI::end_render_pass(RDD::CommandBufferID cmd)
+	{
+		rendering_device->end_render_pass(cmd);
+		return true;
+	}
+
 	bool WSI::end_frame(bool p_present)
 	{
-		rendering_device->swap_buffers(p_present);
-
+		//rendering_device->swap_buffers(p_present);
+		rd->end_frame(true);
 		return true;
 	}
 
@@ -218,9 +231,15 @@ namespace Rendering
 
 	void WSI::pipeline_create()
 	{
-		auto fb_format = rendering_device->screen_get_framebuffer_format(active_window);
+		RenderingDevice::AttachmentFormat attachment;
+		attachment.format = RenderingDeviceCommons::DATA_FORMAT_R8G8B8A8_UNORM;
+		attachment.samples = RenderingDeviceCommons::TEXTURE_SAMPLES_1;
+		attachment.usage_flags = RenderingDeviceCommons::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT;
+		std::vector<RenderingDevice::AttachmentFormat> screen_attachment;
+		screen_attachment.push_back(attachment);
+		auto fb_format = rendering_device->framebuffer_format_create(screen_attachment);
 
-		auto vertex_format = rendering_device->vertex_format_create({});
+		vertex_format = rendering_device->vertex_format_create(vertex_attributes);
 
 		auto blend_state = RenderingDeviceCommons::PipelineColorBlendState::create_blend();
 		pipeline = rendering_device->render_pipeline_create( shader_program, fb_format,
@@ -228,6 +247,21 @@ namespace Rendering
 			{}, RenderingDeviceCommons::PipelineMultisampleState(),
 			RenderingDeviceCommons::PipelineDepthStencilState(), blend_state,
 			0);
+
+		RenderingDeviceCommons::TextureFormat tf;
+		tf.width = rendering_device->screen_get_width();
+		tf.height = rendering_device->screen_get_height();
+		tf.array_layers = 1;
+		tf.texture_type = RenderingDeviceCommons::TEXTURE_TYPE_2D;
+		tf.usage_bits = RenderingDeviceCommons::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RenderingDeviceCommons::TEXTURE_USAGE_SAMPLING_BIT; ;
+		tf.format = RenderingDeviceCommons::DATA_FORMAT_R8G8B8A8_UNORM;
+
+		texture_fb = rendering_device->texture_create(tf, Rendering::RenderingDevice::TextureView(), { });
+		render_pass = rendering_device->render_pass_from_format_id(fb_format);
+		frame_buffer = rendering_device->create_framebuffer_from_format_id(fb_format, { texture_fb }, rendering_device->screen_get_width(), rendering_device->screen_get_height());
+
+		_create_vertex_and_index_buffers();
+		rendering_device->_submit_transfer_workers();
 	}
 
 	void WSI::set_index_buffer_format(RenderingDeviceCommons::IndexBufferFormat format)
@@ -237,6 +271,7 @@ namespace Rendering
 
 	void WSI::teardown()
 	{
+		rd->finalize();
 		rendering_device->finalize();
 	}
 

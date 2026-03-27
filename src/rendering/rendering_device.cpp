@@ -10,6 +10,7 @@
 #include "application/service_locator.h"
 #include <set>
 #include "math\helpers.h"
+#include "libassert/assert.hpp"
 
 namespace Rendering
 {
@@ -2579,6 +2580,40 @@ namespace Rendering
 		driver->command_render_set_scissor(command_buffer, viewport);
 	}
 
+	RDD::FramebufferID RenderingDevice::create_framebuffer(RDD::RenderPassID p_render_pass, std::span<RDD::TextureID> p_attachments, uint32_t p_width, uint32_t p_height)
+	{
+		return driver->framebuffer_create(p_render_pass, p_attachments, p_width, p_height);	
+	}
+
+	RDD::FramebufferID RenderingDevice::create_framebuffer_from_format_id(FramebufferFormatID p_format_id, std::vector<RID> p_attachments, uint32_t p_width, uint32_t p_height)
+	{
+		std::vector<RDD::TextureID> attachments;
+		for (auto a: p_attachments)
+		{
+			attachments.push_back(texture_owner.get_or_null(a)->driver_id);
+		}
+		return driver->framebuffer_create(framebuffer_formats[p_format_id].render_pass, attachments, p_width, p_height);
+	}
+
+	RDD::RenderPassID RenderingDevice::render_pass_from_format_id(FramebufferFormatID p_format_id)
+	{
+		return framebuffer_formats[p_format_id].render_pass;
+	}
+
+	bool RenderingDevice::begin_render_pass(RDD::RenderPassID p_render_pass, RDD::FramebufferID p_frame_buffer, Rect2i p_region, const Color& p_clear_color)
+	{
+		RDD::CommandBufferID command_buffer = frames[frame].command_buffer;
+		std::vector<Rect2i> viewport{ p_region };
+
+		std::array<RenderingDeviceDriver::RenderPassClearValue, 1> val;
+		val[0].color = p_clear_color;
+
+		driver->command_begin_render_pass(command_buffer, p_render_pass, p_frame_buffer, RenderingDeviceDriver::COMMAND_BUFFER_TYPE_PRIMARY, viewport[0], val);
+		driver->command_render_set_viewport(command_buffer, viewport);
+		driver->command_render_set_scissor(command_buffer, viewport);
+		return true;
+	}
+
 	RDD::CommandBufferID RenderingDevice::get_current_command_buffer()
 	{
 		return frames[frame].command_buffer;
@@ -2836,6 +2871,11 @@ namespace Rendering
 		}
 
 	}
+	
+	void RenderingDevice::end_render_pass(RDD::CommandBufferID cmd)
+	{
+		driver->command_end_render_pass(cmd);
+	}
 
 	void RenderingDevice::execute_frame(bool p_present)
 	{
@@ -2859,7 +2899,7 @@ namespace Rendering
 			auto command_buffer = get_current_command_buffer();
 			if (separate_present_queue) {
 				// Issue the presentation separately if the presentation queue is different from the main queue.
-			driver->command_queue_execute_and_present(present_queue, {}, { &command_buffer, 1}, {}, frames[frame].fence, frames[frame].swap_chains_to_present);
+			driver->command_queue_execute_and_present(present_queue, frame_semaphores, { &command_buffer, 1}, {}, frames[frame].fence, frames[frame].swap_chains_to_present);
 			}
 
 			frames[frame].swap_chains_to_present.clear();
@@ -3012,7 +3052,7 @@ namespace Rendering
 				transfer_worker_pool_available_list.erase(transfer_worker_pool_available_list.begin() + available_list_index);
 			}
 			else {
-				DEV_ASSERT(!transfer_worker_pool_full && "A transfer worker should never be created when the pool is full.");
+				DEBUG_ASSERT(!transfer_worker_pool_full && "A transfer worker should never be created when the pool is full.");
 
 				// No existing worker was picked, we create a new one.
 				uint32_t transfer_worker_index = transfer_worker_pool_size;
@@ -3512,6 +3552,16 @@ namespace Rendering
 		}
 
 		return least_common_multiple(alignment, driver->api_trait_get(RDD::API_TRAIT_TEXTURE_TRANSFER_ALIGNMENT));
+	}
+
+	RDD::TextureID RenderingDevice::texture_id_from_rid(RID texture)
+	{
+		return texture_owner.get_or_null(texture)->driver_id;
+	}
+
+	void RenderingDevice::apply_image_barrier(RDD::CommandBufferID p_cmd_buffer, BitField<RenderingDeviceDriver::PipelineStageBits> p_src_stages, BitField<RenderingDeviceDriver::PipelineStageBits> p_dst_stages, std::span<RenderingDeviceDriver::TextureBarrier> p_texture_barriers)
+	{
+		driver->command_pipeline_barrier(p_cmd_buffer, p_src_stages, p_dst_stages, {}, {}, p_texture_barriers, {});
 	}
 
 	Error RenderingDevice::_texture_initialize(RID p_texture, uint32_t p_layer, const std::vector<uint8_t>& p_data, RDD::TextureLayout p_dst_layout, bool p_immediate_flush)
