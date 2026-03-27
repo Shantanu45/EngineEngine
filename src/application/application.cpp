@@ -90,7 +90,7 @@ namespace EE
 
 		render_frame(frame_time, elapsed_time);
 
-		application_wsi->end_frame();
+		application_wsi->end_frame(true);
 		application_wsi->post_end_frame();
 	}
 

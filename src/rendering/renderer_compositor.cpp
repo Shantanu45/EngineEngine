@@ -50,9 +50,9 @@ namespace Rendering
 	}
 
 
-	void RendererCompositor::end_frame()
+	void RendererCompositor::end_frame(bool p_present)
 	{
-		rendering_device->swap_buffers(true);
+		rendering_device->swap_buffers(p_present);
 	}
 
 

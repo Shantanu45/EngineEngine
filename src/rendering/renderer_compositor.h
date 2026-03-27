@@ -35,7 +35,7 @@ namespace Rendering
 
 		void begin_frame();
 
-		void end_frame();
+		void end_frame(bool p_present);
 
 		void initailize(DisplayServerEnums::WindowID p_screen);
 

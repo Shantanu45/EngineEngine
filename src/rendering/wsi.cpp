@@ -64,9 +64,9 @@ namespace Rendering
 
 			rendering_device->screen_create(active_window);
 
-			set_program({ "assets://shaders/triangle_v2.vert", "assets://shaders/triangle_v2.frag" });
+			//set_program({ "assets://shaders/triangle_v2.vert", "assets://shaders/triangle_v2.frag" });
 
-			pipeline_create_default();
+			//pipeline_create_default();
 
 			return true;
 		}
@@ -87,9 +87,9 @@ namespace Rendering
 		return true;
 	}
 
-	bool WSI::end_frame()
+	bool WSI::end_frame(bool p_present)
 	{
-		rendering_device->swap_buffers(true);
+		rendering_device->swap_buffers(p_present);
 
 		return true;
 	}
@@ -117,19 +117,6 @@ namespace Rendering
 			shaders->set_stage_source(stage, shader_path);
 		}
 		shader_program = rendering_device->shader_create_from_spirv(rendering_device->shader_compile_spirv_from_shader_source(shaders), "traingle_shader");
-	}
-
-	RID WSI::create_program(const std::vector<std::string> programs)
-	{
-		RDShaderSource* shaders = new RDShaderSource();
-		shaders->set_language(RenderingDeviceCommons::SHADER_LANGUAGE_GLSL);
-		for (auto shader_path : programs)
-		{
-			auto stage = shader_stage_from_compiler_stage(Compiler::stage_from_path(shader_path));
-			ERR_FAIL_COND_V_MSG(stage == RenderingDeviceCommons::SHADER_STAGE_MAX, RID(), "could not evaluate shader stage from path!!");
-			shaders->set_stage_source(stage, shader_path);
-		}
-		return rendering_device->shader_create_from_spirv(rendering_device->shader_compile_spirv_from_shader_source(shaders), "traingle_shader");
 	}
 
 	void WSI::set_vertex_attribute(const uint32_t binding, const uint32_t location, const RenderingDeviceCommons::DataFormat format, const uint32_t offset, const uint32_t stride)
@@ -241,26 +228,6 @@ namespace Rendering
 			{}, RenderingDeviceCommons::PipelineMultisampleState(),
 			RenderingDeviceCommons::PipelineDepthStencilState(), blend_state,
 			0);
-	}
-
-	void WSI::pipeline_create_default()
-	{
-		DEBUG_ASSERT(!shader_program.is_null());
-		DEBUG_ASSERT(!vertex_attributes.empty());
-		vertex_format = rendering_device->vertex_format_create(vertex_attributes);
-		RenderingDeviceCommons::PipelineRasterizationState rs;
-		rs.front_face = RenderingDeviceCommons::POLYGON_FRONT_FACE_COUNTER_CLOCKWISE;
-		rs.cull_mode = RenderingDeviceCommons::POLYGON_CULL_BACK;
-
-		auto blend_state = RenderingDeviceCommons::PipelineColorBlendState::create_blend();
-		pipeline = rendering_device->create_swapchain_pipeline(active_window, shader_program,
-			vertex_format, RenderingDeviceCommons::RENDER_PRIMITIVE_TRIANGLES,
-			rs, RenderingDeviceCommons::PipelineMultisampleState(),
-			RenderingDeviceCommons::PipelineDepthStencilState(), blend_state,
-			0);
-
-		_create_vertex_and_index_buffers();
-		rendering_device->_submit_transfer_workers();
 	}
 
 	void WSI::set_index_buffer_format(RenderingDeviceCommons::IndexBufferFormat format)

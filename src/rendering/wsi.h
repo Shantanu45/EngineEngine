@@ -46,7 +46,7 @@ namespace Rendering
 
 		bool begin_frame();
 
-		bool end_frame();
+		bool end_frame(bool p_present);
 
 		bool post_end_frame();
 
@@ -54,7 +54,6 @@ namespace Rendering
 
 		void set_program(const std::vector<std::string> programs);
 
-		RID create_program(const std::vector<std::string> programs);
 		void set_vertex_attribute(const uint32_t binding, const uint32_t location, const RenderingDeviceCommons::DataFormat format, const uint32_t offset, const uint32_t stride);
 
 		RID get_current_pipeline();
@@ -80,7 +79,7 @@ namespace Rendering
 
 		void pipeline_create();
 
-		void pipeline_create_default();
+		//void pipeline_create_default();
 
 		inline void set_vertex_data_mode(VERTEX_DATA_MODE mode)
 		{

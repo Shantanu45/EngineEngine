@@ -212,6 +212,8 @@ namespace Rendering
 					break;
 				}
 			}
+
+			frames[i].command_buffer_pool.pool = frames[i].command_pool;
 		}
 		if (frame_failed) {
 			// Clean up created data.
@@ -327,10 +329,10 @@ namespace Rendering
 			driver->semaphore_free(frames[i].semaphore);
 			driver->fence_free(frames[i].fence);
 
-			//RDG::CommandBufferPool& buffer_pool = frames[i].command_buffer_pool;
-			//for (uint32_t j = 0; j < buffer_pool.buffers.size(); j++) {
-			//	driver->semaphore_free(buffer_pool.semaphores[j]);
-			//}
+			CommandBufferPool& buffer_pool = frames[i].command_buffer_pool;
+			for (uint32_t j = 0; j < buffer_pool.buffers.size(); j++) {
+				driver->semaphore_free(buffer_pool.semaphores[j]);
+			}
 
 			for (uint32_t j = 0; j < frames[i].transfer_worker_semaphores.size(); j++) {
 				driver->semaphore_free(frames[i].transfer_worker_semaphores[j]);
@@ -2480,6 +2482,70 @@ namespace Rendering
 		return driver->sampler_is_format_supported_for_filter(p_format, p_sampler_filter);
 	}
 
+	void RenderingDevice::execute_chained_cmds(bool p_present_swap_chain, RenderingDeviceDriver::FenceID p_draw_fence, RenderingDeviceDriver::SemaphoreID p_dst_draw_semaphore_to_signal)
+	{
+		uint32_t command_buffer_count = 1;
+		CommandBufferPool& buffer_pool = frames[frame].command_buffer_pool;
+		if (buffer_pool.buffers_used > 0) {
+			command_buffer_count += buffer_pool.buffers_used;
+			buffer_pool.buffers_used = 0;
+		}
+
+		thread_local std::vector<RDD::SwapChainID> swap_chains;
+		swap_chains.clear();
+
+		// Instead of having just one command; we have potentially many (which had to be split due to an
+		// Adreno workaround on mobile, only if the workaround is active). Thus we must execute all of them
+		// and chain them together via semaphores as dependent executions.
+		thread_local std::vector<RDD::SemaphoreID> wait_semaphores;
+		wait_semaphores = frames[frame].semaphores_to_wait_on;
+
+		for (uint32_t i = 0; i < command_buffer_count; i++) {
+			RDD::CommandBufferID command_buffer;
+			RDD::SemaphoreID signal_semaphore;
+			RDD::FenceID signal_fence;
+			if (i > 0) {
+				command_buffer = buffer_pool.buffers[i - 1];
+			}
+			else {
+				command_buffer = frames[frame].command_buffer;
+			}
+
+			if (i == (command_buffer_count - 1)) {
+				// This is the last command buffer, it should signal the semaphore & fence.
+				signal_semaphore = p_dst_draw_semaphore_to_signal;
+				signal_fence = p_draw_fence;
+
+				if (p_present_swap_chain) {
+					// Just present the swap chains as part of the last command execution.
+					swap_chains = frames[frame].swap_chains_to_present;
+				}
+			}
+			else {
+				signal_semaphore = buffer_pool.semaphores[i];
+				// Semaphores always need to be signaled if it's not the last command buffer.
+			}
+			if (!signal_semaphore)
+			{
+				driver->command_queue_execute_and_present(main_queue, wait_semaphores, { &command_buffer, 1 },
+					{ }, signal_fence,
+					swap_chains);
+			}
+			else
+			{
+				driver->command_queue_execute_and_present(main_queue, wait_semaphores, { &command_buffer, 1 },
+					{ &signal_semaphore, 1 }, signal_fence,
+					swap_chains);
+			}
+
+			// Make the next command buffer wait on the semaphore signaled by this one.
+			wait_semaphores.resize(1);
+			wait_semaphores[0] = signal_semaphore;
+		}
+
+		frames[frame].semaphores_to_wait_on.clear();
+	}
+
 	void RenderingDevice::swap_buffers(bool p_present)
 	{
 		end_frame();
@@ -2784,17 +2850,17 @@ namespace Rendering
 			: RDD::SemaphoreID(nullptr);
 		const bool present_swap_chain = frame_can_present && !separate_present_queue;
 
-		//execute_chained_cmds(present_swap_chain, frames[frame].fence, semaphore);
+		execute_chained_cmds(present_swap_chain, frames[frame].fence, semaphore);
 		// Indicate the fence has been signaled so the next time the frame's contents need to be
 		// used, the CPU needs to wait on the work to be completed.
 		frames[frame].fence_signaled = true;
 		std::vector<RenderingDeviceDriver::SemaphoreID> frame_semaphores{ frames[frame].semaphore };
 		if (frame_can_present) {
 			auto command_buffer = get_current_command_buffer();
-			/*if (separate_present_queue) {*/
+			if (separate_present_queue) {
 				// Issue the presentation separately if the presentation queue is different from the main queue.
 			driver->command_queue_execute_and_present(present_queue, {}, { &command_buffer, 1}, {}, frames[frame].fence, frames[frame].swap_chains_to_present);
-			//}
+			}
 
 			frames[frame].swap_chains_to_present.clear();
 		}

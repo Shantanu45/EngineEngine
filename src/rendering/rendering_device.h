@@ -747,6 +747,16 @@ namespace Rendering
 			}
 		};
 
+		struct CommandBufferPool {
+			// Provided by RenderingDevice.
+			RDD::CommandPoolID pool;
+
+			// Created internally by RenderingDeviceGraph.
+			std::vector<RDD::CommandBufferID> buffers;
+			std::vector<RDD::SemaphoreID> semaphores;
+			uint32_t buffers_used = 0;
+		};
+
 		struct Frame {
 			std::list<Buffer> buffers_to_dispose_of;
 			std::list<Texture> textures_to_dispose_of;
@@ -777,6 +787,10 @@ namespace Rendering
 			// Semaphores the transfer workers can use to wait before rendering the frame.
 			// This must have the same size of the transfer worker pool.
 			std::vector<RenderingDeviceDriver::SemaphoreID> transfer_worker_semaphores;
+
+			// Extra command buffer pool used for driver workarounds or to reduce GPU bubbles by
+			// splitting the final render pass to the swapchain into its own cmd buffer.
+			CommandBufferPool command_buffer_pool;
 
 			// Extra command buffer pool used for driver workarounds or to reduce GPU bubbles by
 			// splitting the final render pass to the swapchain into its own cmd buffer.
@@ -905,6 +919,10 @@ namespace Rendering
 
 #pragma endregion
 
+		void execute_chained_cmds(bool p_present_swap_chain,
+			RenderingDeviceDriver::FenceID p_draw_fence,
+			RenderingDeviceDriver::SemaphoreID p_dst_draw_semaphore_to_signal);
+
 		void swap_buffers(bool p_present);
 
 		/**
@@ -962,6 +980,8 @@ namespace Rendering
 		void update_pipeline_cache(bool p_closing = false);
 
 		void free_rid(RID p_rid);
+
+
 
 	private:
 		bool _buffer_make_mutable(Buffer* p_buffer, RID p_buffer_id);

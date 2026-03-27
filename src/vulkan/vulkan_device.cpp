@@ -4939,8 +4939,8 @@ namespace Vulkan
 
 	void RenderingDeviceDriverVulkan::command_end_render_pass(CommandBufferID p_cmd_buffer) {
 		CommandBufferInfo* command_buffer = (CommandBufferInfo*)(p_cmd_buffer.id);
-		DEV_ASSERT(command_buffer->active_framebuffer != nullptr && "A framebuffer must be active.");
-		DEV_ASSERT(command_buffer->active_render_pass != nullptr && "A render pass must be active.");
+		DEBUG_ASSERT(command_buffer->active_framebuffer != nullptr && "A framebuffer must be active.");
+		DEBUG_ASSERT(command_buffer->active_render_pass != nullptr && "A render pass must be active.");
 
 		//if (vkEndRenderPass2KHR != nullptr && fdm_capabilities.offset_supported && command_buffer->active_render_pass->uses_fragment_density_map) {
 		//	std::vector<VkOffset2D> fragment_density_offsets;
