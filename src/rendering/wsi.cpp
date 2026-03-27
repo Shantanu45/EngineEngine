@@ -241,10 +241,14 @@ namespace Rendering
 
 		vertex_format = rendering_device->vertex_format_create(vertex_attributes);
 
+		RenderingDeviceCommons::PipelineRasterizationState rs;
+		rs.front_face = RenderingDeviceCommons::POLYGON_FRONT_FACE_COUNTER_CLOCKWISE;
+		rs.cull_mode = RenderingDeviceCommons::POLYGON_CULL_BACK;
+
 		auto blend_state = RenderingDeviceCommons::PipelineColorBlendState::create_blend();
 		pipeline = rendering_device->render_pipeline_create( shader_program, fb_format,
 			vertex_format, RenderingDeviceCommons::RENDER_PRIMITIVE_TRIANGLES,
-			{}, RenderingDeviceCommons::PipelineMultisampleState(),
+			rs, RenderingDeviceCommons::PipelineMultisampleState(),
 			RenderingDeviceCommons::PipelineDepthStencilState(), blend_state,
 			0);
 
