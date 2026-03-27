@@ -11,7 +11,7 @@ namespace Rendering
 
 	RendererCompositor::~RendererCompositor()
 	{
-
+		finalize();
 	}
 
 	void RendererCompositor::blit_render_targets_to_screen(const BlitToScreen* p_render_targets)
@@ -100,7 +100,13 @@ namespace Rendering
 	{
 		//blit.shader.version_free(blit.shader_version);
 		rendering_device->free_rid(blit.index_buffer);
+		for (auto uniform: render_target_descriptors)
+		{
+			rendering_device->free_rid(uniform.second);
+			rendering_device->free_rid(uniform.first);
+		}
 		rendering_device->free_rid(blit.sampler);
+		rendering_device->free_rid(blit_pipeline);
 	}
 
 }

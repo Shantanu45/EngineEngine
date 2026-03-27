@@ -4264,6 +4264,11 @@ namespace Rendering
 				uniform_set->invalidated_callback(uniform_set->invalidated_callback_userdata);
 			}
 		}
+		else if (render_pipeline_owner.owns(p_id)) {
+			RenderPipeline* pipeline = render_pipeline_owner.get_or_null(p_id);
+			frames[frame].render_pipelines_to_dispose_of.push_back(*pipeline);
+			render_pipeline_owner.free(p_id);
+		}
 		else {
 #ifdef DEV_ENABLED
 			ERR_PRINT("Attempted to free invalid ID: " + itos(p_id.get_id()) + " " + resource_name);
