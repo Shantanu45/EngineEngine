@@ -6,12 +6,12 @@
  * \date   March 2026
  *********************************************************************/
 #include "wsi.h"
-//#include "vulkan/vulkan_context.h"
 #include "vulkan/vulkan_device.h"
 #include "libassert/assert.hpp"
 #include "compiler/compiler.h"
 #include "application/service_locator.h"
 #include "rendering/renderer_compositor.h"
+#include "pipeline_builder.h"
 
 namespace Rendering
 {
@@ -119,7 +119,7 @@ namespace Rendering
 		return false;
 	}
 
-	void WSI::set_program(const std::vector<std::string> programs)
+	void WSI::set_program(const std::string& p_shader_name, const std::vector<std::string> programs)
 	{
 		RDShaderSource* shaders = new RDShaderSource();
 		shaders->set_language(RenderingDeviceCommons::SHADER_LANGUAGE_GLSL);
@@ -129,7 +129,7 @@ namespace Rendering
 			ERR_FAIL_COND_MSG(stage == RenderingDeviceCommons::SHADER_STAGE_MAX, "could not evaluate shader stage from path!!");
 			shaders->set_stage_source(stage, shader_path);
 		}
-		shader_program = rendering_device->shader_create_from_spirv(rendering_device->shader_compile_spirv_from_shader_source(shaders), "traingle_shader");
+		shader_program = rendering_device->shader_create_from_spirv(rendering_device->shader_compile_spirv_from_shader_source(shaders), p_shader_name);
 	}
 
 	void WSI::set_vertex_attribute(const uint32_t binding, const uint32_t location, const RenderingDeviceCommons::DataFormat format, const uint32_t offset, const uint32_t stride)
@@ -241,20 +241,14 @@ namespace Rendering
 
 		vertex_format = rendering_device->vertex_format_create(vertex_attributes);
 
-		RenderingDeviceCommons::PipelineRasterizationState rs;
-		rs.front_face = RenderingDeviceCommons::POLYGON_FRONT_FACE_COUNTER_CLOCKWISE;
-		rs.cull_mode = RenderingDeviceCommons::POLYGON_CULL_BACK;
-
-		auto blend_state = RenderingDeviceCommons::PipelineColorBlendState::create_blend();
-		pipeline = rendering_device->render_pipeline_create( shader_program, fb_format,
-			vertex_format, RenderingDeviceCommons::RENDER_PRIMITIVE_TRIANGLES,
-			rs, RenderingDeviceCommons::PipelineMultisampleState(),
-			RenderingDeviceCommons::PipelineDepthStencilState(), blend_state,
-			0);
+		pipeline = PipelineBuilder{}
+			.set_shader({ "assets://shaders/triangle_v2.vert", "assets://shaders/triangle_v2.frag" }, "triangle_shader")
+			.set_vertex_format(vertex_format)
+			.build(fb_format);
 
 		RenderingDeviceCommons::TextureFormat tf;
 		tf.width = rendering_device->screen_get_width();
-		tf.height = rendering_device->screen_get_height();
+		tf.height = rendering_device->screen_get_height(); 
 		tf.array_layers = 1;
 		tf.texture_type = RenderingDeviceCommons::TEXTURE_TYPE_2D;
 		tf.usage_bits = RenderingDeviceCommons::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RenderingDeviceCommons::TEXTURE_USAGE_SAMPLING_BIT; ;

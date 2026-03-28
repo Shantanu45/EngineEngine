@@ -39,7 +39,7 @@ struct TriangleApplication : EE::Application
 		wsi->set_default_vertex_attribute();
 
 		wsi->load_gltf("assets://gltf/two_cubes.glb");
-		wsi->set_program({ "assets://shaders/triangle_v2.vert", "assets://shaders/triangle_v2.frag" });
+		wsi->set_program("triangle_shader", { "assets://shaders/triangle_v2.vert", "assets://shaders/triangle_v2.frag" });
 
 		auto device = wsi->get_rendering_device();
 

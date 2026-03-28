@@ -412,7 +412,7 @@ namespace Rendering
 
 #pragma region Shader
 
-	RID RenderingDevice::create_program(const std::vector<std::string> programs)
+	RID RenderingDevice::create_program(const std::string& p_shader_name, const std::vector<std::string> programs)
 	{
 		RDShaderSource* shaders = new RDShaderSource();
 		shaders->set_language(RenderingDeviceCommons::SHADER_LANGUAGE_GLSL);
@@ -422,7 +422,7 @@ namespace Rendering
 			ERR_FAIL_COND_V_MSG(stage == RenderingDeviceCommons::SHADER_STAGE_MAX, RID(), "could not evaluate shader stage from path!!");
 			shaders->set_stage_source(stage, shader_path);
 		}
-		return shader_create_from_spirv(shader_compile_spirv_from_shader_source(shaders), "traingle_shader");
+		return shader_create_from_spirv(shader_compile_spirv_from_shader_source(shaders), p_shader_name);
 	}
 
 	Rendering::RDShaderSPIRV* RenderingDevice::shader_compile_spirv_from_shader_source(const RDShaderSource* p_source, bool p_allow_cache /*= true*/)

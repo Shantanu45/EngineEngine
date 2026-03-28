@@ -58,7 +58,7 @@ namespace Rendering
 
 		bool post_frame_loop();
 
-		void set_program(const std::vector<std::string> programs);
+		void set_program(const std::string& p_shader_name, const std::vector<std::string> programs);
 
 		void set_vertex_attribute(const uint32_t binding, const uint32_t location, const RenderingDeviceCommons::DataFormat format, const uint32_t offset, const uint32_t stride);
 

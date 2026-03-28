@@ -59,7 +59,7 @@ namespace Rendering
 	void RendererCompositor::initailize(DisplayServerEnums::WindowID p_screen)
 	{
 		screen = p_screen;
-		blit.shader = rendering_device->create_program({ "assets://shaders/blit.vert", "assets://shaders/blit.frag" });
+		blit.shader = rendering_device->create_program("blit_shader", {"assets://shaders/blit.vert", "assets://shaders/blit.frag"});
 		ERR_FAIL_COND_MSG(blit.shader.is_null(), "could not create blit shader module");
 		// blit.shader_version = blit.shader.version_create();
 

@@ -810,7 +810,7 @@ namespace Rendering
 		void finalize();
 
 #pragma region Shader
-		RID create_program(const std::vector<std::string> programs);
+		RID create_program(const std::string& p_shader_name, const std::vector<std::string> programs);
 
 		RDShaderSPIRV* shader_compile_spirv_from_shader_source(const RDShaderSource* p_source, bool p_allow_cache = true);
 
