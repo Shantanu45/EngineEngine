@@ -36,10 +36,11 @@ struct TriangleApplication : EE::Application
 	{
 		auto wsi = get_wsi();
 
-		wsi->set_default_vertex_attribute();
+		wsi->set_vertex_data_mode(Rendering::WSI::VERTEX_DATA_MODE::INTERLEVED_DATA);
+		wsi->set_index_buffer_format(Rendering::RenderingDeviceCommons::IndexBufferFormat::INDEX_BUFFER_FORMAT_UINT32);
 
 		wsi->load_gltf("assets://gltf/two_cubes.glb");
-		wsi->set_program("triangle_shader", { "assets://shaders/triangle_v2.vert", "assets://shaders/triangle_v2.frag" });
+		//wsi->set_program("triangle_shader", { "assets://shaders/triangle_v2.vert", "assets://shaders/triangle_v2.frag" });
 
 		auto device = wsi->get_rendering_device();
 
@@ -103,7 +104,7 @@ struct TriangleApplication : EE::Application
 
 		//wsi->set_program({ "assets://shaders/triangle_v2.vert", "assets://shaders/triangle_v2.frag" });
 
-		uniform_set = device->uniform_set_create(uniforms, wsi->get_bound_shader(), 0);
+		uniform_set = device->uniform_set_create(uniforms, device->get_shader_rid("triangle_shader"), 0);
 
 	}
 	
@@ -149,7 +150,7 @@ struct TriangleApplication : EE::Application
 		device->begin_render_pass(wsi->get_current_render_pass(), wsi->get_current_frame_buffer(), viewport[0], Color());
 		//
 		device->bind_render_pipeline(cmd_buffer, wsi->get_current_pipeline());
-		device->bind_uniform_set(wsi->get_bound_shader(), uniform_set, 0);
+		device->bind_uniform_set(device->get_shader_rid("triangle_shader"), uniform_set, 0);
 		wsi->bind_and_draw_indexed(cmd_buffer);
 		wsi->end_render_pass(cmd_buffer);
 

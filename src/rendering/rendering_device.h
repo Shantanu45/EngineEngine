@@ -12,6 +12,8 @@
 #include "util/rid_owner.h"
 #include "xxhash.h"
 #include "compiler/compiler.h"
+#include "libassert/assert.hpp"
+
 #include <map>
 #include <set>
 
@@ -978,6 +980,12 @@ namespace Rendering
 
 		void add_draw_list_bind_uniform_sets(RDD::ShaderID p_shader, std::span<RDD::UniformSetID> p_uniform_sets, uint32_t p_first_index, uint32_t p_set_count);
 
+		RID get_shader_rid(const std::string& p_name)
+		{
+			DEBUG_ASSERT(shader_name_rid_map.contains(p_name), "shader container does not exists!");
+			return shader_name_rid_map[p_name];
+		}
+
 		// TODO: #temp
 		void _submit_transfer_workers(RDD::CommandBufferID p_draw_command_buffer = RDD::CommandBufferID());
 		void _submit_transfer_barriers(RDD::CommandBufferID p_draw_command_buffer);
@@ -1135,6 +1143,8 @@ namespace Rendering
 
 		std::vector<UniformSet::AttachableTexture> attachable_textures;
 		std::vector<UniformSet::SharedTexture> shared_textures_to_update;
+
+		std::unordered_map<std::string, RID> shader_name_rid_map; // shader name to rid
 
 		RID_Owner<RDD::SamplerID, true> sampler_owner;
 

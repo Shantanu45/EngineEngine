@@ -33,13 +33,14 @@ namespace Rendering
 			uint32_t index_count;
 		};
 
+
+
+	public:
 		enum class VERTEX_DATA_MODE
 		{
 			INTERLEVED_DATA,
 			SEPERATE
 		};
-
-	public:
 		WSI();
 		Error initialize(const std::string& p_rendering_driver, DisplayServerEnums::WindowMode p_mode, DisplayServerEnums::VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i* p_position, const Vector2i& p_resolution, int p_screen, DisplayServerEnums::Context p_context, int64_t p_parent_window);
 
@@ -60,8 +61,9 @@ namespace Rendering
 
 		void set_program(const std::string& p_shader_name, const std::vector<std::string> programs);
 
-		void set_vertex_attribute(const uint32_t binding, const uint32_t location, const RenderingDeviceCommons::DataFormat format, const uint32_t offset, const uint32_t stride);
+		//void set_vertex_attribute(const uint32_t binding, const uint32_t location, const RenderingDeviceCommons::DataFormat format, const uint32_t offset, const uint32_t stride);
 
+		RenderingDeviceCommons::VertexAttribute get_vertex_attribute(const uint32_t binding, const uint32_t location, const RenderingDeviceCommons::DataFormat format, const uint32_t offset, const uint32_t stride);
 		RID get_current_pipeline();
 
 		RenderingShaderContainerFormat* create_shader_container_format();
@@ -76,7 +78,8 @@ namespace Rendering
 		void set_wsi_platform_data(DisplayServerEnums::WindowID window, WindowData data);
 
 		Error load_gltf(std::string path);
-		void set_default_vertex_attribute();
+		std::vector<RenderingDeviceCommons::VertexAttribute> get_default_vertex_attribute();
+
 		void push_vertex_data(void* vertex_data, size_t size);
 		void push_index_data(void* data, size_t size);
 
@@ -142,14 +145,13 @@ namespace Rendering
 
 		DisplayServerEnums::WindowID active_window = DisplayServerEnums::INVALID_WINDOW_ID;
 
-		std::vector<RenderingDeviceCommons::VertexAttribute> vertex_attributes;
 		std::vector<uint8_t> vertex_data{};
 		std::vector<uint8_t> index_data{};
 		uint32_t index_count = 0;
 
 		VERTEX_DATA_MODE vertex_data_mode = VERTEX_DATA_MODE::INTERLEVED_DATA;
 
-		RenderingDeviceCommons::IndexBufferFormat index_data_format = RenderingDeviceCommons::IndexBufferFormat::INDEX_BUFFER_FORMAT_UINT16;
+		RenderingDeviceCommons::IndexBufferFormat index_data_format = RenderingDeviceCommons::IndexBufferFormat::INDEX_BUFFER_FORMAT_UINT32;
 
 		RID_Owner<MeshPrimitive, true> mesh_owner;
 

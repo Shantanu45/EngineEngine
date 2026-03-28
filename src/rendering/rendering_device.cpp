@@ -10,7 +10,6 @@
 #include "application/service_locator.h"
 #include <set>
 #include "math\helpers.h"
-#include "libassert/assert.hpp"
 
 namespace Rendering
 {
@@ -469,7 +468,9 @@ namespace Rendering
 		bool code_compiled = shader_container->set_code_from_spirv(p_shader_name, stage_data);
 		//ERR_FAIL_COND_V_MSG(!code_compiled, std::vector<uint8_t>(), std::format("Failed to compile code to native for SPIR-V."));
 		std::vector<PipelineImmutableSampler> immutable_samplers;
-		return shader_create_from_container_with_samplers(shader_container, RID(), immutable_samplers);//_shader_create_from_spirv(stage_data);
+		auto id = shader_create_from_container_with_samplers(shader_container, RID(), immutable_samplers);
+		shader_name_rid_map[p_shader_name] = id;
+		return id;//_shader_create_from_spirv(stage_data);
 	}
 
 	std::vector<uint8_t> RenderingDevice::shader_compile_spirv_from_source_file(ShaderStage p_stage, const std::string& p_source_code_file, ShaderLanguage p_language /*= SHADER_LANGUAGE_GLSL*/, std::string* r_error /*= nullptr*/, bool p_allow_cache /*= true*/)

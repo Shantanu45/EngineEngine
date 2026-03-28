@@ -132,7 +132,7 @@ namespace Rendering
 		shader_program = rendering_device->shader_create_from_spirv(rendering_device->shader_compile_spirv_from_shader_source(shaders), p_shader_name);
 	}
 
-	void WSI::set_vertex_attribute(const uint32_t binding, const uint32_t location, const RenderingDeviceCommons::DataFormat format, const uint32_t offset, const uint32_t stride)
+	RenderingDeviceCommons::VertexAttribute WSI::get_vertex_attribute(const uint32_t binding, const uint32_t location, const RenderingDeviceCommons::DataFormat format, const uint32_t offset, const uint32_t stride)
 	{
 		RenderingDeviceCommons::VertexAttribute va;
 		va.format = format;
@@ -140,7 +140,7 @@ namespace Rendering
 		va.binding = binding;
 		va.location = location;
 		va.offset = offset;
-		vertex_attributes.push_back(va);
+		return va;
 	}
 
 	RID WSI::get_current_pipeline()
@@ -191,15 +191,14 @@ namespace Rendering
 		return OK;
 	}
 
-	void WSI::set_default_vertex_attribute()
+	std::vector<RenderingDeviceCommons::VertexAttribute> WSI::get_default_vertex_attribute()
 	{
-		set_vertex_data_mode(VERTEX_DATA_MODE::INTERLEVED_DATA);
-		set_index_buffer_format(Rendering::RenderingDeviceCommons::IndexBufferFormat::INDEX_BUFFER_FORMAT_UINT32);
-
-		set_vertex_attribute(0, 0, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32B32_SFLOAT, offsetof(Rendering::Vertex, position), sizeof(Rendering::Vertex));
-		set_vertex_attribute(0, 1, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32B32_SFLOAT, offsetof(Rendering::Vertex, normal), sizeof(Rendering::Vertex));
-		set_vertex_attribute(0, 2, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32_SFLOAT, offsetof(Rendering::Vertex, texcoord), sizeof(Rendering::Vertex));
-		set_vertex_attribute(0, 3, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32B32A32_SFLOAT, offsetof(Rendering::Vertex, tangent), sizeof(Rendering::Vertex));
+		std::vector<RenderingDeviceCommons::VertexAttribute> vertex_attributes;
+		vertex_attributes.emplace_back(get_vertex_attribute(0, 0, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32B32_SFLOAT, offsetof(Rendering::Vertex, position), sizeof(Rendering::Vertex)));
+		vertex_attributes.emplace_back(get_vertex_attribute(0, 1, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32B32_SFLOAT, offsetof(Rendering::Vertex, normal), sizeof(Rendering::Vertex)));
+		vertex_attributes.emplace_back(get_vertex_attribute(0, 2, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32_SFLOAT, offsetof(Rendering::Vertex, texcoord), sizeof(Rendering::Vertex)));
+		vertex_attributes.emplace_back(get_vertex_attribute(0, 3, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32B32A32_SFLOAT, offsetof(Rendering::Vertex, tangent), sizeof(Rendering::Vertex)));
+		return vertex_attributes;
 	}
 
 	void WSI::push_vertex_data(void* data, size_t size)
@@ -239,7 +238,7 @@ namespace Rendering
 		screen_attachment.push_back(attachment);
 		auto fb_format = rendering_device->framebuffer_format_create(screen_attachment);
 
-		vertex_format = rendering_device->vertex_format_create(vertex_attributes);
+		vertex_format = rendering_device->vertex_format_create(get_default_vertex_attribute());
 
 		pipeline = PipelineBuilder{}
 			.set_shader({ "assets://shaders/triangle_v2.vert", "assets://shaders/triangle_v2.frag" }, "triangle_shader")
@@ -334,14 +333,14 @@ namespace Rendering
 
 		PackedByteArray interleved;
 
-		if (vertex_data_mode == VERTEX_DATA_MODE::SEPERATE)
-		{
-			 interleved = _get_attrib_interleaved(vertex_attributes, vertex_data);
-		}
-		else
-		{
+		//if (vertex_data_mode == VERTEX_DATA_MODE::SEPERATE)
+		//{
+		//	 interleved = _get_attrib_interleaved(vertex_attributes, vertex_data);
+		//}
+		//else
+		//{
 			interleved = vertex_data;
-		}
+		//}
 
 		RID vertex_buffer = rendering_device->vertex_buffer_create(interleved.size(), interleved);
 
