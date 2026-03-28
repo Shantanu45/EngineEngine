@@ -59,8 +59,6 @@ namespace Rendering
 
 		bool post_frame_loop();
 
-		void set_program(const std::string& p_shader_name, const std::vector<std::string> programs);
-
 		//void set_vertex_attribute(const uint32_t binding, const uint32_t location, const RenderingDeviceCommons::DataFormat format, const uint32_t offset, const uint32_t stride);
 
 		RenderingDeviceCommons::VertexAttribute get_vertex_attribute(const uint32_t binding, const uint32_t location, const RenderingDeviceCommons::DataFormat format, const uint32_t offset, const uint32_t stride);
@@ -70,10 +68,6 @@ namespace Rendering
 
 		void bind_and_draw_indexed(RenderingDeviceDriver::CommandBufferID p_command_buffer);
 		RenderingDevice* get_rendering_device() { return rendering_device; }
-
-		RID get_bound_shader() {
-			return shader_program;
-		};
 
 		void set_wsi_platform_data(DisplayServerEnums::WindowID window, WindowData data);
 
@@ -123,7 +117,7 @@ namespace Rendering
 		void _free_pending_resources(int p_frame);
 		std::vector<uint8_t> _get_attrib_interleaved(const std::vector<RenderingDeviceCommons::VertexAttribute>& attribs, std::vector<uint8_t> vertex_data);
 
-		void _create_vertex_and_index_buffers();
+		void _create_vertex_and_index_buffers(uint32_t total_indices, RenderingDevice::VertexFormatID p_vertex_format);
 		std::unique_ptr<RenderingContextDriver> rendering_context = nullptr;
 		RenderingDevice* rendering_device = nullptr;
 
@@ -139,7 +133,6 @@ namespace Rendering
 
 		std::string rendering_driver;
 		bool main_window_created = false;
-		RID shader_program;
 
 		RenderingDevice::VertexFormatID vertex_format;
 
@@ -159,10 +152,7 @@ namespace Rendering
 
 		std::unique_ptr<GltfLoader> gltf_loader = nullptr;
 
-		uint32_t total_vertices = 0;
-		uint32_t total_indices = 0;
-
-		std::unordered_map<RID, RID> vertex_arrays;		// prim to array
+		std::unordered_map<RID, RID> vertex_arrays;		// prim to vertex array
 		std::unordered_map<RID, RID> index_arrays;
 
 		std::unique_ptr<RendererCompositor> rd;

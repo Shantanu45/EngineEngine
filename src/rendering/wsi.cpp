@@ -119,19 +119,6 @@ namespace Rendering
 		return false;
 	}
 
-	void WSI::set_program(const std::string& p_shader_name, const std::vector<std::string> programs)
-	{
-		RDShaderSource* shaders = new RDShaderSource();
-		shaders->set_language(RenderingDeviceCommons::SHADER_LANGUAGE_GLSL);
-		for (auto shader_path: programs)
-		{
-			auto stage = shader_stage_from_compiler_stage(Compiler::stage_from_path(shader_path));
-			ERR_FAIL_COND_MSG(stage == RenderingDeviceCommons::SHADER_STAGE_MAX, "could not evaluate shader stage from path!!");
-			shaders->set_stage_source(stage, shader_path);
-		}
-		shader_program = rendering_device->shader_create_from_spirv(rendering_device->shader_compile_spirv_from_shader_source(shaders), p_shader_name);
-	}
-
 	RenderingDeviceCommons::VertexAttribute WSI::get_vertex_attribute(const uint32_t binding, const uint32_t location, const RenderingDeviceCommons::DataFormat format, const uint32_t offset, const uint32_t stride)
 	{
 		RenderingDeviceCommons::VertexAttribute va;
@@ -174,6 +161,9 @@ namespace Rendering
 		if (gltf_loader->load(path) != OK)
 			return ERR_FILE_NOT_FOUND;
 
+		uint32_t total_vertices = 0;
+		uint32_t total_indices = 0;
+
 		auto prims = gltf_loader->primitives();
 		for (auto p : prims)
 		{
@@ -188,6 +178,9 @@ namespace Rendering
 			total_vertices += p.vertices.size();
 			total_indices += p.indices.size();
 		}
+		// TODO: should not stay here
+		vertex_format = rendering_device->vertex_format_create(get_default_vertex_attribute());
+		_create_vertex_and_index_buffers(total_indices, vertex_format);
 		return OK;
 	}
 
@@ -238,8 +231,6 @@ namespace Rendering
 		screen_attachment.push_back(attachment);
 		auto fb_format = rendering_device->framebuffer_format_create(screen_attachment);
 
-		vertex_format = rendering_device->vertex_format_create(get_default_vertex_attribute());
-
 		pipeline = PipelineBuilder{}
 			.set_shader({ "assets://shaders/triangle_v2.vert", "assets://shaders/triangle_v2.frag" }, "triangle_shader")
 			.set_vertex_format(vertex_format)
@@ -257,7 +248,7 @@ namespace Rendering
 		render_pass = rendering_device->render_pass_from_format_id(fb_format);
 		frame_buffer = rendering_device->create_framebuffer_from_format_id(fb_format, { texture_fb }, rendering_device->screen_get_width(), rendering_device->screen_get_height());
 
-		_create_vertex_and_index_buffers();
+		//_create_vertex_and_index_buffers();
 		rendering_device->_submit_transfer_workers();
 	}
 
@@ -326,7 +317,7 @@ namespace Rendering
 		return interleved_data;
 	}
 
-	void WSI::_create_vertex_and_index_buffers()
+	void WSI::_create_vertex_and_index_buffers(uint32_t total_indices, RenderingDevice::VertexFormatID p_vertex_format)
 	{
 		DEBUG_ASSERT(primitives.size() > 0);
 		DEBUG_ASSERT(!vertex_data.empty());
@@ -349,7 +340,7 @@ namespace Rendering
 		for (auto& p: primitives)
 		{
 			auto prim = mesh_owner.get_or_null(p.first);
-			vertex_arrays.insert({ p.first, rendering_device->vertex_array_create(prim->vertices.size(), vertex_format, {vertex_buffer}, { p.second.vertex_byte_offset  }) });
+			vertex_arrays.insert({ p.first, rendering_device->vertex_array_create(prim->vertices.size(), p_vertex_format, {vertex_buffer}, { p.second.vertex_byte_offset  }) });
 			index_arrays.insert({ p.first, rendering_device->index_array_create(index_buffer, p.second.indexOffset, p.second.index_count) });
 		}
 	}
