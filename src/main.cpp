@@ -40,6 +40,65 @@ using RD = Rendering::RenderingDevice;
 using RDC = Rendering::RenderingDeviceCommons;
 using RDD = Rendering::RenderingDeviceDriver;
 
+struct RenderContext
+{
+	Rendering::RenderingDevice* device;
+	RDD::CommandBufferID command_buffer;
+};
+
+struct FrameGraphTexture {
+	struct Desc {
+		RDC::TextureFormat texture_format;
+		const RD::TextureView& texture_view;
+		const std::vector<std::vector<uint8_t>>& data;
+		std::string texture_name;
+	};
+
+	void create(const Desc& desc, void* ctx) {
+		auto& device = *static_cast<Rendering::RenderingDevice*>(ctx);
+		texture = device.texture_create(desc.texture_format, desc.texture_view, desc.data);
+	}
+
+	void destroy(const Desc& desc, void* ctx) {
+		auto& device = *static_cast<Rendering::RenderingDevice*>(ctx);
+		device.free_rid(texture);
+	}
+
+	void preRead(const Desc& desc, uint32_t flags, void* ctx) {
+		auto& rc = *static_cast<RenderContext*>(ctx);
+
+		RDD::TextureBarrier barrier2;
+		barrier2.dst_access = RDD::BARRIER_ACCESS_SHADER_READ_BIT;
+		barrier2.next_layout = RDD::TEXTURE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		barrier2.prev_layout = RDD::TEXTURE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		barrier2.src_access = RDD::BARRIER_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+		barrier2.subresources = { RDD::TEXTURE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+		barrier2.texture = rc.device->texture_id_from_rid(texture);
+	}
+
+	void preWrite(const Desc& desc, uint32_t flags, void* ctx) {
+		auto& rc = *static_cast<RenderContext*>(ctx);
+
+		RDD::TextureBarrier barrier;
+		barrier.src_access = 0;
+		barrier.dst_access = RDD::BARRIER_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+		barrier.prev_layout = RDD::TEXTURE_LAYOUT_UNDEFINED;
+		barrier.next_layout = RDD::TEXTURE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		barrier.subresources = { RDD::TEXTURE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+		barrier.texture = rc.device->texture_id_from_rid(texture);
+		rc.device->apply_image_barrier(rc.command_buffer, RDD::PipelineStageBits::PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+			RDD::PipelineStageBits::PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, { &barrier, 1 });
+	}
+
+	// toString is used by the Graphviz dot exporter
+	static std::string toString(const Desc& d) {
+		return d.texture_name;
+	}
+
+private:
+	RID texture;
+};
+
 struct TriangleApplication : EE::Application
 {
 
@@ -142,6 +201,10 @@ struct TriangleApplication : EE::Application
 	
 	void render_frame(double frame_time, double elapsed_time) override
 	{
+		// ---- Build the frame graph ----
+		FrameGraph fg;
+		FrameGraphBlackboard bb;
+
 		auto wsi = get_wsi();
 
 		auto device = wsi->get_rendering_device();
@@ -176,6 +239,7 @@ struct TriangleApplication : EE::Application
 		barrier.texture = device->texture_id_from_rid(texture_fb);
 		device->apply_image_barrier(cmd_buffer, RDD::PipelineStageBits::PIPELINE_STAGE_TOP_OF_PIPE_BIT, RDD::PipelineStageBits::PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, { &barrier, 1 });
 
+		//============================================================================ RP 1 ===========================
 		device->begin_render_pass(render_pass, frame_buffer, viewport[0], Color());
 		//
 		device->bind_render_pipeline(cmd_buffer, pipeline);
@@ -192,8 +256,9 @@ struct TriangleApplication : EE::Application
 		barrier2.src_access = RDD::BARRIER_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 		barrier2.subresources = { RDD::TEXTURE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
 		barrier2.texture = device->texture_id_from_rid(texture_fb);
-
+		//============================================================================ END RP 1 ===========================
 		device->apply_image_barrier(cmd_buffer, RDD::PipelineStageBits::PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, RDD::PipelineStageBits::PIPELINE_STAGE_FRAGMENT_SHADER_BIT, { &barrier2, 1 });
+		//============================================================================ BLIT ===========================
 		wsi->blit_render_target_to_screen(texture_fb);
 
 		//device->begin_for_screen(DisplayServerEnums::MAIN_WINDOW_ID);
