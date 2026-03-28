@@ -123,7 +123,7 @@ namespace Rendering
 	{
 		RenderingDeviceCommons::VertexAttribute va;
 		va.format = format;
-		va.stride = stride;// RenderingDeviceCommons::get_format_vertex_size(format);
+		va.stride = stride;
 		va.binding = binding;
 		va.location = location;
 		va.offset = offset;
@@ -261,7 +261,7 @@ namespace Rendering
 		Error err = rendering_context->window_create(p_window_id, &wd.platfform_data);
 		ERR_FAIL_COND_V_MSG(err != OK, err, std::format("Failed to create {} window.", p_rendering_driver));
 		rendering_context->window_set_size(p_window_id, wd.window_resolution.x, wd.window_resolution.y);
-		surface = rendering_context->surface_get_from_window(p_window_id);
+		//surface = rendering_context->surface_get_from_window(p_window_id);
 		return OK;
 	}
 

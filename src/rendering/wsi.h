@@ -52,7 +52,9 @@ namespace Rendering
 			INTERLEVED_DATA,
 			SEPERATE
 		};
+		
 		WSI();
+
 		Error initialize(const std::string& p_rendering_driver, DisplayServerEnums::WindowMode p_mode, DisplayServerEnums::VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i* p_position, const Vector2i& p_resolution, int p_screen, DisplayServerEnums::Context p_context, int64_t p_parent_window);
 
 		bool pre_frame_loop();
@@ -70,8 +72,6 @@ namespace Rendering
 
 		bool post_frame_loop();
 
-		//void set_vertex_attribute(const uint32_t binding, const uint32_t location, const RenderingDeviceCommons::DataFormat format, const uint32_t offset, const uint32_t stride);
-
 		RenderingDeviceCommons::VertexAttribute get_vertex_attribute(const uint32_t binding, const uint32_t location, const RenderingDeviceCommons::DataFormat format, const uint32_t offset, const uint32_t stride);
 
 		RenderingShaderContainerFormat* create_shader_container_format();
@@ -85,8 +85,6 @@ namespace Rendering
 		RenderingDevice::VertexFormatID get_vertex_format_by_type(VERTEX_FORMAT_VARIATIONS p_type);
 
 		Error load_gltf(const std::string& p_path, const std::string& p_name, VERTEX_FORMAT_VARIATIONS p_type = VERTEX_FORMAT_VARIATIONS::DEFAULT);
-
-	public:
 
 		std::vector<RenderingDeviceCommons::VertexAttribute> get_default_vertex_attribute();
 
@@ -113,26 +111,12 @@ namespace Rendering
 		std::unique_ptr<RenderingContextDriver> rendering_context = nullptr;
 		RenderingDevice* rendering_device = nullptr;
 
-		RenderingContextDriver::SurfaceID surface;
-		RenderingDeviceDriver::SwapChainID swapchain;
-
-		uint32_t frame_count = 0;
-		uint32_t curr_frame = 0;
-		RenderingDeviceDriver::CommandQueueID main_queue;
-		RID pipeline;
-
 		std::map<DisplayServerEnums::WindowID, WindowData> windows;
 
 		std::string rendering_driver;
 		bool main_window_created = false;
 
-		//RenderingDevice::VertexFormatID vertex_format;
-
 		DisplayServerEnums::WindowID active_window = DisplayServerEnums::INVALID_WINDOW_ID;
-
-		//std::vector<uint8_t> vertex_data{};
-		//std::vector<uint8_t> index_data{};
-		//uint32_t index_count = 0;
 
 		VERTEX_DATA_MODE vertex_data_mode = VERTEX_DATA_MODE::INTERLEVED_DATA;
 
