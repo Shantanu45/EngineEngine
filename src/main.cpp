@@ -44,19 +44,20 @@ struct RenderContext
 {
 	Rendering::RenderingDevice* device;
 	RDD::CommandBufferID command_buffer;
+	Rendering::WSI* wsi;
 };
 
 struct FrameGraphTexture {
 	struct Desc {
 		RDC::TextureFormat texture_format;
-		const RD::TextureView& texture_view;
-		const std::vector<std::vector<uint8_t>>& data;
+		const RD::TextureView texture_view;
+		//const std::vector<std::vector<uint8_t>> data;
 		std::string texture_name;
 	};
 
 	void create(const Desc& desc, void* ctx) {
 		auto& device = *static_cast<Rendering::RenderingDevice*>(ctx);
-		texture = device.texture_create(desc.texture_format, desc.texture_view, desc.data);
+		texture = device.texture_create(desc.texture_format, desc.texture_view, {});
 	}
 
 	void destroy(const Desc& desc, void* ctx) {
@@ -95,9 +96,113 @@ struct FrameGraphTexture {
 		return d.texture_name;
 	}
 
-private:
 	RID texture;
 };
+
+
+struct basic_pass_resource
+{
+	FrameGraphResource scene;
+};
+
+void add_basic_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
+	FrameGraphResource image_handle,
+	RDD::RenderPassID  render_pass,
+	RDD::FramebufferID frame_buffer,
+	RID pipeline,
+	RID uniform_set)
+{
+	bb.add<basic_pass_resource>() =
+		fg.addCallbackPass<basic_pass_resource>(
+			"Basic Pass",
+
+			[image_handle](FrameGraph::Builder& builder, basic_pass_resource& data)
+			{
+				data.scene = builder.write(image_handle);
+			},
+
+			[=](const basic_pass_resource& data,
+				FrameGraphPassResources& resources,
+				void* ctx)
+			{
+				auto& rc = *static_cast<RenderContext*>(ctx);
+				auto cmd = rc.command_buffer;
+
+				auto& scene = resources.get<FrameGraphTexture>(data.scene);
+
+				uint32_t w = rc.device->screen_get_width();
+				uint32_t h = rc.device->screen_get_height();
+
+				Rect2i viewport(0, 0, w, h);
+
+				rc.device->begin_render_pass(render_pass, frame_buffer,
+					viewport, Color());
+
+				rc.device->bind_render_pipeline(cmd, pipeline);
+
+				rc.device->bind_uniform_set(
+					rc.device->get_shader_rid("triangle_shader"),
+					uniform_set, 0);
+
+				rc.wsi->bind_and_draw_indexed(cmd, "two_cubes");
+
+				rc.wsi->end_render_pass(cmd);
+			});
+}
+
+void add_blit_pass(FrameGraph& fg, FrameGraphBlackboard& bb)
+{
+	const auto& basic = bb.get<basic_pass_resource>();
+
+	fg.addCallbackPass<basic_pass_resource>(
+		"Blit Pass",
+
+		[&](FrameGraph::Builder& builder, basic_pass_resource& data)
+		{
+			data.scene = builder.read(basic.scene);
+		},
+
+		[=](const basic_pass_resource& data,
+			FrameGraphPassResources& resources,
+			void* ctx)
+		{
+			auto& rc = *static_cast<RenderContext*>(ctx);
+			auto wsi = rc.wsi;
+
+			auto& scene = resources.get<FrameGraphTexture>(data.scene);
+
+			wsi->blit_render_target_to_screen(scene.texture);
+		});
+}
+
+//void add_basic_pass(FrameGraph& fg, FrameGraphBlackboard& bb, FrameGraphResource image_handle, RDD::RenderPassID render_pass, RDD::FramebufferID frame_buffer, RID pipeline, RID uniform_set) {
+//	bb.add<basic_pass_resource>() = fg.addCallbackPass<basic_pass_resource>(
+//		"Basic Pass",
+//		[&](FrameGraph::Builder& builder, basic_pass_resource& data) {
+//			data.scene = builder.write(image_handle, 1u);
+//		},
+//		[=](const basic_pass_resource& data, FrameGraphPassResources& resources, void* ctx) {
+//			auto& rc = *static_cast<RenderContext*>(ctx);
+//			auto device = rc.device;
+//			auto cmd = rc.command_buffer;
+//			auto wsi = rc.wsi;
+//
+//			std::vector<Rect2i> viewport{ Rect2i(0, 0, device->screen_get_width(), device->screen_get_height()) };
+//
+//			device->begin_render_pass(render_pass, frame_buffer, viewport[0], Color());
+//			//
+//			device->bind_render_pipeline(cmd, pipeline);
+//			device->bind_uniform_set(device->get_shader_rid("triangle_shader"), uniform_set, 0);
+//			wsi->bind_and_draw_indexed(cmd, "two_cubes");
+//			wsi->end_render_pass(cmd);
+//
+//			device->_submit_transfer_barriers(cmd);
+//		}
+//	);
+//}
+
+
+
 
 struct TriangleApplication : EE::Application
 {
