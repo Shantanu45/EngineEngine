@@ -17,7 +17,7 @@ namespace math_helpers
             return glm::epsilonEqual(a, b, (T)CMP_EPSILON);
         }
         else {
-            // For glm::vec2, vec3, etc. — epsilon must also be a vector
+            // For glm::vec2, vec3, etc. - epsilon must also be a vector
             return glm::all(glm::epsilonEqual(a, b, T(CMP_EPSILON)));
         }
     }
