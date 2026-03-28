@@ -62,7 +62,6 @@ namespace Rendering
 		//void set_vertex_attribute(const uint32_t binding, const uint32_t location, const RenderingDeviceCommons::DataFormat format, const uint32_t offset, const uint32_t stride);
 
 		RenderingDeviceCommons::VertexAttribute get_vertex_attribute(const uint32_t binding, const uint32_t location, const RenderingDeviceCommons::DataFormat format, const uint32_t offset, const uint32_t stride);
-		RID get_current_pipeline();
 
 		RenderingShaderContainerFormat* create_shader_container_format();
 
@@ -92,21 +91,6 @@ namespace Rendering
 		void set_index_buffer_format(RenderingDeviceCommons::IndexBufferFormat format);
 
 		void teardown();
-
-		RDD::RenderPassID get_current_render_pass()
-		{
-			return render_pass;
-		}
-
-		RDD::FramebufferID get_current_frame_buffer()
-		{
-			return frame_buffer;
-		}
-
-		RID get_texture_fb()
-		{
-			return texture_fb;
-		}
 
 		~WSI();
 	private:
@@ -156,9 +140,5 @@ namespace Rendering
 		std::unordered_map<RID, RID> index_arrays;
 
 		std::unique_ptr<RendererCompositor> rd;
-
-		RDD::RenderPassID render_pass; 
-		RDD::FramebufferID frame_buffer;
-		RID texture_fb;
 	};
 }

@@ -130,11 +130,6 @@ namespace Rendering
 		return va;
 	}
 
-	RID WSI::get_current_pipeline()
-	{
-		return pipeline;
-	}
-
 	RenderingShaderContainerFormat* WSI::create_shader_container_format() 
 	{
 		return new ::Vulkan::RenderingShaderContainerFormatVulkan();
@@ -223,7 +218,7 @@ namespace Rendering
 
 	void WSI::pipeline_create()
 	{
-		RenderingDevice::AttachmentFormat attachment;
+		/*RenderingDevice::AttachmentFormat attachment;
 		attachment.format = RenderingDeviceCommons::DATA_FORMAT_R8G8B8A8_UNORM;
 		attachment.samples = RenderingDeviceCommons::TEXTURE_SAMPLES_1;
 		attachment.usage_flags = RenderingDeviceCommons::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT;
@@ -246,7 +241,7 @@ namespace Rendering
 
 		texture_fb = rendering_device->texture_create(tf, Rendering::RenderingDevice::TextureView(), { });
 		render_pass = rendering_device->render_pass_from_format_id(fb_format);
-		frame_buffer = rendering_device->create_framebuffer_from_format_id(fb_format, { texture_fb }, rendering_device->screen_get_width(), rendering_device->screen_get_height());
+		frame_buffer = rendering_device->create_framebuffer_from_format_id(fb_format, { texture_fb }, rendering_device->screen_get_width(), rendering_device->screen_get_height());*/
 
 		//_create_vertex_and_index_buffers();
 		rendering_device->_submit_transfer_workers();
