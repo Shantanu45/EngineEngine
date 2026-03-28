@@ -20,25 +20,27 @@
 #include "rendering/renderer_compositor.h"
 #include "rendering/pipeline_builder.h"
 
+ //struct alignas(16) UBO {
+ //	float x, y, z;
+ //	float _pad;  // pad to 16 bytes
+ //};
+		 //RDC::TextureFormat c_tf;
+	 //c_tf.width = device->screen_get_width();
+	 //c_tf.height = device->screen_get_height();
+	 //c_tf.array_layers = 1;
+	 //c_tf.texture_type = RDC::TEXTURE_TYPE_2D;
+	 //c_tf.usage_bits = RDC::TEXTURE_USAGE_CPU_READ_BIT | RDC::TEXTURE_USAGE_CAN_COPY_FROM_BIT;
+	 //c_tf.format = RDC::DATA_FORMAT_R8G8B8A8_UNORM;
+
+	 //copy_texture = device->texture_create(c_tf, RD::TextureView());
+
+
 using RD = Rendering::RenderingDevice;
 using RDC = Rendering::RenderingDeviceCommons;
 using RDD = Rendering::RenderingDeviceDriver;
 
 struct TriangleApplication : EE::Application
 {
-	//struct alignas(16) UBO {
-	//	float x, y, z;
-	//	float _pad;  // pad to 16 bytes
-	//};
-			//RDC::TextureFormat c_tf;
-		//c_tf.width = device->screen_get_width();
-		//c_tf.height = device->screen_get_height();
-		//c_tf.array_layers = 1;
-		//c_tf.texture_type = RDC::TEXTURE_TYPE_2D;
-		//c_tf.usage_bits = RDC::TEXTURE_USAGE_CPU_READ_BIT | RDC::TEXTURE_USAGE_CAN_COPY_FROM_BIT;
-		//c_tf.format = RDC::DATA_FORMAT_R8G8B8A8_UNORM;
-
-		//copy_texture = device->texture_create(c_tf, RD::TextureView());
 
 	struct alignas(16) UBO {
 		glm::mat4 model;
