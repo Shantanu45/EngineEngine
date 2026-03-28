@@ -20,22 +20,6 @@
 #include "rendering/fg/frame_graph.h"
 #include "rendering/fg/blackboard.h"
 
-
- //struct alignas(16) UBO {
- //	float x, y, z;
- //	float _pad;  // pad to 16 bytes
- //};
-		 //RDC::TextureFormat c_tf;
-	 //c_tf.width = device->screen_get_width();
-	 //c_tf.height = device->screen_get_height();
-	 //c_tf.array_layers = 1;
-	 //c_tf.texture_type = RDC::TEXTURE_TYPE_2D;
-	 //c_tf.usage_bits = RDC::TEXTURE_USAGE_CPU_READ_BIT | RDC::TEXTURE_USAGE_CAN_COPY_FROM_BIT;
-	 //c_tf.format = RDC::DATA_FORMAT_R8G8B8A8_UNORM;
-
-	 //copy_texture = device->texture_create(c_tf, RD::TextureView());
-
-
 using RD = Rendering::RenderingDevice;
 using RDC = Rendering::RenderingDeviceCommons;
 using RDD = Rendering::RenderingDeviceDriver;
@@ -65,7 +49,7 @@ struct FrameGraphTexture {
 		device.free_rid(texture);
 	}
 
-	void preRead(const Desc& desc, uint32_t flags, void* ctx) {
+	void pre_read(const Desc& desc, uint32_t flags, void* ctx) {
 		auto& rc = *static_cast<RenderContext*>(ctx);
 
 		RDD::TextureBarrier barrier2;
@@ -79,7 +63,7 @@ struct FrameGraphTexture {
 			RDD::PipelineStageBits::PIPELINE_STAGE_FRAGMENT_SHADER_BIT, { &barrier2, 1 });
 	}
 
-	void preWrite(const Desc& desc, uint32_t flags, void* ctx) {
+	void pre_write(const Desc& desc, uint32_t flags, void* ctx) {
 		auto& rc = *static_cast<RenderContext*>(ctx);
 
 		RDD::TextureBarrier barrier;
@@ -93,8 +77,8 @@ struct FrameGraphTexture {
 			RDD::PipelineStageBits::PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, { &barrier, 1 });
 	}
 
-	// toString is used by the Graphviz dot exporter
-	static std::string toString(const Desc& d) {
+	// to_string is used by the Graphviz dot exporter
+	static std::string to_string(const Desc& d) {
 		return d.texture_name;
 	}
 
@@ -115,7 +99,7 @@ void add_basic_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
 	RID uniform_set)
 {
 	bb.add<basic_pass_resource>() =
-		fg.addCallbackPass<basic_pass_resource>(
+		fg.add_callback_pass<basic_pass_resource>(
 			"Basic Pass",
 
 			[image_handle](FrameGraph::Builder& builder, basic_pass_resource& data)
@@ -158,13 +142,13 @@ void add_blit_pass(FrameGraph& fg, FrameGraphBlackboard& bb)
 {
 	const auto& basic = bb.get<basic_pass_resource>();
 
-	fg.addCallbackPass<basic_pass_resource>(
+	fg.add_callback_pass<basic_pass_resource>(
 		"Blit Pass",
 
 		[&](FrameGraph::Builder& builder, basic_pass_resource& data)
 		{
 			data.scene = builder.read(basic.scene, 1u);
-			builder.setSideEffect();		// mark as non cullable
+			builder.set_side_effect();		// mark as non cullable
 		},
 
 		[=](const basic_pass_resource& data,
@@ -180,35 +164,6 @@ void add_blit_pass(FrameGraph& fg, FrameGraphBlackboard& bb)
 		}
 	);
 }
-
-//void add_basic_pass(FrameGraph& fg, FrameGraphBlackboard& bb, FrameGraphResource image_handle, RDD::RenderPassID render_pass, RDD::FramebufferID frame_buffer, RID pipeline, RID uniform_set) {
-//	bb.add<basic_pass_resource>() = fg.addCallbackPass<basic_pass_resource>(
-//		"Basic Pass",
-//		[&](FrameGraph::Builder& builder, basic_pass_resource& data) {
-//			data.scene = builder.write(image_handle, 1u);
-//		},
-//		[=](const basic_pass_resource& data, FrameGraphPassResources& resources, void* ctx) {
-//			auto& rc = *static_cast<RenderContext*>(ctx);
-//			auto device = rc.device;
-//			auto cmd = rc.command_buffer;
-//			auto wsi = rc.wsi;
-//
-//			std::vector<Rect2i> viewport{ Rect2i(0, 0, device->screen_get_width(), device->screen_get_height()) };
-//
-//			device->begin_render_pass(render_pass, frame_buffer, viewport[0], Color());
-//			//
-//			device->bind_render_pipeline(cmd, pipeline);
-//			device->bind_uniform_set(device->get_shader_rid("triangle_shader"), uniform_set, 0);
-//			wsi->bind_and_draw_indexed(cmd, "two_cubes");
-//			wsi->end_render_pass(cmd);
-//
-//			device->_submit_transfer_barriers(cmd);
-//		}
-//	);
-//}
-
-
-
 
 struct TriangleApplication : EE::Application
 {
@@ -356,6 +311,8 @@ struct TriangleApplication : EE::Application
 
 		fg.compile();
 
+		//save_graph_to_file(fg, "file_graph.dot");
+
 		RenderContext rc;
 		rc.command_buffer = device->get_current_command_buffer();
 		rc.device = device;
@@ -398,3 +355,19 @@ namespace EE
 		}
 	}
 }
+
+
+
+//struct alignas(16) UBO {
+ //	float x, y, z;
+ //	float _pad;  // pad to 16 bytes
+ //};
+		 //RDC::TextureFormat c_tf;
+	 //c_tf.width = device->screen_get_width();
+	 //c_tf.height = device->screen_get_height();
+	 //c_tf.array_layers = 1;
+	 //c_tf.texture_type = RDC::TEXTURE_TYPE_2D;
+	 //c_tf.usage_bits = RDC::TEXTURE_USAGE_CPU_READ_BIT | RDC::TEXTURE_USAGE_CAN_COPY_FROM_BIT;
+	 //c_tf.format = RDC::DATA_FORMAT_R8G8B8A8_UNORM;
+
+	 //copy_texture = device->texture_create(c_tf, RD::TextureView());

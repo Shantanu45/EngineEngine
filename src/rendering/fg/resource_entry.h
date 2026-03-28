@@ -19,26 +19,26 @@ public:
 
   static constexpr auto kInitialVersion{1u};
 
-  [[nodiscard]] auto toString() const { return m_concept->toString(); }
+  [[nodiscard]] auto to_string() const { return m_concept->to_string(); }
 
   void create(void *allocator);
   void destroy(void *allocator);
 
-  void preRead(uint32_t flags, void *context) {
-    m_concept->preRead(flags, context);
+  void pre_read(uint32_t flags, void *context) {
+    m_concept->pre_read(flags, context);
   }
-  void preWrite(uint32_t flags, void *context) {
-    m_concept->preWrite(flags, context);
+  void pre_write(uint32_t flags, void *context) {
+    m_concept->pre_write(flags, context);
   }
 
-  [[nodiscard]] auto getId() const { return m_id; }
-  [[nodiscard]] auto getVersion() const { return m_version; }
-  [[nodiscard]] auto isImported() const { return m_type == Type::Imported; }
-  [[nodiscard]] auto isTransient() const { return m_type == Type::Transient; }
+  [[nodiscard]] auto get_id() const { return m_id; }
+  [[nodiscard]] auto get_version() const { return m_version; }
+  [[nodiscard]] auto is_imported() const { return m_type == Type::Imported; }
+  [[nodiscard]] auto is_transient() const { return m_type == Type::Transient; }
 
   template <typename T> [[nodiscard]] T &get();
   template <typename T>
-  [[nodiscard]] const typename T::Desc &getDescriptor() const;
+  [[nodiscard]] const typename T::Desc &get_descriptor() const;
 
 private:
   template <typename T>
@@ -53,10 +53,10 @@ private:
     virtual void create(void *) = 0;
     virtual void destroy(void *) = 0;
 
-    virtual void preRead(uint32_t flags, void *) = 0;
-    virtual void preWrite(uint32_t flags, void *) = 0;
+    virtual void pre_read(uint32_t flags, void *) = 0;
+    virtual void pre_write(uint32_t flags, void *) = 0;
 
-    virtual std::string toString() const = 0;
+    virtual std::string to_string() const = 0;
   };
   template <typename T> struct Model final : Concept {
     Model(const typename T::Desc &, T &&);
@@ -64,30 +64,30 @@ private:
     void create(void *allocator) override;
     void destroy(void *allocator) override;
 
-    void preRead(uint32_t flags, void *context) override {
+    void pre_read(uint32_t flags, void *context) override {
 #if __cplusplus >= 202002L
-      if constexpr (has_preRead<T>)
+      if constexpr (has_pre_read<T>)
 #else
-      if constexpr (has_preRead<T>::value)
+      if constexpr (has_pre_read<T>::value)
 #endif
-        resource.preRead(descriptor, flags, context);
+        resource.pre_read(descriptor, flags, context);
     }
-    void preWrite(uint32_t flags, void *context) override {
+    void pre_write(uint32_t flags, void *context) override {
 #if __cplusplus >= 202002L
-      if constexpr (has_preWrite<T>)
+      if constexpr (has_pre_write<T>)
 #else
-      if constexpr (has_preWrite<T>::value)
+      if constexpr (has_pre_write<T>::value)
 #endif
-        resource.preWrite(descriptor, flags, context);
+        resource.pre_write(descriptor, flags, context);
     }
 
-    std::string toString() const override;
+    std::string to_string() const override;
 
     const typename T::Desc descriptor;
     T resource;
   };
 
-  template <typename T> [[nodiscard]] auto *_getModel() const;
+  template <typename T> [[nodiscard]] auto *_get_model() const;
 
 private:
   const Type m_type;

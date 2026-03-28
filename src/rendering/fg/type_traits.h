@@ -21,17 +21,17 @@ concept Virtualizable = requires(T t) {
 #  define _VIRTUALIZABLE_CONCEPT_IMPL(T) _VIRTUALIZABLE_CONCEPT(T)
 
 template <typename T>
-concept has_preRead = requires(T t) {
-  { t.preRead(typename T::Desc{}, 0u, (void *)nullptr) } -> std::same_as<void>;
+concept has_pre_read = requires(T t) {
+  { t.pre_read(typename T::Desc{}, 0u, (void *)nullptr) } -> std::same_as<void>;
 };
 template <typename T>
-concept has_preWrite = requires(T t) {
-  { t.preWrite(typename T::Desc{}, 0u, (void *)nullptr) } -> std::same_as<void>;
+concept has_pre_write = requires(T t) {
+  { t.pre_write(typename T::Desc{}, 0u, (void *)nullptr) } -> std::same_as<void>;
 };
 
 template <typename T>
-concept has_toString = requires() {
-  { T::toString(typename T::Desc{}) } -> std::convertible_to<std::string_view>;
+concept has_to_string = requires() {
+  { T::to_string(typename T::Desc{}) } -> std::convertible_to<std::string_view>;
 };
 #else
 // https://en.cppreference.com/w/cpp/types/enable_if
@@ -68,15 +68,15 @@ inline constexpr bool is_resource =
     typename T, std::enable_if_t<is_resource<T>, bool>
 #  define _VIRTUALIZABLE_CONCEPT(T) _VIRTUALIZABLE_CONCEPT_IMPL(T) = true
 
-DETECT_FUNCTION(preRead, typename T::Desc{}, 0u, (void *)nullptr)
-DETECT_FUNCTION(preWrite, typename T::Desc{}, 0u, (void *)nullptr)
+DETECT_FUNCTION(pre_read, typename T::Desc{}, 0u, (void *)nullptr)
+DETECT_FUNCTION(pre_write, typename T::Desc{}, 0u, (void *)nullptr)
 
 #  undef DETECT_FUNCTION
 
-template <typename T, typename = void> struct has_toString : std::false_type {};
+template <typename T, typename = void> struct has_to_string : std::false_type {};
 template <typename T>
-struct has_toString<T, std::void_t<decltype(T::toString)>>
-    : std::is_convertible<decltype(T::toString(typename T::Desc{})),
+struct has_to_string<T, std::void_t<decltype(T::to_string)>>
+    : std::is_convertible<decltype(T::to_string(typename T::Desc{})),
                           std::string_view> {};
 
 #endif

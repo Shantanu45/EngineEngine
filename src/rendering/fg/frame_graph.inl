@@ -5,7 +5,7 @@
 //
 
 template <typename Data, typename Setup, typename Execute>
-inline const Data &FrameGraph::addCallbackPass(const std::string_view name,
+inline const Data &FrameGraph::add_callback_pass(const std::string_view name,
                                                Setup &&setup, Execute &&exec) {
   static_assert(std::is_invocable_v<Setup, Builder &, Data &>,
                 "Invalid setup callback");
@@ -16,7 +16,7 @@ inline const Data &FrameGraph::addCallbackPass(const std::string_view name,
 
   auto *pass = new FrameGraphPass<Data, Execute>(std::forward<Execute>(exec));
   auto &passNode =
-    _createPassNode(name, std::unique_ptr<FrameGraphPass<Data, Execute>>(pass));
+    _create_pass_node(name, std::unique_ptr<FrameGraphPass<Data, Execute>>(pass));
   Builder builder{*this, passNode};
   std::invoke(setup, builder, pass->data);
   return pass->data;
@@ -24,8 +24,8 @@ inline const Data &FrameGraph::addCallbackPass(const std::string_view name,
 
 template <_VIRTUALIZABLE_CONCEPT_IMPL(T)>
 inline const typename T::Desc &
-FrameGraph::getDescriptor(FrameGraphResource id) const {
-  return _getResourceEntry(id).getDescriptor<T>();
+FrameGraph::get_descriptor(FrameGraphResource id) const {
+  return _get_resource_entry(id).get_descriptor<T>();
 }
 
 template <_VIRTUALIZABLE_CONCEPT_IMPL(T)>
@@ -59,7 +59,7 @@ FrameGraph::_create(const ResourceEntry::Type type, const std::string_view name,
                     const typename T::Desc &desc, T &&resource) {
   const auto resourceId = static_cast<uint32_t>(m_resourceRegistry.size());
   m_resourceRegistry.emplace_back( ResourceEntry{type, resourceId, desc, std::forward<T>(resource)});
-  return _createResourceNode(name, resourceId).getId();
+  return _create_resource_node(name, resourceId).getId();
 }
 
 //
@@ -81,10 +81,10 @@ FrameGraph::Builder::create(const std::string_view name,
 template <_VIRTUALIZABLE_CONCEPT_IMPL(T)>
 inline T &FrameGraphPassResources::get(FrameGraphResource id) {
   assert(m_passNode.reads(id) || m_passNode.creates(id) || m_passNode.writes(id));
-  return m_frameGraph._getResourceEntry(id).get<T>();
+  return m_frameGraph._get_resource_entry(id).get<T>();
 }
 template <_VIRTUALIZABLE_CONCEPT_IMPL(T)>
-inline const typename T::Desc& FrameGraphPassResources::getDescriptor(FrameGraphResource id) const {
+inline const typename T::Desc& FrameGraphPassResources::get_descriptor(FrameGraphResource id) const {
   assert(m_passNode.reads(id) || m_passNode.creates(id) || m_passNode.writes(id));
-  return m_frameGraph.getDescriptor<T>(id);
+  return m_frameGraph.get_descriptor<T>(id);
 }

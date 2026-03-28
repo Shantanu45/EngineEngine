@@ -5,20 +5,20 @@
 //
 
 inline void ResourceEntry::create(void *allocator) {
-  assert(isTransient());
+  assert(is_transient());
   m_concept->create(allocator);
 }
 inline void ResourceEntry::destroy(void *allocator) {
-  assert(isTransient());
+  assert(is_transient());
   m_concept->destroy(allocator);
 }
 
 template <typename T> inline T &ResourceEntry::get() {
-  return _getModel<T>()->resource;
+  return _get_model<T>()->resource;
 }
 template <typename T>
-inline const typename T::Desc &ResourceEntry::getDescriptor() const {
-  return _getModel<T>()->descriptor;
+inline const typename T::Desc &ResourceEntry::get_descriptor() const {
+  return _get_model<T>()->descriptor;
 }
 
 //
@@ -31,7 +31,7 @@ inline ResourceEntry::ResourceEntry(const Type type, uint32_t id,
     : m_type{type}, m_id{id}, m_version{kInitialVersion},
       m_concept{std::make_unique<Model<T>>(desc, std::forward<T>(obj))} {}
 
-template <typename T> inline auto *ResourceEntry::_getModel() const {
+template <typename T> inline auto *ResourceEntry::_get_model() const {
   auto *model = dynamic_cast<Model<T> *>(m_concept.get());
   assert(model && "Invalid type");
   return model;
@@ -55,13 +55,13 @@ inline void ResourceEntry::Model<T>::destroy(void *allocator) {
 }
 
 template <typename T>
-inline std::string ResourceEntry::Model<T>::toString() const {
+inline std::string ResourceEntry::Model<T>::to_string() const {
 #if __cplusplus >= 202002L
-  if constexpr (has_toString<T>)
+  if constexpr (has_to_string<T>)
 #else
-  if constexpr (has_toString<T>::value)
+  if constexpr (has_to_string<T>::value)
 #endif
-    return T::toString(descriptor);
+    return T::to_string(descriptor);
   else
     return "";
 }

@@ -5,10 +5,12 @@ file(GLOB HEADERS CONFIGURE_DEPENDS "*.h")
 
 file(GLOB FrameGraph CONFIGURE_DEPENDS "fg/*.cpp")
 file(GLOB FrameGraphHeaders CONFIGURE_DEPENDS "fg/*.h")
+file(GLOB FrameGraphInl CONFIGURE_DEPENDS "fg/*.inl")
 
 set(FG 
     ${FrameGraph}
     ${FrameGraphHeaders}
+    ${FrameGraphInl}
 )
 
 source_group("framegraph" FILES ${FG})

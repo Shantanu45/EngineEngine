@@ -45,7 +45,7 @@ public:
                                            uint32_t flags = kFlagsIgnored);
 
     /** Ensures that this pass is not culled during the compilation phase. */
-    Builder &setSideEffect() {
+    Builder &set_side_effect() {
       m_passNode.m_hasSideEffect = true;
       return *this;
     }
@@ -69,12 +69,12 @@ public:
    * (must capture by value due to this).
    */
   template <typename Data = NoData, typename Setup, typename Execute>
-  const Data &addCallbackPass(const std::string_view name, Setup &&setup,
+  const Data &add_callback_pass(const std::string_view name, Setup &&setup,
                               Execute &&exec);
 
   template <_VIRTUALIZABLE_CONCEPT(T)>
   [[nodiscard]] const typename T::Desc &
-  getDescriptor(FrameGraphResource id) const;
+  get_descriptor(FrameGraphResource id) const;
 
   template <_VIRTUALIZABLE_CONCEPT(T)>
   /** Imports the given resource T into FrameGraph. */
@@ -94,7 +94,7 @@ public:
 
 private:
   [[nodiscard]] PassNode &
-  _createPassNode(const std::string_view name,
+  _create_pass_node(const std::string_view name,
                   std::unique_ptr<FrameGraphPassConcept> &&);
 
   template <_VIRTUALIZABLE_CONCEPT(T)>
@@ -103,29 +103,29 @@ private:
                                            const typename T::Desc &, T &&);
 
   [[nodiscard]] ResourceNode &
-  _createResourceNode(const std::string_view name, uint32_t resourceId,
+  _create_resource_node(const std::string_view name, uint32_t resourceId,
                       uint32_t version = ResourceEntry::kInitialVersion);
   /** Increments ResourceEntry version and produces a renamed handle. */
   [[nodiscard]] FrameGraphResource _clone(FrameGraphResource id);
 
   [[nodiscard]] const ResourceNode &
-  _getResourceNode(FrameGraphResource id) const;
+  _get_resource_node(FrameGraphResource id) const;
   [[nodiscard]] const ResourceEntry &
-  _getResourceEntry(FrameGraphResource id) const;
+  _get_resource_entry(FrameGraphResource id) const;
   [[nodiscard]] const ResourceEntry &
-  _getResourceEntry(const ResourceNode &) const;
+  _get_resource_entry(const ResourceNode &) const;
 
-  [[nodiscard]] decltype(auto) _getResourceNode(FrameGraphResource id) {
+  [[nodiscard]] decltype(auto) _get_resource_node(FrameGraphResource id) {
     return const_cast<ResourceNode &>(
-      const_cast<const FrameGraph *>(this)->_getResourceNode(id));
+      const_cast<const FrameGraph *>(this)->_get_resource_node(id));
   }
-  [[nodiscard]] decltype(auto) _getResourceEntry(FrameGraphResource id) {
+  [[nodiscard]] decltype(auto) _get_resource_entry(FrameGraphResource id) {
     return const_cast<ResourceEntry &>(
-      const_cast<const FrameGraph *>(this)->_getResourceEntry(id));
+      const_cast<const FrameGraph *>(this)->_get_resource_entry(id));
   }
-  [[nodiscard]] decltype(auto) _getResourceEntry(const ResourceNode &node) {
+  [[nodiscard]] decltype(auto) _get_resource_entry(const ResourceNode &node) {
     return const_cast<ResourceEntry &>(
-      const_cast<const FrameGraph *>(this)->_getResourceEntry(node));
+      const_cast<const FrameGraph *>(this)->_get_resource_entry(node));
   }
 
 private:
@@ -172,7 +172,7 @@ public:
   [[nodiscard]] T &get(FrameGraphResource id);
 
   template <_VIRTUALIZABLE_CONCEPT(T)>
-  [[nodiscard]] const typename T::Desc& getDescriptor(FrameGraphResource id) const;
+  [[nodiscard]] const typename T::Desc& get_descriptor(FrameGraphResource id) const;
 
 private:
   FrameGraphPassResources(FrameGraph &fg, const PassNode &node)
@@ -182,5 +182,19 @@ private:
   FrameGraph &m_frameGraph;
   const PassNode &m_passNode;
 };
+
+#include <fstream>
+
+static inline void save_graph_to_file(const FrameGraph& fg, const std::string& filename) {
+	// Open a file stream for writing
+	std::ofstream file(filename);
+
+	if (file.is_open()) {
+		// Use the overloaded operator<< to write the Graphviz data to the file
+		file << fg;
+
+		file.close();
+	}
+}
 
 #include "frame_graph.inl"

@@ -11,7 +11,7 @@ namespace graphviz {
 
 namespace {
 
-[[nodiscard]] auto toString(const Color color) {
+[[nodiscard]] auto to_string(const Color color) {
 #define CASE(Value)                                                            \
   case Color::Value:                                                           \
     return #Value
@@ -170,7 +170,7 @@ namespace {
 
 #undef CASE
 }
-[[nodiscard]] auto toString(const RankDir rankDir) {
+[[nodiscard]] auto to_string(const RankDir rankDir) {
 #define CASE(Value)                                                            \
   case RankDir::Value:                                                         \
     return #Value
@@ -188,7 +188,7 @@ namespace {
 }
 
 std::ostream &operator<<(std::ostream &os, const Graph::Style &style) {
-  os << "graph [style=invis, rankdir=" << toString(style.rankDir)
+  os << "graph [style=invis, rankdir=" << to_string(style.rankDir)
      << " ordering=out, splines=spline]"
         "\n"
         "node [shape=record, fontname="
@@ -200,7 +200,7 @@ std::ostream &operator<<(std::ostream &os, const Graph::Style &style) {
 
 std::ostream &operator<<(std::ostream &os, const Graph::Vertex &vertex) {
   os << vertex.key << "[label=<" << vertex.label << ">"
-     << R"( style="rounded,filled", fillcolor=)" << toString(vertex.fillcolor)
+     << R"( style="rounded,filled", fillcolor=)" << to_string(vertex.fillcolor)
      << "]\n";
   if (!vertex.cluster.empty()) {
     os << "subgraph cluster_" << vertex.key << " { " << vertex.key << " ";
@@ -217,7 +217,7 @@ std::ostream &operator<<(std::ostream &os, const Graph::Edge &edge) {
     for (const auto &vertex : edge.vertices) {
       os << vertex << " ";
     }
-    os << "} [color=" << toString(edge.color) << "]\n";
+    os << "} [color=" << to_string(edge.color) << "]\n";
   }
   return os;
 }
@@ -276,7 +276,7 @@ std::ostream &operator<<(std::ostream &os, const Graph &graph) {
       version > ResourceEntry::kInitialVersion) {
     oss << "   <FONT>v" << version << "</FONT>";
   }
-  oss << "<BR/>" << entry.toString() << "} | {Index: " << entry.getId()
+  oss << "<BR/>" << entry.to_string() << "} | {Index: " << entry.get_id()
       << "<BR/>"
       << "Refs : " << node.getRefCount() << "} }";
   return oss.str();
@@ -323,7 +323,7 @@ void Writer::operator()(const ResourceNode &node, const ResourceEntry &entry,
   graph.vertices.emplace_back(Graph::Vertex{
     key,
     stringify(node, entry),
-    entry.isImported() ? colors.resource.imported : colors.resource.transient,
+    entry.is_imported() ? colors.resource.imported : colors.resource.transient,
   });
 
   auto &edge =
@@ -333,7 +333,7 @@ void Writer::operator()(const ResourceNode &node, const ResourceEntry &entry,
       edge.vertices.emplace_back(makeKey(pass));
     }
   }
-  if (entry.isImported()) graph.imported.emplace_back(entry.getId());
+  if (entry.is_imported()) graph.imported.emplace_back(entry.get_id());
 }
 
 void Writer::flush(std::ostream &os) const { os << graph << "\n"; }
