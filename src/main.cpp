@@ -75,6 +75,8 @@ struct FrameGraphTexture {
 		barrier2.src_access = RDD::BARRIER_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 		barrier2.subresources = { RDD::TEXTURE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
 		barrier2.texture = rc.device->texture_id_from_rid(texture);
+		rc.device->apply_image_barrier(rc.command_buffer, RDD::PipelineStageBits::PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+			RDD::PipelineStageBits::PIPELINE_STAGE_FRAGMENT_SHADER_BIT, { &barrier2, 1 });
 	}
 
 	void preWrite(const Desc& desc, uint32_t flags, void* ctx) {
@@ -118,7 +120,7 @@ void add_basic_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
 
 			[image_handle](FrameGraph::Builder& builder, basic_pass_resource& data)
 			{
-				data.scene = builder.write(image_handle);
+				data.scene = builder.write(image_handle, 1u);
 			},
 
 			[=](const basic_pass_resource& data,
@@ -147,6 +149,8 @@ void add_basic_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
 				rc.wsi->bind_and_draw_indexed(cmd, "two_cubes");
 
 				rc.wsi->end_render_pass(cmd);
+
+				rc.device->_submit_transfer_barriers(cmd);
 			});
 }
 
@@ -159,7 +163,8 @@ void add_blit_pass(FrameGraph& fg, FrameGraphBlackboard& bb)
 
 		[&](FrameGraph::Builder& builder, basic_pass_resource& data)
 		{
-			data.scene = builder.read(basic.scene);
+			data.scene = builder.read(basic.scene, 1u);
+			builder.setSideEffect();		// mark non cullable
 		},
 
 		[=](const basic_pass_resource& data,
@@ -172,7 +177,8 @@ void add_blit_pass(FrameGraph& fg, FrameGraphBlackboard& bb)
 			auto& scene = resources.get<FrameGraphTexture>(data.scene);
 
 			wsi->blit_render_target_to_screen(scene.texture);
-		});
+		}
+	);
 }
 
 //void add_basic_pass(FrameGraph& fg, FrameGraphBlackboard& bb, FrameGraphResource image_handle, RDD::RenderPassID render_pass, RDD::FramebufferID frame_buffer, RID pipeline, RID uniform_set) {
@@ -241,7 +247,7 @@ struct TriangleApplication : EE::Application
 			.set_vertex_format(vertex_format)
 			.build(fb_format);
 
-		RDC::TextureFormat tf;
+		tf;
 		tf.width = device->screen_get_width();
 		tf.height = device->screen_get_height();
 		tf.array_layers = 1;
@@ -335,36 +341,56 @@ struct TriangleApplication : EE::Application
 		std::vector<Rect2i> viewport{ Rect2i(0, 0, device->screen_get_width(), device->screen_get_height()) };
 		auto cmd_buffer = device->get_current_command_buffer();
 
-		RDD::TextureBarrier barrier;
-		barrier.src_access = 0;
-		barrier.dst_access = RDD::BARRIER_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-		barrier.prev_layout = RDD::TEXTURE_LAYOUT_UNDEFINED;
-		barrier.next_layout = RDD::TEXTURE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-		barrier.subresources = { RDD::TEXTURE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
-		barrier.texture = device->texture_id_from_rid(texture_fb);
-		device->apply_image_barrier(cmd_buffer, RDD::PipelineStageBits::PIPELINE_STAGE_TOP_OF_PIPE_BIT, RDD::PipelineStageBits::PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, { &barrier, 1 });
+		FrameGraphTexture::Desc scene_desc{
+			tf,
+			RD::TextureView(),
+			"scene texture"
+		};
 
-		//============================================================================ RP 1 ===========================
-		device->begin_render_pass(render_pass, frame_buffer, viewport[0], Color());
-		//
-		device->bind_render_pipeline(cmd_buffer, pipeline);
-		device->bind_uniform_set(device->get_shader_rid("triangle_shader"), uniform_set, 0);
-		wsi->bind_and_draw_indexed(cmd_buffer, "two_cubes");
-		wsi->end_render_pass(cmd_buffer);
+		FrameGraphTexture scene_tex;
+		scene_tex.texture = texture_fb;
 
-		device->_submit_transfer_barriers(cmd_buffer);
+		FrameGraphResource scene_res = fg.import("scene texture", scene_desc, std::move(scene_tex));
+		add_basic_pass(fg, bb, scene_res, render_pass, frame_buffer, pipeline, uniform_set);
+		add_blit_pass(fg, bb);
 
-		RDD::TextureBarrier barrier2;
-		barrier2.dst_access = RDD::BARRIER_ACCESS_SHADER_READ_BIT;
-		barrier2.next_layout = RDD::TEXTURE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		barrier2.prev_layout = RDD::TEXTURE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-		barrier2.src_access = RDD::BARRIER_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-		barrier2.subresources = { RDD::TEXTURE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
-		barrier2.texture = device->texture_id_from_rid(texture_fb);
-		//============================================================================ END RP 1 ===========================
-		device->apply_image_barrier(cmd_buffer, RDD::PipelineStageBits::PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, RDD::PipelineStageBits::PIPELINE_STAGE_FRAGMENT_SHADER_BIT, { &barrier2, 1 });
-		//============================================================================ BLIT ===========================
-		wsi->blit_render_target_to_screen(texture_fb);
+		fg.compile();
+
+		RenderContext rc;
+		rc.command_buffer = device->get_current_command_buffer();
+		rc.device = device;
+		rc.wsi = wsi;
+		fg.execute(&rc, &rc);
+		//RDD::TextureBarrier barrier;
+		//barrier.src_access = 0;
+		//barrier.dst_access = RDD::BARRIER_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+		//barrier.prev_layout = RDD::TEXTURE_LAYOUT_UNDEFINED;
+		//barrier.next_layout = RDD::TEXTURE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		//barrier.subresources = { RDD::TEXTURE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+		//barrier.texture = device->texture_id_from_rid(texture_fb);
+		//device->apply_image_barrier(cmd_buffer, RDD::PipelineStageBits::PIPELINE_STAGE_TOP_OF_PIPE_BIT, RDD::PipelineStageBits::PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, { &barrier, 1 });
+
+		////============================================================================ RP 1 ===========================
+		//device->begin_render_pass(render_pass, frame_buffer, viewport[0], Color());
+		////
+		//device->bind_render_pipeline(cmd_buffer, pipeline);
+		//device->bind_uniform_set(device->get_shader_rid("triangle_shader"), uniform_set, 0);
+		//wsi->bind_and_draw_indexed(cmd_buffer, "two_cubes");
+		//wsi->end_render_pass(cmd_buffer);
+
+		//device->_submit_transfer_barriers(cmd_buffer);
+
+		//RDD::TextureBarrier barrier2;
+		//barrier2.dst_access = RDD::BARRIER_ACCESS_SHADER_READ_BIT;
+		//barrier2.next_layout = RDD::TEXTURE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		//barrier2.prev_layout = RDD::TEXTURE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		//barrier2.src_access = RDD::BARRIER_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+		//barrier2.subresources = { RDD::TEXTURE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+		//barrier2.texture = device->texture_id_from_rid(texture_fb);
+		////============================================================================ END RP 1 ===========================
+		//device->apply_image_barrier(cmd_buffer, RDD::PipelineStageBits::PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, RDD::PipelineStageBits::PIPELINE_STAGE_FRAGMENT_SHADER_BIT, { &barrier2, 1 });
+		////============================================================================ BLIT ===========================
+		//wsi->blit_render_target_to_screen(texture_fb);
 
 		//device->begin_for_screen(DisplayServerEnums::MAIN_WINDOW_ID);
 	}
@@ -382,6 +408,8 @@ private:
 	RDD::RenderPassID render_pass;
 	RDD::FramebufferID frame_buffer;
 	RID texture_fb;
+	RDC::TextureFormat tf;
+
 };
 
 namespace EE
