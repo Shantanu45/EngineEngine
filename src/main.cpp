@@ -52,6 +52,9 @@ struct TriangleApplication : EE::Application
 		wsi->set_vertex_data_mode(Rendering::WSI::VERTEX_DATA_MODE::INTERLEVED_DATA);
 		wsi->set_index_buffer_format(Rendering::RenderingDeviceCommons::IndexBufferFormat::INDEX_BUFFER_FORMAT_UINT32);
 
+		wsi->create_new_vertex_format(wsi->get_default_vertex_attribute(), Rendering::VERTEX_FORMAT_VARIATIONS::DEFAULT);
+		auto vertex_format = wsi->get_vertex_format_by_type(Rendering::VERTEX_FORMAT_VARIATIONS::DEFAULT);
+
 		wsi->load_gltf("assets://gltf/two_cubes.glb",  "two_cubes");
 
 		auto device = wsi->get_rendering_device();
@@ -65,7 +68,7 @@ struct TriangleApplication : EE::Application
 		screen_attachment.push_back(attachment);
 		auto fb_format = device->framebuffer_format_create(screen_attachment);
 
-		auto vertex_format = device->vertex_format_create(wsi->get_default_vertex_attribute());
+		
 
 		pipeline = Rendering::PipelineBuilder{}
 			.set_shader({ "assets://shaders/triangle_v2.vert", "assets://shaders/triangle_v2.frag" }, "triangle_shader")

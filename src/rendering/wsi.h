@@ -24,6 +24,12 @@ namespace Rendering
 		Size2i window_resolution;
 	};
 
+	enum class VERTEX_FORMAT_VARIATIONS
+	{
+		DEFAULT,
+		COUNT
+	};
+
 	class WSI
 	{
 		struct PrimitiveData {
@@ -75,14 +81,14 @@ namespace Rendering
 
 		void set_wsi_platform_data(DisplayServerEnums::WindowID window, WindowData data);
 
-		Error load_gltf(const std::string& p_path, const std::string& p_name);
+		void create_new_vertex_format(const std::vector<RenderingDeviceCommons::VertexAttribute>& p_attributes, VERTEX_FORMAT_VARIATIONS p_type);
+		RenderingDevice::VertexFormatID get_vertex_format_by_type(VERTEX_FORMAT_VARIATIONS p_type);
+
+		Error load_gltf(const std::string& p_path, const std::string& p_name, VERTEX_FORMAT_VARIATIONS p_type = VERTEX_FORMAT_VARIATIONS::DEFAULT);
+
+	public:
+
 		std::vector<RenderingDeviceCommons::VertexAttribute> get_default_vertex_attribute();
-
-		void push_vertex_data(void* vertex_data, size_t size);
-		void push_index_data(void* data, size_t size);
-
-		void clear_vertex_data() { vertex_data.clear(); }
-		void clear_index_data() { index_data.clear(); }
 
 		void submit_transfer_workers();
 
@@ -104,7 +110,6 @@ namespace Rendering
 		void _free_pending_resources(int p_frame);
 		std::vector<uint8_t> _get_attrib_interleaved(const std::vector<RenderingDeviceCommons::VertexAttribute>& attribs, std::vector<uint8_t> vertex_data);
 
-		void _create_vertex_and_index_buffers(uint32_t total_indices, RenderingDevice::VertexFormatID p_vertex_format, MeshData& p_mesh_data);
 		std::unique_ptr<RenderingContextDriver> rendering_context = nullptr;
 		RenderingDevice* rendering_device = nullptr;
 
@@ -121,13 +126,13 @@ namespace Rendering
 		std::string rendering_driver;
 		bool main_window_created = false;
 
-		RenderingDevice::VertexFormatID vertex_format;
+		//RenderingDevice::VertexFormatID vertex_format;
 
 		DisplayServerEnums::WindowID active_window = DisplayServerEnums::INVALID_WINDOW_ID;
 
-		std::vector<uint8_t> vertex_data{};
-		std::vector<uint8_t> index_data{};
-		uint32_t index_count = 0;
+		//std::vector<uint8_t> vertex_data{};
+		//std::vector<uint8_t> index_data{};
+		//uint32_t index_count = 0;
 
 		VERTEX_DATA_MODE vertex_data_mode = VERTEX_DATA_MODE::INTERLEVED_DATA;
 
@@ -135,13 +140,12 @@ namespace Rendering
 
 		RID_Owner<MeshPrimitive, true> mesh_owner;
 
-		std::unordered_map<std::string, MeshData> meshes;
+		std::unordered_map<std::string, MeshData> mesh_list;
 
 		std::unique_ptr<GltfLoader> gltf_loader = nullptr;
 
-		//std::unordered_map<RID, RID> vertex_arrays;		// prim to vertex array
-		//std::unordered_map<RID, RID> index_arrays;
-
 		std::unique_ptr<RendererCompositor> rd;
+
+		std::unordered_map<VERTEX_FORMAT_VARIATIONS, RenderingDevice::VertexFormatID> vertex_format_map;
 	};
 }

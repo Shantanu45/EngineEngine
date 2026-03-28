@@ -137,7 +137,7 @@ namespace Rendering
 
 	void WSI::bind_and_draw_indexed(RenderingDeviceDriver::CommandBufferID p_command_buffer, const std::string& p_mesh_name)
 	{
-		auto primitives = meshes[p_mesh_name].primitives;
+		auto primitives = mesh_list[p_mesh_name].primitives;
 		for (auto& p : primitives)
 		{
 			rendering_device->bind_vertex_array(p.second.vertex_array);
@@ -151,10 +151,24 @@ namespace Rendering
 		windows.insert({ window, data });
 	}
 
-	Error WSI::load_gltf(const std::string& p_path, const std::string& p_name)
+	void WSI::create_new_vertex_format(const std::vector<RenderingDeviceCommons::VertexAttribute>& p_attributes, VERTEX_FORMAT_VARIATIONS p_type)
+	{
+		DEBUG_ASSERT(p_type < VERTEX_FORMAT_VARIATIONS::COUNT);
+		vertex_format_map[p_type] = rendering_device->vertex_format_create(p_attributes);
+	}
+
+	Rendering::RenderingDevice::VertexFormatID WSI::get_vertex_format_by_type(VERTEX_FORMAT_VARIATIONS p_type)
+	{
+		DEBUG_ASSERT(vertex_format_map.contains(p_type),  "type does not exists, create vertex format via create_new_vertex_format() first");
+		return vertex_format_map[p_type];
+	}
+
+	Error WSI::load_gltf(const std::string& p_path, const std::string& p_name, VERTEX_FORMAT_VARIATIONS p_type /*= VERTEX_FORMAT_VARIATIONS::DEFAULT*/)
 	{
 		if (gltf_loader->load(p_path) != OK)
 			return ERR_FILE_NOT_FOUND;
+
+		RenderingDevice::VertexFormatID vertex_format = get_vertex_format_by_type(p_type);
 
 		uint32_t total_vertices = 0;
 		uint32_t total_indices = 0;
@@ -173,16 +187,37 @@ namespace Rendering
 			uint64_t vbSize = p.vertices.size() * sizeof(Rendering::Vertex);
 			uint64_t ibSize = p.indices.size() * ((index_data_format == Rendering::RenderingDeviceCommons::IndexBufferFormat::INDEX_BUFFER_FORMAT_UINT16)  ?  sizeof(uint16_t) : sizeof(uint32_t));
 
-			push_vertex_data(p.vertices.data(), vbSize);
-			push_index_data(p.indices.data(), ibSize);
+			// add to buffer
+			const size_t vb_offset = vertex_data.size();
+			vertex_data.resize(vb_offset + vbSize);
+			memcpy(vertex_data.data() + vb_offset, p.vertices.data(), vbSize);
+
+			const size_t ib_offset = index_data.size();
+			index_data.resize(ib_offset + ibSize);
+			memcpy(index_data.data() + ib_offset, p.indices.data(), ibSize);
 
 			total_vertices += p.vertices.size();
 			total_indices += p.indices.size();
 		}
 		// TODO: should not stay here
-		vertex_format = rendering_device->vertex_format_create(get_default_vertex_attribute());
-		_create_vertex_and_index_buffers(total_indices, vertex_format, mesh_data);
-		meshes[p_name] = mesh_data;
+		/*create_vertex_format({});*/
+
+
+		DEBUG_ASSERT(mesh_data.primitives.size() > 0);
+		DEBUG_ASSERT(!vertex_data.empty());
+
+		RID vertex_buffer = rendering_device->vertex_buffer_create(vertex_data.size(), vertex_data);
+
+		RID index_buffer = rendering_device->index_buffer_create(total_indices, index_data_format, index_data);
+
+		for (auto& p : mesh_data.primitives)
+		{
+			auto prim = mesh_owner.get_or_null(p.first);
+			p.second.vertex_array = rendering_device->vertex_array_create(prim->vertices.size(), vertex_format, { vertex_buffer }, { p.second.vertex_byte_offset });
+			p.second.index_array = rendering_device->index_array_create(index_buffer, p.second.indexOffset, p.second.index_count);
+		}
+
+		mesh_list[p_name] = mesh_data;
 		return OK;
 	}
 
@@ -194,33 +229,6 @@ namespace Rendering
 		vertex_attributes.emplace_back(get_vertex_attribute(0, 2, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32_SFLOAT, offsetof(Rendering::Vertex, texcoord), sizeof(Rendering::Vertex)));
 		vertex_attributes.emplace_back(get_vertex_attribute(0, 3, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32B32A32_SFLOAT, offsetof(Rendering::Vertex, tangent), sizeof(Rendering::Vertex)));
 		return vertex_attributes;
-	}
-
-	void WSI::push_vertex_data(void* data, size_t size)
-	{
-		const size_t offset = vertex_data.size();
-		vertex_data.resize(offset + size);
-		memcpy(vertex_data.data() + offset, data, size);
-	}
-
-	void WSI::push_index_data(void* data, size_t size)
-	{
-		const size_t offset = index_data.size();
-		index_data.resize(offset + size);
-		memcpy(index_data.data() + offset, data, size);
-
-		switch (index_data_format)
-		{
-		case Rendering::RenderingDeviceCommons::INDEX_BUFFER_FORMAT_UINT16:
-			index_count = index_data.size() / sizeof(uint16_t);
-			break;
-		case Rendering::RenderingDeviceCommons::INDEX_BUFFER_FORMAT_UINT32:
-			index_count = index_data.size() / sizeof(uint32_t);
-			break;
-		default:
-			index_count = 0;
-			break;
-		}
 	}
 
 	void WSI::submit_transfer_workers()
@@ -293,34 +301,5 @@ namespace Rendering
 		return interleved_data;
 	}
 
-	void WSI::_create_vertex_and_index_buffers(uint32_t total_indices, RenderingDevice::VertexFormatID p_vertex_format, MeshData& p_mesh_data)
-	{
-		DEBUG_ASSERT(p_mesh_data.primitives.size() > 0);
-		DEBUG_ASSERT(!vertex_data.empty());
-
-		PackedByteArray interleved;
-
-		//if (vertex_data_mode == VERTEX_DATA_MODE::SEPERATE)
-		//{
-		//	 interleved = _get_attrib_interleaved(vertex_attributes, vertex_data);
-		//}
-		//else
-		//{
-			interleved = vertex_data;
-		//}
-
-		RID vertex_buffer = rendering_device->vertex_buffer_create(interleved.size(), interleved);
-
-		RID index_buffer = rendering_device->index_buffer_create(total_indices, index_data_format, index_data);
-
-		for (auto& p: p_mesh_data.primitives)
-		{
-			auto prim = mesh_owner.get_or_null(p.first);
-			p.second.vertex_array = rendering_device->vertex_array_create(prim->vertices.size(), p_vertex_format, { vertex_buffer }, { p.second.vertex_byte_offset });
-			p.second.index_array = rendering_device->index_array_create(index_buffer, p.second.indexOffset, p.second.index_count);
-			//vertex_arrays.insert({ p.first, rendering_device->vertex_array_create(prim->vertices.size(), p_vertex_format, {vertex_buffer}, { p.second.vertex_byte_offset  }) });
-			//index_arrays.insert({ p.first, rendering_device->index_array_create(index_buffer, p.second.indexOffset, p.second.index_count) });
-		}
-	}
 
 }
