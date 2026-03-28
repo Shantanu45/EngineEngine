@@ -164,7 +164,7 @@ void add_blit_pass(FrameGraph& fg, FrameGraphBlackboard& bb)
 		[&](FrameGraph::Builder& builder, basic_pass_resource& data)
 		{
 			data.scene = builder.read(basic.scene, 1u);
-			builder.setSideEffect();		// mark non cullable
+			builder.setSideEffect();		// mark as non cullable
 		},
 
 		[=](const basic_pass_resource& data,
@@ -361,38 +361,6 @@ struct TriangleApplication : EE::Application
 		rc.device = device;
 		rc.wsi = wsi;
 		fg.execute(&rc, &rc);
-		//RDD::TextureBarrier barrier;
-		//barrier.src_access = 0;
-		//barrier.dst_access = RDD::BARRIER_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-		//barrier.prev_layout = RDD::TEXTURE_LAYOUT_UNDEFINED;
-		//barrier.next_layout = RDD::TEXTURE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-		//barrier.subresources = { RDD::TEXTURE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
-		//barrier.texture = device->texture_id_from_rid(texture_fb);
-		//device->apply_image_barrier(cmd_buffer, RDD::PipelineStageBits::PIPELINE_STAGE_TOP_OF_PIPE_BIT, RDD::PipelineStageBits::PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, { &barrier, 1 });
-
-		////============================================================================ RP 1 ===========================
-		//device->begin_render_pass(render_pass, frame_buffer, viewport[0], Color());
-		////
-		//device->bind_render_pipeline(cmd_buffer, pipeline);
-		//device->bind_uniform_set(device->get_shader_rid("triangle_shader"), uniform_set, 0);
-		//wsi->bind_and_draw_indexed(cmd_buffer, "two_cubes");
-		//wsi->end_render_pass(cmd_buffer);
-
-		//device->_submit_transfer_barriers(cmd_buffer);
-
-		//RDD::TextureBarrier barrier2;
-		//barrier2.dst_access = RDD::BARRIER_ACCESS_SHADER_READ_BIT;
-		//barrier2.next_layout = RDD::TEXTURE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		//barrier2.prev_layout = RDD::TEXTURE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-		//barrier2.src_access = RDD::BARRIER_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-		//barrier2.subresources = { RDD::TEXTURE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
-		//barrier2.texture = device->texture_id_from_rid(texture_fb);
-		////============================================================================ END RP 1 ===========================
-		//device->apply_image_barrier(cmd_buffer, RDD::PipelineStageBits::PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, RDD::PipelineStageBits::PIPELINE_STAGE_FRAGMENT_SHADER_BIT, { &barrier2, 1 });
-		////============================================================================ BLIT ===========================
-		//wsi->blit_render_target_to_screen(texture_fb);
-
-		//device->begin_for_screen(DisplayServerEnums::MAIN_WINDOW_ID);
 	}
 
 private:
