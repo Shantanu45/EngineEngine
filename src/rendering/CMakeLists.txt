@@ -3,9 +3,20 @@ set(PROJECT_NAME rendering)
 file(GLOB SOURCES CONFIGURE_DEPENDS "*.cpp")
 file(GLOB HEADERS CONFIGURE_DEPENDS "*.h")
 
+file(GLOB FrameGraph CONFIGURE_DEPENDS "fg/*.cpp")
+file(GLOB FrameGraphHeaders CONFIGURE_DEPENDS "fg/*.h")
+
+set(FG 
+    ${FrameGraph}
+    ${FrameGraphHeaders}
+)
+
+source_group("framegraph" FILES ${FG})
+
 add_library(${PROJECT_NAME} STATIC 
 ${SOURCES} 
 ${HEADERS}
+${FG}
 )
 
 setup_msvc_options(${PROJECT_NAME})

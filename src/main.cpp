@@ -15,10 +15,11 @@
 #include "application/application_entry/application_entry.h"
 #include "libassert/assert.hpp"
 #include "rendering/image_loader.h"
-#include <cmath> 
-#include <cstddef>
 #include "rendering/renderer_compositor.h"
 #include "rendering/pipeline_builder.h"
+#include "rendering/fg/frame_graph.h"
+#include "rendering/fg/blackboard.h"
+
 
  //struct alignas(16) UBO {
  //	float x, y, z;
@@ -88,7 +89,6 @@ struct TriangleApplication : EE::Application
 		render_pass = device->render_pass_from_format_id(fb_format);
 		frame_buffer = device->create_framebuffer_from_format_id(fb_format, { texture_fb }, device->screen_get_width(), device->screen_get_height());
 
-
 		state_uniform = device->uniform_buffer_create(sizeof(UBO));
 
 		auto fs = Services::get().get<FilesystemInterface>();
@@ -146,9 +146,6 @@ struct TriangleApplication : EE::Application
 
 		auto device = wsi->get_rendering_device();
 
-		double intpart;
-		double fracpart = std::modf(elapsed_time, &intpart);
-
 		UBO ubo{};
 		ubo.model = glm::mat4(1.0f); // identity for now
 		ubo.view = glm::lookAt(
@@ -200,8 +197,6 @@ struct TriangleApplication : EE::Application
 		wsi->blit_render_target_to_screen(texture_fb);
 
 		//device->begin_for_screen(DisplayServerEnums::MAIN_WINDOW_ID);
-
-
 	}
 
 private:
@@ -232,7 +227,7 @@ namespace EE
 		}
 		catch (const std::exception& e)
 		{
-			//LOGE("application_create() threw exception: %s\n", e.what());
+			LOGE("application_create() threw exception: %s\n", e.what());
 			return nullptr;
 		}
 	}
