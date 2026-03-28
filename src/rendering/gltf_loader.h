@@ -1,4 +1,10 @@
-// gltf_loader.h
+/*****************************************************************//**
+ * \file   gltf_loader.h
+ * \brief  
+ * 
+ * \author Shantanu Kumar
+ * \date   March 2026
+ *********************************************************************/
 #pragma once
 
 #include <string>

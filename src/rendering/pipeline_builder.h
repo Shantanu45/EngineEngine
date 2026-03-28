@@ -1,3 +1,10 @@
+/*****************************************************************//**
+ * \file   pipeline_builder.h
+ * \brief  
+ * 
+ * \author Shantanu Kumar
+ * \date   March 2026
+ *********************************************************************/
 #pragma once
 #include "rendering_device.h"
 
