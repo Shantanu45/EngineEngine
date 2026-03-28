@@ -22,6 +22,7 @@
 
 using RD = Rendering::RenderingDevice;
 using RDC = Rendering::RenderingDeviceCommons;
+using RDD = Rendering::RenderingDeviceDriver;
 
 struct TriangleApplication : EE::Application
 {
@@ -29,15 +30,15 @@ struct TriangleApplication : EE::Application
 	//	float x, y, z;
 	//	float _pad;  // pad to 16 bytes
 	//};
-			//Rendering::RenderingDeviceCommons::TextureFormat c_tf;
+			//RDC::TextureFormat c_tf;
 		//c_tf.width = device->screen_get_width();
 		//c_tf.height = device->screen_get_height();
 		//c_tf.array_layers = 1;
-		//c_tf.texture_type = Rendering::RenderingDeviceCommons::TEXTURE_TYPE_2D;
-		//c_tf.usage_bits = Rendering::RenderingDeviceCommons::TEXTURE_USAGE_CPU_READ_BIT | Rendering::RenderingDeviceCommons::TEXTURE_USAGE_CAN_COPY_FROM_BIT;
-		//c_tf.format = Rendering::RenderingDeviceCommons::DATA_FORMAT_R8G8B8A8_UNORM;
+		//c_tf.texture_type = RDC::TEXTURE_TYPE_2D;
+		//c_tf.usage_bits = RDC::TEXTURE_USAGE_CPU_READ_BIT | RDC::TEXTURE_USAGE_CAN_COPY_FROM_BIT;
+		//c_tf.format = RDC::DATA_FORMAT_R8G8B8A8_UNORM;
 
-		//copy_texture = device->texture_create(c_tf, Rendering::RenderingDevice::TextureView());
+		//copy_texture = device->texture_create(c_tf, RD::TextureView());
 
 	struct alignas(16) UBO {
 		glm::mat4 model;
@@ -50,7 +51,7 @@ struct TriangleApplication : EE::Application
 		auto wsi = get_wsi();
 
 		wsi->set_vertex_data_mode(Rendering::WSI::VERTEX_DATA_MODE::INTERLEVED_DATA);
-		wsi->set_index_buffer_format(Rendering::RenderingDeviceCommons::IndexBufferFormat::INDEX_BUFFER_FORMAT_UINT32);
+		wsi->set_index_buffer_format(RDC::IndexBufferFormat::INDEX_BUFFER_FORMAT_UINT32);
 
 		wsi->create_new_vertex_format(wsi->get_default_vertex_attribute(), Rendering::VERTEX_FORMAT_VARIATIONS::DEFAULT);
 		auto vertex_format = wsi->get_vertex_format_by_type(Rendering::VERTEX_FORMAT_VARIATIONS::DEFAULT);
@@ -68,8 +69,6 @@ struct TriangleApplication : EE::Application
 		screen_attachment.push_back(attachment);
 		auto fb_format = device->framebuffer_format_create(screen_attachment);
 
-		
-
 		pipeline = Rendering::PipelineBuilder{}
 			.set_shader({ "assets://shaders/triangle_v2.vert", "assets://shaders/triangle_v2.frag" }, "triangle_shader")
 			.set_vertex_format(vertex_format)
@@ -83,7 +82,7 @@ struct TriangleApplication : EE::Application
 		tf.usage_bits = RDC::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RDC::TEXTURE_USAGE_SAMPLING_BIT; ;
 		tf.format = RDC::DATA_FORMAT_R8G8B8A8_UNORM;
 
-		texture_fb = device->texture_create(tf, Rendering::RenderingDevice::TextureView(), { });
+		texture_fb = device->texture_create(tf, RD::TextureView(), { });
 		render_pass = device->render_pass_from_format_id(fb_format);
 		frame_buffer = device->create_framebuffer_from_format_id(fb_format, { texture_fb }, device->screen_get_width(), device->screen_get_height());
 
@@ -94,40 +93,40 @@ struct TriangleApplication : EE::Application
 		Rendering::ImageLoader img_loader(*fs);
 		auto image = img_loader.load_from_file("assets://textures/wall.jpg");
 
-		Rendering::RenderingDeviceCommons::TextureFormat tf2;
+		RDC::TextureFormat tf2;
 		tf2.width = image.width;
 		tf2.height = image.height;
 		tf2.array_layers = 1;
-		tf2.texture_type = Rendering::RenderingDeviceCommons::TEXTURE_TYPE_2D;
-		tf2.usage_bits = Rendering::RenderingDeviceCommons::TEXTURE_USAGE_SAMPLING_BIT | Rendering::RenderingDeviceCommons::TEXTURE_USAGE_CAN_UPDATE_BIT;
-		tf2.format = Rendering::RenderingDeviceCommons::DATA_FORMAT_R8G8B8A8_UNORM;
+		tf2.texture_type = RDC::TEXTURE_TYPE_2D;
+		tf2.usage_bits = RDC::TEXTURE_USAGE_SAMPLING_BIT | RDC::TEXTURE_USAGE_CAN_UPDATE_BIT;
+		tf2.format = RDC::DATA_FORMAT_R8G8B8A8_UNORM;
 
-		texture_uniform = device->texture_create(tf2, Rendering::RenderingDevice::TextureView(), { image.pixels });
+		texture_uniform = device->texture_create(tf2, RD::TextureView(), { image.pixels });
 
 		wsi->pre_frame_loop();
 
-		Rendering::RenderingDeviceCommons::SamplerState s;
-		s.mag_filter = Rendering::RenderingDeviceCommons::SAMPLER_FILTER_LINEAR;
-		s.min_filter = Rendering::RenderingDeviceCommons::SAMPLER_FILTER_LINEAR;
+		RDC::SamplerState s;
+		s.mag_filter = RDC::SAMPLER_FILTER_LINEAR;
+		s.min_filter = RDC::SAMPLER_FILTER_LINEAR;
 		s.max_lod = 0;
 
 		sampler = device->sampler_create(s);
 
-		std::vector<Rendering::RenderingDevice::Uniform> uniforms;
-		Rendering::RenderingDevice::Uniform u;
-		u.uniform_type = Rendering::RenderingDeviceCommons::UNIFORM_TYPE_UNIFORM_BUFFER;
+		std::vector<RD::Uniform> uniforms;
+		RD::Uniform u;
+		u.uniform_type = RDC::UNIFORM_TYPE_UNIFORM_BUFFER;
 		u.binding = 0;
 		u.append_id(state_uniform);
 		uniforms.push_back(u);
 
-		Rendering::RenderingDevice::Uniform tu;
-		tu.uniform_type = Rendering::RenderingDeviceCommons::UNIFORM_TYPE_TEXTURE;
+		RD::Uniform tu;
+		tu.uniform_type = RDC::UNIFORM_TYPE_TEXTURE;
 		tu.binding = 1;
 		tu.append_id(texture_uniform);
 		uniforms.push_back(tu);
 
-		Rendering::RenderingDevice::Uniform su;
-		su.uniform_type = Rendering::RenderingDevice::UNIFORM_TYPE_SAMPLER;
+		RD::Uniform su;
+		su.uniform_type = RD::UNIFORM_TYPE_SAMPLER;
 		su.binding = 2;
 		su.append_id(sampler);
 		uniforms.push_back(su);
@@ -169,14 +168,14 @@ struct TriangleApplication : EE::Application
 		std::vector<Rect2i> viewport{ Rect2i(0, 0, device->screen_get_width(), device->screen_get_height()) };
 		auto cmd_buffer = device->get_current_command_buffer();
 
-		Rendering::RenderingDeviceDriver::TextureBarrier barrier;
+		RDD::TextureBarrier barrier;
 		barrier.src_access = 0;
-		barrier.dst_access = Rendering::RenderingDeviceDriver::BARRIER_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-		barrier.prev_layout = Rendering::RenderingDeviceDriver::TEXTURE_LAYOUT_UNDEFINED;
-		barrier.next_layout = Rendering::RenderingDeviceDriver::TEXTURE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-		barrier.subresources = { Rendering::RenderingDeviceDriver::TEXTURE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+		barrier.dst_access = RDD::BARRIER_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+		barrier.prev_layout = RDD::TEXTURE_LAYOUT_UNDEFINED;
+		barrier.next_layout = RDD::TEXTURE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		barrier.subresources = { RDD::TEXTURE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
 		barrier.texture = device->texture_id_from_rid(texture_fb);
-		device->apply_image_barrier(cmd_buffer, Rendering::RenderingDeviceDriver::PipelineStageBits::PIPELINE_STAGE_TOP_OF_PIPE_BIT, Rendering::RenderingDeviceDriver::PipelineStageBits::PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, { &barrier, 1 });
+		device->apply_image_barrier(cmd_buffer, RDD::PipelineStageBits::PIPELINE_STAGE_TOP_OF_PIPE_BIT, RDD::PipelineStageBits::PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, { &barrier, 1 });
 
 		device->begin_render_pass(render_pass, frame_buffer, viewport[0], Color());
 		//
@@ -187,15 +186,15 @@ struct TriangleApplication : EE::Application
 
 		device->_submit_transfer_barriers(cmd_buffer);
 
-		Rendering::RenderingDeviceDriver::TextureBarrier barrier2;
-		barrier2.dst_access = Rendering::RenderingDeviceDriver::BARRIER_ACCESS_SHADER_READ_BIT;
-		barrier2.next_layout = Rendering::RenderingDeviceDriver::TEXTURE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		barrier2.prev_layout = Rendering::RenderingDeviceDriver::TEXTURE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-		barrier2.src_access = Rendering::RenderingDeviceDriver::BARRIER_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-		barrier2.subresources = { Rendering::RenderingDeviceDriver::TEXTURE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+		RDD::TextureBarrier barrier2;
+		barrier2.dst_access = RDD::BARRIER_ACCESS_SHADER_READ_BIT;
+		barrier2.next_layout = RDD::TEXTURE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		barrier2.prev_layout = RDD::TEXTURE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		barrier2.src_access = RDD::BARRIER_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+		barrier2.subresources = { RDD::TEXTURE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
 		barrier2.texture = device->texture_id_from_rid(texture_fb);
 
-		device->apply_image_barrier(cmd_buffer, Rendering::RenderingDeviceDriver::PipelineStageBits::PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, Rendering::RenderingDeviceDriver::PipelineStageBits::PIPELINE_STAGE_FRAGMENT_SHADER_BIT, { &barrier2, 1 });
+		device->apply_image_barrier(cmd_buffer, RDD::PipelineStageBits::PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, RDD::PipelineStageBits::PIPELINE_STAGE_FRAGMENT_SHADER_BIT, { &barrier2, 1 });
 		wsi->blit_render_target_to_screen(texture_fb);
 
 		//device->begin_for_screen(DisplayServerEnums::MAIN_WINDOW_ID);
