@@ -135,13 +135,13 @@ namespace Rendering
 		return new ::Vulkan::RenderingShaderContainerFormatVulkan();
 	}
 
-	void WSI::bind_and_draw_indexed(RenderingDeviceDriver::CommandBufferID p_command_buffer)
+	void WSI::bind_and_draw_indexed(RenderingDeviceDriver::CommandBufferID p_command_buffer, const std::string& p_mesh_name)
 	{
-		bool flag = false;
+		auto primitives = meshes[p_mesh_name].primitives;
 		for (auto& p : primitives)
 		{
-			rendering_device->bind_vertex_array(vertex_arrays[p.first]);
-			rendering_device->bind_index_array(index_arrays[p.first]);
+			rendering_device->bind_vertex_array(p.second.vertex_array);
+			rendering_device->bind_index_array(p.second.index_array);
 			rendering_device->render_draw_indexed(p_command_buffer, p.second.index_count, 1, 0, 0, 0);
 		}
 	}
@@ -151,22 +151,28 @@ namespace Rendering
 		windows.insert({ window, data });
 	}
 
-	Error WSI::load_gltf(std::string path)
+	Error WSI::load_gltf(const std::string& p_path, const std::string& p_name)
 	{
-		if (gltf_loader->load(path) != OK)
+		if (gltf_loader->load(p_path) != OK)
 			return ERR_FILE_NOT_FOUND;
 
 		uint32_t total_vertices = 0;
 		uint32_t total_indices = 0;
 
+		std::vector<uint8_t> vertex_data{};
+		std::vector<uint8_t> index_data{};
+
+		MeshData mesh_data;
+
 		auto prims = gltf_loader->primitives();
 		for (auto p : prims)
 		{
-			MeshRange range = { total_vertices, total_vertices * sizeof(Rendering::Vertex), total_indices, (uint32_t)p.indices.size() };
-			primitives.insert({ mesh_owner.make_rid(p), range });
+			PrimitiveData range = { total_vertices, total_vertices * sizeof(Rendering::Vertex), total_indices, (uint32_t)p.indices.size() };
+			mesh_data.primitives[mesh_owner.make_rid(p)] = range;
 
 			uint64_t vbSize = p.vertices.size() * sizeof(Rendering::Vertex);
 			uint64_t ibSize = p.indices.size() * ((index_data_format == Rendering::RenderingDeviceCommons::IndexBufferFormat::INDEX_BUFFER_FORMAT_UINT16)  ?  sizeof(uint16_t) : sizeof(uint32_t));
+
 			push_vertex_data(p.vertices.data(), vbSize);
 			push_index_data(p.indices.data(), ibSize);
 
@@ -175,7 +181,8 @@ namespace Rendering
 		}
 		// TODO: should not stay here
 		vertex_format = rendering_device->vertex_format_create(get_default_vertex_attribute());
-		_create_vertex_and_index_buffers(total_indices, vertex_format);
+		_create_vertex_and_index_buffers(total_indices, vertex_format, mesh_data);
+		meshes[p_name] = mesh_data;
 		return OK;
 	}
 
@@ -216,34 +223,8 @@ namespace Rendering
 		}
 	}
 
-	void WSI::pipeline_create()
+	void WSI::submit_transfer_workers()
 	{
-		/*RenderingDevice::AttachmentFormat attachment;
-		attachment.format = RenderingDeviceCommons::DATA_FORMAT_R8G8B8A8_UNORM;
-		attachment.samples = RenderingDeviceCommons::TEXTURE_SAMPLES_1;
-		attachment.usage_flags = RenderingDeviceCommons::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT;
-		std::vector<RenderingDevice::AttachmentFormat> screen_attachment;
-		screen_attachment.push_back(attachment);
-		auto fb_format = rendering_device->framebuffer_format_create(screen_attachment);
-
-		pipeline = PipelineBuilder{}
-			.set_shader({ "assets://shaders/triangle_v2.vert", "assets://shaders/triangle_v2.frag" }, "triangle_shader")
-			.set_vertex_format(vertex_format)
-			.build(fb_format);
-
-		RenderingDeviceCommons::TextureFormat tf;
-		tf.width = rendering_device->screen_get_width();
-		tf.height = rendering_device->screen_get_height(); 
-		tf.array_layers = 1;
-		tf.texture_type = RenderingDeviceCommons::TEXTURE_TYPE_2D;
-		tf.usage_bits = RenderingDeviceCommons::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RenderingDeviceCommons::TEXTURE_USAGE_SAMPLING_BIT; ;
-		tf.format = RenderingDeviceCommons::DATA_FORMAT_R8G8B8A8_UNORM;
-
-		texture_fb = rendering_device->texture_create(tf, Rendering::RenderingDevice::TextureView(), { });
-		render_pass = rendering_device->render_pass_from_format_id(fb_format);
-		frame_buffer = rendering_device->create_framebuffer_from_format_id(fb_format, { texture_fb }, rendering_device->screen_get_width(), rendering_device->screen_get_height());*/
-
-		//_create_vertex_and_index_buffers();
 		rendering_device->_submit_transfer_workers();
 	}
 
@@ -312,9 +293,9 @@ namespace Rendering
 		return interleved_data;
 	}
 
-	void WSI::_create_vertex_and_index_buffers(uint32_t total_indices, RenderingDevice::VertexFormatID p_vertex_format)
+	void WSI::_create_vertex_and_index_buffers(uint32_t total_indices, RenderingDevice::VertexFormatID p_vertex_format, MeshData& p_mesh_data)
 	{
-		DEBUG_ASSERT(primitives.size() > 0);
+		DEBUG_ASSERT(p_mesh_data.primitives.size() > 0);
 		DEBUG_ASSERT(!vertex_data.empty());
 
 		PackedByteArray interleved;
@@ -332,11 +313,13 @@ namespace Rendering
 
 		RID index_buffer = rendering_device->index_buffer_create(total_indices, index_data_format, index_data);
 
-		for (auto& p: primitives)
+		for (auto& p: p_mesh_data.primitives)
 		{
 			auto prim = mesh_owner.get_or_null(p.first);
-			vertex_arrays.insert({ p.first, rendering_device->vertex_array_create(prim->vertices.size(), p_vertex_format, {vertex_buffer}, { p.second.vertex_byte_offset  }) });
-			index_arrays.insert({ p.first, rendering_device->index_array_create(index_buffer, p.second.indexOffset, p.second.index_count) });
+			p.second.vertex_array = rendering_device->vertex_array_create(prim->vertices.size(), p_vertex_format, { vertex_buffer }, { p.second.vertex_byte_offset });
+			p.second.index_array = rendering_device->index_array_create(index_buffer, p.second.indexOffset, p.second.index_count);
+			//vertex_arrays.insert({ p.first, rendering_device->vertex_array_create(prim->vertices.size(), p_vertex_format, {vertex_buffer}, { p.second.vertex_byte_offset  }) });
+			//index_arrays.insert({ p.first, rendering_device->index_array_create(index_buffer, p.second.indexOffset, p.second.index_count) });
 		}
 	}
 

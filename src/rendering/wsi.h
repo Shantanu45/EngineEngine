@@ -26,14 +26,19 @@ namespace Rendering
 
 	class WSI
 	{
-		struct MeshRange {
+		struct PrimitiveData {
 			uint32_t vertexOffset;  // offset into the big vertex buffer
 			uint64_t vertex_byte_offset;
 			uint32_t indexOffset;   // offset into the big index buffer
 			uint32_t index_count;
+
+			RID vertex_array;
+			RID index_array;
 		};
 
-
+		struct MeshData {
+			std::unordered_map<RID, PrimitiveData> primitives;
+		};
 
 	public:
 		enum class VERTEX_DATA_MODE
@@ -65,12 +70,12 @@ namespace Rendering
 
 		RenderingShaderContainerFormat* create_shader_container_format();
 
-		void bind_and_draw_indexed(RenderingDeviceDriver::CommandBufferID p_command_buffer);
+		void bind_and_draw_indexed(RenderingDeviceDriver::CommandBufferID p_command_buffer, const std::string& p_mesh_name);
 		RenderingDevice* get_rendering_device() { return rendering_device; }
 
 		void set_wsi_platform_data(DisplayServerEnums::WindowID window, WindowData data);
 
-		Error load_gltf(std::string path);
+		Error load_gltf(const std::string& p_path, const std::string& p_name);
 		std::vector<RenderingDeviceCommons::VertexAttribute> get_default_vertex_attribute();
 
 		void push_vertex_data(void* vertex_data, size_t size);
@@ -79,9 +84,7 @@ namespace Rendering
 		void clear_vertex_data() { vertex_data.clear(); }
 		void clear_index_data() { index_data.clear(); }
 
-		void pipeline_create();
-
-		//void pipeline_create_default();
+		void submit_transfer_workers();
 
 		inline void set_vertex_data_mode(VERTEX_DATA_MODE mode)
 		{
@@ -101,7 +104,7 @@ namespace Rendering
 		void _free_pending_resources(int p_frame);
 		std::vector<uint8_t> _get_attrib_interleaved(const std::vector<RenderingDeviceCommons::VertexAttribute>& attribs, std::vector<uint8_t> vertex_data);
 
-		void _create_vertex_and_index_buffers(uint32_t total_indices, RenderingDevice::VertexFormatID p_vertex_format);
+		void _create_vertex_and_index_buffers(uint32_t total_indices, RenderingDevice::VertexFormatID p_vertex_format, MeshData& p_mesh_data);
 		std::unique_ptr<RenderingContextDriver> rendering_context = nullptr;
 		RenderingDevice* rendering_device = nullptr;
 
@@ -132,12 +135,12 @@ namespace Rendering
 
 		RID_Owner<MeshPrimitive, true> mesh_owner;
 
-		std::unordered_map<RID, MeshRange> primitives;
+		std::unordered_map<std::string, MeshData> meshes;
 
 		std::unique_ptr<GltfLoader> gltf_loader = nullptr;
 
-		std::unordered_map<RID, RID> vertex_arrays;		// prim to vertex array
-		std::unordered_map<RID, RID> index_arrays;
+		//std::unordered_map<RID, RID> vertex_arrays;		// prim to vertex array
+		//std::unordered_map<RID, RID> index_arrays;
 
 		std::unique_ptr<RendererCompositor> rd;
 	};
