@@ -319,6 +319,20 @@ struct TriangleApplication : EE::Application
 		fg.execute(&rc, &rc);
 	}
 
+	void post_frame() override
+	{
+		auto wsi = get_wsi();
+
+		auto device = wsi->get_rendering_device();
+
+		device->free_rid(state_uniform);
+		device->free_rid(texture_uniform);
+		device->free_rid(sampler);
+		device->free_rid(uniform_set);
+		device->free_rid(pipeline);
+		device->free_rid(texture_fb);
+	}
+
 private:
 	RID state_uniform;
 	RID texture_uniform;

@@ -870,6 +870,10 @@ namespace Rendering
 		FramebufferFormatID framebuffer_format_create_multipass(const std::vector<AttachmentFormat>& p_attachments, const std::vector<FramebufferPass>& p_passes, 
 			uint32_t p_view_count = 1, int32_t p_vrs_attachment = -1);
 			
+		RenderingDevice::TextureSamples framebuffer_format_get_texture_samples(FramebufferFormatID p_format, uint32_t p_pass);
+		RID framebuffer_create_empty(const Size2i& p_size, TextureSamples p_samples, FramebufferFormatID p_format_check);
+		RID framebuffer_create(const std::vector<RID>& p_texture_attachments, FramebufferFormatID p_format_check, uint32_t p_view_count);
+		RID framebuffer_create_multipass(const std::vector<RID>& p_texture_attachments, const std::vector<FramebufferPass>& p_passes, FramebufferFormatID p_format_check, uint32_t p_view_count);
 		FramebufferFormatID framebuffer_format_create_empty(TextureSamples p_samples = TEXTURE_SAMPLES_1);
 
 #pragma endregion
@@ -1064,6 +1068,10 @@ namespace Rendering
 			int32_t p_vrs_attachment = -1, Size2i p_vrs_texel_size = Size2i(), std::vector<TextureSamples>* r_samples = nullptr);
 
 		void _free_internal(RID p_id);
+
+		std::unordered_map<RID, std::unordered_set<RID>> dependency_map; // IDs to IDs that depend on it.
+		std::unordered_map<RID, std::unordered_set<RID>> reverse_dependency_map; // Same as above, but in reverse.
+
 		void _add_dependency(RID p_id, RID p_depends_on);
 		void _free_dependencies(RID p_id);
 		template <typename T>
@@ -1118,6 +1126,8 @@ namespace Rendering
 		std::vector<Frame> frames;
 		int frame = 0;
 		uint64_t frames_drawn = 0;
+
+		uint32_t frames_pending_resources_for_processing = 0u;
 
 		std::unique_ptr<Compiler::GLSLCompiler> compiler;
 

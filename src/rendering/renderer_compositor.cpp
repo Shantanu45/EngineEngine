@@ -105,8 +105,8 @@ namespace Rendering
 		rendering_device->free_rid(blit.index_buffer);
 		for (auto uniform: render_target_descriptors)
 		{
-			rendering_device->free_rid(uniform.second);
-			rendering_device->free_rid(uniform.first);
+			//rendering_device->free_rid(uniform.second);
+			//rendering_device->free_rid(uniform.first);
 		}
 		rendering_device->free_rid(blit.sampler);
 		rendering_device->free_rid(blit_pipeline);

@@ -769,6 +769,15 @@ namespace Rendering
 
 		// Create ID to associate with this pipeline.
 		RID id = render_pipeline_owner.make_rid(pipeline);
+		{
+			//_THREAD_SAFE_METHOD_
+
+#ifdef DEV_ENABLED
+				set_resource_name(id, "RID:" + itos(id.get_id()));
+#endif
+			// Now add all the dependencies.
+			_add_dependency(id, p_shader);
+		}
 		return id;
 	}
 
@@ -994,6 +1003,174 @@ namespace Rendering
 			LOGI("FORMAT:", attachment.format, "SAMPLES:", attachment.samples, "USAGE FLAGS:", attachment.usage_flags);
 		}
 #endif
+
+		return id;
+	}
+
+	RenderingDevice::TextureSamples RenderingDevice::framebuffer_format_get_texture_samples(FramebufferFormatID p_format, uint32_t p_pass) {
+		//_THREAD_SAFE_METHOD_
+
+		auto E = framebuffer_formats.find(p_format);
+		ERR_FAIL_COND_V(!(E == framebuffer_formats.end()), TEXTURE_SAMPLES_1);
+		ERR_FAIL_COND_V(p_pass >= uint32_t(E->second.pass_samples.size()), TEXTURE_SAMPLES_1);
+
+		return E->second.pass_samples[p_pass];
+	}
+
+	RID RenderingDevice::framebuffer_create_empty(const Size2i& p_size, TextureSamples p_samples, FramebufferFormatID p_format_check) {
+		//_THREAD_SAFE_METHOD_
+
+		Framebuffer framebuffer;
+		framebuffer.format_id = framebuffer_format_create_empty(p_samples);
+		ERR_FAIL_COND_V(p_format_check != INVALID_FORMAT_ID && framebuffer.format_id != p_format_check, RID());
+		framebuffer.size = p_size;
+		framebuffer.view_count = 1;
+
+		//RDG::FramebufferCache* framebuffer_cache = RDG::framebuffer_cache_create();
+		//framebuffer_cache->width = p_size.width;
+		//framebuffer_cache->height = p_size.height;
+		//framebuffer.framebuffer_cache = framebuffer_cache;
+
+		RID id = framebuffer_owner.make_rid(framebuffer);
+#ifdef DEV_ENABLED
+		set_resource_name(id, "RID:" + itos(id.get_id()));
+#endif
+
+		// This relies on the fact that HashMap will not change the address of an object after it's been inserted into the container.
+		//framebuffer_cache->render_pass_creation_user_data = (void*)(&framebuffer_formats[framebuffer.format_id].E->key());
+
+		return id;
+	}
+
+	RID RenderingDevice::framebuffer_create(const std::vector<RID>& p_texture_attachments, FramebufferFormatID p_format_check, uint32_t p_view_count) {
+		//_THREAD_SAFE_METHOD_
+
+		FramebufferPass pass;
+
+		for (int i = 0; i < p_texture_attachments.size(); i++) {
+			Texture* texture = texture_owner.get_or_null(p_texture_attachments[i]);
+
+			ERR_FAIL_COND_V_MSG(texture && texture->layers != p_view_count, RID(), "Layers of our texture doesn't match view count for this framebuffer");
+
+			if (texture != nullptr) {
+				_check_transfer_worker_texture(texture);
+			}
+
+			if (texture && texture->usage_flags & TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+				pass.depth_attachment = i;
+			}
+			else if (texture && texture->usage_flags & TEXTURE_USAGE_DEPTH_RESOLVE_ATTACHMENT_BIT) {
+				pass.depth_resolve_attachment = i;
+			}
+			else if (texture && texture->usage_flags & TEXTURE_USAGE_VRS_ATTACHMENT_BIT) {
+				// Prevent the VRS attachment from being added to the color_attachments.
+			}
+			else {
+				if (texture && texture->is_resolve_buffer) {
+					pass.resolve_attachments.push_back(i);
+				}
+				else {
+					pass.color_attachments.push_back(texture ? i : ATTACHMENT_UNUSED);
+				}
+			}
+		}
+
+		std::vector<FramebufferPass> passes;
+		passes.push_back(pass);
+
+		return framebuffer_create_multipass(p_texture_attachments, passes, p_format_check, p_view_count);
+	}
+
+	RID RenderingDevice::framebuffer_create_multipass(const std::vector<RID>& p_texture_attachments, const std::vector<FramebufferPass>& p_passes, FramebufferFormatID p_format_check, uint32_t p_view_count) {
+		//_THREAD_SAFE_METHOD_
+
+		std::vector<AttachmentFormat> attachments;
+		std::vector<RDD::TextureID> textures;
+		//std::vector<RDG::ResourceTracker*> trackers;
+		int32_t vrs_attachment = -1;
+		attachments.resize(p_texture_attachments.size());
+		Size2i size;
+		bool size_set = false;
+		for (int i = 0; i < p_texture_attachments.size(); i++) {
+			AttachmentFormat af;
+			Texture* texture = texture_owner.get_or_null(p_texture_attachments[i]);
+			if (!texture) {
+				af.usage_flags = AttachmentFormat::UNUSED_ATTACHMENT;
+				//trackers.push_back(nullptr);
+			}
+			else {
+				ERR_FAIL_COND_V_MSG(texture->layers != p_view_count, RID(), "Layers of our texture doesn't match view count for this framebuffer");
+
+				_check_transfer_worker_texture(texture);
+
+				if (i != 0 && texture->usage_flags & TEXTURE_USAGE_VRS_ATTACHMENT_BIT) {
+					// Detect if the texture is the fragment density map and it's not the first attachment.
+					vrs_attachment = i;
+				}
+
+				if (!size_set) {
+					size.x = texture->width;
+					size.y = texture->height;
+					size_set = true;
+				}
+				else if (texture->usage_flags & TEXTURE_USAGE_VRS_ATTACHMENT_BIT) {
+					// If this is not the first attachment we assume this is used as the VRS attachment.
+					// In this case this texture will be 1/16th the size of the color attachment.
+					// So we skip the size check.
+				}
+				else {
+					ERR_FAIL_COND_V_MSG((uint32_t)size.x != texture->width || (uint32_t)size.y != texture->height, RID(),
+						"All textures in a framebuffer should be the same size.");
+				}
+
+				af.format = texture->format;
+				af.samples = texture->samples;
+				af.usage_flags = texture->usage_flags;
+
+				//_texture_make_mutable(texture, p_texture_attachments[i]);
+
+				textures.push_back(texture->driver_id);
+				//trackers.push_back(texture->draw_tracker);
+			}
+			attachments[i] = af;
+		}
+
+		ERR_FAIL_COND_V_MSG(!size_set, RID(), "All attachments unused.");
+
+		FramebufferFormatID format_id = framebuffer_format_create_multipass(attachments, p_passes, p_view_count, vrs_attachment);
+		if (format_id == INVALID_ID) {
+			return RID();
+		}
+
+		ERR_FAIL_COND_V_MSG(p_format_check != INVALID_ID && format_id != p_format_check, RID(),
+			"The format used to check this framebuffer differs from the intended framebuffer format.");
+
+		Framebuffer framebuffer;
+		framebuffer.format_id = format_id;
+		framebuffer.texture_ids = p_texture_attachments;
+		framebuffer.size = size;
+		framebuffer.view_count = p_view_count;
+
+		//RDG::FramebufferCache* framebuffer_cache = RDG::framebuffer_cache_create();
+		//framebuffer_cache->width = size.width;
+		//framebuffer_cache->height = size.height;
+		//framebuffer_cache->textures = textures;
+		//framebuffer_cache->trackers = trackers;
+		//framebuffer.framebuffer_cache = framebuffer_cache;
+
+		RID id = framebuffer_owner.make_rid(framebuffer);
+#ifdef DEV_ENABLED
+		set_resource_name(id, "RID:" + itos(id.get_id()));
+#endif
+
+		for (int i = 0; i < p_texture_attachments.size(); i++) {
+			if (p_texture_attachments[i].is_valid()) {
+				_add_dependency(id, p_texture_attachments[i]);
+			}
+		}
+
+		// This relies on the fact that HashMap will not change the address of an object after it's been inserted into the container.
+		//framebuffer_cache->render_pass_creation_user_data = (void*)(&framebuffer_formats[framebuffer.format_id].E->key());
 
 		return id;
 	}
@@ -1557,14 +1734,14 @@ namespace Rendering
 		set_resource_name(id, "RID:" + itos(id.get_id()));
 #endif
 		// Add dependencies.
-		//_add_dependency(id, p_shader);
-		//for (uint32_t i = 0; i < uniform_count; i++) {
-		//	const Uniform& uniform = uniforms[i];
-		//	int id_count = uniform.get_id_count();
-		//	for (int j = 0; j < id_count; j++) {
-		//		_add_dependency(id, uniform.get_id(j));
-		//	}
-		//}
+		_add_dependency(id, p_shader);
+		for (uint32_t i = 0; i < uniform_count; i++) {
+			const Uniform& uniform = uniforms[i];
+			int id_count = uniform.get_id_count();
+			for (int j = 0; j < id_count; j++) {
+				_add_dependency(id, uniform.get_id(j));
+			}
+		}
 		return id;
 	}
 
@@ -1802,9 +1979,9 @@ namespace Rendering
 		}
 
 		RID id = vertex_array_owner.make_rid(vertex_array);
-		//for (const RID& buf : unique_buffers) {
-		//	_add_dependency(id, buf);
-		//}
+		for (const RID& buf : unique_buffers) {
+			_add_dependency(id, buf);
+		}
 
 		return id;
 	}
@@ -1905,7 +2082,7 @@ namespace Rendering
 		index_array.transfer_worker_operation = index_buffer->transfer_worker_operation;
 
 		RID id = index_array_owner.make_rid(index_array);
-		//_add_dependency(id, p_index_buffer);
+		_add_dependency(id, p_index_buffer);
 		return id;
 	}
 
@@ -2843,6 +3020,16 @@ namespace Rendering
 
 		// Create ID to associate with this pipeline.
 		RID id = render_pipeline_owner.make_rid(pipeline);
+
+		{
+			//_THREAD_SAFE_METHOD_
+
+#ifdef DEV_ENABLED
+				set_resource_name(id, "RID:" + itos(id.get_id()));
+#endif
+			// Now add all the dependencies.
+			_add_dependency(id, p_shader);
+		}
 		return id;
 	}
 
@@ -4400,16 +4587,43 @@ namespace Rendering
 			ERR_PRINT(std::format("Attempted to free invalid ID: {}", p_id.get_id()));
 #endif
 		}
+
+		frames_pending_resources_for_processing = uint32_t(frames.size());
 	}
 
 	void RenderingDevice::_add_dependency(RID p_id, RID p_depends_on)
 	{
-
+		// operator[] inserts empty set if key absent, returns ref either way
+		dependency_map[p_depends_on].insert(p_id);
+		reverse_dependency_map[p_id].insert(p_depends_on);
 	}
 
 	void RenderingDevice::_free_dependencies(RID p_id)
 	{
+		// --- Forward dependencies: free everything that depends on p_id ---
+		auto E = dependency_map.find(p_id);
+		if (E != dependency_map.end()) {
+			while (!E->second.empty()) {
+				free_rid(*E->second.begin());
+			}
+			dependency_map.erase(E);
+		}
 
+		// --- Reverse dependencies: remove p_id from others' dependency sets ---
+		auto RE = reverse_dependency_map.find(p_id);
+		if (RE != reverse_dependency_map.end()) {
+			for (const RID& F : RE->second) {
+				auto G = dependency_map.find(F);
+				if (G == dependency_map.end()) {
+					continue;  // ERR_CONTINUE(!G)
+				}
+				if (G->second.find(p_id) == G->second.end()) {
+					continue;  // ERR_CONTINUE(!G->value.has(p_id))
+				}
+				G->second.erase(p_id);
+			}
+			reverse_dependency_map.erase(RE);
+		}
 	}
 
 	void RenderingDevice::_free_pending_resources(int p_frame)
@@ -4516,9 +4730,9 @@ namespace Rendering
 			frames[p_frame].buffers_to_dispose_of.pop_front();
 		}
 
-		//if (frames_pending_resources_for_processing > 0u) {
-		//	--frames_pending_resources_for_processing;
-		//}
+		if (frames_pending_resources_for_processing > 0u) {
+			--frames_pending_resources_for_processing;
+		}
 	}
 
 	RenderingDevice::RenderingDevice()
