@@ -247,6 +247,7 @@ namespace Rendering
 		}
 
 		frames_drawn = frames.size();
+		frames_drawn++;
 
 		// Convert block size from KB.
 		//upload_staging_buffers.block_size = GLOBAL_GET("rendering/rendering_device/staging_buffer/block_size_kb");
@@ -3260,7 +3261,7 @@ namespace Rendering
 	{
 		RDD::CommandBufferID command_buffer = frames[frame].command_buffer;
 		//driver->command_end_render_pass(command_buffer);
-
+		frames_drawn++;
 		driver->command_buffer_end(command_buffer);
 		// Advance staging buffers if used.
 		if (upload_staging_buffers.used) {
@@ -3776,6 +3777,10 @@ namespace Rendering
 	{
 		r_alloc_size = p_amount;
 		r_required_action = STAGING_REQUIRED_ACTION_NONE;
+
+		//LOGI(std::format("[Staging] Request: {} bytes  | Current block fill: {} / {}  | Total blocks: {}  | Max size: {}",
+		//	p_amount, p_staging_buffers.blocks[p_staging_buffers.current].fill_amount, p_staging_buffers.block_size,
+		//	p_staging_buffers.blocks.size(), p_staging_buffers.max_size).c_str());
 
 		while (true) {
 			r_alloc_offset = 0;

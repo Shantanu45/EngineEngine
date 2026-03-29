@@ -1297,10 +1297,14 @@ namespace Vulkan
 		if (false/*!Engine::get_singleton()->is_extra_gpu_memory_tracking_enabled()*/) {
 			alloc_create_info.preferredFlags &= ~vma_flags_to_remove;
 			alloc_create_info.usage = vma_usage;
+
+
 			VkResult err = vmaCreateBuffer(allocator, &create_info, &alloc_create_info, &vk_buffer, &allocation, &alloc_info);
 			ERR_FAIL_COND_V_MSG(err, BufferID(), std::format( "Can't create buffer of size: {} , error {}", std::to_string(p_size), std::to_string(err)));
 		}
 		else {
+			static uint32_t num = 1;
+			//LOGI("buffer alloc: %d", num++);
 			VkResult err = vkCreateBuffer(vk_device, &create_info, nullptr, &vk_buffer);
 			ERR_FAIL_COND_V_MSG(err, BufferID(), std::format("Can't create buffer of size: {} , error {}", std::to_string(p_size), std::to_string(err)));
 			err = vmaAllocateMemoryForBuffer(allocator, vk_buffer, &alloc_create_info, &allocation, &alloc_info);
