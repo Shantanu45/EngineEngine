@@ -295,6 +295,11 @@ namespace Rendering
 	}
 
 	void RenderingDevice::finalize() {
+
+		if (!frames.empty()) {
+			// Wait for all frames to have finished rendering.
+			_flush_and_stall_for_all_frames(false);
+		}
 		_submit_transfer_workers();
 		_wait_for_transfer_workers();
 
@@ -3685,6 +3690,7 @@ namespace Rendering
 	{
 		_stall_for_previous_frames();
 		// TODO: end render pass?
+		//driver->command_end_render_pass(get_current_command_buffer());
 		end_frame();
 		execute_frame(false);
 
