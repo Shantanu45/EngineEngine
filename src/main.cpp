@@ -35,7 +35,6 @@ struct FrameGraphTexture {
 	struct Desc {
 		RDC::TextureFormat texture_format;
 		const RD::TextureView texture_view;
-		//const std::vector<std::vector<uint8_t>> data;
 		std::string texture_name;
 	};
 
@@ -188,7 +187,6 @@ struct TriangleApplication : EE::Application
 		auto device = wsi->get_rendering_device();
 
 		std::vector<RID> fb_textures;
-		//RID scene_texture;
 		{ //texture
 			RD::TextureFormat tf;
 			tf.texture_type = RD::TEXTURE_TYPE_2D;
@@ -337,8 +335,6 @@ private:
 
 	RID pipeline;
 
-	//RDD::RenderPassID render_pass;
-	//RDD::FramebufferID frame_buffer;
 	RID texture_fb;
 	RDC::TextureFormat tf;
 
