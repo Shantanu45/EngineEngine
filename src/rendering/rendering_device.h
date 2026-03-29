@@ -936,6 +936,7 @@ namespace Rendering
 		 */
 		bool begin_for_screen(DisplayServerEnums::WindowID p_screen = 0, const Color& p_clear_color = Color());
 
+		bool end_for_screen(DisplayServerEnums::WindowID p_screen);
 		RDD::FramebufferID create_framebuffer(RDD::RenderPassID p_render_pass, std::span<RDD::TextureID> p_attachments, uint32_t p_width, uint32_t p_height);
 		RDD::FramebufferID create_framebuffer_from_format_id(FramebufferFormatID p_format_id, std::vector<RID> p_attachments, uint32_t p_width, uint32_t p_height);
 		RDD::RenderPassID render_pass_from_format_id(FramebufferFormatID p_format_id);
@@ -969,9 +970,9 @@ namespace Rendering
 
 		void begin_frame(bool p_presented = false);
 
-		void bind_render_pipeline(RDD::CommandBufferID p_command_buffer, RID pipeline);
-
 		void end_frame();
+
+		void bind_render_pipeline(RDD::CommandBufferID p_command_buffer, RID pipeline);
 
 		void end_render_pass(RDD::CommandBufferID cmd);
 		void execute_frame(bool p_present);

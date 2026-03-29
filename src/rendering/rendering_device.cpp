@@ -2581,6 +2581,12 @@ namespace Rendering
 		driver->command_render_set_scissor(command_buffer, viewport);
 	}
 
+	bool RenderingDevice::end_for_screen(DisplayServerEnums::WindowID p_screen)
+	{
+		driver->command_end_render_pass(get_current_command_buffer());
+		return true;
+	}
+
 	RDD::FramebufferID RenderingDevice::create_framebuffer(RDD::RenderPassID p_render_pass, std::span<RDD::TextureID> p_attachments, uint32_t p_width, uint32_t p_height)
 	{
 		return driver->framebuffer_create(p_render_pass, p_attachments, p_width, p_height);	
@@ -2848,16 +2854,10 @@ namespace Rendering
 		driver->command_buffer_begin(command_buffer);
 	}
 
-	void  RenderingDevice::bind_render_pipeline(RDD::CommandBufferID p_command_buffer, RID pipeline)
-	{
-		RenderPipeline* render_pipeline = render_pipeline_owner.get_or_null(pipeline);
-		driver->command_bind_render_pipeline(p_command_buffer, render_pipeline->driver_id);
-	}
-
 	void RenderingDevice::end_frame()
 	{
 		RDD::CommandBufferID command_buffer = frames[frame].command_buffer;
-		driver->command_end_render_pass(command_buffer);
+		//driver->command_end_render_pass(command_buffer);
 
 		driver->command_buffer_end(command_buffer);
 		// Advance staging buffers if used.
@@ -2872,10 +2872,16 @@ namespace Rendering
 		}
 
 	}
-	
+
 	void RenderingDevice::end_render_pass(RDD::CommandBufferID cmd)
 	{
 		driver->command_end_render_pass(cmd);
+	}
+
+	void  RenderingDevice::bind_render_pipeline(RDD::CommandBufferID p_command_buffer, RID pipeline)
+	{
+		RenderPipeline* render_pipeline = render_pipeline_owner.get_or_null(pipeline);
+		driver->command_bind_render_pipeline(p_command_buffer, render_pipeline->driver_id);
 	}
 
 	void RenderingDevice::execute_frame(bool p_present)
@@ -3281,6 +3287,7 @@ namespace Rendering
 	void RenderingDevice::_flush_and_stall_for_all_frames(bool p_begin_frame /*= true*/)
 	{
 		_stall_for_previous_frames();
+		// TODO: end render pass?
 		end_frame();
 		execute_frame(false);
 

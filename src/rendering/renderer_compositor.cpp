@@ -41,6 +41,8 @@ namespace Rendering
 		rendering_device->bind_uniform_set(blit.shader, it->second, 0);
 		
 		rendering_device->render_draw_indexed(rendering_device->get_current_command_buffer(), 6, 1, 0, 0, 0);
+
+		rendering_device->end_for_screen(screen);
 	}
 
 
