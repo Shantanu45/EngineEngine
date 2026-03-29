@@ -93,8 +93,7 @@ struct basic_pass_resource
 
 void add_basic_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
 	FrameGraphResource image_handle,
-	RDD::RenderPassID  render_pass,
-	RDD::FramebufferID frame_buffer,
+	RID frame_buffer,
 	RID pipeline,
 	RID uniform_set)
 {
@@ -121,7 +120,7 @@ void add_basic_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
 
 				Rect2i viewport(0, 0, w, h);
 
-				rc.device->begin_render_pass(render_pass, frame_buffer,
+				rc.device->begin_render_pass_from_frame_buffer(frame_buffer,
 					viewport, Color());
 
 				rc.device->bind_render_pipeline(cmd, pipeline);
@@ -189,46 +188,48 @@ struct TriangleApplication : EE::Application
 		auto device = wsi->get_rendering_device();
 
 
-		RD::AttachmentFormat attachment;
-		attachment.format = RDC::DATA_FORMAT_R8G8B8A8_UNORM;
-		attachment.samples = RDC::TEXTURE_SAMPLES_1;
-		attachment.usage_flags = RDC::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT;
-		std::vector<RD::AttachmentFormat> screen_attachment;
-		screen_attachment.push_back(attachment);
-		auto fb_format = device->framebuffer_format_create(screen_attachment);
-
-		pipeline = Rendering::PipelineBuilder{}
-			.set_shader({ "assets://shaders/triangle_v2.vert", "assets://shaders/triangle_v2.frag" }, "triangle_shader")
-			.set_vertex_format(vertex_format)
-			.build(fb_format);
-
-		tf;
-		tf.width = device->screen_get_width();
-		tf.height = device->screen_get_height();
-		tf.array_layers = 1;
-		tf.texture_type = RDC::TEXTURE_TYPE_2D;
-		tf.usage_bits = RDC::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RDC::TEXTURE_USAGE_SAMPLING_BIT; ;
-		tf.format = RDC::DATA_FORMAT_R8G8B8A8_UNORM;
-
-		texture_fb = device->texture_create(tf, RD::TextureView(), { });
-		render_pass = device->render_pass_from_format_id(fb_format);
-		frame_buffer = device->create_framebuffer_from_format_id(fb_format, { texture_fb }, device->screen_get_width(), device->screen_get_height());
+		//RD::AttachmentFormat attachment;
+		//attachment.format = RDC::DATA_FORMAT_R8G8B8A8_UNORM;
+		//attachment.samples = RDC::TEXTURE_SAMPLES_1;
+		//attachment.usage_flags = RDC::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT;
+		//std::vector<RD::AttachmentFormat> screen_attachment;
+		//screen_attachment.push_back(attachment);
+		//auto fb_format = device->framebuffer_format_create(screen_attachment);
 
 		std::vector<RID> fb_textures;
-		RID scene_texture;
+		//RID scene_texture;
 		{ //texture
 			RD::TextureFormat tf;
 			tf.texture_type = RD::TEXTURE_TYPE_2D;
 			tf.width = device->screen_get_width();
 			tf.height = device->screen_get_height();
 			tf.usage_bits = RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT;
-			tf.format = RD::DATA_FORMAT_R32_SFLOAT;
+			tf.format = RD::DATA_FORMAT_R8G8B8A8_UNORM;
 
-			scene_texture = RD::get_singleton()->texture_create(tf, RD::TextureView());
-			fb_textures.push_back(scene_texture);
+			texture_fb = RD::get_singleton()->texture_create(tf, RD::TextureView());
+			fb_textures.push_back(texture_fb);
 		}
 
 		scene_fb = device->framebuffer_create(fb_textures);
+
+		pipeline = Rendering::PipelineBuilder{}
+			.set_shader({ "assets://shaders/triangle_v2.vert", "assets://shaders/triangle_v2.frag" }, "triangle_shader")
+			.set_vertex_format(vertex_format)
+			.build_from_frame_buffer(scene_fb);
+
+		//tf;
+		//tf.width = device->screen_get_width();
+		//tf.height = device->screen_get_height();
+		//tf.array_layers = 1;
+		//tf.texture_type = RDC::TEXTURE_TYPE_2D;
+		//tf.usage_bits = RDC::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RDC::TEXTURE_USAGE_SAMPLING_BIT; ;
+		//tf.format = RDC::DATA_FORMAT_R8G8B8A8_UNORM;
+
+		//texture_fb = device->texture_create(tf, RD::TextureView(), { });
+		//render_pass = device->render_pass_from_format_id(fb_format);
+		//frame_buffer = device->create_framebuffer_from_format_id(fb_format, { texture_fb }, device->screen_get_width(), device->screen_get_height());
+
+		
 
 		//frame_buffer = device->create_framebuffer(fb_format, { texture_fb }, device->screen_get_width(), device->screen_get_height());
 
@@ -323,7 +324,7 @@ struct TriangleApplication : EE::Application
 		scene_tex.texture = texture_fb;
 
 		FrameGraphResource scene_res = fg.import("scene texture", scene_desc, std::move(scene_tex));
-		add_basic_pass(fg, bb, scene_res, render_pass, frame_buffer, pipeline, uniform_set);
+		add_basic_pass(fg, bb, scene_res, scene_fb, pipeline, uniform_set);
 		add_blit_pass(fg, bb);
 
 		fg.compile();
@@ -361,8 +362,8 @@ private:
 
 	RID pipeline;
 
-	RDD::RenderPassID render_pass;
-	RDD::FramebufferID frame_buffer;
+	//RDD::RenderPassID render_pass;
+	//RDD::FramebufferID frame_buffer;
 	RID texture_fb;
 	RDC::TextureFormat tf;
 
