@@ -4822,6 +4822,25 @@ namespace Rendering
 		reverse_dependency_map[p_id].insert(p_depends_on);
 	}
 
+	void RenderingDevice::_free_dependencies_of(RID p_id) {
+		auto RE = reverse_dependency_map.find(p_id);
+		if (RE == reverse_dependency_map.end()) {
+			return;
+		}
+
+		// Snapshot the set to avoid iterator invalidation during recursive frees
+		std::unordered_set<RID> dependents = RE->second;
+		reverse_dependency_map.erase(RE); // erase early to prevent re-entrancy issues
+
+		for (RID dep : dependents) {
+			auto G = dependency_map.find(dep);
+			if (G != dependency_map.end()) {
+				G->second.erase(p_id);
+			}
+			free_rid(dep);
+		}
+	}
+
 	void RenderingDevice::_free_dependencies(RID p_id)
 	{
 		// --- Forward dependencies: free everything that depends on p_id ---

@@ -110,6 +110,7 @@ namespace Rendering
 		}
 		rendering_device->free_rid(blit.sampler);
 		rendering_device->free_rid(blit_pipeline);
+		rendering_device->screen_free();
 	}
 
 }

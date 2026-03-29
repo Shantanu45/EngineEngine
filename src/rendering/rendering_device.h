@@ -996,6 +996,7 @@ namespace Rendering
 		// TODO: #temp
 		void _submit_transfer_workers(RDD::CommandBufferID p_draw_command_buffer = RDD::CommandBufferID());
 		void _submit_transfer_barriers(RDD::CommandBufferID p_draw_command_buffer);
+		void _free_dependencies_of(RID p_id);
 
 		void update_pipeline_cache(bool p_closing = false);
 

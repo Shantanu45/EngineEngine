@@ -258,7 +258,21 @@ namespace Rendering
 	void WSI::teardown()
 	{
 		rd->finalize();
+		for (auto m : mesh_list)
+		{
+			for (auto p : m.second.primitives)
+			{
+				rendering_device->_free_dependencies_of(p.second.vertex_array);
+				rendering_device->free_rid(p.second.vertex_array);
+				rendering_device->_free_dependencies_of(p.second.index_array);
+				rendering_device->free_rid(p.second.index_array);
+
+				//rendering_device->free_rid(p.f);
+			}
+
+		}
 		rendering_device->finalize();
+
 	}
 
 	WSI::~WSI()
