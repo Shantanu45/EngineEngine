@@ -319,10 +319,8 @@ struct TriangleApplication : EE::Application
 
 		device->free_rid(state_uniform);
 		device->free_rid(texture_uniform);
-		//device->free_rid(sampler);
-		//device->free_rid(uniform_set);
-		//device->free_rid(pipeline);
-		//device->free_rid(texture_fb);
+		device->free_rid(texture_fb);
+		device->free_rid(scene_fb);
 	}
 
 private:

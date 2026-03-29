@@ -4722,7 +4722,7 @@ namespace Rendering
 		else if (framebuffer_owner.owns(p_id)) {
 			Framebuffer* framebuffer = framebuffer_owner.get_or_null(p_id);
 			frames[frame].framebuffers_to_dispose_of.push_back(*framebuffer);
-
+			driver->framebuffer_free(rid_to_frame_buffer_id[p_id]);			// temp untill we have cache
 			if (framebuffer->invalidated_callback != nullptr) {
 				framebuffer->invalidated_callback(framebuffer->invalidated_callback_userdata);
 			}
@@ -4923,6 +4923,7 @@ namespace Rendering
 		// Framebuffers.
 		while (!frames[p_frame].framebuffers_to_dispose_of.empty()) {
 			Framebuffer* framebuffer = &frames[p_frame].framebuffers_to_dispose_of.front();
+			//TODO: come back when we have frame buffer chache
 			//draw_graph.framebuffer_cache_free(driver, framebuffer->framebuffer_cache);
 			frames[p_frame].framebuffers_to_dispose_of.pop_front();
 		}
