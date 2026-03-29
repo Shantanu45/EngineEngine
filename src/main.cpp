@@ -134,7 +134,7 @@ void add_basic_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
 
 				rc.wsi->end_render_pass(cmd);
 
-				rc.device->_submit_transfer_barriers(cmd);
+				//rc.device->_submit_transfer_barriers(cmd);
 			});
 }
 
@@ -262,7 +262,6 @@ struct TriangleApplication : EE::Application
 		wsi->submit_transfer_workers();
 
 		uniform_set = device->uniform_set_create(uniforms, device->get_shader_rid("triangle_shader"), 0);
-
 	}
 	
 	void render_frame(double frame_time, double elapsed_time) override
