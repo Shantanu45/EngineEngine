@@ -3260,6 +3260,9 @@ namespace Rendering
 	void RenderingDevice::end_frame()
 	{
 		RDD::CommandBufferID command_buffer = frames[frame].command_buffer;
+
+		_submit_transfer_workers(command_buffer);
+		_submit_transfer_barriers(command_buffer);
 		//driver->command_end_render_pass(command_buffer);
 		frames_drawn++;
 		driver->command_buffer_end(command_buffer);
@@ -3692,8 +3695,8 @@ namespace Rendering
 		_stall_for_previous_frames();
 		// TODO: end render pass?
 		//driver->command_end_render_pass(get_current_command_buffer());
-		end_frame();
-		execute_frame(false);
+		//end_frame();
+		//execute_frame(false);
 
 		if (p_begin_frame) {
 			begin_frame();
