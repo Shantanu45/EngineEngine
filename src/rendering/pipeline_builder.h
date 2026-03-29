@@ -89,6 +89,15 @@ namespace Rendering
 				p_render_subpass, specialization_constants);
 		}
 
+		RID build_from_frame_buffer(RID p_frame_buffer, uint32_t p_render_subpass = 0)
+		{
+			return device->render_pipeline_create_from_frame_buffer(shader, p_frame_buffer,
+				vertex_format, render_primitive,
+				rasterization_state, multisample_state,
+				depth_stencil_state, blend_state, dynamic_state_flags,
+				p_render_subpass, specialization_constants);
+		}
+
 	private:
 		RenderingDevice* device;
 		RID shader;

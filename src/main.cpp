@@ -214,6 +214,24 @@ struct TriangleApplication : EE::Application
 		render_pass = device->render_pass_from_format_id(fb_format);
 		frame_buffer = device->create_framebuffer_from_format_id(fb_format, { texture_fb }, device->screen_get_width(), device->screen_get_height());
 
+		std::vector<RID> fb_textures;
+		RID scene_texture;
+		{ //texture
+			RD::TextureFormat tf;
+			tf.texture_type = RD::TEXTURE_TYPE_2D;
+			tf.width = device->screen_get_width();
+			tf.height = device->screen_get_height();
+			tf.usage_bits = RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT;
+			tf.format = RD::DATA_FORMAT_R32_SFLOAT;
+
+			scene_texture = RD::get_singleton()->texture_create(tf, RD::TextureView());
+			fb_textures.push_back(scene_texture);
+		}
+
+		scene_fb = device->framebuffer_create(fb_textures);
+
+		//frame_buffer = device->create_framebuffer(fb_format, { texture_fb }, device->screen_get_width(), device->screen_get_height());
+
 		state_uniform = device->uniform_buffer_create(sizeof(UBO));
 
 		auto fs = Services::get().get<FilesystemInterface>();
@@ -347,6 +365,8 @@ private:
 	RDD::FramebufferID frame_buffer;
 	RID texture_fb;
 	RDC::TextureFormat tf;
+
+	RID scene_fb;
 
 };
 

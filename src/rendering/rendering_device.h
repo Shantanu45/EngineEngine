@@ -837,6 +837,7 @@ namespace Rendering
 			uint32_t p_for_render_pass = 0,
 			const std::vector<PipelineSpecializationConstant>& p_specialization_constants = std::vector<PipelineSpecializationConstant>());
 
+		RID render_pipeline_create_from_frame_buffer(RID p_shader, RID p_framebuffer, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, const PipelineRasterizationState& p_rasterization_state, const PipelineMultisampleState& p_multisample_state, const PipelineDepthStencilState& p_depth_stencil_state, const PipelineColorBlendState& p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags /*= 0*/, uint32_t p_for_render_pass /*= 0*/, const std::vector<PipelineSpecializationConstant>& p_specialization_constants /*= std::vector<PipelineSpecializationConstant>()*/);
 		bool render_pipeline_is_valid(RID p_pipeline);
 #pragma endregion
 
@@ -872,7 +873,7 @@ namespace Rendering
 			
 		RenderingDevice::TextureSamples framebuffer_format_get_texture_samples(FramebufferFormatID p_format, uint32_t p_pass);
 		RID framebuffer_create_empty(const Size2i& p_size, TextureSamples p_samples, FramebufferFormatID p_format_check);
-		RID framebuffer_create(const std::vector<RID>& p_texture_attachments, FramebufferFormatID p_format_check, uint32_t p_view_count);
+		RID framebuffer_create(const std::vector<RID>& p_texture_attachments, FramebufferFormatID p_format_check = INVALID_ID, uint32_t p_view_count = 1);
 		RID framebuffer_create_multipass(const std::vector<RID>& p_texture_attachments, const std::vector<FramebufferPass>& p_passes, FramebufferFormatID p_format_check, uint32_t p_view_count);
 		FramebufferFormatID framebuffer_format_create_empty(TextureSamples p_samples = TEXTURE_SAMPLES_1);
 
@@ -945,6 +946,7 @@ namespace Rendering
 		RDD::FramebufferID create_framebuffer_from_format_id(FramebufferFormatID p_format_id, std::vector<RID> p_attachments, uint32_t p_width, uint32_t p_height);
 		RDD::RenderPassID render_pass_from_format_id(FramebufferFormatID p_format_id);
 		bool begin_render_pass(RDD::RenderPassID p_render_pass, RDD::FramebufferID p_frame_buffer, Rect2i p_region, const Color& p_clear_color);
+		bool begin_render_pass_from_frame_buffer(RID p_frame_buffer, Rect2i p_region, const Color& p_clear_color);
 		RDD::CommandBufferID get_current_command_buffer();
 
 		/**
@@ -1108,6 +1110,7 @@ namespace Rendering
 
 		std::map<FramebufferFormatKey, FramebufferFormatID> framebuffer_format_cache;
 		std::unordered_map<FramebufferFormatID, FramebufferFormat> framebuffer_formats;
+		std::unordered_map<RID, RDD::FramebufferID> rid_to_frame_buffer_id;;
 
 		std::vector<TransferWorker*> transfer_worker_pool;
 		uint32_t transfer_worker_pool_size = 0;

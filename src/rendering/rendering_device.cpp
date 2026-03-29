@@ -781,6 +781,192 @@ namespace Rendering
 		return id;
 	}
 
+	RID RenderingDevice::render_pipeline_create_from_frame_buffer(RID p_shader, RID p_framebuffer,
+		VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive,
+		const PipelineRasterizationState& p_rasterization_state, const PipelineMultisampleState& p_multisample_state,
+		const PipelineDepthStencilState& p_depth_stencil_state, const PipelineColorBlendState& p_blend_state,
+		BitField<PipelineDynamicStateFlags> p_dynamic_state_flags /*= 0*/, uint32_t p_for_render_pass /*= 0*/,
+		const std::vector<PipelineSpecializationConstant>& p_specialization_constants /*= std::vector<PipelineSpecializationConstant>()*/)
+	{
+		Shader* shader = shader_owner.get_or_null(p_shader);
+		ERR_FAIL_NULL_V(shader, RID());
+		ERR_FAIL_COND_V_MSG(shader->pipeline_type != PIPELINE_TYPE_RASTERIZATION, RID(),
+			"Only render shaders can be used in render pipelines");
+
+		ERR_FAIL_COND_V_MSG(!shader->stage_bits.has_flag(RDD::PIPELINE_STAGE_VERTEX_SHADER_BIT), RID(), "Pre-raster shader (vertex shader) is not provided for pipeline creation.");
+
+		auto framebuff = framebuffer_owner.get_or_null(p_framebuffer);
+
+		auto frame_buffer_format = framebuff->format_id;
+		FramebufferFormat fb_format;
+		{
+			//_THREAD_SAFE_METHOD_
+
+			if (frame_buffer_format == INVALID_ID) {
+				// If nothing provided, use an empty one (no attachments).
+				frame_buffer_format = framebuffer_format_create(std::vector<AttachmentFormat>());
+			}
+			ERR_FAIL_COND_V(!framebuffer_formats.contains(frame_buffer_format), RID());
+			fb_format = framebuffer_formats[frame_buffer_format];
+		}
+
+		// Validate shader vs. framebuffer.
+		{
+			ERR_FAIL_COND_V_MSG(p_for_render_pass >= uint32_t(fb_format.E->first.passes.size()), RID(), std::format("Render pass requested for pipeline creation {} is out of bounds", std::to_string(p_for_render_pass)));
+			const FramebufferPass& pass = fb_format.E->first.passes[p_for_render_pass];
+			uint32_t output_mask = 0;
+			for (int i = 0; i < pass.color_attachments.size(); i++) {
+				if (pass.color_attachments[i] != ATTACHMENT_UNUSED) {
+					output_mask |= 1 << i;
+				}
+			}
+			ERR_FAIL_COND_V_MSG(shader->fragment_output_mask != output_mask, RID(),
+				std::format("Mismatch fragment shader output mask {} and framebuffer color output mask {} when binding both in render pipeline.", std::to_string(shader->fragment_output_mask), std::to_string(output_mask)));
+		}
+
+		RDD::VertexFormatID driver_vertex_format;
+		if (p_vertex_format != INVALID_ID) {
+			// Uses vertices, else it does not.
+			ERR_FAIL_COND_V(!vertex_formats.contains(p_vertex_format), RID());
+			const VertexDescriptionCache& vd = vertex_formats[p_vertex_format];
+			driver_vertex_format = vertex_formats[p_vertex_format].driver_id;
+
+			// Validate with inputs.
+			for (uint32_t i = 0; i < 64; i++) {
+				if (!(shader->vertex_input_mask & ((uint64_t)1) << i)) {
+					continue;
+				}
+				bool found = false;
+				for (int j = 0; j < vd.vertex_formats.size(); j++) {
+					if (vd.vertex_formats[j].location == i) {
+						found = true;
+						break;
+					}
+				}
+
+				ERR_FAIL_COND_V_MSG(!found, RID(),
+					std::format("Shader vertex input location {} not provided in vertex input description for pipeline creation.", std::to_string(i)));
+			}
+
+		}
+		else {
+			ERR_FAIL_COND_V_MSG(shader->vertex_input_mask != 0, RID(),
+				std::format("Shader contains vertex inputs, but no vertex input description was provided for pipeline creation."));
+		}
+
+		ERR_FAIL_INDEX_V(p_render_primitive, RENDER_PRIMITIVE_MAX, RID());
+
+		ERR_FAIL_INDEX_V(p_rasterization_state.cull_mode, 3, RID());
+
+		if (p_multisample_state.sample_mask.size()) {
+			// Use sample mask.
+			ERR_FAIL_COND_V((int)TEXTURE_SAMPLES_COUNT[p_multisample_state.sample_count] != p_multisample_state.sample_mask.size(), RID());
+		}
+
+		ERR_FAIL_INDEX_V(p_depth_stencil_state.depth_compare_operator, COMPARE_OP_MAX, RID());
+
+		ERR_FAIL_INDEX_V(p_depth_stencil_state.front_op.fail, STENCIL_OP_MAX, RID());
+		ERR_FAIL_INDEX_V(p_depth_stencil_state.front_op.pass, STENCIL_OP_MAX, RID());
+		ERR_FAIL_INDEX_V(p_depth_stencil_state.front_op.depth_fail, STENCIL_OP_MAX, RID());
+		ERR_FAIL_INDEX_V(p_depth_stencil_state.front_op.compare, COMPARE_OP_MAX, RID());
+
+		ERR_FAIL_INDEX_V(p_depth_stencil_state.back_op.fail, STENCIL_OP_MAX, RID());
+		ERR_FAIL_INDEX_V(p_depth_stencil_state.back_op.pass, STENCIL_OP_MAX, RID());
+		ERR_FAIL_INDEX_V(p_depth_stencil_state.back_op.depth_fail, STENCIL_OP_MAX, RID());
+		ERR_FAIL_INDEX_V(p_depth_stencil_state.back_op.compare, COMPARE_OP_MAX, RID());
+
+		ERR_FAIL_INDEX_V(p_blend_state.logic_op, LOGIC_OP_MAX, RID());
+
+		const FramebufferPass& pass = fb_format.E->first.passes[p_for_render_pass];
+		ERR_FAIL_COND_V(p_blend_state.attachments.size() < pass.color_attachments.size(), RID());
+		for (int i = 0; i < pass.color_attachments.size(); i++) {
+			if (pass.color_attachments[i] != ATTACHMENT_UNUSED) {
+				ERR_FAIL_INDEX_V(p_blend_state.attachments[i].src_color_blend_factor, BLEND_FACTOR_MAX, RID());
+				ERR_FAIL_INDEX_V(p_blend_state.attachments[i].dst_color_blend_factor, BLEND_FACTOR_MAX, RID());
+				ERR_FAIL_INDEX_V(p_blend_state.attachments[i].color_blend_op, BLEND_OP_MAX, RID());
+
+				ERR_FAIL_INDEX_V(p_blend_state.attachments[i].src_alpha_blend_factor, BLEND_FACTOR_MAX, RID());
+				ERR_FAIL_INDEX_V(p_blend_state.attachments[i].dst_alpha_blend_factor, BLEND_FACTOR_MAX, RID());
+				ERR_FAIL_INDEX_V(p_blend_state.attachments[i].alpha_blend_op, BLEND_OP_MAX, RID());
+			}
+		}
+
+		for (int i = 0; i < shader->specialization_constants.size(); i++) {
+			const ShaderSpecializationConstant& sc = shader->specialization_constants[i];
+			for (int j = 0; j < p_specialization_constants.size(); j++) {
+				const PipelineSpecializationConstant& psc = p_specialization_constants[j];
+				if (psc.constant_id == sc.constant_id) {
+					ERR_FAIL_COND_V_MSG(psc.type != sc.type, RID(), std::format("Specialization constant provided for id {} is of the wrong type.", std::to_string(sc.constant_id)));
+					break;
+				}
+			}
+		}
+		std::vector<int32_t> color_attachments = pass.color_attachments;
+		std::vector<PipelineSpecializationConstant> specialization_constants = p_specialization_constants;
+		RenderPipeline pipeline;
+		pipeline.driver_id = driver->render_pipeline_create(
+			shader->driver_id,
+			driver_vertex_format,
+			p_render_primitive,
+			p_rasterization_state,
+			p_multisample_state,
+			p_depth_stencil_state,
+			p_blend_state,
+			color_attachments,
+			p_dynamic_state_flags,
+			fb_format.render_pass,
+			p_for_render_pass,
+			specialization_constants);
+		ERR_FAIL_COND_V(!pipeline.driver_id, RID());
+
+		pipeline.shader = p_shader;
+		pipeline.shader_driver_id = shader->driver_id;
+		pipeline.shader_layout_hash = shader->layout_hash;
+		pipeline.set_formats = shader->set_formats;
+		pipeline.push_constant_size = shader->push_constant_size;
+		pipeline.stage_bits = shader->stage_bits;
+
+#ifdef DEBUG_ENABLED
+		pipeline.validation.dynamic_state = p_dynamic_state_flags;
+		pipeline.validation.framebuffer_format = p_framebuffer_format;
+		pipeline.validation.render_pass = p_for_render_pass;
+		pipeline.validation.vertex_format = p_vertex_format;
+		pipeline.validation.uses_restart_indices = p_render_primitive == RENDER_PRIMITIVE_TRIANGLE_STRIPS_WITH_RESTART_INDEX;
+
+		static const uint32_t primitive_divisor[RENDER_PRIMITIVE_MAX] = {
+			1, 2, 1, 1, 1, 3, 1, 1, 1, 1, 1
+		};
+		pipeline.validation.primitive_divisor = primitive_divisor[p_render_primitive];
+		static const uint32_t primitive_minimum[RENDER_PRIMITIVE_MAX] = {
+			1,
+			2,
+			2,
+			2,
+			2,
+			3,
+			3,
+			3,
+			3,
+			3,
+			1,
+		};
+		pipeline.validation.primitive_minimum = primitive_minimum[p_render_primitive];
+#endif
+
+		// Create ID to associate with this pipeline.
+		RID id = render_pipeline_owner.make_rid(pipeline);
+		{
+			//_THREAD_SAFE_METHOD_
+
+#ifdef DEV_ENABLED
+			set_resource_name(id, "RID:" + itos(id.get_id()));
+#endif
+			// Now add all the dependencies.
+			_add_dependency(id, p_shader);
+		}
+		return id;
+	}
+
 	Error RenderingDevice::screen_create(DisplayServerEnums::WindowID p_screen)
 	{
 
@@ -1042,138 +1228,7 @@ namespace Rendering
 		return id;
 	}
 
-	RID RenderingDevice::framebuffer_create(const std::vector<RID>& p_texture_attachments, FramebufferFormatID p_format_check, uint32_t p_view_count) {
-		//_THREAD_SAFE_METHOD_
-
-		FramebufferPass pass;
-
-		for (int i = 0; i < p_texture_attachments.size(); i++) {
-			Texture* texture = texture_owner.get_or_null(p_texture_attachments[i]);
-
-			ERR_FAIL_COND_V_MSG(texture && texture->layers != p_view_count, RID(), "Layers of our texture doesn't match view count for this framebuffer");
-
-			if (texture != nullptr) {
-				_check_transfer_worker_texture(texture);
-			}
-
-			if (texture && texture->usage_flags & TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) {
-				pass.depth_attachment = i;
-			}
-			else if (texture && texture->usage_flags & TEXTURE_USAGE_DEPTH_RESOLVE_ATTACHMENT_BIT) {
-				pass.depth_resolve_attachment = i;
-			}
-			else if (texture && texture->usage_flags & TEXTURE_USAGE_VRS_ATTACHMENT_BIT) {
-				// Prevent the VRS attachment from being added to the color_attachments.
-			}
-			else {
-				if (texture && texture->is_resolve_buffer) {
-					pass.resolve_attachments.push_back(i);
-				}
-				else {
-					pass.color_attachments.push_back(texture ? i : ATTACHMENT_UNUSED);
-				}
-			}
-		}
-
-		std::vector<FramebufferPass> passes;
-		passes.push_back(pass);
-
-		return framebuffer_create_multipass(p_texture_attachments, passes, p_format_check, p_view_count);
-	}
-
-	RID RenderingDevice::framebuffer_create_multipass(const std::vector<RID>& p_texture_attachments, const std::vector<FramebufferPass>& p_passes, FramebufferFormatID p_format_check, uint32_t p_view_count) {
-		//_THREAD_SAFE_METHOD_
-
-		std::vector<AttachmentFormat> attachments;
-		std::vector<RDD::TextureID> textures;
-		//std::vector<RDG::ResourceTracker*> trackers;
-		int32_t vrs_attachment = -1;
-		attachments.resize(p_texture_attachments.size());
-		Size2i size;
-		bool size_set = false;
-		for (int i = 0; i < p_texture_attachments.size(); i++) {
-			AttachmentFormat af;
-			Texture* texture = texture_owner.get_or_null(p_texture_attachments[i]);
-			if (!texture) {
-				af.usage_flags = AttachmentFormat::UNUSED_ATTACHMENT;
-				//trackers.push_back(nullptr);
-			}
-			else {
-				ERR_FAIL_COND_V_MSG(texture->layers != p_view_count, RID(), "Layers of our texture doesn't match view count for this framebuffer");
-
-				_check_transfer_worker_texture(texture);
-
-				if (i != 0 && texture->usage_flags & TEXTURE_USAGE_VRS_ATTACHMENT_BIT) {
-					// Detect if the texture is the fragment density map and it's not the first attachment.
-					vrs_attachment = i;
-				}
-
-				if (!size_set) {
-					size.x = texture->width;
-					size.y = texture->height;
-					size_set = true;
-				}
-				else if (texture->usage_flags & TEXTURE_USAGE_VRS_ATTACHMENT_BIT) {
-					// If this is not the first attachment we assume this is used as the VRS attachment.
-					// In this case this texture will be 1/16th the size of the color attachment.
-					// So we skip the size check.
-				}
-				else {
-					ERR_FAIL_COND_V_MSG((uint32_t)size.x != texture->width || (uint32_t)size.y != texture->height, RID(),
-						"All textures in a framebuffer should be the same size.");
-				}
-
-				af.format = texture->format;
-				af.samples = texture->samples;
-				af.usage_flags = texture->usage_flags;
-
-				//_texture_make_mutable(texture, p_texture_attachments[i]);
-
-				textures.push_back(texture->driver_id);
-				//trackers.push_back(texture->draw_tracker);
-			}
-			attachments[i] = af;
-		}
-
-		ERR_FAIL_COND_V_MSG(!size_set, RID(), "All attachments unused.");
-
-		FramebufferFormatID format_id = framebuffer_format_create_multipass(attachments, p_passes, p_view_count, vrs_attachment);
-		if (format_id == INVALID_ID) {
-			return RID();
-		}
-
-		ERR_FAIL_COND_V_MSG(p_format_check != INVALID_ID && format_id != p_format_check, RID(),
-			"The format used to check this framebuffer differs from the intended framebuffer format.");
-
-		Framebuffer framebuffer;
-		framebuffer.format_id = format_id;
-		framebuffer.texture_ids = p_texture_attachments;
-		framebuffer.size = size;
-		framebuffer.view_count = p_view_count;
-
-		//RDG::FramebufferCache* framebuffer_cache = RDG::framebuffer_cache_create();
-		//framebuffer_cache->width = size.width;
-		//framebuffer_cache->height = size.height;
-		//framebuffer_cache->textures = textures;
-		//framebuffer_cache->trackers = trackers;
-		//framebuffer.framebuffer_cache = framebuffer_cache;
-
-		RID id = framebuffer_owner.make_rid(framebuffer);
-#ifdef DEV_ENABLED
-		set_resource_name(id, "RID:" + itos(id.get_id()));
-#endif
-
-		for (int i = 0; i < p_texture_attachments.size(); i++) {
-			if (p_texture_attachments[i].is_valid()) {
-				_add_dependency(id, p_texture_attachments[i]);
-			}
-		}
-
-		// This relies on the fact that HashMap will not change the address of an object after it's been inserted into the container.
-		//framebuffer_cache->render_pass_creation_user_data = (void*)(&framebuffer_formats[framebuffer.format_id].E->key());
-
-		return id;
-	}
+	
 
 	Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_format_create_empty(TextureSamples p_samples /*= TEXTURE_SAMPLES_1*/)
 	{
@@ -2766,7 +2821,9 @@ namespace Rendering
 
 	RDD::FramebufferID RenderingDevice::create_framebuffer(RDD::RenderPassID p_render_pass, std::span<RDD::TextureID> p_attachments, uint32_t p_width, uint32_t p_height)
 	{
-		return driver->framebuffer_create(p_render_pass, p_attachments, p_width, p_height);	
+		auto id = driver->framebuffer_create(p_render_pass, p_attachments, p_width, p_height);
+		//renderpass_to_frame_buffer_id[p_render_pass] = id;
+		return id;
 	}
 
 	RDD::FramebufferID RenderingDevice::create_framebuffer_from_format_id(FramebufferFormatID p_format_id, std::vector<RID> p_attachments, uint32_t p_width, uint32_t p_height)
@@ -2777,6 +2834,141 @@ namespace Rendering
 			attachments.push_back(texture_owner.get_or_null(a)->driver_id);
 		}
 		return driver->framebuffer_create(framebuffer_formats[p_format_id].render_pass, attachments, p_width, p_height);
+	}
+
+	RID RenderingDevice::framebuffer_create(const std::vector<RID>& p_texture_attachments, FramebufferFormatID p_format_check, uint32_t p_view_count) {
+		//_THREAD_SAFE_METHOD_
+
+		FramebufferPass pass;
+
+		for (int i = 0; i < p_texture_attachments.size(); i++) {
+			Texture* texture = texture_owner.get_or_null(p_texture_attachments[i]);
+
+			ERR_FAIL_COND_V_MSG(texture && texture->layers != p_view_count, RID(), "Layers of our texture doesn't match view count for this framebuffer");
+
+			if (texture != nullptr) {
+				_check_transfer_worker_texture(texture);
+			}
+
+			if (texture && texture->usage_flags & TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+				pass.depth_attachment = i;
+			}
+			else if (texture && texture->usage_flags & TEXTURE_USAGE_DEPTH_RESOLVE_ATTACHMENT_BIT) {
+				pass.depth_resolve_attachment = i;
+			}
+			else if (texture && texture->usage_flags & TEXTURE_USAGE_VRS_ATTACHMENT_BIT) {
+				// Prevent the VRS attachment from being added to the color_attachments.
+			}
+			else {
+				if (texture && texture->is_resolve_buffer) {
+					pass.resolve_attachments.push_back(i);
+				}
+				else {
+					pass.color_attachments.push_back(texture ? i : ATTACHMENT_UNUSED);
+				}
+			}
+		}
+
+		std::vector<FramebufferPass> passes;
+		passes.push_back(pass);
+
+		return framebuffer_create_multipass(p_texture_attachments, passes, p_format_check, p_view_count);
+	}
+
+	RID RenderingDevice::framebuffer_create_multipass(const std::vector<RID>& p_texture_attachments, const std::vector<FramebufferPass>& p_passes, FramebufferFormatID p_format_check, uint32_t p_view_count) {
+		//_THREAD_SAFE_METHOD_
+
+		std::vector<AttachmentFormat> attachments;
+		std::vector<RDD::TextureID> textures;
+		//std::vector<RDG::ResourceTracker*> trackers;
+		int32_t vrs_attachment = -1;
+		attachments.resize(p_texture_attachments.size());
+		Size2i size;
+		bool size_set = false;
+		for (int i = 0; i < p_texture_attachments.size(); i++) {
+			AttachmentFormat af;
+			Texture* texture = texture_owner.get_or_null(p_texture_attachments[i]);
+			if (!texture) {
+				af.usage_flags = AttachmentFormat::UNUSED_ATTACHMENT;
+				//trackers.push_back(nullptr);
+			}
+			else {
+				ERR_FAIL_COND_V_MSG(texture->layers != p_view_count, RID(), "Layers of our texture doesn't match view count for this framebuffer");
+
+				_check_transfer_worker_texture(texture);
+
+				if (i != 0 && texture->usage_flags & TEXTURE_USAGE_VRS_ATTACHMENT_BIT) {
+					// Detect if the texture is the fragment density map and it's not the first attachment.
+					vrs_attachment = i;
+				}
+
+				if (!size_set) {
+					size.x = texture->width;
+					size.y = texture->height;
+					size_set = true;
+				}
+				else if (texture->usage_flags & TEXTURE_USAGE_VRS_ATTACHMENT_BIT) {
+					// If this is not the first attachment we assume this is used as the VRS attachment.
+					// In this case this texture will be 1/16th the size of the color attachment.
+					// So we skip the size check.
+				}
+				else {
+					ERR_FAIL_COND_V_MSG((uint32_t)size.x != texture->width || (uint32_t)size.y != texture->height, RID(),
+						"All textures in a framebuffer should be the same size.");
+				}
+
+				af.format = texture->format;
+				af.samples = texture->samples;
+				af.usage_flags = texture->usage_flags;
+
+				//_texture_make_mutable(texture, p_texture_attachments[i]);
+
+				textures.push_back(texture->driver_id);
+				//trackers.push_back(texture->draw_tracker);
+			}
+			attachments[i] = af;
+		}
+
+		ERR_FAIL_COND_V_MSG(!size_set, RID(), "All attachments unused.");
+
+		FramebufferFormatID format_id = framebuffer_format_create_multipass(attachments, p_passes, p_view_count, vrs_attachment);
+		if (format_id == INVALID_ID) {
+			return RID();
+		}
+
+		ERR_FAIL_COND_V_MSG(p_format_check != INVALID_ID && format_id != p_format_check, RID(),
+			"The format used to check this framebuffer differs from the intended framebuffer format.");
+
+		Framebuffer framebuffer;
+		framebuffer.format_id = format_id;
+		framebuffer.texture_ids = p_texture_attachments;
+		framebuffer.size = size;
+		framebuffer.view_count = p_view_count;
+
+		//RDG::FramebufferCache* framebuffer_cache = RDG::framebuffer_cache_create();
+		//framebuffer_cache->width = size.width;
+		//framebuffer_cache->height = size.height;
+		//framebuffer_cache->textures = textures;
+		//framebuffer_cache->trackers = trackers;
+		//framebuffer.framebuffer_cache = framebuffer_cache;
+
+		RID id = framebuffer_owner.make_rid(framebuffer);
+#ifdef DEV_ENABLED
+		set_resource_name(id, "RID:" + itos(id.get_id()));
+#endif
+
+		for (int i = 0; i < p_texture_attachments.size(); i++) {
+			if (p_texture_attachments[i].is_valid()) {
+				_add_dependency(id, p_texture_attachments[i]);
+			}
+		}
+
+		auto frame_buffer = create_framebuffer_from_format_id(format_id, p_texture_attachments, size.x, size.y);
+		rid_to_frame_buffer_id[id] = frame_buffer;
+		// This relies on the fact that HashMap will not change the address of an object after it's been inserted into the container.
+		//framebuffer_cache->render_pass_creation_user_data = (void*)(&framebuffer_formats[framebuffer.format_id].E->key());
+
+		return id;
 	}
 
 	RDD::RenderPassID RenderingDevice::render_pass_from_format_id(FramebufferFormatID p_format_id)
@@ -2793,6 +2985,24 @@ namespace Rendering
 		val[0].color = p_clear_color;
 
 		driver->command_begin_render_pass(command_buffer, p_render_pass, p_frame_buffer, RenderingDeviceDriver::COMMAND_BUFFER_TYPE_PRIMARY, viewport[0], val);
+		driver->command_render_set_viewport(command_buffer, viewport);
+		driver->command_render_set_scissor(command_buffer, viewport);
+		return true;
+	}
+
+	bool RenderingDevice::begin_render_pass_from_frame_buffer(RID p_frame_buffer, Rect2i p_region, const Color& p_clear_color)
+	{
+		RDD::CommandBufferID command_buffer = frames[frame].command_buffer;
+		std::vector<Rect2i> viewport{ p_region };
+
+		std::array<RenderingDeviceDriver::RenderPassClearValue, 1> val;
+		val[0].color = p_clear_color;
+
+		auto frame_buffer = framebuffer_owner.get_or_null(p_frame_buffer);
+		auto frame_buffer_format = framebuffer_formats[frame_buffer->format_id];
+		auto render_pass = frame_buffer_format.render_pass;
+
+		driver->command_begin_render_pass(command_buffer, render_pass, rid_to_frame_buffer_id[p_frame_buffer], RenderingDeviceDriver::COMMAND_BUFFER_TYPE_PRIMARY, viewport[0], val);
 		driver->command_render_set_viewport(command_buffer, viewport);
 		driver->command_render_set_scissor(command_buffer, viewport);
 		return true;
