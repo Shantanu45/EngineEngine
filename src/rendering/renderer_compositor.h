@@ -39,6 +39,11 @@ namespace Rendering
 
 		void initailize(DisplayServerEnums::WindowID p_screen);
 
+		bool is_blit_pass_active() const
+		{
+			return initialized;
+		}
+
 		void finalize();
 	private:
 
@@ -49,5 +54,7 @@ namespace Rendering
 
 		RenderingDevice* rendering_device;
 		DisplayServerEnums::WindowID screen;
+
+		bool initialized = false;
 	};
 }

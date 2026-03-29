@@ -62,7 +62,7 @@ namespace Rendering
 		if (rendering_context && rendering_device) {
 			
 			DEV_ASSERT(rendering_device != nullptr);
-
+			// TODO: my be move swap chain creation to the renderer compositor?
 			rendering_device->screen_create(active_window);
 			rd = std::make_unique<RendererCompositor>();
 			rd->initailize(DisplayServerEnums::MAIN_WINDOW_ID);
@@ -73,9 +73,13 @@ namespace Rendering
 
 	void WSI::blit_render_target_to_screen(RID texture)
 	{
-		Rendering::BlitToScreen blit;
-		blit.render_target = texture;
-		rd->blit_render_targets_to_screen(&blit);
+		if (rd->is_blit_pass_active())
+		{
+			Rendering::BlitToScreen blit;
+			blit.render_target = texture;
+
+			rd->blit_render_targets_to_screen(&blit);
+		}
 	}
 
 	bool WSI::pre_begin_frame()
@@ -86,7 +90,10 @@ namespace Rendering
 	bool WSI::begin_frame()
 	{
 		rendering_device->begin_frame();
-		rd->begin_frame();
+		if (rd->is_blit_pass_active())
+		{
+			rd->begin_frame();
+		}
 		rendering_device->_submit_transfer_barriers(rendering_device->get_current_command_buffer());
 
 		rendering_device->screen_prepare_for_drawing(active_window);
@@ -103,7 +110,14 @@ namespace Rendering
 	bool WSI::end_frame(bool p_present)
 	{
 		//rendering_device->swap_buffers(p_present);
-		rd->end_frame(true);
+		if (rd->is_blit_pass_active())
+		{
+			rd->end_frame(true);
+		}
+		else
+		{
+			// TODO: logic if not presenting on screen
+		}
 		return true;
 	}
 

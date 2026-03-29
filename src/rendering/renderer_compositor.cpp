@@ -95,6 +95,7 @@ namespace Rendering
 		blit.sampler = rendering_device->sampler_create(RenderingDevice::SamplerState());
 
 		rendering_device->_submit_transfer_workers();
+		initialized = true;
 	}
 
 
