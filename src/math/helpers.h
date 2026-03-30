@@ -3,6 +3,7 @@
 #include <glm/gtc/epsilon.hpp>
 #include "glm/gtc/round.hpp"
 #include <string>
+#include "util/typedefs.h"
 
 namespace math_helpers
 {

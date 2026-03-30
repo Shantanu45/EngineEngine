@@ -18,7 +18,7 @@
 #include "rendering/pipeline_builder.h"
 #include "rendering/framegraph_resources.h"
 
-
+#include "rendering/camera.h"
 
 
 
@@ -105,8 +105,7 @@ struct TriangleApplication : EE::Application
 
 	struct alignas(16) UBO {
 		glm::mat4 model;
-		glm::mat4 view;
-		glm::mat4 projection;
+		glm::mat4 view_projection;
 	};
 
 	void pre_frame() override
@@ -142,6 +141,9 @@ struct TriangleApplication : EE::Application
 			.set_shader({ "assets://shaders/triangle_v2.vert", "assets://shaders/triangle_v2.frag" }, "triangle_shader")
 			.set_vertex_format(vertex_format)
 			.build_from_frame_buffer(scene_fb);		
+
+		camera.set_perspective(60.0f, 16.0f / 9.0f, 0.1f, 1000.0f);
+		camera.set_mode(CameraMode::Fly);
 
 		state_uniform = device->uniform_buffer_create(sizeof(UBO));
 
@@ -206,19 +208,20 @@ struct TriangleApplication : EE::Application
 
 		UBO ubo{};
 		ubo.model = glm::mat4(1.0f); // identity for now
-		ubo.view = glm::lookAt(
-			glm::vec3(0.0f, 0.0f, 3.0f),  // camera position
-			glm::vec3(0.0f, 0.0f, 0.0f),  // look at origin
-			glm::vec3(0.0f, 1.0f, 0.0f)   // up vector
-		);
-		ubo.projection = glm::perspective(glm::radians(45.0f),
-			(float)device->screen_get_width() / (float)device->screen_get_height(),         // aspect ratio
-			0.1f,                          // near
-			100.0f                         // far
-		);
+		ubo.view_projection = camera.get_view_projection();
+		//	glm::lookAt(
+		//	glm::vec3(0.0f, 0.0f, 3.0f),  // camera position
+		//	glm::vec3(0.0f, 0.0f, 0.0f),  // look at origin
+		//	glm::vec3(0.0f, 1.0f, 0.0f)   // up vector
+		//);
+		//ubo.projection = glm::perspective(glm::radians(45.0f),
+		//	(float)device->screen_get_width() / (float)device->screen_get_height(),         // aspect ratio
+		//	0.1f,                          // near
+		//	100.0f                         // far
+		//);
 
 		// Vulkan clip space fix - flip Y
-		ubo.projection[1][1] *= -1;
+		//ubo.projection[1][1] *= -1;
 		auto err = device->buffer_update(state_uniform, 0, sizeof(UBO), &ubo);
 
 		// needs to be outside render pass begin - end
@@ -277,7 +280,7 @@ private:
 	RDC::TextureFormat tf;
 
 	RID scene_fb;
-
+	Camera camera;
 };
 
 namespace EE
@@ -285,7 +288,7 @@ namespace EE
 	Application* application_create(int, char**)
 	{
 		EE_APPLICATION_SETUP;
-		spdlog::info("hwlloe");
+
 		try
 		{
 			auto* app = new TriangleApplication();

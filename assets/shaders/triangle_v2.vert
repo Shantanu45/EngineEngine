@@ -10,12 +10,11 @@ layout(location = 1) out vec2 fragUV;
 
 layout(binding = 0) uniform UBO {
     mat4 model;
-    mat4 view;
-    mat4 projection;
+    mat4 view_projectoin;
 } ubo;
 
 void main() {
-    gl_Position = ubo.projection * ubo.view * ubo.model * vec4(inPosition, 1.0);
+    gl_Position = ubo.view_projectoin * ubo.model * vec4(inPosition, 1.0);
     fragUV = inTexcoord;
     fragCol = inNormal; // use normal for debug color
 }
