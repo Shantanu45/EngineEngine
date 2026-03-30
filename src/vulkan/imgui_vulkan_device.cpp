@@ -138,6 +138,13 @@ namespace Vulkan
 		}
 	}
 
+	void ImGuiDevice::execute(void* p_draw_data, RenderingDeviceDriverVulkan::CommandBufferID p_command_buffer, RenderingDeviceDriverVulkan::PipelineID p_pipeline)
+	{
+		RenderingDeviceDriverVulkan::CommandBufferInfo* command_buffer = (RenderingDeviceDriverVulkan::CommandBufferInfo*)(p_command_buffer.id);
+		VkPipeline pipeline = (VkPipeline)(p_pipeline.id);
+		ImGui_ImplVulkan_RenderDrawData((ImDrawData*)p_draw_data, command_buffer->vk_command_buffer, pipeline);
+	}
+
 	void ImGuiDevice::finalize()
 	{
 		auto err = vkDeviceWaitIdle(vulkan_driver->vulkan_device_get());

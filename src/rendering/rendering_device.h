@@ -1012,6 +1012,8 @@ namespace Rendering
 
 		Error iniitialize_imgui_device(RID p_framebuffer);
 
+		void imgui_execute(void* p_draw_data, RDD::CommandBufferID p_command_buffer, RDD::PipelineID p_pipeline = RDD::PipelineID());
+		Vulkan::ImGuiDevice* get_imgui_device();
 		// TODO: #temp
 		void _submit_transfer_workers(RDD::CommandBufferID p_draw_command_buffer = RDD::CommandBufferID());
 		void _submit_transfer_barriers(RDD::CommandBufferID p_draw_command_buffer);

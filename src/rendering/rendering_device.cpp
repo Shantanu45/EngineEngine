@@ -3390,6 +3390,16 @@ namespace Rendering
 		return OK;
 	}
 
+	void RenderingDevice::imgui_execute(void* p_draw_data, RDD::CommandBufferID p_command_buffer, RDD::PipelineID p_pipeline)
+	{
+		imgui_device->execute(p_draw_data, p_command_buffer, p_pipeline);
+	}
+
+	Vulkan::ImGuiDevice* RenderingDevice::get_imgui_device()
+	{
+		return imgui_device.get();
+	}
+
 #pragma region Transfer worker
 
 	static uint32_t _get_alignment_offset(uint32_t p_offset, uint32_t p_required_align) {

@@ -26,6 +26,7 @@ namespace Vulkan
 		void end_frame();
 
 		void show_demo_window();
+		void execute(void* p_draw_data, RenderingDeviceDriverVulkan::CommandBufferID p_command_buffer, RenderingDeviceDriverVulkan::PipelineID p_pipeline);
 		void finalize();
 	public:
 		RenderingContextDriverVulkan* vulkan_context;
