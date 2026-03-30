@@ -17,6 +17,14 @@ namespace Vulkan
 			const uint32_t p_min_image_count, const uint32_t p_swapchain_image_count, const VkRenderPass p_render_pass,
 			const uint32_t subpass);
 
+		void poll_event(SDL_Event* event);
+
+		void begin_frame();
+
+		void render();
+
+		void end_frame();
+
 		void finalize();
 	public:
 		RenderingContextDriverVulkan* vulkan_context;

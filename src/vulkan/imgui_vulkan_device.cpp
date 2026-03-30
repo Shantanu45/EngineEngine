@@ -79,8 +79,33 @@ namespace Vulkan
 	}
 
 
+	void ImGuiDevice::poll_event(SDL_Event* event)
+	{
+		ImGui_ImplSDL3_ProcessEvent(event);
+	}
+
+	void ImGuiDevice::begin_frame()
+	{
+		// Start the Dear ImGui frame
+		ImGui_ImplVulkan_NewFrame();
+		ImGui_ImplSDL3_NewFrame();
+		ImGui::NewFrame();
+	}
+
+	void ImGuiDevice::render()
+	{
+		ImGui::Render();
+	}
+
+	void ImGuiDevice::end_frame()
+	{
+
+	}
+
 	void ImGuiDevice::finalize()
 	{
+		auto err = vkDeviceWaitIdle(vulkan_driver->vulkan_device_get());
+		check_vk_result(err);
 		ImGui_ImplVulkan_Shutdown();
 		ImGui_ImplSDL3_Shutdown();
 		ImGui::DestroyContext();
