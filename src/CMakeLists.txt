@@ -33,6 +33,7 @@ find_package(xxHash REQUIRED)
 find_package(spirv-reflect-static REQUIRED)
 find_package(TinyGLTF REQUIRED)
 find_package(stb REQUIRED)
+find_package(imgui REQUIRED)
 
 
 set(INCLUDES 
@@ -64,6 +65,7 @@ set(ADDITIONAL_LIBRARY_DEPENDENCIES
 	spirv-reflect-static
 	TinyGLTF::TinyGLTF
 	stb::stb
+	imgui::imgui
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE "${ADDITIONAL_LIBRARY_DEPENDENCIES}")

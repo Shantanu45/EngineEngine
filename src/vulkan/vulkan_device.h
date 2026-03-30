@@ -548,7 +548,9 @@ namespace Vulkan
 
 		virtual uint64_t limit_get(Limit p_limit) override final;
 
-
+		VkDevice vulkan_device_get() const {
+			return vk_device;
+		}
 	private:
 		void _register_requested_device_extension(const std::string& p_extension_name, bool p_required);
 		Error _initialize_device_extensions();
