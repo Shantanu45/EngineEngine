@@ -1117,7 +1117,7 @@ namespace Rendering
 		ERR_FAIL_COND_V_MSG(it == screen_swap_chains.end(), FAILED, "Screen was never created.");
 
 		// Flush everything so nothing can be using the swap chain before erasing it.
-		_flush_and_stall_for_all_frames();
+		_flush_and_stall_for_all_frames(true);
 
 		const DisplayServerEnums::WindowID screen = it->first;
 		const RDD::SwapChainID swap_chain = it->second;
@@ -2793,7 +2793,10 @@ namespace Rendering
 		execute_frame(p_present);
 		_stall_for_frame(frame);
 
+
 		frame = (frame + 1) % frames.size();
+		begin_frame();
+
 	}
 
 	bool RenderingDevice::begin_for_screen(DisplayServerEnums::WindowID p_screen /*= 0*/, const Color& p_clear_color /*= Color()*/)
@@ -3251,10 +3254,26 @@ namespace Rendering
 
 	void RenderingDevice::begin_frame(bool p_presented /*= false*/)
 	{
+		_stall_for_frame(frame);
+
+		frames_drawn++;
 
 		RDD::CommandBufferID command_buffer = frames[frame].command_buffer;
 
 		driver->command_buffer_begin(command_buffer);
+
+		_free_pending_resources(frame);
+
+		// Advance staging buffers if used.
+		if (upload_staging_buffers.used) {
+			upload_staging_buffers.current = (upload_staging_buffers.current + 1) % upload_staging_buffers.blocks.size();
+			upload_staging_buffers.used = false;
+		}
+
+		if (download_staging_buffers.used) {
+			download_staging_buffers.current = (download_staging_buffers.current + 1) % download_staging_buffers.blocks.size();
+			download_staging_buffers.used = false;
+		}
 	}
 
 	void RenderingDevice::end_frame()
@@ -3266,17 +3285,6 @@ namespace Rendering
 		//driver->command_end_render_pass(command_buffer);
 		frames_drawn++;
 		driver->command_buffer_end(command_buffer);
-		// Advance staging buffers if used.
-		if (upload_staging_buffers.used) {
-			upload_staging_buffers.current = (upload_staging_buffers.current + 1) % upload_staging_buffers.blocks.size();
-			upload_staging_buffers.used = false;
-		}
-
-		if (download_staging_buffers.used) {
-			download_staging_buffers.current = (download_staging_buffers.current + 1) % download_staging_buffers.blocks.size();
-			download_staging_buffers.used = false;
-		}
-
 	}
 
 	void RenderingDevice::end_render_pass(RDD::CommandBufferID cmd)
@@ -3695,8 +3703,8 @@ namespace Rendering
 		_stall_for_previous_frames();
 		// TODO: end render pass?
 		//driver->command_end_render_pass(get_current_command_buffer());
-		//end_frame();
-		//execute_frame(false);
+		end_frame();
+		execute_frame(false);
 
 		if (p_begin_frame) {
 			begin_frame();
@@ -4872,7 +4880,7 @@ namespace Rendering
 	void RenderingDevice::_free_pending_resources(int p_frame)
 	{
 		// Free in dependency usage order, so nothing weird happens.
-	// Pipelines.
+		// Pipelines.
 		while (!frames[p_frame].render_pipelines_to_dispose_of.empty()) {
 			RenderPipeline* pipeline = &(frames[p_frame]).render_pipelines_to_dispose_of.front();
 
@@ -4880,40 +4888,6 @@ namespace Rendering
 
 			frames[p_frame].render_pipelines_to_dispose_of.pop_front();
 		}
-
-		//while (frames[p_frame].compute_pipelines_to_dispose_of.front()) {
-		//	ComputePipeline* pipeline = &frames[p_frame].compute_pipelines_to_dispose_of.front()->get();
-
-		//	driver->pipeline_free(pipeline->driver_id);
-
-		//	frames[p_frame].compute_pipelines_to_dispose_of.pop_front();
-		//}
-
-		//while (frames[p_frame].raytracing_pipelines_to_dispose_of.front()) {
-		//	RaytracingPipeline* pipeline = &frames[p_frame].raytracing_pipelines_to_dispose_of.front()->get();
-
-		//	driver->raytracing_pipeline_free(pipeline->driver_id);
-
-		//	frames[p_frame].raytracing_pipelines_to_dispose_of.pop_front();
-		//}
-
-		// Acceleration structures.
-		//while (frames[p_frame].acceleration_structures_to_dispose_of.front()) {
-		//	AccelerationStructure& acceleration_structure = frames[p_frame].acceleration_structures_to_dispose_of.front()->get();
-
-		//	driver->acceleration_structure_free(acceleration_structure.driver_id);
-
-		//	if (acceleration_structure.scratch_buffer) {
-		//		size_t scratch_size = driver->buffer_get_allocation_size(acceleration_structure.scratch_buffer);
-		//		_THREAD_SAFE_LOCK_
-		//			buffer_memory -= scratch_size;
-		//		_THREAD_SAFE_UNLOCK_
-
-		//			driver->buffer_free(acceleration_structure.scratch_buffer);
-		//	}
-
-		//	frames[p_frame].acceleration_structures_to_dispose_of.pop_front();
-		//}
 
 		// Uniform sets.
 		while (!frames[p_frame].uniform_sets_to_dispose_of.empty()) {

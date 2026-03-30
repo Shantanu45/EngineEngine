@@ -311,7 +311,7 @@ struct TriangleApplication : EE::Application
 		fg.execute(&rc, &rc);
 	}
 
-	void post_frame() override
+	void teardown_application() override
 	{
 		auto wsi = get_wsi();
 

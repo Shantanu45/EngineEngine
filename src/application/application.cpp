@@ -55,7 +55,8 @@ namespace EE
 
 	Application::~Application()
 	{
-		teardown_wsi();
+		teardown_wsi(); 
+
 		FreeConsole();
 	}
 
@@ -97,6 +98,7 @@ namespace EE
 	void Application::post_frame()
 	{
 		application_wsi->post_frame_loop();
+		teardown_application();
 	}
 
 	void Application::render_early_loading(double frame_time, double elapsed_time)

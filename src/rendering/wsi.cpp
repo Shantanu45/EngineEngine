@@ -66,6 +66,8 @@ namespace Rendering
 			rendering_device->screen_create(active_window);
 			rd = std::make_unique<RendererCompositor>();
 			rd->initailize(DisplayServerEnums::MAIN_WINDOW_ID);
+			rendering_device->begin_frame();
+
 			return true;
 		}
 		return false;
@@ -89,14 +91,10 @@ namespace Rendering
 
 	bool WSI::begin_frame()
 	{
-		rendering_device->begin_frame();
-		if (rd->is_blit_pass_active())
-		{
-			rd->begin_frame();
-		}
+
 		rendering_device->_submit_transfer_barriers(rendering_device->get_current_command_buffer());
 
-		rendering_device->screen_prepare_for_drawing(active_window);
+		//rendering_device->screen_prepare_for_drawing(active_window);
 
 		return true;
 	}
@@ -266,12 +264,12 @@ namespace Rendering
 				rendering_device->free_rid(p.second.vertex_array);
 				rendering_device->_free_dependencies_of(p.second.index_array);
 				rendering_device->free_rid(p.second.index_array);
-
-				//rendering_device->free_rid(p.f);
 			}
 
 		}
+
 		rendering_device->finalize();
+		rendering_device->screen_free();
 
 	}
 

@@ -974,6 +974,11 @@ namespace Rendering
 			uint32_t p_for_render_pass = 0,
 			const std::vector<PipelineSpecializationConstant>& p_specialization_constants = std::vector<PipelineSpecializationConstant>());
 
+		/**
+		 * command buffer begin.
+		 * 
+		 * \param p_presented
+		 */
 		void begin_frame(bool p_presented = false);
 
 		void end_frame();

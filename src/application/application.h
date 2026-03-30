@@ -39,6 +39,7 @@ namespace EE
 
 		virtual void post_frame();
 
+		virtual void teardown_application() = 0;
 
 		virtual void render_early_loading(double frame_time, double elapsed_time);
 
@@ -69,8 +70,8 @@ namespace EE
 			return application_wsi.get();
 		}
 
-
 		void teardown_wsi();
+
 
 	protected:
 		void request_shutdown()

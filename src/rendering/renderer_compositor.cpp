@@ -16,6 +16,7 @@ namespace Rendering
 
 	void RendererCompositor::blit_render_targets_to_screen(const BlitToScreen* p_render_targets)
 	{
+		rendering_device->screen_prepare_for_drawing(screen);
 		rendering_device->begin_for_screen(screen);
 
 		RID rd_texture = p_render_targets[0].render_target;		// 0 for now
@@ -110,7 +111,6 @@ namespace Rendering
 		}
 		rendering_device->free_rid(blit.sampler);
 		rendering_device->free_rid(blit_pipeline);
-		rendering_device->screen_free();
 	}
 
 }
