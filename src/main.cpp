@@ -11,78 +11,15 @@
 #define VMA_DYNAMIC_VULKAN_FUNCTIONS 1
 
 #include "vma/vk_mem_alloc.h"
-#include "application/application.h"
 #include "application/application_entry/application_entry.h"
 #include "libassert/assert.hpp"
 #include "rendering/image_loader.h"
-#include "rendering/renderer_compositor.h"
+
 #include "rendering/pipeline_builder.h"
-#include "rendering/fg/frame_graph.h"
-#include "rendering/fg/blackboard.h"
+#include "rendering/framegraph_resources.h"
 
-using RD = Rendering::RenderingDevice;
-using RDC = Rendering::RenderingDeviceCommons;
-using RDD = Rendering::RenderingDeviceDriver;
 
-struct RenderContext
-{
-	Rendering::RenderingDevice* device;
-	RDD::CommandBufferID command_buffer;
-	Rendering::WSI* wsi;
-};
 
-struct FrameGraphTexture {
-	struct Desc {
-		RDC::TextureFormat texture_format;
-		const RD::TextureView texture_view;
-		std::string texture_name;
-	};
-
-	void create(const Desc& desc, void* ctx) {
-		auto& device = *static_cast<Rendering::RenderingDevice*>(ctx);
-		texture = device.texture_create(desc.texture_format, desc.texture_view, {});
-	}
-
-	void destroy(const Desc& desc, void* ctx) {
-		auto& device = *static_cast<Rendering::RenderingDevice*>(ctx);
-		device.free_rid(texture);
-	}
-
-	void pre_read(const Desc& desc, uint32_t flags, void* ctx) {
-		auto& rc = *static_cast<RenderContext*>(ctx);
-
-		RDD::TextureBarrier barrier2;
-		barrier2.dst_access = RDD::BARRIER_ACCESS_SHADER_READ_BIT;
-		barrier2.next_layout = RDD::TEXTURE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		barrier2.prev_layout = RDD::TEXTURE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-		barrier2.src_access = RDD::BARRIER_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-		barrier2.subresources = { RDD::TEXTURE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
-		barrier2.texture = rc.device->texture_id_from_rid(texture);
-		rc.device->apply_image_barrier(rc.command_buffer, RDD::PipelineStageBits::PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-			RDD::PipelineStageBits::PIPELINE_STAGE_FRAGMENT_SHADER_BIT, { &barrier2, 1 });
-	}
-
-	void pre_write(const Desc& desc, uint32_t flags, void* ctx) {
-		auto& rc = *static_cast<RenderContext*>(ctx);
-
-		RDD::TextureBarrier barrier;
-		barrier.src_access = 0;
-		barrier.dst_access = RDD::BARRIER_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-		barrier.prev_layout = RDD::TEXTURE_LAYOUT_UNDEFINED;
-		barrier.next_layout = RDD::TEXTURE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-		barrier.subresources = { RDD::TEXTURE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
-		barrier.texture = rc.device->texture_id_from_rid(texture);
-		rc.device->apply_image_barrier(rc.command_buffer, RDD::PipelineStageBits::PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-			RDD::PipelineStageBits::PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, { &barrier, 1 });
-	}
-
-	// to_string is used by the Graphviz dot exporter
-	static std::string to_string(const Desc& d) {
-		return d.texture_name;
-	}
-
-	RID texture;
-};
 
 
 struct basic_pass_resource
@@ -109,10 +46,10 @@ void add_basic_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
 				FrameGraphPassResources& resources,
 				void* ctx)
 			{
-				auto& rc = *static_cast<RenderContext*>(ctx);
+				auto& rc = *static_cast<Rendering::RenderContext*>(ctx);
 				auto cmd = rc.command_buffer;
 
-				auto& scene = resources.get<FrameGraphTexture>(data.scene);
+				auto& scene = resources.get<Rendering::FrameGraphTexture>(data.scene);
 
 				uint32_t w = rc.device->screen_get_width();
 				uint32_t h = rc.device->screen_get_height();
@@ -153,10 +90,10 @@ void add_blit_pass(FrameGraph& fg, FrameGraphBlackboard& bb)
 			FrameGraphPassResources& resources,
 			void* ctx)
 		{
-			auto& rc = *static_cast<RenderContext*>(ctx);
+			auto& rc = *static_cast<Rendering::RenderContext*>(ctx);
 			auto wsi = rc.wsi;
 
-			auto& scene = resources.get<FrameGraphTexture>(data.scene);
+			auto& scene = resources.get<Rendering::FrameGraphTexture>(data.scene);
 
 			wsi->blit_render_target_to_screen(scene.texture);
 		}
@@ -222,7 +159,6 @@ struct TriangleApplication : EE::Application
 
 		texture_uniform = device->texture_create(tf2, RD::TextureView(), { image.pixels });
 
-		wsi->pre_frame_loop();
 
 		RDC::SamplerState s;
 		s.mag_filter = RDC::SAMPLER_FILTER_LINEAR;
@@ -254,6 +190,8 @@ struct TriangleApplication : EE::Application
 		wsi->submit_transfer_workers();
 
 		uniform_set = device->uniform_set_create(uniforms, device->get_shader_rid("triangle_shader"), 0);
+
+		wsi->pre_frame_loop();
 	}
 	
 	void render_frame(double frame_time, double elapsed_time) override
@@ -287,13 +225,13 @@ struct TriangleApplication : EE::Application
 		std::vector<Rect2i> viewport{ Rect2i(0, 0, device->screen_get_width(), device->screen_get_height()) };
 		auto cmd_buffer = device->get_current_command_buffer();
 
-		FrameGraphTexture::Desc scene_desc{
+		Rendering::FrameGraphTexture::Desc scene_desc{
 			tf,
 			RD::TextureView(),
 			"scene texture"
 		};
 
-		FrameGraphTexture scene_tex;
+		Rendering::FrameGraphTexture scene_tex;
 		scene_tex.texture = texture_fb;
 
 		FrameGraphResource scene_res = fg.import("scene texture", scene_desc, std::move(scene_tex));
@@ -304,7 +242,7 @@ struct TriangleApplication : EE::Application
 
 		//save_graph_to_file(fg, "file_graph.dot");
 
-		RenderContext rc;
+		Rendering::RenderContext rc;
 		rc.command_buffer = device->get_current_command_buffer();
 		rc.device = device;
 		rc.wsi = wsi;
