@@ -27,7 +27,7 @@ namespace Vulkan
 	}
 
 	Error ImGuiDevice::initialize(const uint32_t p_device_index, const uint32_t p_surface_id,
-		const uint32_t p_min_image_count, const uint32_t p_swapchain_image_count, const VkRenderPass p_render_pass, 
+		const uint32_t p_min_image_count, const uint32_t p_swapchain_image_count, const RenderingDeviceDriver::RenderPassID p_render_pass,
 		const uint32_t subpass)
 	{
 		ImGui::CreateContext();
@@ -58,6 +58,8 @@ namespace Vulkan
 		auto err = vkCreateDescriptorPool(vulkan_driver->vulkan_device_get(), &pool_info, nullptr, &descriptor_pool);
 		check_vk_result(err);
 
+		RenderingDeviceDriverVulkan::RenderPassInfo* render_pass = (RenderingDeviceDriverVulkan::RenderPassInfo*)(p_render_pass.id);
+
 		ImGui_ImplVulkan_InitInfo init_info = {};
 		//init_info.ApiVersion = VK_API_VERSION_1_3;              // Pass in your value of VkApplicationInfo::apiVersion, otherwise will default to header version.
 		init_info.Instance = vulkan_context->instance_get();
@@ -70,7 +72,7 @@ namespace Vulkan
 		init_info.MinImageCount = p_min_image_count;
 		init_info.ImageCount = p_swapchain_image_count;
 		init_info.Allocator = nullptr;
-		init_info.PipelineInfoMain.RenderPass = p_render_pass;
+		init_info.PipelineInfoMain.RenderPass = render_pass->vk_render_pass;
 		init_info.PipelineInfoMain.Subpass = subpass;
 		init_info.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
 		init_info.CheckVkResultFn = check_vk_result;

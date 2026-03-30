@@ -14,7 +14,7 @@ namespace Vulkan
 		virtual ~ImGuiDevice();
 
 		Error initialize(const uint32_t p_device_index, const uint32_t p_surface_id,
-			const uint32_t p_min_image_count, const uint32_t p_swapchain_image_count, const VkRenderPass p_render_pass,
+			const uint32_t p_min_image_count, const uint32_t p_swapchain_image_count, const RenderingDeviceDriver::RenderPassID p_render_pass,
 			const uint32_t subpass);
 
 		void poll_event(SDL_Event* event);
