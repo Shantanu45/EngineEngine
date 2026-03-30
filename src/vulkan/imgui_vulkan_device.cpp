@@ -26,7 +26,7 @@ namespace Vulkan
 
 	}
 
-	Error ImGuiDevice::initaialize(const uint32_t p_device_index, const uint32_t p_surface_id, const VkQueue p_queue, 
+	Error ImGuiDevice::initialize(const uint32_t p_device_index, const uint32_t p_surface_id, const VkQueue p_queue, 
 		const VkPipelineCache p_pipeline_cache, const VkDescriptorPool p_descriptor_pool,
 		const uint32_t p_min_image_count, const uint32_t p_swapchain_image_count, const VkRenderPass p_render_pass, 
 		const uint32_t subpass)
