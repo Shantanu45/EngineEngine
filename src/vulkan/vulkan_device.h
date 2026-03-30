@@ -572,6 +572,11 @@ namespace Vulkan
 		void _descriptor_set_pool_unreference(DescriptorSetPools::iterator p_pool_sets_it, VkDescriptorPool p_vk_descriptor_pool, int p_linear_pool_index);
 		VkSampleCountFlagBits _ensure_supported_sample_count(TextureSamples p_requested_sample_count) ;
 
+		VkQueue _get_vk_queue(uint32_t family, uint32_t index)
+		{
+			return queue_families[family][index].queue;
+		}
+
 
 	private:
 		VkDevice vk_device = VK_NULL_HANDLE;
@@ -610,6 +615,8 @@ namespace Vulkan
 		// It cannot change after creating the PSOs, since we need to skipping samplers when creating uniform sets.
 		bool immutable_samplers_enabled = true;
 		RenderingShaderContainerFormatVulkan shader_container_format;
+
+		friend class ImGuiDevice;
 
 	};
 }
