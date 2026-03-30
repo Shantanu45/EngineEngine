@@ -209,19 +209,7 @@ struct TriangleApplication : EE::Application
 		UBO ubo{};
 		ubo.model = glm::mat4(1.0f); // identity for now
 		ubo.view_projection = camera.get_view_projection();
-		//	glm::lookAt(
-		//	glm::vec3(0.0f, 0.0f, 3.0f),  // camera position
-		//	glm::vec3(0.0f, 0.0f, 0.0f),  // look at origin
-		//	glm::vec3(0.0f, 1.0f, 0.0f)   // up vector
-		//);
-		//ubo.projection = glm::perspective(glm::radians(45.0f),
-		//	(float)device->screen_get_width() / (float)device->screen_get_height(),         // aspect ratio
-		//	0.1f,                          // near
-		//	100.0f                         // far
-		//);
 
-		// Vulkan clip space fix - flip Y
-		//ubo.projection[1][1] *= -1;
 		auto err = device->buffer_update(state_uniform, 0, sizeof(UBO), &ubo);
 
 		// needs to be outside render pass begin - end

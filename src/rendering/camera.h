@@ -144,6 +144,25 @@ public:
 	// Returns true if an AABB (min/max corners) is inside or intersecting the frustum.
 	bool is_aabb_visible(const glm::vec3& p_min, const glm::vec3& p_max) const;
 
+	private:
+		// --- Internal recalculation -----------------------------------------------
+
+		void _recalculate_projection() {
+			if (_projection_type == CameraProjection::Perspective) {
+				_projection = glm::perspective(_fov, _aspect, _near, _far);
+			}
+			else {
+				_projection = glm::ortho(_ortho_left, _ortho_right, _ortho_bottom, _ortho_top, _near, _far);
+			}
+			_projection[1][1] *= -1; // Vulkan clip space Y flip
+			_update_frustum();
+		}
+
+		void _recalculate_view();
+
+		// Extract frustum planes from the combined view-projection matrix.
+		// Uses Gribb/Hartmann method.
+		void _update_frustum();
 private:
 	// --- State ---------------------------------------------------------------
 
@@ -187,21 +206,4 @@ private:
 	// Frustum
 	Frustum _frustum;
 
-	// --- Internal recalculation -----------------------------------------------
-
-	void _recalculate_projection() {
-		if (_projection_type == CameraProjection::Perspective) {
-			_projection = glm::perspective(_fov, _aspect, _near, _far);
-		}
-		else {
-			_projection = glm::ortho(_ortho_left, _ortho_right, _ortho_bottom, _ortho_top, _near, _far);
-		}
-		_update_frustum();
-	}
-
-	void _recalculate_view();
-
-	// Extract frustum planes from the combined view-projection matrix.
-	// Uses Gribb/Hartmann method.
-	void _update_frustum();
 };
