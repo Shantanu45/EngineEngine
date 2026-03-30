@@ -11,7 +11,6 @@ namespace Rendering
 
 	RendererCompositor::~RendererCompositor()
 	{
-		finalize();
 	}
 
 	void RendererCompositor::blit_render_targets_to_screen(const BlitToScreen* p_render_targets)

@@ -57,6 +57,17 @@ namespace Rendering
 		return OK;
 	}
 
+	void WSI::blit_render_target_to_screen(RID texture)
+	{
+		if (rd->is_blit_pass_active())
+		{
+			Rendering::BlitToScreen blit;
+			blit.render_target = texture;
+
+			rd->blit_render_targets_to_screen(&blit);
+		}
+	}
+
 	bool WSI::pre_frame_loop()
 	{
 		if (rendering_context && rendering_device) {
@@ -71,17 +82,6 @@ namespace Rendering
 			return true;
 		}
 		return false;
-	}
-
-	void WSI::blit_render_target_to_screen(RID texture)
-	{
-		if (rd->is_blit_pass_active())
-		{
-			Rendering::BlitToScreen blit;
-			blit.render_target = texture;
-
-			rd->blit_render_targets_to_screen(&blit);
-		}
 	}
 
 	bool WSI::pre_begin_frame()
@@ -131,22 +131,6 @@ namespace Rendering
 		return false;
 	}
 
-	RenderingDeviceCommons::VertexAttribute WSI::get_vertex_attribute(const uint32_t binding, const uint32_t location, const RenderingDeviceCommons::DataFormat format, const uint32_t offset, const uint32_t stride)
-	{
-		RenderingDeviceCommons::VertexAttribute va;
-		va.format = format;
-		va.stride = stride;
-		va.binding = binding;
-		va.location = location;
-		va.offset = offset;
-		return va;
-	}
-
-	RenderingShaderContainerFormat* WSI::create_shader_container_format() 
-	{
-		return new ::Vulkan::RenderingShaderContainerFormatVulkan();
-	}
-
 	void WSI::bind_and_draw_indexed(RenderingDeviceDriver::CommandBufferID p_command_buffer, const std::string& p_mesh_name)
 	{
 		auto primitives = mesh_list[p_mesh_name].primitives;
@@ -163,6 +147,17 @@ namespace Rendering
 		windows.insert({ window, data });
 	}
 
+	RenderingDeviceCommons::VertexAttribute WSI::get_vertex_attribute(const uint32_t binding, const uint32_t location, const RenderingDeviceCommons::DataFormat format, const uint32_t offset, const uint32_t stride)
+	{
+		RenderingDeviceCommons::VertexAttribute va;
+		va.format = format;
+		va.stride = stride;
+		va.binding = binding;
+		va.location = location;
+		va.offset = offset;
+		return va;
+	}
+
 	void WSI::create_new_vertex_format(const std::vector<RenderingDeviceCommons::VertexAttribute>& p_attributes, VERTEX_FORMAT_VARIATIONS p_type)
 	{
 		DEBUG_ASSERT(p_type < VERTEX_FORMAT_VARIATIONS::COUNT);
@@ -173,6 +168,26 @@ namespace Rendering
 	{
 		DEBUG_ASSERT(vertex_format_map.contains(p_type),  "type does not exists, create vertex format via create_new_vertex_format() first");
 		return vertex_format_map[p_type];
+	}
+
+	std::vector<RenderingDeviceCommons::VertexAttribute> WSI::get_default_vertex_attribute()
+	{
+		std::vector<RenderingDeviceCommons::VertexAttribute> vertex_attributes;
+		vertex_attributes.emplace_back(get_vertex_attribute(0, 0, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32B32_SFLOAT, offsetof(Rendering::Vertex, position), sizeof(Rendering::Vertex)));
+		vertex_attributes.emplace_back(get_vertex_attribute(0, 1, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32B32_SFLOAT, offsetof(Rendering::Vertex, normal), sizeof(Rendering::Vertex)));
+		vertex_attributes.emplace_back(get_vertex_attribute(0, 2, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32_SFLOAT, offsetof(Rendering::Vertex, texcoord), sizeof(Rendering::Vertex)));
+		vertex_attributes.emplace_back(get_vertex_attribute(0, 3, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32B32A32_SFLOAT, offsetof(Rendering::Vertex, tangent), sizeof(Rendering::Vertex)));
+		return vertex_attributes;
+	}
+
+	void WSI::set_index_buffer_format(RenderingDeviceCommons::IndexBufferFormat format)
+	{
+		index_data_format = format;
+	}
+
+	void WSI::submit_transfer_workers()
+	{
+		rendering_device->_submit_transfer_workers();
 	}
 
 	Error WSI::load_gltf(const std::string& p_path, const std::string& p_name, VERTEX_FORMAT_VARIATIONS p_type /*= VERTEX_FORMAT_VARIATIONS::DEFAULT*/)
@@ -233,24 +248,9 @@ namespace Rendering
 		return OK;
 	}
 
-	std::vector<RenderingDeviceCommons::VertexAttribute> WSI::get_default_vertex_attribute()
+	RenderingShaderContainerFormat* WSI::create_shader_container_format() 
 	{
-		std::vector<RenderingDeviceCommons::VertexAttribute> vertex_attributes;
-		vertex_attributes.emplace_back(get_vertex_attribute(0, 0, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32B32_SFLOAT, offsetof(Rendering::Vertex, position), sizeof(Rendering::Vertex)));
-		vertex_attributes.emplace_back(get_vertex_attribute(0, 1, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32B32_SFLOAT, offsetof(Rendering::Vertex, normal), sizeof(Rendering::Vertex)));
-		vertex_attributes.emplace_back(get_vertex_attribute(0, 2, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32_SFLOAT, offsetof(Rendering::Vertex, texcoord), sizeof(Rendering::Vertex)));
-		vertex_attributes.emplace_back(get_vertex_attribute(0, 3, Rendering::RenderingDeviceCommons::DATA_FORMAT_R32G32B32A32_SFLOAT, offsetof(Rendering::Vertex, tangent), sizeof(Rendering::Vertex)));
-		return vertex_attributes;
-	}
-
-	void WSI::submit_transfer_workers()
-	{
-		rendering_device->_submit_transfer_workers();
-	}
-
-	void WSI::set_index_buffer_format(RenderingDeviceCommons::IndexBufferFormat format)
-	{
-		index_data_format = format;
+		return new ::Vulkan::RenderingShaderContainerFormatVulkan();
 	}
 
 	void WSI::teardown()

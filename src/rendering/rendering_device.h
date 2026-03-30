@@ -827,6 +827,11 @@ namespace Rendering
 
 		uint64_t shader_get_vertex_input_attribute_mask(RID p_shader);
 
+		RID get_shader_rid(const std::string& p_name)
+		{
+			DEBUG_ASSERT(shader_name_rid_map.contains(p_name), "shader container does not exists!");
+			return shader_name_rid_map[p_name];
+		}
 #pragma endregion
 
 #pragma region Pipeline
@@ -839,6 +844,8 @@ namespace Rendering
 
 		RID render_pipeline_create_from_frame_buffer(RID p_shader, RID p_framebuffer, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, const PipelineRasterizationState& p_rasterization_state, const PipelineMultisampleState& p_multisample_state, const PipelineDepthStencilState& p_depth_stencil_state, const PipelineColorBlendState& p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags /*= 0*/, uint32_t p_for_render_pass /*= 0*/, const std::vector<PipelineSpecializationConstant>& p_specialization_constants /*= std::vector<PipelineSpecializationConstant>()*/);
 		bool render_pipeline_is_valid(RID p_pipeline);
+
+		void update_pipeline_cache(bool p_closing = false);
 #pragma endregion
 
 #pragma region Screen
@@ -905,6 +912,10 @@ namespace Rendering
 
 		void bind_uniform_set(RID p_shader_id, RID p_uniform_set_id, uint32_t set_index);
 
+		void set_push_constant(const void* p_data, uint32_t p_data_size, RID p_shader);
+
+		void add_draw_list_bind_uniform_sets(RDD::ShaderID p_shader, std::span<RDD::UniformSetID> p_uniform_sets, uint32_t p_first_index, uint32_t p_set_count);
+
 #pragma endregion
 
 #pragma region Texture
@@ -920,9 +931,12 @@ namespace Rendering
 		Error texture_update(RID p_texture, uint32_t p_layer, const std::vector<uint8_t>& p_data);
 		std::vector<uint8_t> texture_get_data(RID p_texture, uint32_t p_layer); // CPU textures will return immediately, while GPU textures will most likely force a flush
 		//Error texture_get_data_async(RID p_texture, uint32_t p_layer, const Callable& p_callback);
+		RDD::TextureID texture_id_from_rid(RID texture);
 
 		RID sampler_create(const SamplerState& p_state);
 		bool sampler_is_format_supported_for_filter(DataFormat p_format, SamplerFilter p_sampler_filter) const;
+
+		void apply_image_barrier(RDD::CommandBufferID p_cmd_buffer, BitField<RenderingDeviceDriver::PipelineStageBits> p_src_stages, BitField<RenderingDeviceDriver::PipelineStageBits> p_dst_stages, std::span<RenderingDeviceDriver::TextureBarrier> p_texture_barriers);
 
 #pragma endregion
 
@@ -959,6 +973,7 @@ namespace Rendering
 		void render_draw(RenderingDeviceDriver::CommandBufferID p_command_buffer, uint32_t p_vertex_count, uint32_t p_instance_count);
 
 		void render_draw_indexed(RenderingDeviceDriver::CommandBufferID p_command_buffer, uint32_t p_index_count, uint32_t p_instance_count, uint32_t p_first_index, int32_t p_vertex_offset, uint32_t p_first_instance);
+
 		void submit();
 
 		void sync();
@@ -988,27 +1003,12 @@ namespace Rendering
 		void end_render_pass(RDD::CommandBufferID cmd);
 		void execute_frame(bool p_present);
 
-		void set_push_constant(const void* p_data, uint32_t p_data_size, RID p_shader);
-
-		void add_draw_list_bind_uniform_sets(RDD::ShaderID p_shader, std::span<RDD::UniformSetID> p_uniform_sets, uint32_t p_first_index, uint32_t p_set_count);
-
-		RID get_shader_rid(const std::string& p_name)
-		{
-			DEBUG_ASSERT(shader_name_rid_map.contains(p_name), "shader container does not exists!");
-			return shader_name_rid_map[p_name];
-		}
-
 		// TODO: #temp
 		void _submit_transfer_workers(RDD::CommandBufferID p_draw_command_buffer = RDD::CommandBufferID());
 		void _submit_transfer_barriers(RDD::CommandBufferID p_draw_command_buffer);
 		void _free_dependencies_of(RID p_id);
 
-		void update_pipeline_cache(bool p_closing = false);
-
 		void free_rid(RID p_rid);
-
-		void apply_image_barrier(RDD::CommandBufferID p_cmd_buffer, BitField<RenderingDeviceDriver::PipelineStageBits> p_src_stages, BitField<RenderingDeviceDriver::PipelineStageBits> p_dst_stages, std::span<RenderingDeviceDriver::TextureBarrier> p_texture_barriers);
-		RDD::TextureID texture_id_from_rid(RID texture);
 
 	private:
 		bool _buffer_make_mutable(Buffer* p_buffer, RID p_buffer_id);
@@ -1021,9 +1021,6 @@ namespace Rendering
 			return index_buffer_create(p_index_count, p_format, p_data, p_use_restart_indices, p_creation_bits);
 		}
 
-		void _stall_for_frame(uint32_t p_frame);
-		void _stall_for_previous_frames();
-		void _flush_and_stall_for_all_frames(bool p_begin_frame = true);
 		uint32_t _get_swap_chain_desired_count() const;
 		Buffer* _get_buffer_from_owner(RID p_buffer);
 		Error _buffer_initialize(Buffer* p_buffer, std::span<uint8_t> p_data, uint32_t p_required_align = 32);
@@ -1046,13 +1043,6 @@ namespace Rendering
 
 #pragma endregion
 
-		std::vector<uint8_t> _load_pipeline_cache();
-		static void _save_pipeline_cache(void* p_data);
-		Error _staging_buffer_allocate(StagingBuffers& p_staging_buffers, uint32_t p_amount, uint32_t p_required_align, 
-			uint32_t& r_alloc_offset, uint32_t& r_alloc_size, StagingRequiredAction& r_required_action, bool p_can_segment = true);
-		void _staging_buffer_execute_required_action(StagingBuffers& p_staging_buffers, StagingRequiredAction p_required_action);
-		Error _insert_staging_block(StagingBuffers& p_staging_buffers);
-
 #pragma region Texture
 		uint32_t _texture_layer_count(Texture* p_texture) const;
 		uint32_t _texture_alignment(Texture* p_texture) const;
@@ -1067,7 +1057,14 @@ namespace Rendering
 		void _texture_clear_depth_stencil(RID p_texture_rid, Texture* p_texture, float p_depth, uint8_t p_stencil, uint32_t p_base_mipmap, uint32_t p_mipmaps, uint32_t p_base_layer, uint32_t p_layers);
 		uint32_t _texture_vrs_method_to_usage_bits() const;
 		void _texture_ensure_shareable_format(RID p_texture, const DataFormat& p_shareable_format);
-#pragma endregion Texture
+#pragma endregion
+
+		std::vector<uint8_t> _load_pipeline_cache();
+		static void _save_pipeline_cache(void* p_data);
+		Error _staging_buffer_allocate(StagingBuffers& p_staging_buffers, uint32_t p_amount, uint32_t p_required_align,
+			uint32_t& r_alloc_offset, uint32_t& r_alloc_size, StagingRequiredAction& r_required_action, bool p_can_segment = true);
+		void _staging_buffer_execute_required_action(StagingBuffers& p_staging_buffers, StagingRequiredAction p_required_action);
+		Error _insert_staging_block(StagingBuffers& p_staging_buffers);
 		
 		static RDD::TextureLayout _vrs_layout_from_method(VRSMethod p_method);
 		static RDD::RenderPassID _render_pass_create(RenderingDeviceDriver* p_driver, const std::vector<AttachmentFormat>& p_attachments,
@@ -1077,13 +1074,16 @@ namespace Rendering
 
 		void _free_internal(RID p_id);
 
-		std::unordered_map<RID, std::unordered_set<RID>> dependency_map; // IDs to IDs that depend on it.
-		std::unordered_map<RID, std::unordered_set<RID>> reverse_dependency_map; // Same as above, but in reverse.
+		void _stall_for_frame(uint32_t p_frame);
+		void _stall_for_previous_frames();
+		void _flush_and_stall_for_all_frames(bool p_begin_frame = true);
 
 		void _add_dependency(RID p_id, RID p_depends_on);
 		void _free_dependencies(RID p_id);
+
 		template <typename T>
 		void _free_rids(T& p_owner, const char* p_type);
+
 		void _free_pending_resources(int p_frame);
 
 		RenderingDevice();
@@ -1116,7 +1116,10 @@ namespace Rendering
 
 		std::map<FramebufferFormatKey, FramebufferFormatID> framebuffer_format_cache;
 		std::unordered_map<FramebufferFormatID, FramebufferFormat> framebuffer_formats;
-		std::unordered_map<RID, RDD::FramebufferID> rid_to_frame_buffer_id;;
+		std::unordered_map<RID, RDD::FramebufferID> rid_to_frame_buffer_id;
+
+		std::unordered_map<RID, std::unordered_set<RID>> dependency_map; // IDs to IDs that depend on it.
+		std::unordered_map<RID, std::unordered_set<RID>> reverse_dependency_map; // Same as above, but in reverse.
 
 		std::vector<TransferWorker*> transfer_worker_pool;
 		uint32_t transfer_worker_pool_size = 0;

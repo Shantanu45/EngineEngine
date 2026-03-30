@@ -988,6 +988,11 @@ namespace Rendering
 		return id;
 	}
 
+	void RenderingDevice::update_pipeline_cache(bool p_closing /*= false*/)
+	{
+
+	}
+
 	Error RenderingDevice::screen_create(DisplayServerEnums::WindowID p_screen)
 	{
 
@@ -1250,6 +1255,141 @@ namespace Rendering
 	}
 
 	
+
+	RID RenderingDevice::framebuffer_create(const std::vector<RID>& p_texture_attachments, FramebufferFormatID p_format_check, uint32_t p_view_count) {
+		//_THREAD_SAFE_METHOD_
+
+		FramebufferPass pass;
+
+		for (int i = 0; i < p_texture_attachments.size(); i++) {
+			Texture* texture = texture_owner.get_or_null(p_texture_attachments[i]);
+
+			ERR_FAIL_COND_V_MSG(texture && texture->layers != p_view_count, RID(), "Layers of our texture doesn't match view count for this framebuffer");
+
+			if (texture != nullptr) {
+				_check_transfer_worker_texture(texture);
+			}
+
+			if (texture && texture->usage_flags & TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+				pass.depth_attachment = i;
+			}
+			else if (texture && texture->usage_flags & TEXTURE_USAGE_DEPTH_RESOLVE_ATTACHMENT_BIT) {
+				pass.depth_resolve_attachment = i;
+			}
+			else if (texture && texture->usage_flags & TEXTURE_USAGE_VRS_ATTACHMENT_BIT) {
+				// Prevent the VRS attachment from being added to the color_attachments.
+			}
+			else {
+				if (texture && texture->is_resolve_buffer) {
+					pass.resolve_attachments.push_back(i);
+				}
+				else {
+					pass.color_attachments.push_back(texture ? i : ATTACHMENT_UNUSED);
+				}
+			}
+		}
+
+		std::vector<FramebufferPass> passes;
+		passes.push_back(pass);
+
+		return framebuffer_create_multipass(p_texture_attachments, passes, p_format_check, p_view_count);
+	}
+
+	RID RenderingDevice::framebuffer_create_multipass(const std::vector<RID>& p_texture_attachments, const std::vector<FramebufferPass>& p_passes, FramebufferFormatID p_format_check, uint32_t p_view_count) {
+		//_THREAD_SAFE_METHOD_
+
+		std::vector<AttachmentFormat> attachments;
+		std::vector<RDD::TextureID> textures;
+		//std::vector<RDG::ResourceTracker*> trackers;
+		int32_t vrs_attachment = -1;
+		attachments.resize(p_texture_attachments.size());
+		Size2i size;
+		bool size_set = false;
+		for (int i = 0; i < p_texture_attachments.size(); i++) {
+			AttachmentFormat af;
+			Texture* texture = texture_owner.get_or_null(p_texture_attachments[i]);
+			if (!texture) {
+				af.usage_flags = AttachmentFormat::UNUSED_ATTACHMENT;
+				//trackers.push_back(nullptr);
+			}
+			else {
+				ERR_FAIL_COND_V_MSG(texture->layers != p_view_count, RID(), "Layers of our texture doesn't match view count for this framebuffer");
+
+				_check_transfer_worker_texture(texture);
+
+				if (i != 0 && texture->usage_flags & TEXTURE_USAGE_VRS_ATTACHMENT_BIT) {
+					// Detect if the texture is the fragment density map and it's not the first attachment.
+					vrs_attachment = i;
+				}
+
+				if (!size_set) {
+					size.x = texture->width;
+					size.y = texture->height;
+					size_set = true;
+				}
+				else if (texture->usage_flags & TEXTURE_USAGE_VRS_ATTACHMENT_BIT) {
+					// If this is not the first attachment we assume this is used as the VRS attachment.
+					// In this case this texture will be 1/16th the size of the color attachment.
+					// So we skip the size check.
+				}
+				else {
+					ERR_FAIL_COND_V_MSG((uint32_t)size.x != texture->width || (uint32_t)size.y != texture->height, RID(),
+						"All textures in a framebuffer should be the same size.");
+				}
+
+				af.format = texture->format;
+				af.samples = texture->samples;
+				af.usage_flags = texture->usage_flags;
+
+				//_texture_make_mutable(texture, p_texture_attachments[i]);
+
+				textures.push_back(texture->driver_id);
+				//trackers.push_back(texture->draw_tracker);
+			}
+			attachments[i] = af;
+		}
+
+		ERR_FAIL_COND_V_MSG(!size_set, RID(), "All attachments unused.");
+
+		FramebufferFormatID format_id = framebuffer_format_create_multipass(attachments, p_passes, p_view_count, vrs_attachment);
+		if (format_id == INVALID_ID) {
+			return RID();
+		}
+
+		ERR_FAIL_COND_V_MSG(p_format_check != INVALID_ID && format_id != p_format_check, RID(),
+			"The format used to check this framebuffer differs from the intended framebuffer format.");
+
+		Framebuffer framebuffer;
+		framebuffer.format_id = format_id;
+		framebuffer.texture_ids = p_texture_attachments;
+		framebuffer.size = size;
+		framebuffer.view_count = p_view_count;
+
+		//RDG::FramebufferCache* framebuffer_cache = RDG::framebuffer_cache_create();
+		//framebuffer_cache->width = size.width;
+		//framebuffer_cache->height = size.height;
+		//framebuffer_cache->textures = textures;
+		//framebuffer_cache->trackers = trackers;
+		//framebuffer.framebuffer_cache = framebuffer_cache;
+
+		RID id = framebuffer_owner.make_rid(framebuffer);
+#ifdef DEV_ENABLED
+		set_resource_name(id, "RID:" + itos(id.get_id()));
+#endif
+
+		for (int i = 0; i < p_texture_attachments.size(); i++) {
+			if (p_texture_attachments[i].is_valid()) {
+				_add_dependency(id, p_texture_attachments[i]);
+			}
+		}
+
+		auto frame_buffer = create_framebuffer_from_format_id(format_id, p_texture_attachments, size.x, size.y);
+		rid_to_frame_buffer_id[id] = frame_buffer;
+		// This relies on the fact that HashMap will not change the address of an object after it's been inserted into the container.
+		//framebuffer_cache->render_pass_creation_user_data = (void*)(&framebuffer_formats[framebuffer.format_id].E->key());
+
+		return id;
+	}
 
 	Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_format_create_empty(TextureSamples p_samples /*= TEXTURE_SAMPLES_1*/)
 	{
@@ -2181,6 +2321,27 @@ namespace Rendering
 		add_draw_list_bind_uniform_sets(shader->driver_id, { &uniform_set->driver_id, 1 }, set_index, 1);
 	}
 
+	void RenderingDevice::set_push_constant(const void* p_data, uint32_t p_data_size, RID p_shader)
+	{
+#ifdef DEBUG_ENABLED
+		ERR_FAIL_COND_MSG(p_data_size != draw_list.validation.pipeline_push_constant_size,
+			"This render pipeline requires (" + itos(draw_list.validation.pipeline_push_constant_size) + ") bytes of push constant data, supplied: (" + itos(p_data_size) + ")");
+#endif
+		auto shader = shader_owner.get_or_null(p_shader);
+		std::vector<uint32_t> push_constant_data_view(reinterpret_cast<const uint32_t*>(p_data), (reinterpret_cast<const uint32_t*>(p_data)) + p_data_size / sizeof(uint32_t));
+		driver->command_bind_push_constants(get_current_command_buffer(), shader->driver_id, 0, push_constant_data_view);
+
+#ifdef DEBUG_ENABLED
+		draw_list.validation.pipeline_push_constant_supplied = true;
+#endif
+	}
+
+	void RenderingDevice::add_draw_list_bind_uniform_sets(RDD::ShaderID p_shader, std::span<RDD::UniformSetID> p_uniform_sets, uint32_t p_first_index, uint32_t p_set_count) {
+		DEV_ASSERT(p_uniform_sets.size() >= p_set_count);
+
+		driver->command_bind_render_uniform_sets(get_current_command_buffer(), p_uniform_sets, p_shader, p_first_index, p_set_count, driver->uniform_sets_get_dynamic_offsets(p_uniform_sets, p_shader, p_first_index, p_set_count));
+	}
+
 	RID RenderingDevice::texture_buffer_create(uint32_t p_size_elements, DataFormat p_format, std::span<uint8_t> p_data /*= {}*/)
 	{
 		uint32_t element_size = get_format_vertex_size(p_format);
@@ -2709,6 +2870,11 @@ namespace Rendering
 		}
 	}
 
+	RDD::TextureID RenderingDevice::texture_id_from_rid(RID texture)
+	{
+		return texture_owner.get_or_null(texture)->driver_id;
+	}
+
 	RID RenderingDevice::sampler_create(const SamplerState& p_state)
 	{
 		//_THREAD_SAFE_METHOD_
@@ -2735,6 +2901,11 @@ namespace Rendering
 		ERR_FAIL_INDEX_V(p_format, DATA_FORMAT_MAX, false);
 
 		return driver->sampler_is_format_supported_for_filter(p_format, p_sampler_filter);
+	}
+
+	void RenderingDevice::apply_image_barrier(RDD::CommandBufferID p_cmd_buffer, BitField<RenderingDeviceDriver::PipelineStageBits> p_src_stages, BitField<RenderingDeviceDriver::PipelineStageBits> p_dst_stages, std::span<RenderingDeviceDriver::TextureBarrier> p_texture_barriers)
+	{
+		driver->command_pipeline_barrier(p_cmd_buffer, p_src_stages, p_dst_stages, {}, {}, p_texture_barriers, {});
 	}
 
 	void RenderingDevice::execute_chained_cmds(bool p_present_swap_chain, RenderingDeviceDriver::FenceID p_draw_fence, RenderingDeviceDriver::SemaphoreID p_dst_draw_semaphore_to_signal)
@@ -2858,141 +3029,6 @@ namespace Rendering
 			attachments.push_back(texture_owner.get_or_null(a)->driver_id);
 		}
 		return driver->framebuffer_create(framebuffer_formats[p_format_id].render_pass, attachments, p_width, p_height);
-	}
-
-	RID RenderingDevice::framebuffer_create(const std::vector<RID>& p_texture_attachments, FramebufferFormatID p_format_check, uint32_t p_view_count) {
-		//_THREAD_SAFE_METHOD_
-
-		FramebufferPass pass;
-
-		for (int i = 0; i < p_texture_attachments.size(); i++) {
-			Texture* texture = texture_owner.get_or_null(p_texture_attachments[i]);
-
-			ERR_FAIL_COND_V_MSG(texture && texture->layers != p_view_count, RID(), "Layers of our texture doesn't match view count for this framebuffer");
-
-			if (texture != nullptr) {
-				_check_transfer_worker_texture(texture);
-			}
-
-			if (texture && texture->usage_flags & TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) {
-				pass.depth_attachment = i;
-			}
-			else if (texture && texture->usage_flags & TEXTURE_USAGE_DEPTH_RESOLVE_ATTACHMENT_BIT) {
-				pass.depth_resolve_attachment = i;
-			}
-			else if (texture && texture->usage_flags & TEXTURE_USAGE_VRS_ATTACHMENT_BIT) {
-				// Prevent the VRS attachment from being added to the color_attachments.
-			}
-			else {
-				if (texture && texture->is_resolve_buffer) {
-					pass.resolve_attachments.push_back(i);
-				}
-				else {
-					pass.color_attachments.push_back(texture ? i : ATTACHMENT_UNUSED);
-				}
-			}
-		}
-
-		std::vector<FramebufferPass> passes;
-		passes.push_back(pass);
-
-		return framebuffer_create_multipass(p_texture_attachments, passes, p_format_check, p_view_count);
-	}
-
-	RID RenderingDevice::framebuffer_create_multipass(const std::vector<RID>& p_texture_attachments, const std::vector<FramebufferPass>& p_passes, FramebufferFormatID p_format_check, uint32_t p_view_count) {
-		//_THREAD_SAFE_METHOD_
-
-		std::vector<AttachmentFormat> attachments;
-		std::vector<RDD::TextureID> textures;
-		//std::vector<RDG::ResourceTracker*> trackers;
-		int32_t vrs_attachment = -1;
-		attachments.resize(p_texture_attachments.size());
-		Size2i size;
-		bool size_set = false;
-		for (int i = 0; i < p_texture_attachments.size(); i++) {
-			AttachmentFormat af;
-			Texture* texture = texture_owner.get_or_null(p_texture_attachments[i]);
-			if (!texture) {
-				af.usage_flags = AttachmentFormat::UNUSED_ATTACHMENT;
-				//trackers.push_back(nullptr);
-			}
-			else {
-				ERR_FAIL_COND_V_MSG(texture->layers != p_view_count, RID(), "Layers of our texture doesn't match view count for this framebuffer");
-
-				_check_transfer_worker_texture(texture);
-
-				if (i != 0 && texture->usage_flags & TEXTURE_USAGE_VRS_ATTACHMENT_BIT) {
-					// Detect if the texture is the fragment density map and it's not the first attachment.
-					vrs_attachment = i;
-				}
-
-				if (!size_set) {
-					size.x = texture->width;
-					size.y = texture->height;
-					size_set = true;
-				}
-				else if (texture->usage_flags & TEXTURE_USAGE_VRS_ATTACHMENT_BIT) {
-					// If this is not the first attachment we assume this is used as the VRS attachment.
-					// In this case this texture will be 1/16th the size of the color attachment.
-					// So we skip the size check.
-				}
-				else {
-					ERR_FAIL_COND_V_MSG((uint32_t)size.x != texture->width || (uint32_t)size.y != texture->height, RID(),
-						"All textures in a framebuffer should be the same size.");
-				}
-
-				af.format = texture->format;
-				af.samples = texture->samples;
-				af.usage_flags = texture->usage_flags;
-
-				//_texture_make_mutable(texture, p_texture_attachments[i]);
-
-				textures.push_back(texture->driver_id);
-				//trackers.push_back(texture->draw_tracker);
-			}
-			attachments[i] = af;
-		}
-
-		ERR_FAIL_COND_V_MSG(!size_set, RID(), "All attachments unused.");
-
-		FramebufferFormatID format_id = framebuffer_format_create_multipass(attachments, p_passes, p_view_count, vrs_attachment);
-		if (format_id == INVALID_ID) {
-			return RID();
-		}
-
-		ERR_FAIL_COND_V_MSG(p_format_check != INVALID_ID && format_id != p_format_check, RID(),
-			"The format used to check this framebuffer differs from the intended framebuffer format.");
-
-		Framebuffer framebuffer;
-		framebuffer.format_id = format_id;
-		framebuffer.texture_ids = p_texture_attachments;
-		framebuffer.size = size;
-		framebuffer.view_count = p_view_count;
-
-		//RDG::FramebufferCache* framebuffer_cache = RDG::framebuffer_cache_create();
-		//framebuffer_cache->width = size.width;
-		//framebuffer_cache->height = size.height;
-		//framebuffer_cache->textures = textures;
-		//framebuffer_cache->trackers = trackers;
-		//framebuffer.framebuffer_cache = framebuffer_cache;
-
-		RID id = framebuffer_owner.make_rid(framebuffer);
-#ifdef DEV_ENABLED
-		set_resource_name(id, "RID:" + itos(id.get_id()));
-#endif
-
-		for (int i = 0; i < p_texture_attachments.size(); i++) {
-			if (p_texture_attachments[i].is_valid()) {
-				_add_dependency(id, p_texture_attachments[i]);
-			}
-		}
-
-		auto frame_buffer = create_framebuffer_from_format_id(format_id, p_texture_attachments, size.x, size.y);
-		rid_to_frame_buffer_id[id] = frame_buffer;
-		// This relies on the fact that HashMap will not change the address of an object after it's been inserted into the container.
-		//framebuffer_cache->render_pass_creation_user_data = (void*)(&framebuffer_formats[framebuffer.format_id].E->key());
-
-		return id;
 	}
 
 	RDD::RenderPassID RenderingDevice::render_pass_from_format_id(FramebufferFormatID p_format_id)
@@ -3302,15 +3338,15 @@ namespace Rendering
 		driver->command_buffer_end(command_buffer);
 	}
 
-	void RenderingDevice::end_render_pass(RDD::CommandBufferID cmd)
-	{
-		driver->command_end_render_pass(cmd);
-	}
-
 	void  RenderingDevice::bind_render_pipeline(RDD::CommandBufferID p_command_buffer, RID pipeline)
 	{
 		RenderPipeline* render_pipeline = render_pipeline_owner.get_or_null(pipeline);
 		driver->command_bind_render_pipeline(p_command_buffer, render_pipeline->driver_id);
+	}
+
+	void RenderingDevice::end_render_pass(RDD::CommandBufferID cmd)
+	{
+		driver->command_end_render_pass(cmd);
 	}
 
 	void RenderingDevice::execute_frame(bool p_present)
@@ -3340,27 +3376,6 @@ namespace Rendering
 
 			frames[frame].swap_chains_to_present.clear();
 		}
-	}
-
-	void RenderingDevice::set_push_constant(const void* p_data, uint32_t p_data_size, RID p_shader)
-	{
-#ifdef DEBUG_ENABLED
-		ERR_FAIL_COND_MSG(p_data_size != draw_list.validation.pipeline_push_constant_size,
-			"This render pipeline requires (" + itos(draw_list.validation.pipeline_push_constant_size) + ") bytes of push constant data, supplied: (" + itos(p_data_size) + ")");
-#endif
-		auto shader = shader_owner.get_or_null(p_shader);
-		std::vector<uint32_t> push_constant_data_view(reinterpret_cast<const uint32_t*>(p_data), (reinterpret_cast<const uint32_t*>(p_data)) + p_data_size / sizeof(uint32_t));
-		driver->command_bind_push_constants(get_current_command_buffer(), shader->driver_id, 0, push_constant_data_view);
-
-#ifdef DEBUG_ENABLED
-		draw_list.validation.pipeline_push_constant_supplied = true;
-#endif
-	}
-
-	void RenderingDevice::add_draw_list_bind_uniform_sets(RDD::ShaderID p_shader, std::span<RDD::UniformSetID> p_uniform_sets, uint32_t p_first_index, uint32_t p_set_count) {
-		DEV_ASSERT(p_uniform_sets.size() >= p_set_count);
-
-		driver->command_bind_render_uniform_sets(get_current_command_buffer(), p_uniform_sets, p_shader, p_first_index, p_set_count, driver->uniform_sets_get_dynamic_offsets(p_uniform_sets, p_shader, p_first_index, p_set_count));
 	}
 
 #pragma region Transfer worker
@@ -3678,13 +3693,25 @@ namespace Rendering
 		transfer_worker_pool_size = 0;
 	}
 
-
-
 #pragma endregion
 
-	void RenderingDevice::update_pipeline_cache(bool p_closing /*= false*/)
-	{
+	void RenderingDevice::_free_dependencies_of(RID p_id) {
+		auto RE = reverse_dependency_map.find(p_id);
+		if (RE == reverse_dependency_map.end()) {
+			return;
+		}
 
+		// Snapshot the set to avoid iterator invalidation during recursive frees
+		std::unordered_set<RID> dependents = RE->second;
+		reverse_dependency_map.erase(RE); // erase early to prevent re-entrancy issues
+
+		for (RID dep : dependents) {
+			auto G = dependency_map.find(dep);
+			if (G != dependency_map.end()) {
+				G->second.erase(p_id);
+			}
+			free_rid(dep);
+		}
 	}
 
 	void RenderingDevice::free_rid(RID p_rid)
@@ -3696,37 +3723,6 @@ namespace Rendering
 	bool RenderingDevice::_buffer_make_mutable(Buffer* p_buffer, RID p_buffer_id) {
 		//TODO:
 		return true;
-	}
-
-	void RenderingDevice::_stall_for_frame(uint32_t p_frame)
-	{
-		if (frames[p_frame].fence_signaled) {
-			driver->fence_wait(frames[p_frame].fence);
-			frames[p_frame].fence_signaled = false;
-		}
-	}
-
-	void RenderingDevice::_stall_for_previous_frames()
-	{
-		for (uint32_t i = 0; i < frames.size(); i++) {
-			_stall_for_frame(i);
-		}
-	}
-
-	void RenderingDevice::_flush_and_stall_for_all_frames(bool p_begin_frame /*= true*/)
-	{
-		_stall_for_previous_frames();
-		// TODO: end render pass?
-		//driver->command_end_render_pass(get_current_command_buffer());
-		end_frame();
-		execute_frame(false);
-
-		if (p_begin_frame) {
-			begin_frame();
-		}
-		else {
-			_stall_for_frame(frame);
-		}
 	}
 
 	uint32_t RenderingDevice::_get_swap_chain_desired_count() const {
@@ -3788,193 +3784,6 @@ namespace Rendering
 		return OK;
 	}
 
-	std::vector<uint8_t> RenderingDevice::_load_pipeline_cache()
-	{
-		// TODO
-		return {};
-	}
-
-	void RenderingDevice::_save_pipeline_cache(void* p_data)
-	{
-
-	}
-
-	Error RenderingDevice::_staging_buffer_allocate(StagingBuffers& p_staging_buffers, uint32_t p_amount, uint32_t p_required_align, uint32_t& r_alloc_offset, uint32_t& r_alloc_size, StagingRequiredAction& r_required_action, bool p_can_segment /*= true*/)
-	{
-		r_alloc_size = p_amount;
-		r_required_action = STAGING_REQUIRED_ACTION_NONE;
-
-		//LOGI(std::format("[Staging] Request: {} bytes  | Current block fill: {} / {}  | Total blocks: {}  | Max size: {}",
-		//	p_amount, p_staging_buffers.blocks[p_staging_buffers.current].fill_amount, p_staging_buffers.block_size,
-		//	p_staging_buffers.blocks.size(), p_staging_buffers.max_size).c_str());
-
-		while (true) {
-			r_alloc_offset = 0;
-
-			// See if we can use current block.
-			if (p_staging_buffers.blocks[p_staging_buffers.current].frame_used == frames_drawn) {
-				// We used this block this frame, let's see if there is still room.
-
-				uint32_t write_from = p_staging_buffers.blocks[p_staging_buffers.current].fill_amount;
-
-				{
-					uint32_t align_remainder = write_from % p_required_align;
-					if (align_remainder != 0) {
-						write_from += p_required_align - align_remainder;
-					}
-				}
-
-				int32_t available_bytes = int32_t(p_staging_buffers.block_size) - int32_t(write_from);
-
-				if ((int32_t)p_amount < available_bytes) {
-					// All is good, we should be ok, all will fit.
-					r_alloc_offset = write_from;
-				}
-				else if (p_can_segment && available_bytes >= (int32_t)p_required_align) {
-					// Ok all won't fit but at least we can fit a chunkie.
-					// All is good, update what needs to be written to.
-					r_alloc_offset = write_from;
-					r_alloc_size = available_bytes - (available_bytes % p_required_align);
-
-				}
-				else {
-					// Can't fit it into this buffer.
-					// Will need to try next buffer.
-
-					p_staging_buffers.current = (p_staging_buffers.current + 1) % p_staging_buffers.blocks.size();
-
-					// Before doing anything, though, let's check that we didn't manage to fill all blocks.
-					// Possible in a single frame.
-					if (p_staging_buffers.blocks[p_staging_buffers.current].frame_used == frames_drawn) {
-						// Guess we did.. ok, let's see if we can insert a new block.
-						if ((uint64_t)p_staging_buffers.blocks.size() * p_staging_buffers.block_size < p_staging_buffers.max_size) {
-							// We can, so we are safe.
-							Error err = _insert_staging_block(p_staging_buffers);
-							if (err) {
-								return err;
-							}
-							// Claim for this frame.
-							p_staging_buffers.blocks[p_staging_buffers.current].frame_used = frames_drawn;
-						}
-						else {
-							// Ok, worst case scenario, all the staging buffers belong to this frame
-							// and this frame is not even done.
-							// If this is the main thread, it means the user is likely loading a lot of resources at once,.
-							// Otherwise, the thread should just be blocked until the next frame (currently unimplemented).
-							r_required_action = STAGING_REQUIRED_ACTION_FLUSH_AND_STALL_ALL;
-						}
-
-					}
-					else {
-						// Not from current frame, so continue and try again.
-						continue;
-					}
-				}
-
-			}
-			else if (p_staging_buffers.blocks[p_staging_buffers.current].frame_used <= frames_drawn - frames.size()) {
-				// This is an old block, which was already processed, let's reuse.
-				p_staging_buffers.blocks[p_staging_buffers.current].frame_used = frames_drawn;
-				p_staging_buffers.blocks[p_staging_buffers.current].fill_amount = 0;
-			}
-			else {
-				// This block may still be in use, let's not touch it unless we have to, so.. can we create a new one?
-				if ((uint64_t)p_staging_buffers.blocks.size() * p_staging_buffers.block_size < p_staging_buffers.max_size) {
-					// We are still allowed to create a new block, so let's do that and insert it for current pos.
-					Error err = _insert_staging_block(p_staging_buffers);
-					if (err) {
-						return err;
-					}
-					// Claim for this frame.
-					p_staging_buffers.blocks[p_staging_buffers.current].frame_used = frames_drawn;
-				}
-				else {
-					// Oops, we are out of room and we can't create more.
-					// Let's flush older frames.
-					// The logic here is that if a game is loading a lot of data from the main thread, it will need to be stalled anyway.
-					// If loading from a separate thread, we can block that thread until next frame when more room is made (not currently implemented, though).
-					r_required_action = STAGING_REQUIRED_ACTION_STALL_PREVIOUS;
-				}
-			}
-
-			// All was good, break.
-			break;
-		}
-
-		p_staging_buffers.used = true;
-
-		return OK;
-	}
-
-	void RenderingDevice::_staging_buffer_execute_required_action(StagingBuffers& p_staging_buffers, StagingRequiredAction p_required_action)
-	{
-		switch (p_required_action) {
-		case STAGING_REQUIRED_ACTION_NONE: {
-			// Do nothing.
-		} break;
-		case STAGING_REQUIRED_ACTION_FLUSH_AND_STALL_ALL: {
-			_flush_and_stall_for_all_frames();
-
-			// Clear the whole staging buffer.
-			for (int i = 0; i < p_staging_buffers.blocks.size(); i++) {
-				p_staging_buffers.blocks[i].frame_used = 0;
-				p_staging_buffers.blocks[i].fill_amount = 0;
-			}
-
-			// Claim for current frame.
-			p_staging_buffers.blocks[p_staging_buffers.current].frame_used = frames_drawn;
-		} break;
-		case STAGING_REQUIRED_ACTION_STALL_PREVIOUS: {
-			_stall_for_previous_frames();
-
-			for (int i = 0; i < p_staging_buffers.blocks.size(); i++) {
-				// Clear all blocks but the ones from this frame.
-				int block_idx = (i + p_staging_buffers.current) % p_staging_buffers.blocks.size();
-				if (p_staging_buffers.blocks[block_idx].frame_used == frames_drawn) {
-					break; // Ok, we reached something from this frame, abort.
-				}
-
-				p_staging_buffers.blocks[block_idx].frame_used = 0;
-				p_staging_buffers.blocks[block_idx].fill_amount = 0;
-			}
-
-			// Claim for current frame.
-			p_staging_buffers.blocks[p_staging_buffers.current].frame_used = frames_drawn;
-		} break;
-		default: {
-			DEV_ASSERT(false && "Unknown required action.");
-		} break;
-		}
-	}
-
-	Error RenderingDevice::_insert_staging_block(StagingBuffers& p_staging_buffers)
-	{
-		StagingBufferBlock block;
-
-		block.driver_id = driver->buffer_create(p_staging_buffers.block_size, p_staging_buffers.usage_bits, RDD::MEMORY_ALLOCATION_TYPE_CPU, frames_drawn);
-		ERR_FAIL_COND_V(!block.driver_id, ERR_CANT_CREATE);
-
-		block.frame_used = 0;
-		block.fill_amount = 0;
-		block.data_ptr = driver->buffer_map(block.driver_id);
-
-		if (block.data_ptr == nullptr) {
-			driver->buffer_free(block.driver_id);
-			return ERR_CANT_CREATE;
-		}
-
-		if (p_staging_buffers.current >= p_staging_buffers.blocks.size())
-		{
-			p_staging_buffers.blocks.push_back(block);
-			p_staging_buffers.current++;
-			return OK;
-		}
-
-		p_staging_buffers.blocks[p_staging_buffers.current] = block;
-		
-		return OK;
-	}
-
 	uint32_t RenderingDevice::_texture_layer_count(Texture* p_texture) const
 	{
 		switch (p_texture->type) {
@@ -3994,16 +3803,6 @@ namespace Rendering
 		}
 
 		return least_common_multiple(alignment, driver->api_trait_get(RDD::API_TRAIT_TEXTURE_TRANSFER_ALIGNMENT));
-	}
-
-	RDD::TextureID RenderingDevice::texture_id_from_rid(RID texture)
-	{
-		return texture_owner.get_or_null(texture)->driver_id;
-	}
-
-	void RenderingDevice::apply_image_barrier(RDD::CommandBufferID p_cmd_buffer, BitField<RenderingDeviceDriver::PipelineStageBits> p_src_stages, BitField<RenderingDeviceDriver::PipelineStageBits> p_dst_stages, std::span<RenderingDeviceDriver::TextureBarrier> p_texture_barriers)
-	{
-		driver->command_pipeline_barrier(p_cmd_buffer, p_src_stages, p_dst_stages, {}, {}, p_texture_barriers, {});
 	}
 
 	Error RenderingDevice::_texture_initialize(RID p_texture, uint32_t p_layer, const std::vector<uint8_t>& p_data, RDD::TextureLayout p_dst_layout, bool p_immediate_flush)
@@ -4424,6 +4223,193 @@ namespace Rendering
 		}
 	}
 
+	std::vector<uint8_t> RenderingDevice::_load_pipeline_cache()
+	{
+		// TODO
+		return {};
+	}
+
+	void RenderingDevice::_save_pipeline_cache(void* p_data)
+	{
+
+	}
+
+	Error RenderingDevice::_staging_buffer_allocate(StagingBuffers& p_staging_buffers, uint32_t p_amount, uint32_t p_required_align, uint32_t& r_alloc_offset, uint32_t& r_alloc_size, StagingRequiredAction& r_required_action, bool p_can_segment /*= true*/)
+	{
+		r_alloc_size = p_amount;
+		r_required_action = STAGING_REQUIRED_ACTION_NONE;
+
+		//LOGI(std::format("[Staging] Request: {} bytes  | Current block fill: {} / {}  | Total blocks: {}  | Max size: {}",
+		//	p_amount, p_staging_buffers.blocks[p_staging_buffers.current].fill_amount, p_staging_buffers.block_size,
+		//	p_staging_buffers.blocks.size(), p_staging_buffers.max_size).c_str());
+
+		while (true) {
+			r_alloc_offset = 0;
+
+			// See if we can use current block.
+			if (p_staging_buffers.blocks[p_staging_buffers.current].frame_used == frames_drawn) {
+				// We used this block this frame, let's see if there is still room.
+
+				uint32_t write_from = p_staging_buffers.blocks[p_staging_buffers.current].fill_amount;
+
+				{
+					uint32_t align_remainder = write_from % p_required_align;
+					if (align_remainder != 0) {
+						write_from += p_required_align - align_remainder;
+					}
+				}
+
+				int32_t available_bytes = int32_t(p_staging_buffers.block_size) - int32_t(write_from);
+
+				if ((int32_t)p_amount < available_bytes) {
+					// All is good, we should be ok, all will fit.
+					r_alloc_offset = write_from;
+				}
+				else if (p_can_segment && available_bytes >= (int32_t)p_required_align) {
+					// Ok all won't fit but at least we can fit a chunkie.
+					// All is good, update what needs to be written to.
+					r_alloc_offset = write_from;
+					r_alloc_size = available_bytes - (available_bytes % p_required_align);
+
+				}
+				else {
+					// Can't fit it into this buffer.
+					// Will need to try next buffer.
+
+					p_staging_buffers.current = (p_staging_buffers.current + 1) % p_staging_buffers.blocks.size();
+
+					// Before doing anything, though, let's check that we didn't manage to fill all blocks.
+					// Possible in a single frame.
+					if (p_staging_buffers.blocks[p_staging_buffers.current].frame_used == frames_drawn) {
+						// Guess we did.. ok, let's see if we can insert a new block.
+						if ((uint64_t)p_staging_buffers.blocks.size() * p_staging_buffers.block_size < p_staging_buffers.max_size) {
+							// We can, so we are safe.
+							Error err = _insert_staging_block(p_staging_buffers);
+							if (err) {
+								return err;
+							}
+							// Claim for this frame.
+							p_staging_buffers.blocks[p_staging_buffers.current].frame_used = frames_drawn;
+						}
+						else {
+							// Ok, worst case scenario, all the staging buffers belong to this frame
+							// and this frame is not even done.
+							// If this is the main thread, it means the user is likely loading a lot of resources at once,.
+							// Otherwise, the thread should just be blocked until the next frame (currently unimplemented).
+							r_required_action = STAGING_REQUIRED_ACTION_FLUSH_AND_STALL_ALL;
+						}
+
+					}
+					else {
+						// Not from current frame, so continue and try again.
+						continue;
+					}
+				}
+
+			}
+			else if (p_staging_buffers.blocks[p_staging_buffers.current].frame_used <= frames_drawn - frames.size()) {
+				// This is an old block, which was already processed, let's reuse.
+				p_staging_buffers.blocks[p_staging_buffers.current].frame_used = frames_drawn;
+				p_staging_buffers.blocks[p_staging_buffers.current].fill_amount = 0;
+			}
+			else {
+				// This block may still be in use, let's not touch it unless we have to, so.. can we create a new one?
+				if ((uint64_t)p_staging_buffers.blocks.size() * p_staging_buffers.block_size < p_staging_buffers.max_size) {
+					// We are still allowed to create a new block, so let's do that and insert it for current pos.
+					Error err = _insert_staging_block(p_staging_buffers);
+					if (err) {
+						return err;
+					}
+					// Claim for this frame.
+					p_staging_buffers.blocks[p_staging_buffers.current].frame_used = frames_drawn;
+				}
+				else {
+					// Oops, we are out of room and we can't create more.
+					// Let's flush older frames.
+					// The logic here is that if a game is loading a lot of data from the main thread, it will need to be stalled anyway.
+					// If loading from a separate thread, we can block that thread until next frame when more room is made (not currently implemented, though).
+					r_required_action = STAGING_REQUIRED_ACTION_STALL_PREVIOUS;
+				}
+			}
+
+			// All was good, break.
+			break;
+		}
+
+		p_staging_buffers.used = true;
+
+		return OK;
+	}
+
+	void RenderingDevice::_staging_buffer_execute_required_action(StagingBuffers& p_staging_buffers, StagingRequiredAction p_required_action)
+	{
+		switch (p_required_action) {
+		case STAGING_REQUIRED_ACTION_NONE: {
+			// Do nothing.
+		} break;
+		case STAGING_REQUIRED_ACTION_FLUSH_AND_STALL_ALL: {
+			_flush_and_stall_for_all_frames();
+
+			// Clear the whole staging buffer.
+			for (int i = 0; i < p_staging_buffers.blocks.size(); i++) {
+				p_staging_buffers.blocks[i].frame_used = 0;
+				p_staging_buffers.blocks[i].fill_amount = 0;
+			}
+
+			// Claim for current frame.
+			p_staging_buffers.blocks[p_staging_buffers.current].frame_used = frames_drawn;
+		} break;
+		case STAGING_REQUIRED_ACTION_STALL_PREVIOUS: {
+			_stall_for_previous_frames();
+
+			for (int i = 0; i < p_staging_buffers.blocks.size(); i++) {
+				// Clear all blocks but the ones from this frame.
+				int block_idx = (i + p_staging_buffers.current) % p_staging_buffers.blocks.size();
+				if (p_staging_buffers.blocks[block_idx].frame_used == frames_drawn) {
+					break; // Ok, we reached something from this frame, abort.
+				}
+
+				p_staging_buffers.blocks[block_idx].frame_used = 0;
+				p_staging_buffers.blocks[block_idx].fill_amount = 0;
+			}
+
+			// Claim for current frame.
+			p_staging_buffers.blocks[p_staging_buffers.current].frame_used = frames_drawn;
+		} break;
+		default: {
+			DEV_ASSERT(false && "Unknown required action.");
+		} break;
+		}
+	}
+
+	Error RenderingDevice::_insert_staging_block(StagingBuffers& p_staging_buffers)
+	{
+		StagingBufferBlock block;
+
+		block.driver_id = driver->buffer_create(p_staging_buffers.block_size, p_staging_buffers.usage_bits, RDD::MEMORY_ALLOCATION_TYPE_CPU, frames_drawn);
+		ERR_FAIL_COND_V(!block.driver_id, ERR_CANT_CREATE);
+
+		block.frame_used = 0;
+		block.fill_amount = 0;
+		block.data_ptr = driver->buffer_map(block.driver_id);
+
+		if (block.data_ptr == nullptr) {
+			driver->buffer_free(block.driver_id);
+			return ERR_CANT_CREATE;
+		}
+
+		if (p_staging_buffers.current >= p_staging_buffers.blocks.size())
+		{
+			p_staging_buffers.blocks.push_back(block);
+			p_staging_buffers.current++;
+			return OK;
+		}
+
+		p_staging_buffers.blocks[p_staging_buffers.current] = block;
+		
+		return OK;
+	}
+
 	RDD::TextureLayout RenderingDevice::_vrs_layout_from_method(VRSMethod p_method) {
 		switch (p_method) {
 		case VRS_METHOD_FRAGMENT_SHADING_RATE:
@@ -4838,30 +4824,42 @@ namespace Rendering
 		frames_pending_resources_for_processing = uint32_t(frames.size());
 	}
 
+	void RenderingDevice::_stall_for_frame(uint32_t p_frame)
+	{
+		if (frames[p_frame].fence_signaled) {
+			driver->fence_wait(frames[p_frame].fence);
+			frames[p_frame].fence_signaled = false;
+		}
+	}
+
+	void RenderingDevice::_stall_for_previous_frames()
+	{
+		for (uint32_t i = 0; i < frames.size(); i++) {
+			_stall_for_frame(i);
+		}
+	}
+
+	void RenderingDevice::_flush_and_stall_for_all_frames(bool p_begin_frame /*= true*/)
+	{
+		_stall_for_previous_frames();
+		// TODO: end render pass?
+		//driver->command_end_render_pass(get_current_command_buffer());
+		end_frame();
+		execute_frame(false);
+
+		if (p_begin_frame) {
+			begin_frame();
+		}
+		else {
+			_stall_for_frame(frame);
+		}
+	}
+
 	void RenderingDevice::_add_dependency(RID p_id, RID p_depends_on)
 	{
 		// operator[] inserts empty set if key absent, returns ref either way
 		dependency_map[p_depends_on].insert(p_id);
 		reverse_dependency_map[p_id].insert(p_depends_on);
-	}
-
-	void RenderingDevice::_free_dependencies_of(RID p_id) {
-		auto RE = reverse_dependency_map.find(p_id);
-		if (RE == reverse_dependency_map.end()) {
-			return;
-		}
-
-		// Snapshot the set to avoid iterator invalidation during recursive frees
-		std::unordered_set<RID> dependents = RE->second;
-		reverse_dependency_map.erase(RE); // erase early to prevent re-entrancy issues
-
-		for (RID dep : dependents) {
-			auto G = dependency_map.find(dep);
-			if (G != dependency_map.end()) {
-				G->second.erase(p_id);
-			}
-			free_rid(dep);
-		}
 	}
 
 	void RenderingDevice::_free_dependencies(RID p_id)

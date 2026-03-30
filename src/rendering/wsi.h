@@ -57,38 +57,34 @@ namespace Rendering
 
 		Error initialize(const std::string& p_rendering_driver, DisplayServerEnums::WindowMode p_mode, DisplayServerEnums::VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i* p_position, const Vector2i& p_resolution, int p_screen, DisplayServerEnums::Context p_context, int64_t p_parent_window);
 
-		bool pre_frame_loop();
-
 		void blit_render_target_to_screen(RID texture);
+
+		bool pre_frame_loop();
 
 		bool pre_begin_frame();
 
 		bool begin_frame();
 
 		bool end_render_pass(RDD::CommandBufferID cmd);
+
 		bool end_frame(bool p_present);
 
 		bool post_end_frame();
 
 		bool post_frame_loop();
 
-		RenderingDeviceCommons::VertexAttribute get_vertex_attribute(const uint32_t binding, const uint32_t location, const RenderingDeviceCommons::DataFormat format, const uint32_t offset, const uint32_t stride);
-
-		RenderingShaderContainerFormat* create_shader_container_format();
-
 		void bind_and_draw_indexed(RenderingDeviceDriver::CommandBufferID p_command_buffer, const std::string& p_mesh_name);
 		RenderingDevice* get_rendering_device() { return rendering_device; }
 
 		void set_wsi_platform_data(DisplayServerEnums::WindowID window, WindowData data);
 
+		RenderingDeviceCommons::VertexAttribute get_vertex_attribute(const uint32_t binding, const uint32_t location, const RenderingDeviceCommons::DataFormat format, const uint32_t offset, const uint32_t stride);
+
 		void create_new_vertex_format(const std::vector<RenderingDeviceCommons::VertexAttribute>& p_attributes, VERTEX_FORMAT_VARIATIONS p_type);
+
 		RenderingDevice::VertexFormatID get_vertex_format_by_type(VERTEX_FORMAT_VARIATIONS p_type);
 
-		Error load_gltf(const std::string& p_path, const std::string& p_name, VERTEX_FORMAT_VARIATIONS p_type = VERTEX_FORMAT_VARIATIONS::DEFAULT);
-
 		std::vector<RenderingDeviceCommons::VertexAttribute> get_default_vertex_attribute();
-
-		void submit_transfer_workers();
 
 		inline void set_vertex_data_mode(VERTEX_DATA_MODE mode)
 		{
@@ -97,9 +93,16 @@ namespace Rendering
 
 		void set_index_buffer_format(RenderingDeviceCommons::IndexBufferFormat format);
 
+		void submit_transfer_workers();
+
+		Error load_gltf(const std::string& p_path, const std::string& p_name, VERTEX_FORMAT_VARIATIONS p_type = VERTEX_FORMAT_VARIATIONS::DEFAULT);
+
+		RenderingShaderContainerFormat* create_shader_container_format();
+
 		void teardown();
 
 		~WSI();
+
 	private:
 
 		Error _create_rendering_context_window(DisplayServerEnums::WindowID p_window_id, const std::string& p_rendering_driver = "vulkan");
@@ -107,6 +110,8 @@ namespace Rendering
 
 		void _free_pending_resources(int p_frame);
 		std::vector<uint8_t> _get_attrib_interleaved(const std::vector<RenderingDeviceCommons::VertexAttribute>& attribs, std::vector<uint8_t> vertex_data);
+
+	private:
 
 		std::unique_ptr<RenderingContextDriver> rendering_context = nullptr;
 		RenderingDevice* rendering_device = nullptr;
