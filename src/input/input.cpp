@@ -7,6 +7,7 @@
  *********************************************************************/
 #include "input.h"
 #include <algorithm>
+#include "util/logger.h"
 
 namespace EE
 {
@@ -82,9 +83,12 @@ namespace EE
 
 	void InputSystem::on_sdl_event(const SDL_Event& e)
 	{
+
 		switch (e.type)
 		{
+
 			case SDL_EVENT_KEY_DOWN:
+			{
 				if (!e.key.repeat)
 				{
 					Key k = sdl_to_key[e.key.scancode];
@@ -92,7 +96,7 @@ namespace EE
 						keys[static_cast<size_t>(k)] |= (KeyState::KEY_DOWN | KeyState::KEY_PRESSED);
 				}
 				break;
-
+			}
 			case SDL_EVENT_KEY_UP:
 			{
 				Key k = sdl_to_key[e.key.scancode];
@@ -107,6 +111,7 @@ namespace EE
 			{
 				MouseButton btn = get_mouse_button(e.button.button);
 				mouse[static_cast<size_t>(btn)] |= MOUSE_DOWN | MOUSE_PRESSED;
+
 				break;
 			}
 			case SDL_EVENT_MOUSE_BUTTON_UP:
@@ -120,7 +125,9 @@ namespace EE
 			{
 				last_mouse_pos = mouse_pos;
 				mouse_pos = glm::vec2(e.motion.x, e.motion.y);
-				mouse_delta = mouse_pos - last_mouse_pos;
+				mouse_delta = glm::vec2(e.motion.xrel, e.motion.yrel);
+				mouse_delta_accum += mouse_delta;
+
 				break;
 			}
 		}
@@ -166,6 +173,7 @@ namespace EE
 		}
 
 		// Reset delta (optional, depending on needs)
-		// mouse_delta = glm::vec2(0.0f);
+		mouse_delta = glm::vec2(0.0f);
+
 	}
 }

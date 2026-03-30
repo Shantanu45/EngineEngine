@@ -125,14 +125,14 @@ namespace EE
 			application.info.apiVersion = VK_API_VERSION_1_1;
 
 			// SHAN: test
-			std::unique_ptr is = std::make_unique<InputSystem>();
-			set_input_handler(std::move(is));
+			auto is = Services::get().get<InputSystemInterface>();
+			set_input_handler(is);
 
 			get_frame_timer().reset();
 			return true;
 		}
 
-		void set_input_handler(std::unique_ptr<InputSystem> input) { this->input = std::move(input); }
+		void set_input_handler(std::shared_ptr<InputSystemInterface> input) { this->input = input; }
 
 		bool process_sdl_event(const SDL_Event& e)
 		{
@@ -175,9 +175,10 @@ namespace EE
 		void run_message_loop()
 		{
 			SDL_Event e;
+
+			input->update();
 			while (async_loop_alive && SDL_WaitEvent(&e))		// SDL_WaitEvent (Blocking), CPU Usage: Very low (OS puts thread to sleep), Best for: Applications that don't need continuous updates (editors, menus, idle apps)
 			{
-				input->update();
 				if (!process_sdl_event(e))
 					break;
 			}
@@ -186,9 +187,10 @@ namespace EE
 		bool iterate_message_loop()
 		{
 			SDL_Event e;
+
+			input->update();
 			while (SDL_PollEvent(&e))			// SDL_PollEvent (Non-blocking), CPU Usage: High (busy-waiting), Best for: Games that need constant 60+ FPS rendering
 			{
-				input->update();
 				if (!process_sdl_event(e))
 					return false;
 			}
@@ -269,7 +271,7 @@ namespace EE
 		}
 
 	private:
-		std::unique_ptr<InputSystem> input;
+		std::shared_ptr<InputSystemInterface> input;
 		uint32_t wake_event_type = 0;
 		bool async_loop_alive = true;  // TODO:
 
@@ -303,10 +305,12 @@ namespace EE
 		Locator::ServiceLocator& locator = Services::get();
 
 		// Register real implementations
+		locator.provide<InputSystemInterface>(std::make_shared<InputSystem>());
+
 		locator.provide<FilesystemInterface>(std::make_shared<Filesystem>());
 		std::shared_ptr<FilesystemInterface> fs = locator.get<FilesystemInterface>();
 		const std::string exe_path = Path::get_executable_path();
-		FileSystem::Filesystem::setup_default_filesystem(static_cast<Filesystem*>(fs.get()), Path::join(exe_path, "../../assets").c_str());		// 		default asstes directory for now`
+		FileSystem::Filesystem::setup_default_filesystem(static_cast<Filesystem*>(fs.get()), Path::join(exe_path, "../../assets").c_str());		// 		default assets directory for now`
 		//auto fs = Services::get().get<FilesystemInterface>();
 
 		// creates application

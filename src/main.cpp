@@ -19,6 +19,7 @@
 #include "rendering/framegraph_resources.h"
 
 #include "rendering/camera.h"
+#include "input/input.h"
 
 
 
@@ -194,6 +195,8 @@ struct TriangleApplication : EE::Application
 		uniform_set = device->uniform_set_create(uniforms, device->get_shader_rid("triangle_shader"), 0);
 
 		wsi->pre_frame_loop();
+
+		input_system = Services::get().get<EE::InputSystemInterface>();
 	}
 	
 	void render_frame(double frame_time, double elapsed_time) override
@@ -205,6 +208,8 @@ struct TriangleApplication : EE::Application
 		auto wsi = get_wsi();
 
 		auto device = wsi->get_rendering_device();
+
+		camera.update_from_input(input_system.get(), frame_time);
 
 		UBO ubo{};
 		ubo.model = glm::mat4(1.0f); // identity for now
@@ -269,6 +274,8 @@ private:
 
 	RID scene_fb;
 	Camera camera;
+
+	std::shared_ptr<EE::InputSystemInterface> input_system;
 };
 
 namespace EE

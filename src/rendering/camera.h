@@ -9,6 +9,7 @@
 
 #include <array>
 #include "math/helpers.h"
+#include "input/input.h"
 
 
 // -----------------------------------------------------------------------------
@@ -41,6 +42,20 @@ struct FrustumPlane {
 struct Frustum {
 	// Order: Left, Right, Bottom, Top, Near, Far
 	std::array<FrustumPlane, 6> planes;
+};
+
+struct CameraControls
+{
+	EE::Key forward = EE::Key::W;
+	EE::Key backward = EE::Key::S;
+	EE::Key left = EE::Key::A;
+	EE::Key right = EE::Key::D;
+	EE::Key up = EE::Key::E;
+	EE::Key down = EE::Key::Q;
+	EE::MouseButton rotate_button = EE::MouseButton::Right;
+
+	float sensitivity = 0.001f;
+	float speed = 1.0f;
 };
 
 class Camera {
@@ -95,6 +110,25 @@ public:
 	// p_delta_x = yaw delta (radians), p_delta_y = pitch delta (radians)
 	void fly_rotate(float p_delta_yaw, float p_delta_pitch);
 
+	void update_from_input(EE::InputSystemInterface* input_system, double frame_time)
+	{
+		if (!input_system->is_mouse_held(controls.rotate_button))
+			return;
+
+		glm::vec2 mouse_delta = input_system->get_mouse_delta();
+		fly_rotate(mouse_delta.x * controls.sensitivity, mouse_delta.y * controls.sensitivity);
+
+		glm::vec3 move_dir(0.f);
+		move_dir.z += input_system->is_held(controls.forward) ? 1.f : 0.f;
+		move_dir.z += input_system->is_held(controls.backward) ? -1.f : 0.f;
+		move_dir.x += input_system->is_held(controls.right) ? 1.f : 0.f;
+		move_dir.x += input_system->is_held(controls.left) ? -1.f : 0.f;
+		move_dir.y += input_system->is_held(controls.up) ? 1.f : 0.f;
+		move_dir.y += input_system->is_held(controls.down) ? -1.f : 0.f;
+
+		fly_move(move_dir * controls.speed * static_cast<float>(frame_time));
+	}
+
 	// --- Orbit / Arcball -----------------------------------------------------
 
 	void set_orbit_target(const glm::vec3& p_target) {
@@ -144,7 +178,7 @@ public:
 	// Returns true if an AABB (min/max corners) is inside or intersecting the frustum.
 	bool is_aabb_visible(const glm::vec3& p_min, const glm::vec3& p_max) const;
 
-	private:
+private:
 		// --- Internal recalculation -----------------------------------------------
 
 		void _recalculate_projection() {
@@ -168,6 +202,8 @@ private:
 
 	CameraMode       _mode = CameraMode::Fly;
 	CameraProjection _projection_type = CameraProjection::Perspective;
+
+	CameraControls controls;
 
 	// Transform
 	glm::vec3 _position = glm::vec3(0.0f, 0.0f, 3.0f);
