@@ -21,8 +21,6 @@
 #include "rendering/camera.h"
 #include "input/input.h"
 
-
-
 struct basic_pass_resource
 {
 	FrameGraphResource scene;
@@ -104,7 +102,7 @@ void add_blit_pass(FrameGraph& fg, FrameGraphBlackboard& bb)
 struct TriangleApplication : EE::Application
 {
 
-	struct alignas(16) UBO {
+	struct alignas(16) Camera_UBO {
 		glm::mat4 model;
 		glm::mat4 view_projection;
 	};
@@ -146,7 +144,8 @@ struct TriangleApplication : EE::Application
 		camera.set_perspective(60.0f, 16.0f / 9.0f, 0.1f, 1000.0f);
 		camera.set_mode(CameraMode::Fly);
 
-		state_uniform = device->uniform_buffer_create(sizeof(UBO));
+
+		camera_ubo = device->uniform_buffer_create(sizeof(Camera_UBO));
 
 		auto fs = Services::get().get<FilesystemInterface>();
 		Rendering::ImageLoader img_loader(*fs);
@@ -174,7 +173,7 @@ struct TriangleApplication : EE::Application
 		RD::Uniform u;
 		u.uniform_type = RDC::UNIFORM_TYPE_UNIFORM_BUFFER;
 		u.binding = 0;
-		u.append_id(state_uniform);
+		u.append_id(camera_ubo);
 		uniforms.push_back(u);
 
 		RD::Uniform tu;
@@ -189,10 +188,9 @@ struct TriangleApplication : EE::Application
 		su.append_id(sampler);
 		uniforms.push_back(su);
 
-		DEV_ASSERT(rendering_device != nullptr);
-		wsi->submit_transfer_workers();
-
 		uniform_set = device->uniform_set_create(uniforms, device->get_shader_rid("triangle_shader"), 0);
+
+		wsi->submit_transfer_workers();
 
 		wsi->pre_frame_loop();
 
@@ -211,11 +209,11 @@ struct TriangleApplication : EE::Application
 
 		camera.update_from_input(input_system.get(), frame_time);
 
-		UBO ubo{};
+		Camera_UBO ubo{};
 		ubo.model = glm::mat4(1.0f); // identity for now
 		ubo.view_projection = camera.get_view_projection();
 
-		auto err = device->buffer_update(state_uniform, 0, sizeof(UBO), &ubo);
+		auto err = device->buffer_update(camera_ubo, 0, sizeof(Camera_UBO), &ubo);
 
 		// needs to be outside render pass begin - end
 		std::vector<Rect2i> viewport{ Rect2i(0, 0, device->screen_get_width(), device->screen_get_height()) };
@@ -251,7 +249,7 @@ struct TriangleApplication : EE::Application
 
 		auto device = wsi->get_rendering_device();
 
-		device->free_rid(state_uniform);
+		device->free_rid(camera_ubo);
 		device->free_rid(texture_uniform);
 		device->free_rid(texture_fb);
 		device->free_rid(pipeline);
@@ -260,7 +258,7 @@ struct TriangleApplication : EE::Application
 	}
 
 private:
-	RID state_uniform;
+	RID camera_ubo;
 	RID texture_uniform;
 	RID sampler;
 	RID uniform_set;
