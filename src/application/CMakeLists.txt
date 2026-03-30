@@ -16,6 +16,7 @@ find_package(SDL3 REQUIRED)
 find_package(xxHash REQUIRED)
 find_package(TinyGLTF REQUIRED)
 find_package(stb REQUIRED)
+find_package(imgui REQUIRED)
 
 set(INCLUDES 
 	"${PROJECT_SOURCE_DIR}/src"
@@ -36,6 +37,7 @@ set(ADDITIONAL_LIBRARY_DEPENDENCIES
 	xxHash::xxhash
 	TinyGLTF::TinyGLTF
 	stb::stb
+	imgui::imgui
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE ${ADDITIONAL_LIBRARY_DEPENDENCIES})

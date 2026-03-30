@@ -1307,7 +1307,7 @@ bool    ImGui_ImplVulkan_Init(ImGui_ImplVulkan_InitInfo* info)
         IM_ASSERT(info->PipelineInfoMain.RenderPass == VK_NULL_HANDLE);
 
     bd->VulkanInitInfo = *info;
-
+    printf("vkGetPhysicalDeviceProperties = %p\n", vkGetPhysicalDeviceProperties);
     VkPhysicalDeviceProperties properties;
     vkGetPhysicalDeviceProperties(info->PhysicalDevice, &properties);
     bd->NonCoherentAtomSize = properties.limits.nonCoherentAtomSize;

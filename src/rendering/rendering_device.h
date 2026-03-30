@@ -17,6 +17,13 @@
 #include <map>
 #include <set>
 
+namespace Vulkan
+{
+	class ImGuiDevice;
+
+}
+
+
 namespace Rendering
 {
 	static Compiler::Stage compiler_stage_from_shader_stage(const RenderingDeviceCommons::ShaderStage stage)
@@ -1003,6 +1010,8 @@ namespace Rendering
 		void end_render_pass(RDD::CommandBufferID cmd);
 		void execute_frame(bool p_present);
 
+		Error iniitialize_imgui_device(RID p_framebuffer);
+
 		// TODO: #temp
 		void _submit_transfer_workers(RDD::CommandBufferID p_draw_command_buffer = RDD::CommandBufferID());
 		void _submit_transfer_barriers(RDD::CommandBufferID p_draw_command_buffer);
@@ -1092,6 +1101,8 @@ namespace Rendering
 	private:
 		bool is_main_instance = false;
 		bool pipeline_cache_enabled = false;
+
+		std::unique_ptr<Vulkan::ImGuiDevice> imgui_device;
 
 		RenderingContextDriver* context = nullptr;
 		RenderingDeviceDriver* driver = nullptr;
@@ -1205,7 +1216,7 @@ namespace Rendering
 				WARN_PRINT(std::format("1 RID of type '{}' was leaked.", p_type));
 			}
 			else {
-				WARN_PRINT(std::format("%d RIDs of type '{}' were leaked.", owned.size(), p_type));
+				WARN_PRINT(std::format("%d RIDs of type '{}' were leakedM.", owned.size(), p_type));
 			}
 			for (const RID& rid : owned) {
 #ifdef DEV_ENABLED

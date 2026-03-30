@@ -13,7 +13,6 @@
 #include "rendering/gltf_loader.h"
 #include "math/rect2.h"
 
-
 namespace Rendering
 {
 	class RendererCompositor;

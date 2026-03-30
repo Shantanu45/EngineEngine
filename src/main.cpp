@@ -135,6 +135,8 @@ struct TriangleApplication : EE::Application
 		}
 
 		scene_fb = device->framebuffer_create(fb_textures);
+		auto imgui_fb = device->framebuffer_create(fb_textures);
+		DEBUG_ASSERT(device->iniitialize_imgui_device(imgui_fb) == OK);
 
 		pipeline = Rendering::PipelineBuilder{}
 			.set_shader({ "assets://shaders/triangle_v2.vert", "assets://shaders/triangle_v2.frag" }, "triangle_shader")

@@ -10,6 +10,8 @@
 #include "application/service_locator.h"
 #include <set>
 #include "math\helpers.h"
+ //TODO: add abstraction for imgui
+#include "vulkan/imgui_vulkan_device.h"
 
 namespace Rendering
 {
@@ -3376,6 +3378,16 @@ namespace Rendering
 
 			frames[frame].swap_chains_to_present.clear();
 		}
+	}
+
+	Error RenderingDevice::iniitialize_imgui_device(RID p_framebuffer)
+	{
+		auto framebuffer = framebuffer_owner.get_or_null(p_framebuffer);
+		RDD::RenderPassID render_pass = framebuffer_formats[framebuffer->format_id].render_pass;
+		imgui_device = std::make_unique<Vulkan::ImGuiDevice>(context, driver);
+		imgui_device->initialize(0/*temp*/, main_queue_family.id - 1, 2, _get_swap_chain_desired_count(), render_pass, 0);
+
+		return OK;
 	}
 
 #pragma region Transfer worker
