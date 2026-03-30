@@ -261,16 +261,13 @@ namespace Rendering
 			for (auto p : m.second.primitives)
 			{
 				rendering_device->_free_dependencies_of(p.second.vertex_array);
-				rendering_device->free_rid(p.second.vertex_array);
 				rendering_device->_free_dependencies_of(p.second.index_array);
-				rendering_device->free_rid(p.second.index_array);
 			}
-
+			rendering_device->free_rid(m.second.primitives.begin()->second.vertex_array);
+			rendering_device->free_rid(m.second.primitives.begin()->second.index_array);
 		}
-
+		//rendering_device->screen_free();
 		rendering_device->finalize();
-		rendering_device->screen_free();
-
 	}
 
 	WSI::~WSI()

@@ -1166,6 +1166,8 @@ namespace Rendering
 
 		std::unordered_map<std::string, RID> shader_name_rid_map; // shader name to rid
 
+		std::unordered_map<uint32_t, RID> shader_cache;
+
 		RID_Owner<RDD::SamplerID, true> sampler_owner;
 
 		RID_Owner<RenderPipeline, true> render_pipeline_owner;

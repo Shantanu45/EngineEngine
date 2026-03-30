@@ -304,8 +304,12 @@ namespace Rendering
 		_submit_transfer_workers();
 		_wait_for_transfer_workers();
 
-		// Delete everything the graph has created.
-		//draw_graph.finalize();
+		// Delete all shader modules in cache;
+		for (auto s: shader_cache)
+		{
+			free_rid(s.second);
+		}
+		shader_cache.clear();
 
 		// Free all resources.
 		_free_rids(render_pipeline_owner, "Pipeline");
@@ -419,15 +423,26 @@ namespace Rendering
 
 	RID RenderingDevice::create_program(const std::string& p_shader_name, const std::vector<std::string> programs)
 	{
-		RDShaderSource* shaders = new RDShaderSource();
-		shaders->set_language(RenderingDeviceCommons::SHADER_LANGUAGE_GLSL);
-		for (auto shader_path : programs)
+		auto hash = hash_xxhash_strings_32(programs);
+		if (shader_cache.contains(hash))
 		{
-			auto stage = shader_stage_from_compiler_stage(Compiler::stage_from_path(shader_path));
-			ERR_FAIL_COND_V_MSG(stage == RenderingDeviceCommons::SHADER_STAGE_MAX, RID(), "could not evaluate shader stage from path!!");
-			shaders->set_stage_source(stage, shader_path);
+			return shader_cache[hash];
 		}
-		return shader_create_from_spirv(shader_compile_spirv_from_shader_source(shaders), p_shader_name);
+		else
+		{
+			RDShaderSource* shaders = new RDShaderSource();
+			shaders->set_language(RenderingDeviceCommons::SHADER_LANGUAGE_GLSL);
+			for (auto shader_path : programs)
+			{
+				auto stage = shader_stage_from_compiler_stage(Compiler::stage_from_path(shader_path));
+				ERR_FAIL_COND_V_MSG(stage == RenderingDeviceCommons::SHADER_STAGE_MAX, RID(), "could not evaluate shader stage from path!!");
+				shaders->set_stage_source(stage, shader_path);
+			}
+			auto shader_rid =  shader_create_from_spirv(shader_compile_spirv_from_shader_source(shaders), p_shader_name);
+
+			shader_cache[hash] = shader_rid;
+			return shader_rid;
+		}
 	}
 
 	Rendering::RDShaderSPIRV* RenderingDevice::shader_compile_spirv_from_shader_source(const RDShaderSource* p_source, bool p_allow_cache /*= true*/)
