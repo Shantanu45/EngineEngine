@@ -34,6 +34,7 @@ struct imgui_pass_resource
 struct blit_pass_resource
 {
 	FrameGraphResource scene;
+	FrameGraphResource ui;
 };
 
 void add_basic_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
@@ -84,14 +85,16 @@ void add_basic_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
 
 void add_blit_pass(FrameGraph& fg, FrameGraphBlackboard& bb)
 {
-	const auto& basic = bb.get<basic_pass_resource>();
+	const auto& scene = bb.get<basic_pass_resource>();
+	const auto& ui = bb.get<imgui_pass_resource>();
 
 	fg.add_callback_pass<blit_pass_resource>(
 		"Blit Pass",
 
 		[&](FrameGraph::Builder& builder, blit_pass_resource& data)
 		{
-			data.scene = builder.read(basic.scene, 1u);
+			data.scene = builder.read(scene.scene, 1u);
+			data.ui = builder.read(ui.ui, 1u);
 			builder.set_side_effect();		// mark as non cullable
 		},
 
@@ -103,6 +106,7 @@ void add_blit_pass(FrameGraph& fg, FrameGraphBlackboard& bb)
 			auto wsi = rc.wsi;
 
 			auto& scene = resources.get<Rendering::FrameGraphTexture>(data.scene);
+			auto& ui = resources.get<Rendering::FrameGraphTexture>(data.ui);
 
 			wsi->blit_render_target_to_screen(scene.texture);
 		}
@@ -110,7 +114,7 @@ void add_blit_pass(FrameGraph& fg, FrameGraphBlackboard& bb)
 }
 
 void add_imgui_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
-	FrameGraphResource image_handle, RID frame_buffer)
+	FrameGraphResource image_handle)
 {
 	bb.add<imgui_pass_resource>() =
 		fg.add_callback_pass<imgui_pass_resource>(
@@ -130,18 +134,8 @@ void add_imgui_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
 
 				auto& scene = resources.get<Rendering::FrameGraphTexture>(data.ui);
 
-				uint32_t w = rc.device->screen_get_width();
-				uint32_t h = rc.device->screen_get_height();
-
-				Rect2i viewport(0, 0, w, h);
-
-				rc.device->begin_render_pass_from_frame_buffer(frame_buffer,
-					viewport, Color());
-
+				ImGui::Render();
 				rc.device->imgui_execute(ImGui::GetDrawData(), cmd);
-				//ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
-
-				rc.wsi->end_render_pass(cmd);
 
 				//rc.device->_submit_transfer_barriers(cmd);
 			});
@@ -182,22 +176,7 @@ struct TriangleApplication : EE::Application
 			fb_textures.push_back(texture_fb);
 		}
 
-		std::vector<RID> imgui_textures;
-		{ //texture
-			RD::TextureFormat tf;
-			tf.texture_type = RD::TEXTURE_TYPE_2D;
-			tf.width = device->screen_get_width();
-			tf.height = device->screen_get_height();
-			tf.usage_bits = RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT;
-			tf.format = RD::DATA_FORMAT_R8G8B8A8_UNORM;
-
-			imgui_texture_fb = RD::get_singleton()->texture_create(tf, RD::TextureView());
-			imgui_textures.push_back(imgui_texture_fb);
-		}
-
 		scene_fb = device->framebuffer_create(fb_textures);
-		imgui_fb = device->framebuffer_create(imgui_textures);
-		
 
 		pipeline = Rendering::PipelineBuilder{}
 			.set_shader({ "assets://shaders/triangle_v2.vert", "assets://shaders/triangle_v2.frag" }, "triangle_shader")
@@ -265,7 +244,7 @@ struct TriangleApplication : EE::Application
 
 		wsi->pre_frame_loop();
 
-		DEBUG_ASSERT(device->iniitialize_imgui_device(wsi->get_wsi_platform_data(0).platfform_data, imgui_fb) == OK);
+		DEBUG_ASSERT(device->iniitialize_imgui_device(wsi->get_wsi_platform_data(0).platfform_data) == OK);
 
 		input_system = Services::get().get<EE::InputSystemInterface>();
 	}
@@ -301,8 +280,18 @@ struct TriangleApplication : EE::Application
 		Rendering::FrameGraphTexture scene_tex;
 		scene_tex.texture = texture_fb;
 
+
 		FrameGraphResource scene_res = fg.import("scene texture", scene_desc, std::move(scene_tex));
+
+		auto imgui_fb = device->get_imgui_texture();
+
+		device->imgui_begin_frame();
+		
+		Rendering::FrameGraphTexture imgui_tex;
+		imgui_tex.texture = imgui_fb;
+		FrameGraphResource imgui_res = fg.import("scene texture", scene_desc, std::move(imgui_tex));
 		add_basic_pass(fg, bb, scene_res, scene_fb, pipeline, uniform_set);
+		add_imgui_pass(fg, bb, imgui_res);
 		add_blit_pass(fg, bb);
 
 		fg.compile();

@@ -3380,10 +3380,8 @@ namespace Rendering
 		}
 	}
 
-	Error RenderingDevice::iniitialize_imgui_device(WindowPlatformData p_platfform_data, RID p_framebuffer)
+	Error RenderingDevice::iniitialize_imgui_device(WindowPlatformData p_platfform_data)
 	{
-		auto framebuffer = framebuffer_owner.get_or_null(p_framebuffer);
-		RDD::RenderPassID render_pass = framebuffer_formats[framebuffer->format_id].render_pass;
 		imgui_device = std::make_unique<Vulkan::ImGuiDevice>(p_platfform_data, context, driver);
 
 		TextureFormat tf;
@@ -3391,15 +3389,24 @@ namespace Rendering
 		tf.width = screen_get_width();
 		tf.height = screen_get_height();
 		tf.usage_bits = TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | TEXTURE_USAGE_SAMPLING_BIT;
-		tf.format = DATA_FORMAT_R8G8B8A8_UNORM;
+		tf.format = driver->swap_chain_get_format(screen_swap_chains[0]/*temp*/);
 
-		auto imgui_texture_rid = texture_create(tf, TextureView());
+		imgui_texture_rid = texture_create(tf, TextureView());
 		auto imgui_texture = texture_owner.get_or_null(imgui_texture_rid);
 		std::vector<RenderingDeviceDriver::TextureID> textures{ imgui_texture->driver_id };
 		
 		imgui_device->initialize(0/*temp*/, main_queue_family.id - 1, 2, _get_swap_chain_desired_count(), driver->swap_chain_get_format(screen_swap_chains[0]/*temp*/), textures, screen_get_width(), screen_get_height());
 
 		return OK;
+	}
+
+	void RenderingDevice::imgui_begin_frame()
+	{
+		imgui_device->begin_frame();
+	}
+
+	RID RenderingDevice::get_imgui_texture() {
+		return imgui_texture_rid;
 	}
 
 	RenderingDeviceDriver::FramebufferID RenderingDevice::get_imgui_framebuffer() {

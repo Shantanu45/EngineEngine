@@ -62,6 +62,9 @@ namespace Vulkan
 
 
 		renderbuffer = _create_render_pass(vulkan_driver->vulkan_device_get(), RD_TO_VK_FORMAT[p_swapchain_format]);
+
+		render_pass_device_info.vk_render_pass = vk_renderpass;
+
 		ImGui_ImplVulkan_InitInfo init_info = {};
 		//init_info.ApiVersion = VK_API_VERSION_1_3;              // Pass in your value of VkApplicationInfo::apiVersion, otherwise will default to header version.
 		init_info.Instance = vulkan_context->instance_get();
@@ -74,13 +77,13 @@ namespace Vulkan
 		init_info.MinImageCount = p_min_image_count;
 		init_info.ImageCount = p_swapchain_image_count;
 		init_info.Allocator = nullptr;
-		init_info.PipelineInfoMain.RenderPass = ((RenderingDeviceDriverVulkan::RenderPassInfo*)(renderbuffer.id))->vk_render_pass;
+		init_info.PipelineInfoMain.RenderPass = vk_renderpass;// ((RenderingDeviceDriverVulkan::RenderPassInfo*)(renderbuffer.id))->vk_render_pass;
 		init_info.PipelineInfoMain.Subpass = 0;
 		init_info.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
 		init_info.CheckVkResultFn = check_vk_result;
 		ImGui_ImplVulkan_Init(&init_info);
 
-		framebuffer = _create_imgui_framebuffers(renderbuffer, p_attachments, width, height);
+		framebuffer = _create_imgui_framebuffers(vk_renderpass, p_attachments, width, height);
 		return OK;
 	}
 
@@ -165,7 +168,6 @@ namespace Vulkan
 
 	RenderingDeviceDriver::RenderPassID ImGuiDevice::_create_render_pass(VkDevice device, VkFormat swapchainFormat)
 	{
-		// Color attachment (swapchain image)
 		VkAttachmentDescription color_attachment{};
 		color_attachment.format = swapchainFormat;
 		color_attachment.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -174,7 +176,7 @@ namespace Vulkan
 		color_attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 		color_attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 		color_attachment.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-		color_attachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+		color_attachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
 		VkAttachmentReference color_ref{};
 		color_ref.attachment = 0;
@@ -191,9 +193,11 @@ namespace Vulkan
 		dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
 		dependency.dstSubpass = 0;
 		dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-		dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-		dependency.srcAccessMask = 0;
-		dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+		dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+									VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;;
+		dependency.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+		dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+									VK_ACCESS_SHADER_READ_BIT;
 
 		VkRenderPassCreateInfo render_pass_info{};
 		render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
@@ -204,23 +208,23 @@ namespace Vulkan
 		render_pass_info.dependencyCount = 1;
 		render_pass_info.pDependencies = &dependency;
 
-		VkRenderPass render_pass;
-		if (vkCreateRenderPass(device, &render_pass_info, nullptr, &render_pass) != VK_SUCCESS)
+		if (vkCreateRenderPass(device, &render_pass_info, nullptr, &vk_renderpass) != VK_SUCCESS)
 		{
 			throw std::runtime_error("Failed to create ImGui render pass");
 		}
-		DEBUG_ASSERT(render_pass != VK_NULL_HANDLE);
+		DEBUG_ASSERT(vk_renderpass != VK_NULL_HANDLE);
 
 		RenderingDeviceDriverVulkan::RenderPassInfo render_pass_device_info;
-		render_pass_device_info.vk_render_pass = render_pass;
+		render_pass_device_info.vk_render_pass = vk_renderpass;
 		RenderingDeviceDriver::RenderPassID render_pass_id(&render_pass_device_info);
 
 		return render_pass_id;
 	}
 
-	RenderingDeviceDriver::FramebufferID ImGuiDevice::_create_imgui_framebuffers(RenderingDeviceDriver::RenderPassID p_render_pass, std::span<RenderingDeviceDriver::TextureID> p_attachments, uint32_t p_width, uint32_t p_height)
+	RenderingDeviceDriver::FramebufferID ImGuiDevice::_create_imgui_framebuffers(VkRenderPass p_render_pass, std::span<RenderingDeviceDriver::TextureID> p_attachments, uint32_t p_width, uint32_t p_height)
 	{
-		return vulkan_driver->framebuffer_create(p_render_pass, p_attachments, p_width, p_height);
+		RenderingDeviceDriver::RenderPassID render_pass_id(&render_pass_device_info);
+		return vulkan_driver->framebuffer_create(render_pass_id, p_attachments, p_width, p_height);
 
 	}
 

@@ -26,11 +26,13 @@ namespace Vulkan
 		void end_frame();
 
 		RenderingDeviceDriver::FramebufferID get_imgui_framebuffer() {
+
 			return framebuffer;
 		}
 
 		RenderingDeviceDriver::RenderPassID get_imgui_renderpass() {
-			return renderbuffer;
+			RenderingDeviceDriver::RenderPassID render_pass_id(&render_pass_device_info);
+			return render_pass_id;
 		}
 
 		void show_demo_window();
@@ -39,7 +41,7 @@ namespace Vulkan
 
 	private:
 		RenderingDeviceDriver::RenderPassID _create_render_pass(VkDevice device, VkFormat swapchainFormat);
-		RenderingDeviceDriver::FramebufferID _create_imgui_framebuffers(RenderingDeviceDriver::RenderPassID p_render_pass, std::span<RenderingDeviceDriver::TextureID> p_attachments, uint32_t p_width, uint32_t p_height);
+		RenderingDeviceDriver::FramebufferID _create_imgui_framebuffers(VkRenderPass p_render_pass, std::span<RenderingDeviceDriver::TextureID> p_attachments, uint32_t p_width, uint32_t p_height);
 	public:
 		RenderingContextDriverVulkan* vulkan_context;
 		RenderingDeviceDriverVulkan* vulkan_driver;
@@ -48,6 +50,8 @@ namespace Vulkan
 
 		RenderingDeviceDriver::FramebufferID framebuffer;
 		RenderingDeviceDriver::RenderPassID renderbuffer;
+		VkRenderPass vk_renderpass;
+		RenderingDeviceDriverVulkan::RenderPassInfo render_pass_device_info;
 
 	};
 }

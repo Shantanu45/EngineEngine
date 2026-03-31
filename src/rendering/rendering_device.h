@@ -1009,8 +1009,10 @@ namespace Rendering
 		void end_render_pass(RDD::CommandBufferID cmd);
 		void execute_frame(bool p_present);
 
-		Error iniitialize_imgui_device(WindowPlatformData p_platfform_data, RID p_framebuffer);
+		Error iniitialize_imgui_device(WindowPlatformData p_platfform_data);
 
+		void imgui_begin_frame();
+		RID get_imgui_texture();
 		RenderingDeviceDriver::FramebufferID get_imgui_framebuffer();
 		void imgui_execute(void* p_draw_data, RDD::CommandBufferID p_command_buffer, RDD::PipelineID p_pipeline = RDD::PipelineID());
 		Vulkan::ImGuiDevice* get_imgui_device();
@@ -1183,6 +1185,8 @@ namespace Rendering
 		std::unordered_map<std::string, RID> shader_name_rid_map; // shader name to rid
 
 		std::unordered_map<uint32_t, RID> shader_cache;
+
+		RID imgui_texture_rid;
 
 		RID_Owner<RDD::SamplerID, true> sampler_owner;
 
