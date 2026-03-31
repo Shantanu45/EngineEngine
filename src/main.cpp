@@ -313,6 +313,7 @@ struct TriangleApplication : EE::Application
 
 		device->free_rid(camera_ubo);
 		device->free_rid(texture_uniform);
+		device->free_rid(texture_uniform_red);
 		device->free_rid(texture_fb);
 		device->free_rid(imgui_fb);
 		device->free_rid(pipeline);

@@ -1065,13 +1065,12 @@ namespace Vulkan
 			alloc_create_info.preferredFlags &= ~vma_flags_to_remove;
 			alloc_create_info.usage = vma_usage;
 
-
 			VkResult err = vmaCreateBuffer(allocator, &create_info, &alloc_create_info, &vk_buffer, &allocation, &alloc_info);
 			ERR_FAIL_COND_V_MSG(err, BufferID(), std::format( "Can't create buffer of size: {} , error {}", std::to_string(p_size), std::to_string(err)));
 		}
 		else {
-			static uint32_t num = 1;
-			//LOGI("buffer alloc: %d", num++);
+			/*static uint32_t num = 1;
+			LOGI("buffer alloc: %d", num++);*/
 			VkResult err = vkCreateBuffer(vk_device, &create_info, nullptr, &vk_buffer);
 			ERR_FAIL_COND_V_MSG(err, BufferID(), std::format("Can't create buffer of size: {} , error {}", std::to_string(p_size), std::to_string(err)));
 			err = vmaAllocateMemoryForBuffer(allocator, vk_buffer, &alloc_create_info, &allocation, &alloc_info);
@@ -1120,6 +1119,8 @@ namespace Vulkan
 			vmaDestroyBuffer(allocator, buf_info->vk_buffer, buf_info->allocation.handle);
 		}
 		else {
+			/*static uint32_t de_num = 1;
+			LOGI("buffer de alloc: %d", de_num++);*/
 			vkDestroyBuffer(vk_device, buf_info->vk_buffer, nullptr);
 			vmaFreeMemory(allocator, buf_info->allocation.handle);
 		}
@@ -1406,6 +1407,8 @@ namespace Vulkan
 			ERR_FAIL_COND_V_MSG(err, TextureID(), std::format("vmaCreateImage failed with error {} .", std::to_string(err)));
 		}
 		else {
+			//static uint32_t num = 1;
+			//LOGI("buffer alloc: %d", num++);
 			VkResult err = vkCreateImage(vk_device, &create_info, nullptr, &vk_image);
 			ERR_FAIL_COND_V_MSG(err, TextureID(), std::format("vkCreateImage failed with error {}", std::to_string(err)));
 			err = vmaAllocateMemoryForImage(allocator, vk_image, &alloc_create_info, &allocation, &alloc_info);
@@ -1451,6 +1454,8 @@ namespace Vulkan
 				vmaDestroyImage(allocator, vk_image, allocation);
 			}
 			else {
+				//static uint32_t de_num = 1;
+				//LOGI("de_num buffer alloc: %d", de_num++);
 				vkDestroyImage(vk_device, vk_image, nullptr);
 				vmaFreeMemory(allocator, allocation);
 			}
@@ -1634,6 +1639,8 @@ namespace Vulkan
 				vmaDestroyImage(allocator, tex_info->vk_view_create_info.image, tex_info->allocation.handle);
 			}
 			else {
+				//static uint32_t de_num_tex = 1;
+				//LOGI("de_num_tex buffer alloc: %d", de_num_tex++);
 				vkDestroyImage(vk_device, tex_info->vk_image, nullptr);
 				vmaFreeMemory(allocator, tex_info->allocation.handle);
 			}

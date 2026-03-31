@@ -3386,7 +3386,7 @@ namespace Rendering
 		}
 	}
 
-	Error RenderingDevice::iniitialize_imgui_device(WindowPlatformData p_platfform_data)
+	Error RenderingDevice::iniitialize_imgui_device(WindowPlatformData p_platfform_data, uint32_t p_devince_index /*=0*/, uint32_t swapchain_index/*=0*/)
 	{
 		imgui_device = std::make_unique<Vulkan::ImGuiDevice>(p_platfform_data, context, driver);
 
@@ -3395,13 +3395,13 @@ namespace Rendering
 		tf.width = screen_get_width();
 		tf.height = screen_get_height();
 		tf.usage_bits = TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | TEXTURE_USAGE_SAMPLING_BIT;
-		tf.format = driver->swap_chain_get_format(screen_swap_chains[0]/*temp*/);
+		tf.format = driver->swap_chain_get_format(screen_swap_chains[swapchain_index]/*temp*/);
 
 		imgui_texture_rid = texture_create(tf, TextureView());
 		auto imgui_texture = texture_owner.get_or_null(imgui_texture_rid);
 		std::vector<RenderingDeviceDriver::TextureID> textures{ imgui_texture->driver_id };
 		
-		imgui_device->initialize(0/*temp*/, main_queue_family.id - 1, 2, _get_swap_chain_desired_count(), driver->swap_chain_get_format(screen_swap_chains[0]/*temp*/), textures, screen_get_width(), screen_get_height());
+		imgui_device->initialize(p_devince_index, main_queue_family.id - 1, 2, _get_swap_chain_desired_count(), driver->swap_chain_get_format(screen_swap_chains[swapchain_index]/*temp*/), textures, screen_get_width(), screen_get_height());
 
 		return OK;
 	}

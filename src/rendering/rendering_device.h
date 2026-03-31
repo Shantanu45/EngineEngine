@@ -1011,7 +1011,7 @@ namespace Rendering
 		void end_render_pass(RDD::CommandBufferID cmd);
 		void execute_frame(bool p_present);
 
-		Error iniitialize_imgui_device(WindowPlatformData p_platfform_data);
+		Error iniitialize_imgui_device(WindowPlatformData p_platfform_data, uint32_t p_devince_index = 0, uint32_t swapchain_index = 0);
 
 		void imgui_begin_frame();
 		RID get_imgui_texture();
