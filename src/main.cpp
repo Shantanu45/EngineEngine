@@ -213,6 +213,7 @@ struct TriangleApplication : EE::Application
 		auto fs = Services::get().get<FilesystemInterface>();
 		Rendering::ImageLoader img_loader(*fs);
 		auto image = img_loader.load_from_file("assets://textures/wall.jpg");
+		auto image_red = img_loader.load_from_file("assets://textures/wall_red.jpg");
 
 		RDC::TextureFormat tf2;
 		tf2.width = image.width;
@@ -223,6 +224,7 @@ struct TriangleApplication : EE::Application
 		tf2.format = RDC::DATA_FORMAT_R8G8B8A8_UNORM;
 
 		texture_uniform = device->texture_create(tf2, RD::TextureView(), { image.pixels });
+		texture_uniform_red = device->texture_create(tf2, RD::TextureView(), { image_red.pixels });
 
 
 		RDC::SamplerState s;
@@ -245,9 +247,15 @@ struct TriangleApplication : EE::Application
 		tu.append_id(texture_uniform);
 		uniforms.push_back(tu);
 
+		RD::Uniform tu_red;
+		tu_red.uniform_type = RDC::UNIFORM_TYPE_TEXTURE;
+		tu_red.binding = 2;
+		tu_red.append_id(texture_uniform_red);
+		uniforms.push_back(tu_red);
+
 		RD::Uniform su;
 		su.uniform_type = RD::UNIFORM_TYPE_SAMPLER;
-		su.binding = 2;
+		su.binding = 3;
 		su.append_id(sampler);
 		uniforms.push_back(su);
 
@@ -323,6 +331,7 @@ struct TriangleApplication : EE::Application
 private:
 	RID camera_ubo;
 	RID texture_uniform;
+	RID texture_uniform_red;
 	RID sampler;
 	RID uniform_set;
 
