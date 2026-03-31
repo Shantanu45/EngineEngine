@@ -65,11 +65,11 @@ namespace EE
 		int run(Application* app) override
 		{
 			_app = app;
-			init(app->get_name(), app->get_default_width(), app->get_default_height());
+			ERR_FAIL_COND_V_MSG(!init(app->get_name(), app->get_default_width(), app->get_default_height()), EXIT_FAILURE, "SDL initialization failed");
 			auto data = create_window_data();
 			
-			app->on_init(DisplayServerEnums::MAIN_WINDOW_ID, data.get());
-			app->pre_frame();
+			ERR_FAIL_COND_V_MSG(!app->on_init(DisplayServerEnums::MAIN_WINDOW_ID, data.get()), EXIT_FAILURE, "on init failed");
+			ERR_FAIL_COND_V_MSG(!app->pre_frame(), EXIT_FAILURE, "pre frame failed");
 			run_loop(app);
 			app->post_frame();
 			return EXIT_SUCCESS;

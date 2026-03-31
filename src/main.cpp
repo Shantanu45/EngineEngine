@@ -79,8 +79,10 @@ struct TriangleApplication : EE::Application
 		glm::mat4 view_projection;
 	};
 
-	void pre_frame() override
+	bool pre_frame() override
 	{
+		input_system = Services::get().get<EE::InputSystemInterface>();
+
 		auto wsi = get_wsi();
 
 		wsi->set_vertex_data_mode(Rendering::WSI::VERTEX_DATA_MODE::INTERLEVED_DATA);
@@ -172,8 +174,7 @@ struct TriangleApplication : EE::Application
 
 		wsi->submit_transfer_workers();
 
-		wsi->pre_frame_loop();
-		input_system = Services::get().get<EE::InputSystemInterface>();
+		return wsi->pre_frame_loop();
 	}
 	
 	void render_frame(double frame_time, double elapsed_time) override

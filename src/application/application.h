@@ -25,7 +25,7 @@ namespace EE
 
 		bool init_wsi();
 
-		virtual void pre_frame();
+		virtual bool pre_frame();
 
 		/**
 		 * application must overload at least this function. runs in loop between begin and end frame

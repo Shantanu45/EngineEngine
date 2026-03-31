@@ -78,7 +78,7 @@ namespace Rendering
 	{
 		if (rendering_context && rendering_device) {
 			
-			DEV_ASSERT(rendering_device != nullptr);
+			ERR_FAIL_COND_V_MSG(rendering_device == nullptr, false, "Rendering device invalid. Did initialization went wrong!");
 			// TODO: my be move swap chain creation to the renderer compositor?
 			rendering_device->screen_create(active_window);
 

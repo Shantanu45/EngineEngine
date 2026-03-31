@@ -78,9 +78,9 @@ namespace EE
 		return true;
 	}
 
-	void Application::pre_frame()
+	bool Application::pre_frame()
 	{
-		application_wsi->pre_frame_loop();
+		return application_wsi->pre_frame_loop();
 	}
 
 	void Application::run_frame(double frame_time, double elapsed_time)
