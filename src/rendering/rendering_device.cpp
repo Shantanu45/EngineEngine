@@ -3408,7 +3408,16 @@ namespace Rendering
 
 	void RenderingDevice::imgui_execute(void* p_draw_data, RDD::CommandBufferID p_command_buffer, RDD::PipelineID p_pipeline)
 	{
+		std::vector<Rect2i> viewport{ Rect2i(0, 0, screen_get_width(), screen_get_height()) };
+
+		std::array<RenderingDeviceDriver::RenderPassClearValue, 1> val;
+		val[0].color = Color();
+
+		driver->command_begin_render_pass(p_command_buffer, imgui_device->get_imgui_renderpass(), imgui_device->get_imgui_framebuffer(), RenderingDeviceDriver::COMMAND_BUFFER_TYPE_PRIMARY, viewport[0], val);
+		driver->command_render_set_viewport(p_command_buffer, viewport);
+		driver->command_render_set_scissor(p_command_buffer, viewport);
 		imgui_device->execute(p_draw_data, p_command_buffer, p_pipeline);
+		end_render_pass(p_command_buffer);
 	}
 
 	Vulkan::ImGuiDevice* RenderingDevice::get_imgui_device()

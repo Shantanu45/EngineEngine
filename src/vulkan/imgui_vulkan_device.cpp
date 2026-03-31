@@ -61,7 +61,7 @@ namespace Vulkan
 		check_vk_result(err);
 
 
-
+		renderbuffer = _create_render_pass(vulkan_driver->vulkan_device_get(), RD_TO_VK_FORMAT[p_swapchain_format]);
 		ImGui_ImplVulkan_InitInfo init_info = {};
 		//init_info.ApiVersion = VK_API_VERSION_1_3;              // Pass in your value of VkApplicationInfo::apiVersion, otherwise will default to header version.
 		init_info.Instance = vulkan_context->instance_get();
@@ -74,13 +74,13 @@ namespace Vulkan
 		init_info.MinImageCount = p_min_image_count;
 		init_info.ImageCount = p_swapchain_image_count;
 		init_info.Allocator = nullptr;
-		init_info.PipelineInfoMain.RenderPass = _create_render_pass(init_info.Device, RD_TO_VK_FORMAT[p_swapchain_format]);
+		init_info.PipelineInfoMain.RenderPass = ((RenderingDeviceDriverVulkan::RenderPassInfo*)(renderbuffer.id))->vk_render_pass;
 		init_info.PipelineInfoMain.Subpass = 0;
 		init_info.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
 		init_info.CheckVkResultFn = check_vk_result;
 		ImGui_ImplVulkan_Init(&init_info);
 
-		framebuffer = _create_imgui_framebuffers(init_info.PipelineInfoMain.RenderPass, p_attachments, width, height);
+		framebuffer = _create_imgui_framebuffers(renderbuffer, p_attachments, width, height);
 		return OK;
 	}
 
@@ -163,7 +163,7 @@ namespace Vulkan
 		}
 	}
 
-	VkRenderPass ImGuiDevice::_create_render_pass(VkDevice device, VkFormat swapchainFormat)
+	RenderingDeviceDriver::RenderPassID ImGuiDevice::_create_render_pass(VkDevice device, VkFormat swapchainFormat)
 	{
 		// Color attachment (swapchain image)
 		VkAttachmentDescription color_attachment{};
@@ -209,18 +209,18 @@ namespace Vulkan
 		{
 			throw std::runtime_error("Failed to create ImGui render pass");
 		}
-
 		DEBUG_ASSERT(render_pass != VK_NULL_HANDLE);
 
-		return render_pass;
+		RenderingDeviceDriverVulkan::RenderPassInfo render_pass_device_info;
+		render_pass_device_info.vk_render_pass = render_pass;
+		RenderingDeviceDriver::RenderPassID render_pass_id(&render_pass_device_info);
+
+		return render_pass_id;
 	}
 
-	RenderingDeviceDriver::FramebufferID ImGuiDevice::_create_imgui_framebuffers(VkRenderPass p_render_pass, std::span<RenderingDeviceDriver::TextureID> p_attachments, uint32_t p_width, uint32_t p_height)
+	RenderingDeviceDriver::FramebufferID ImGuiDevice::_create_imgui_framebuffers(RenderingDeviceDriver::RenderPassID p_render_pass, std::span<RenderingDeviceDriver::TextureID> p_attachments, uint32_t p_width, uint32_t p_height)
 	{
-		RenderingDeviceDriverVulkan::RenderPassInfo render_pass;
-		render_pass.vk_render_pass = p_render_pass;
-		RenderingDeviceDriver::RenderPassID render_pass_id(&render_pass);
-		return vulkan_driver->framebuffer_create(render_pass_id, p_attachments, p_width, p_height);
+		return vulkan_driver->framebuffer_create(p_render_pass, p_attachments, p_width, p_height);
 
 	}
 

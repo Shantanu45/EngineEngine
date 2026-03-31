@@ -29,13 +29,17 @@ namespace Vulkan
 			return framebuffer;
 		}
 
+		RenderingDeviceDriver::RenderPassID get_imgui_renderpass() {
+			return renderbuffer;
+		}
+
 		void show_demo_window();
 		void execute(void* p_draw_data, RenderingDeviceDriverVulkan::CommandBufferID p_command_buffer, RenderingDeviceDriverVulkan::PipelineID p_pipeline);
 		void finalize();
 
 	private:
-		VkRenderPass _create_render_pass(VkDevice device, VkFormat swapchainFormat);
-		RenderingDeviceDriver::FramebufferID _create_imgui_framebuffers(VkRenderPass p_render_pass, std::span<RenderingDeviceDriver::TextureID> p_attachments, uint32_t p_width, uint32_t p_height);
+		RenderingDeviceDriver::RenderPassID _create_render_pass(VkDevice device, VkFormat swapchainFormat);
+		RenderingDeviceDriver::FramebufferID _create_imgui_framebuffers(RenderingDeviceDriver::RenderPassID p_render_pass, std::span<RenderingDeviceDriver::TextureID> p_attachments, uint32_t p_width, uint32_t p_height);
 	public:
 		RenderingContextDriverVulkan* vulkan_context;
 		RenderingDeviceDriverVulkan* vulkan_driver;
@@ -43,6 +47,7 @@ namespace Vulkan
 		VkDescriptorPool descriptor_pool = VK_NULL_HANDLE;
 
 		RenderingDeviceDriver::FramebufferID framebuffer;
+		RenderingDeviceDriver::RenderPassID renderbuffer;
 
 	};
 }
