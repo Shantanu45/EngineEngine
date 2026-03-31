@@ -283,7 +283,7 @@ struct TriangleApplication : EE::Application
 
 		FrameGraphResource scene_res = fg.import("scene texture", scene_desc, std::move(scene_tex));
 
-		auto imgui_fb = device->get_imgui_texture();
+		imgui_fb = device->get_imgui_texture();
 
 		device->imgui_begin_frame();
 		
@@ -314,6 +314,7 @@ struct TriangleApplication : EE::Application
 		device->free_rid(camera_ubo);
 		device->free_rid(texture_uniform);
 		device->free_rid(texture_fb);
+		device->free_rid(imgui_fb);
 		device->free_rid(pipeline);
 		device->free_rid(sampler);
 		//device->free_rid(scene_fb);

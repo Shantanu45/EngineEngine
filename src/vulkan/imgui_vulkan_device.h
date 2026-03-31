@@ -52,6 +52,7 @@ namespace Vulkan
 		RenderingDeviceDriver::RenderPassID renderbuffer;
 		VkRenderPass vk_renderpass;
 		RenderingDeviceDriverVulkan::RenderPassInfo render_pass_device_info;
+		VkDevice device;
 
 	};
 }

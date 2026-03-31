@@ -57,6 +57,9 @@ namespace Vulkan
 			pool_info.maxSets += pool_size.descriptorCount;
 		pool_info.poolSizeCount = (uint32_t)IM_COUNTOF(pool_sizes);
 		pool_info.pPoolSizes = pool_sizes;
+
+		device = vulkan_driver->vulkan_device_get();
+
 		auto err = vkCreateDescriptorPool(vulkan_driver->vulkan_device_get(), &pool_info, nullptr, &descriptor_pool);
 		check_vk_result(err);
 
@@ -69,7 +72,7 @@ namespace Vulkan
 		//init_info.ApiVersion = VK_API_VERSION_1_3;              // Pass in your value of VkApplicationInfo::apiVersion, otherwise will default to header version.
 		init_info.Instance = vulkan_context->instance_get();
 		init_info.PhysicalDevice = vulkan_context->physical_device_get(p_device_index);
-		init_info.Device = vulkan_driver->vulkan_device_get();
+		init_info.Device = device;
 		init_info.QueueFamily = p_queue_family;// vulkan_driver->command_queue_family_get(RDD::COMMAND_QUEUE_FAMILY_GRAPHICS_BIT, p_surface_id).id - 1; // Since 0 is a valid index and we use 0 as the error case
 		init_info.Queue = vulkan_driver->_get_vk_queue(init_info.QueueFamily, 0);
 		init_info.PipelineCache = vulkan_driver->pipelines_cache.vk_cache;
@@ -154,16 +157,23 @@ namespace Vulkan
 	void ImGuiDevice::finalize()
 	{
 		auto err = vkDeviceWaitIdle(vulkan_driver->vulkan_device_get());
-		check_vk_result(err);
+
 		ImGui_ImplVulkan_Shutdown();
 		ImGui_ImplSDL3_Shutdown();
 		ImGui::DestroyContext();
 
+		// Destroy resources used by ImGui AFTER shutdown
 		if (descriptor_pool != VK_NULL_HANDLE)
 		{
 			vkDestroyDescriptorPool(vulkan_driver->vulkan_device_get(), descriptor_pool, nullptr);
 			descriptor_pool = VK_NULL_HANDLE;
 		}
+
+		// Destroy rendering resources
+		vkDestroyRenderPass(device, vk_renderpass, nullptr);
+
+		// Destroy framebuffer last
+		vulkan_driver->framebuffer_free(framebuffer);
 	}
 
 	RenderingDeviceDriver::RenderPassID ImGuiDevice::_create_render_pass(VkDevice device, VkFormat swapchainFormat)
