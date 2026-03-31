@@ -108,6 +108,8 @@ namespace Rendering
 
 		~WSI();
 
+		bool imgui_active = true;
+
 	private:
 
 		Error _create_rendering_context_window(DisplayServerEnums::WindowID p_window_id, const std::string& p_rendering_driver = "vulkan");

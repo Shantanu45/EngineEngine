@@ -81,9 +81,18 @@ namespace Rendering
 			DEV_ASSERT(rendering_device != nullptr);
 			// TODO: my be move swap chain creation to the renderer compositor?
 			rendering_device->screen_create(active_window);
+
+			if (imgui_active)
+			{
+				ERR_FAIL_COND_V_MSG(rendering_device->iniitialize_imgui_device(get_wsi_platform_data(0).platfform_data) != OK, false, "imgui is set to active but could not initialize");
+				//DEBUG_ASSERT(rendering_device->iniitialize_imgui_device(get_wsi_platform_data(0).platfform_data) == OK);
+			}
+
 			rd = std::make_unique<RendererCompositor>();
 			rd->initailize(DisplayServerEnums::MAIN_WINDOW_ID);
 			rendering_device->begin_frame();
+
+
 
 			return true;
 		}

@@ -16,25 +16,13 @@
 #include "rendering/image_loader.h"
 
 #include "rendering/pipeline_builder.h"
-#include "rendering/framegraph_resources.h"
-#include "imgui.h"
+#include "rendering/render_passes/common.h"
 #include "rendering/camera.h"
 #include "input/input.h"
 
 struct basic_pass_resource
 {
 	FrameGraphResource scene;
-};
-
-struct imgui_pass_resource
-{
-	FrameGraphResource ui;
-};
-
-struct blit_pass_resource
-{
-	FrameGraphResource scene;
-	FrameGraphResource ui;
 };
 
 void add_basic_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
@@ -78,64 +66,6 @@ void add_basic_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
 				rc.wsi->bind_and_draw_indexed(cmd, "two_cubes");
 
 				rc.wsi->end_render_pass(cmd);
-
-				//rc.device->_submit_transfer_barriers(cmd);
-			});
-}
-
-void add_blit_pass(FrameGraph& fg, FrameGraphBlackboard& bb)
-{
-	const auto& scene = bb.get<basic_pass_resource>();
-	const auto& ui = bb.get<imgui_pass_resource>();
-
-	fg.add_callback_pass<blit_pass_resource>(
-		"Blit Pass",
-
-		[&](FrameGraph::Builder& builder, blit_pass_resource& data)
-		{
-			data.scene = builder.read(scene.scene, 1u);
-			data.ui = builder.read(ui.ui, 1u);
-			builder.set_side_effect();		// mark as non cullable
-		},
-
-		[=](const blit_pass_resource& data,
-			FrameGraphPassResources& resources,
-			void* ctx)
-		{
-			auto& rc = *static_cast<Rendering::RenderContext*>(ctx);
-			auto wsi = rc.wsi;
-
-			auto& scene = resources.get<Rendering::FrameGraphTexture>(data.scene);
-			auto& ui = resources.get<Rendering::FrameGraphTexture>(data.ui);
-
-			wsi->blit_render_target_to_screen(scene.texture, ui.texture);
-		}
-	);
-}
-
-void add_imgui_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
-	FrameGraphResource image_handle)
-{
-	bb.add<imgui_pass_resource>() =
-		fg.add_callback_pass<imgui_pass_resource>(
-			"imgui Pass",
-
-			[image_handle](FrameGraph::Builder& builder, imgui_pass_resource& data)
-			{
-				data.ui = builder.write(image_handle, 1u);
-			},
-
-			[=](const imgui_pass_resource& data,
-				FrameGraphPassResources& resources,
-				void* ctx)
-			{
-				auto& rc = *static_cast<Rendering::RenderContext*>(ctx);
-				auto cmd = rc.command_buffer;
-
-				auto& scene = resources.get<Rendering::FrameGraphTexture>(data.ui);
-
-				ImGui::Render();
-				rc.device->imgui_execute(ImGui::GetDrawData(), cmd);
 
 				//rc.device->_submit_transfer_barriers(cmd);
 			});
@@ -243,18 +173,11 @@ struct TriangleApplication : EE::Application
 		wsi->submit_transfer_workers();
 
 		wsi->pre_frame_loop();
-
-		DEBUG_ASSERT(device->iniitialize_imgui_device(wsi->get_wsi_platform_data(0).platfform_data) == OK);
-
 		input_system = Services::get().get<EE::InputSystemInterface>();
 	}
 	
 	void render_frame(double frame_time, double elapsed_time) override
 	{
-		// ---- Build the frame graph ----
-		FrameGraph fg;
-		FrameGraphBlackboard bb;
-
 		auto wsi = get_wsi();
 
 		auto device = wsi->get_rendering_device();
@@ -267,10 +190,6 @@ struct TriangleApplication : EE::Application
 
 		auto err = device->buffer_update(camera_ubo, 0, sizeof(Camera_UBO), &ubo);
 
-		// needs to be outside render pass begin - end
-		std::vector<Rect2i> viewport{ Rect2i(0, 0, device->screen_get_width(), device->screen_get_height()) };
-		auto cmd_buffer = device->get_current_command_buffer();
-
 		Rendering::FrameGraphTexture::Desc scene_desc{
 			tf,
 			RD::TextureView(),
@@ -280,23 +199,27 @@ struct TriangleApplication : EE::Application
 		Rendering::FrameGraphTexture scene_tex;
 		scene_tex.texture = texture_fb;
 
-
-		FrameGraphResource scene_res = fg.import("scene texture", scene_desc, std::move(scene_tex));
-
 		imgui_fb = device->get_imgui_texture();
 
 		device->imgui_begin_frame();
 		
+		// ---- Build the frame graph ----
+		FrameGraph fg;
+		FrameGraphBlackboard bb;
+
+		FrameGraphResource scene_res = fg.import("scene texture", scene_desc, std::move(scene_tex));
+		add_basic_pass(fg, bb, scene_res, scene_fb, pipeline, uniform_set);
+
 		Rendering::FrameGraphTexture imgui_tex;
 		imgui_tex.texture = imgui_fb;
 		FrameGraphResource imgui_res = fg.import("scene texture", scene_desc, std::move(imgui_tex));
-		add_basic_pass(fg, bb, scene_res, scene_fb, pipeline, uniform_set);
-		add_imgui_pass(fg, bb, imgui_res);
-		add_blit_pass(fg, bb);
+
+		Rendering::add_imgui_pass(fg, bb, imgui_res);
+		Rendering::add_blit_pass<basic_pass_resource>(fg, bb);
 
 		fg.compile();
 
-		//save_graph_to_file(fg, "file_graph.dot");
+		save_graph_to_file(fg, "file_graph.dot");
 
 		Rendering::RenderContext rc;
 		rc.command_buffer = device->get_current_command_buffer();

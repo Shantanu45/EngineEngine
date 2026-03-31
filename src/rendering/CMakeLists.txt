@@ -15,10 +15,21 @@ set(FG
 
 source_group("framegraph" FILES ${FG})
 
+file(GLOB RenderPassesCpp CONFIGURE_DEPENDS "render_passes/*.cpp")
+file(GLOB RenderPassesHeader CONFIGURE_DEPENDS "render_passes/*.h")
+
+set(RP
+    ${RenderPassesCpp}
+    ${RenderPassesHeader}
+)
+
+source_group("render_passes" FILES ${RP})
+
 add_library(${PROJECT_NAME} STATIC 
 ${SOURCES} 
 ${HEADERS}
 ${FG}
+${RP}
 )
 
 setup_msvc_options(${PROJECT_NAME})
