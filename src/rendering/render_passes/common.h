@@ -66,6 +66,10 @@ namespace Rendering
 				{
 					auto& rc = *static_cast<Rendering::RenderContext*>(ctx);
 					auto cmd = rc.command_buffer;
+					auto wsi = rc.wsi;
+
+					// TODO: find alternative, not sure if its good to do it in a loop.
+					DEBUG_ASSERT(wsi->imgui_active, "Trying to add imgui pass when imgui_active if false, NOT ALLOWED!");
 
 					auto& scene = resources.get<Rendering::FrameGraphTexture>(data.ui);
 

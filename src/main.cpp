@@ -83,6 +83,9 @@ struct TriangleApplication : EE::Application
 	{
 		input_system = Services::get().get<EE::InputSystemInterface>();
 
+		camera.set_perspective(60.0f, 16.0f / 9.0f, 0.1f, 1000.0f);
+		camera.set_mode(CameraMode::Fly);
+
 		auto wsi = get_wsi();
 
 		wsi->set_vertex_data_mode(Rendering::WSI::VERTEX_DATA_MODE::INTERLEVED_DATA);
@@ -115,10 +118,6 @@ struct TriangleApplication : EE::Application
 			.set_vertex_format(vertex_format)
 			.build_from_frame_buffer(scene_fb);		
 
-		camera.set_perspective(60.0f, 16.0f / 9.0f, 0.1f, 1000.0f);
-		camera.set_mode(CameraMode::Fly);
-
-
 		camera_ubo = device->uniform_buffer_create(sizeof(Camera_UBO));
 
 		auto fs = Services::get().get<FilesystemInterface>();
@@ -136,7 +135,6 @@ struct TriangleApplication : EE::Application
 
 		texture_uniform = device->texture_create(tf2, RD::TextureView(), { image.pixels });
 		texture_uniform_red = device->texture_create(tf2, RD::TextureView(), { image_red.pixels });
-
 
 		RDC::SamplerState s;
 		s.mag_filter = RDC::SAMPLER_FILTER_LINEAR;
