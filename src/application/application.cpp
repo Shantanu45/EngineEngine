@@ -109,6 +109,11 @@ namespace EE
 	{
 	}
 
+	void Application::app_poll(void* e)
+	{
+		application_wsi->poll(e);
+	}
+
 	void Application::teardown_wsi()
 	{
 		application_wsi->teardown();

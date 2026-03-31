@@ -297,6 +297,11 @@ namespace Rendering
 		return OK;
 	}
 
+	void RenderingDevice::on_poll(void* e)
+	{
+		imgui_device->poll_event(e);
+	}
+
 	void RenderingDevice::finalize() {
 
 		if (!frames.empty()) {

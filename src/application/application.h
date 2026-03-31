@@ -45,6 +45,8 @@ namespace EE
 
 		virtual void render_loading(double frame_time, double elapsed_time);
 
+		virtual void app_poll(void* e);
+
 		virtual std::string get_name()
 		{
 			return "maker";

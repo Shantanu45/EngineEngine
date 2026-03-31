@@ -17,7 +17,7 @@ namespace Vulkan
 			const uint32_t p_min_image_count, const uint32_t p_swapchain_image_count, const RenderingDeviceCommons::DataFormat p_swapchain_format,
 			std::span<RenderingDeviceDriver::TextureID> p_attachments, uint32_t width, uint32_t height);
 
-		void poll_event(SDL_Event* event);
+		void poll_event(void* event);
 
 		void begin_frame();
 

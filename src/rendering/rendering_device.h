@@ -815,6 +815,8 @@ namespace Rendering
 		};
 		Error initialize(RenderingContextDriver* p_context, DisplayServerEnums::WindowID p_main_window = DisplayServerEnums::INVALID_WINDOW_ID);
 
+		void on_poll(void* e);
+
 		void finalize();
 
 #pragma region Shader

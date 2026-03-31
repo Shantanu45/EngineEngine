@@ -64,6 +64,7 @@ namespace EE
 
 		int run(Application* app) override
 		{
+			_app = app;
 			init(app->get_name(), app->get_default_width(), app->get_default_height());
 			auto data = create_window_data();
 			
@@ -179,6 +180,7 @@ namespace EE
 			input->update();
 			while (async_loop_alive && SDL_WaitEvent(&e))		// SDL_WaitEvent (Blocking), CPU Usage: Very low (OS puts thread to sleep), Best for: Applications that don't need continuous updates (editors, menus, idle apps)
 			{
+				_app->app_poll(&e);
 				if (!process_sdl_event(e))
 					break;
 			}
@@ -191,6 +193,7 @@ namespace EE
 			input->update();
 			while (SDL_PollEvent(&e))			// SDL_PollEvent (Non-blocking), CPU Usage: High (busy-waiting), Best for: Games that need constant 60+ FPS rendering
 			{
+				_app->app_poll(&e);
 				if (!process_sdl_event(e))
 					return false;
 			}
@@ -289,6 +292,7 @@ namespace EE
 
 		Util::FrameTimer timer;
 
+		Application* _app;
 
 		double frame_time;
 		double elapsed_time;

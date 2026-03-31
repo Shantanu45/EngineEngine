@@ -88,9 +88,9 @@ namespace Vulkan
 	}
 
 
-	void ImGuiDevice::poll_event(SDL_Event* event)
+	void ImGuiDevice::poll_event(void* event)
 	{
-		ImGui_ImplSDL3_ProcessEvent(event);
+		ImGui_ImplSDL3_ProcessEvent((SDL_Event*)event);
 	}
 
 	void ImGuiDevice::begin_frame()

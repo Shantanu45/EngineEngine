@@ -57,6 +57,11 @@ namespace Rendering
 		return OK;
 	}
 
+	void WSI::poll(void* e)
+	{
+		rendering_device->on_poll(e);
+	}
+
 	void WSI::blit_render_target_to_screen(RID texture, RID ui)
 	{
 		if (rd->is_blit_pass_active())
