@@ -39,10 +39,10 @@ namespace Rendering
 			auto& rc = *static_cast<RenderContext*>(ctx);
 
 			RDD::TextureBarrier barrier2;
+			barrier2.src_access = RDD::BARRIER_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 			barrier2.dst_access = RDD::BARRIER_ACCESS_SHADER_READ_BIT;
 			barrier2.next_layout = RDD::TEXTURE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 			barrier2.prev_layout = RDD::TEXTURE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-			barrier2.src_access = RDD::BARRIER_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 			barrier2.subresources = { RDD::TEXTURE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
 			barrier2.texture = rc.device->texture_id_from_rid(texture);
 			rc.device->apply_image_barrier(rc.command_buffer, RDD::PipelineStageBits::PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
