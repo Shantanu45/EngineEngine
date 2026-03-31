@@ -62,13 +62,13 @@ namespace Rendering
 		rendering_device->on_poll(e);
 	}
 
-	void WSI::blit_render_target_to_screen(RID texture, RID ui)
+	void WSI::blit_render_target_to_screen(RID p_scene_texture, RID p_imgui_ui_tex)
 	{
 		if (rd->is_blit_pass_active())
 		{
 			Rendering::BlitToScreen blit;
-			blit.render_target = texture;
-			blit.ui = ui;
+			blit.render_target = p_scene_texture;
+			blit.ui = p_imgui_ui_tex;
 
 			rd->blit_render_targets_to_screen(&blit);
 		}
@@ -105,9 +105,9 @@ namespace Rendering
 		return true;
 	}
 
-	bool WSI::end_render_pass(RDD::CommandBufferID cmd)
+	bool WSI::end_render_pass(RDD::CommandBufferID p_cmd)
 	{
-		rendering_device->end_render_pass(cmd);
+		rendering_device->end_render_pass(p_cmd);
 		return true;
 	}
 
@@ -148,19 +148,19 @@ namespace Rendering
 		}
 	}
 
-	void WSI::set_wsi_platform_data(DisplayServerEnums::WindowID window, WindowData data)
+	void WSI::set_wsi_platform_data(DisplayServerEnums::WindowID p_window, WindowData p_data)
 	{
-		windows.insert({ window, data });
+		windows.insert({ p_window, p_data });
 	}
 
-	RenderingDeviceCommons::VertexAttribute WSI::get_vertex_attribute(const uint32_t binding, const uint32_t location, const RenderingDeviceCommons::DataFormat format, const uint32_t offset, const uint32_t stride)
+	RenderingDeviceCommons::VertexAttribute WSI::get_vertex_attribute(const uint32_t p_binding, const uint32_t p_location, const RenderingDeviceCommons::DataFormat p_format, const uint32_t p_offset, const uint32_t p_stride)
 	{
 		RenderingDeviceCommons::VertexAttribute va;
-		va.format = format;
-		va.stride = stride;
-		va.binding = binding;
-		va.location = location;
-		va.offset = offset;
+		va.format = p_format;
+		va.stride = p_stride;
+		va.binding = p_binding;
+		va.location = p_location;
+		va.offset = p_offset;
 		return va;
 	}
 
@@ -186,9 +186,9 @@ namespace Rendering
 		return vertex_attributes;
 	}
 
-	void WSI::set_index_buffer_format(RenderingDeviceCommons::IndexBufferFormat format)
+	void WSI::set_index_buffer_format(RenderingDeviceCommons::IndexBufferFormat p_format)
 	{
-		index_data_format = format;
+		index_data_format = p_format;
 	}
 
 	void WSI::submit_transfer_workers()
@@ -232,9 +232,6 @@ namespace Rendering
 			total_vertices += p.vertices.size();
 			total_indices += p.indices.size();
 		}
-		// TODO: should not stay here
-		/*create_vertex_format({});*/
-
 
 		DEBUG_ASSERT(mesh_data.primitives.size() > 0);
 		DEBUG_ASSERT(!vertex_data.empty());
@@ -285,7 +282,7 @@ namespace Rendering
 	{
 		// TODO: check if window entry exists
 
-		auto wd = windows.at(p_window_id);
+		const auto wd = windows.at(p_window_id);
 
 		Error err = rendering_context->window_create(p_window_id, &wd.platfform_data);
 		ERR_FAIL_COND_V_MSG(err != OK, err, std::format("Failed to create {} window.", p_rendering_driver));
@@ -294,12 +291,12 @@ namespace Rendering
 		return OK;
 	}
 
-	std::vector<uint8_t> WSI::_get_attrib_interleaved(const std::vector<RenderingDeviceCommons::VertexAttribute>& attribs, std::vector<uint8_t> vertex_data)
+	std::vector<uint8_t> WSI::_get_attrib_interleaved(const std::vector<RenderingDeviceCommons::VertexAttribute>& p_attribs, const std::vector<uint8_t>& p_vertex_data)
 	{
 		std::vector<uint8_t> interleved_data;
-		uint32_t vert_num = vertex_data.size() / attribs[0].stride;
-		uint32_t stride = attribs[0].stride;
-		interleved_data.resize(vertex_data.size());
+		const uint32_t vert_num = p_vertex_data.size() / p_attribs[0].stride;
+		const uint32_t stride = p_attribs[0].stride;
+		interleved_data.resize(p_vertex_data.size());
 		for (int v = 0; v < vert_num; v++)
 		{
 			auto vert_pos = v;
@@ -308,22 +305,22 @@ namespace Rendering
 
 			auto src_attrib_offset = 0;
 			// for each vertex
-			for (int i = 0; i < attribs.size() - 1; i++)
+			for (int i = 0; i < p_attribs.size() - 1; i++)
 			{
-				auto size = attribs[i + 1].offset - attribs[i].offset;		// size of the attribute
+				auto size = p_attribs[i + 1].offset - p_attribs[i].offset;		// size of the attribute
 
-				dst_offset = (vert_pos * stride) + attribs[i].offset;
+				dst_offset = (vert_pos * stride) + p_attribs[i].offset;
 				src_offset = (i  * src_attrib_offset) + (vert_pos * size);
 
-				memcpy(interleved_data.data() + dst_offset, vertex_data.data() + src_offset, size);
+				memcpy(interleved_data.data() + dst_offset, p_vertex_data.data() + src_offset, size);
 				src_attrib_offset += (size * vert_num);
 			}
-			auto last_attrib_size = attribs.back().stride - attribs.back().offset;
+			auto last_attrib_size = p_attribs.back().stride - p_attribs.back().offset;
 
-			dst_offset = (vert_pos * stride) + attribs.back().offset;
+			dst_offset = (vert_pos * stride) + p_attribs.back().offset;
 			src_offset = (src_attrib_offset) + (vert_pos * last_attrib_size);
 
-			memcpy(interleved_data.data() + dst_offset, vertex_data.data() + src_offset, last_attrib_size);
+			memcpy(interleved_data.data() + dst_offset, p_vertex_data.data() + src_offset, last_attrib_size);
 
 		}
 

@@ -58,7 +58,7 @@ namespace Rendering
 
 		void poll(void* e);
 
-		void blit_render_target_to_screen(RID texture, RID ui);
+		void blit_render_target_to_screen(RID p_scene_texture, RID p_imgui_ui_tex);
 
 		bool pre_frame_loop();
 
@@ -66,7 +66,7 @@ namespace Rendering
 
 		bool begin_frame();
 
-		bool end_render_pass(RDD::CommandBufferID cmd);
+		bool end_render_pass(RDD::CommandBufferID p_cmd);
 
 		bool end_frame(bool p_present);
 
@@ -77,13 +77,13 @@ namespace Rendering
 		void bind_and_draw_indexed(RenderingDeviceDriver::CommandBufferID p_command_buffer, const std::string& p_mesh_name);
 		RenderingDevice* get_rendering_device() { return rendering_device; }
 
-		void set_wsi_platform_data(DisplayServerEnums::WindowID window, WindowData data);
+		void set_wsi_platform_data(DisplayServerEnums::WindowID p_window, WindowData p_data);
 		WindowData get_wsi_platform_data(DisplayServerEnums::WindowID window)
 		{
 			return windows[window];
 		}
 
-		RenderingDeviceCommons::VertexAttribute get_vertex_attribute(const uint32_t binding, const uint32_t location, const RenderingDeviceCommons::DataFormat format, const uint32_t offset, const uint32_t stride);
+		RenderingDeviceCommons::VertexAttribute get_vertex_attribute(const uint32_t p_binding, const uint32_t p_location, const RenderingDeviceCommons::DataFormat p_format, const uint32_t p_offset, const uint32_t p_stride);
 
 		void create_new_vertex_format(const std::vector<RenderingDeviceCommons::VertexAttribute>& p_attributes, VERTEX_FORMAT_VARIATIONS p_type);
 
@@ -91,12 +91,12 @@ namespace Rendering
 
 		std::vector<RenderingDeviceCommons::VertexAttribute> get_default_vertex_attribute();
 
-		inline void set_vertex_data_mode(VERTEX_DATA_MODE mode)
+		inline void set_vertex_data_mode(VERTEX_DATA_MODE p_mode)
 		{
-			vertex_data_mode = mode;
+			vertex_data_mode = p_mode;
 		};
 
-		void set_index_buffer_format(RenderingDeviceCommons::IndexBufferFormat format);
+		void set_index_buffer_format(RenderingDeviceCommons::IndexBufferFormat p_format);
 
 		void submit_transfer_workers();
 
@@ -114,7 +114,7 @@ namespace Rendering
 		void _destroy_rendering_context_window(DisplayServerEnums::WindowID p_window_id);
 
 		void _free_pending_resources(int p_frame);
-		std::vector<uint8_t> _get_attrib_interleaved(const std::vector<RenderingDeviceCommons::VertexAttribute>& attribs, std::vector<uint8_t> vertex_data);
+		std::vector<uint8_t> _get_attrib_interleaved(const std::vector<RenderingDeviceCommons::VertexAttribute>& p_attribs, const std::vector<uint8_t>& p_vertex_data);
 
 	private:
 
