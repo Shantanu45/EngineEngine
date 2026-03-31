@@ -76,6 +76,10 @@ namespace Rendering
 		RenderingDevice* get_rendering_device() { return rendering_device; }
 
 		void set_wsi_platform_data(DisplayServerEnums::WindowID window, WindowData data);
+		WindowData get_wsi_platform_data(DisplayServerEnums::WindowID window)
+		{
+			return windows[window];
+		}
 
 		RenderingDeviceCommons::VertexAttribute get_vertex_attribute(const uint32_t binding, const uint32_t location, const RenderingDeviceCommons::DataFormat format, const uint32_t offset, const uint32_t stride);
 

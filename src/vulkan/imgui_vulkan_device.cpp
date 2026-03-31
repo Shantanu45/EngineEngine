@@ -12,9 +12,10 @@ namespace Vulkan
 			abort();
 	}
 
-	ImGuiDevice::ImGuiDevice(RenderingContextDriver* p_vulkan_context, RenderingDeviceDriver* p_vulkan_driver) :
+	ImGuiDevice::ImGuiDevice(WindowPlatformData p_platform_data, RenderingContextDriver* p_vulkan_context, RenderingDeviceDriver* p_vulkan_driver) :
 		vulkan_context(static_cast<RenderingContextDriverVulkan*>(p_vulkan_context)),
-		vulkan_driver(static_cast<RenderingDeviceDriverVulkan*>(p_vulkan_driver))
+		vulkan_driver(static_cast<RenderingDeviceDriverVulkan*>(p_vulkan_driver)),
+		platform_data(p_platform_data)
 	{
 
 	}
@@ -26,10 +27,12 @@ namespace Vulkan
 	}
 
 	Error ImGuiDevice::initialize(const uint32_t p_device_index, const uint32_t p_queue_family,
-		const uint32_t p_min_image_count, const uint32_t p_swapchain_image_count, const RenderingDeviceDriver::RenderPassID p_render_pass,
-		const uint32_t subpass)
+		const uint32_t p_min_image_count, const uint32_t p_swapchain_image_count, const RenderingDeviceCommons::DataFormat p_swapchain_format,
+		std::span<RenderingDeviceDriver::TextureID> p_attachments, uint32_t width, uint32_t height)
 	{
 		ImGui::CreateContext();
+
+		ImGui_ImplSDL3_InitForVulkan(static_cast<SDL_Window*>(platform_data.sdl.window));
 
 		VkDescriptorPoolSize pool_sizes[] =
 		{
@@ -57,9 +60,7 @@ namespace Vulkan
 		auto err = vkCreateDescriptorPool(vulkan_driver->vulkan_device_get(), &pool_info, nullptr, &descriptor_pool);
 		check_vk_result(err);
 
-		RenderingDeviceDriverVulkan::RenderPassInfo* render_pass = (RenderingDeviceDriverVulkan::RenderPassInfo*)(p_render_pass.id);
 
-		DEBUG_ASSERT(render_pass != VK_NULL_HANDLE);
 
 		ImGui_ImplVulkan_InitInfo init_info = {};
 		//init_info.ApiVersion = VK_API_VERSION_1_3;              // Pass in your value of VkApplicationInfo::apiVersion, otherwise will default to header version.
@@ -73,11 +74,13 @@ namespace Vulkan
 		init_info.MinImageCount = p_min_image_count;
 		init_info.ImageCount = p_swapchain_image_count;
 		init_info.Allocator = nullptr;
-		init_info.PipelineInfoMain.RenderPass = render_pass->vk_render_pass;
-		init_info.PipelineInfoMain.Subpass = subpass;
+		init_info.PipelineInfoMain.RenderPass = _create_render_pass(init_info.Device, RD_TO_VK_FORMAT[p_swapchain_format]);
+		init_info.PipelineInfoMain.Subpass = 0;
 		init_info.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
 		init_info.CheckVkResultFn = check_vk_result;
 		ImGui_ImplVulkan_Init(&init_info);
+
+		framebuffer = _create_imgui_framebuffers(init_info.PipelineInfoMain.RenderPass, p_attachments, width, height);
 		return OK;
 	}
 
@@ -159,6 +162,69 @@ namespace Vulkan
 			descriptor_pool = VK_NULL_HANDLE;
 		}
 	}
+
+	VkRenderPass ImGuiDevice::_create_render_pass(VkDevice device, VkFormat swapchainFormat)
+	{
+		// Color attachment (swapchain image)
+		VkAttachmentDescription color_attachment{};
+		color_attachment.format = swapchainFormat;
+		color_attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+		color_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD; // IMPORTANT: keep existing image
+		color_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		color_attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		color_attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		color_attachment.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		color_attachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+		VkAttachmentReference color_ref{};
+		color_ref.attachment = 0;
+		color_ref.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+		// Subpass
+		VkSubpassDescription subpass{};
+		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+		subpass.colorAttachmentCount = 1;
+		subpass.pColorAttachments = &color_ref;
+
+		// Subpass dependency (external -> imgui pass)
+		VkSubpassDependency dependency{};
+		dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+		dependency.dstSubpass = 0;
+		dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		dependency.srcAccessMask = 0;
+		dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+		VkRenderPassCreateInfo render_pass_info{};
+		render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+		render_pass_info.attachmentCount = 1;
+		render_pass_info.pAttachments = &color_attachment;
+		render_pass_info.subpassCount = 1;
+		render_pass_info.pSubpasses = &subpass;
+		render_pass_info.dependencyCount = 1;
+		render_pass_info.pDependencies = &dependency;
+
+		VkRenderPass render_pass;
+		if (vkCreateRenderPass(device, &render_pass_info, nullptr, &render_pass) != VK_SUCCESS)
+		{
+			throw std::runtime_error("Failed to create ImGui render pass");
+		}
+
+		DEBUG_ASSERT(render_pass != VK_NULL_HANDLE);
+
+		return render_pass;
+	}
+
+	RenderingDeviceDriver::FramebufferID ImGuiDevice::_create_imgui_framebuffers(VkRenderPass p_render_pass, std::span<RenderingDeviceDriver::TextureID> p_attachments, uint32_t p_width, uint32_t p_height)
+	{
+		RenderingDeviceDriverVulkan::RenderPassInfo render_pass;
+		render_pass.vk_render_pass = p_render_pass;
+		RenderingDeviceDriver::RenderPassID render_pass_id(&render_pass);
+		return vulkan_driver->framebuffer_create(render_pass_id, p_attachments, p_width, p_height);
+
+	}
+
+
 
 }
 

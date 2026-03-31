@@ -197,7 +197,7 @@ struct TriangleApplication : EE::Application
 
 		scene_fb = device->framebuffer_create(fb_textures);
 		imgui_fb = device->framebuffer_create(imgui_textures);
-		DEBUG_ASSERT(device->iniitialize_imgui_device(imgui_fb) == OK);
+		
 
 		pipeline = Rendering::PipelineBuilder{}
 			.set_shader({ "assets://shaders/triangle_v2.vert", "assets://shaders/triangle_v2.frag" }, "triangle_shader")
@@ -264,6 +264,8 @@ struct TriangleApplication : EE::Application
 		wsi->submit_transfer_workers();
 
 		wsi->pre_frame_loop();
+
+		DEBUG_ASSERT(device->iniitialize_imgui_device(wsi->get_wsi_platform_data(0).platfform_data, imgui_fb) == OK);
 
 		input_system = Services::get().get<EE::InputSystemInterface>();
 	}

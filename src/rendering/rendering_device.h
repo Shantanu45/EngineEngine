@@ -23,7 +23,6 @@ namespace Vulkan
 
 }
 
-
 namespace Rendering
 {
 	static Compiler::Stage compiler_stage_from_shader_stage(const RenderingDeviceCommons::ShaderStage stage)
@@ -1010,8 +1009,9 @@ namespace Rendering
 		void end_render_pass(RDD::CommandBufferID cmd);
 		void execute_frame(bool p_present);
 
-		Error iniitialize_imgui_device(RID p_framebuffer);
+		Error iniitialize_imgui_device(WindowPlatformData p_platfform_data, RID p_framebuffer);
 
+		RenderingDeviceDriver::FramebufferID get_imgui_framebuffer();
 		void imgui_execute(void* p_draw_data, RDD::CommandBufferID p_command_buffer, RDD::PipelineID p_pipeline = RDD::PipelineID());
 		Vulkan::ImGuiDevice* get_imgui_device();
 		// TODO: #temp
