@@ -108,7 +108,7 @@ void add_blit_pass(FrameGraph& fg, FrameGraphBlackboard& bb)
 			auto& scene = resources.get<Rendering::FrameGraphTexture>(data.scene);
 			auto& ui = resources.get<Rendering::FrameGraphTexture>(data.ui);
 
-			wsi->blit_render_target_to_screen(scene.texture);
+			wsi->blit_render_target_to_screen(scene.texture, ui.texture);
 		}
 	);
 }

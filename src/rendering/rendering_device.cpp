@@ -3403,6 +3403,7 @@ namespace Rendering
 	void RenderingDevice::imgui_begin_frame()
 	{
 		imgui_device->begin_frame();
+		imgui_device->show_demo_window();		// TODO: temp
 	}
 
 	RID RenderingDevice::get_imgui_texture() {

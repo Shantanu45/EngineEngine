@@ -57,12 +57,13 @@ namespace Rendering
 		return OK;
 	}
 
-	void WSI::blit_render_target_to_screen(RID texture)
+	void WSI::blit_render_target_to_screen(RID texture, RID ui)
 	{
 		if (rd->is_blit_pass_active())
 		{
 			Rendering::BlitToScreen blit;
 			blit.render_target = texture;
+			blit.ui = ui;
 
 			rd->blit_render_targets_to_screen(&blit);
 		}

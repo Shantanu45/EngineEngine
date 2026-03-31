@@ -108,7 +108,7 @@ namespace Vulkan
 
 	void ImGuiDevice::end_frame()
 	{
-
+		
 	}
 
 	void ImGuiDevice::show_demo_window()

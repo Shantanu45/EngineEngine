@@ -5,6 +5,7 @@ namespace Rendering
 {
 	struct BlitToScreen {
 		RID render_target;
+		RID ui;
 		Rect2 src_rect = Rect2(0.0, 0.0, 1.0, 1.0);
 		Rect2i dst_rect;
 
