@@ -526,6 +526,8 @@ namespace Vulkan
 
 		const RenderingShaderContainerFormat& get_shader_container_format() const override;
 
+		void set_object_name(ObjectType p_type, ID p_driver_id, const std::string& p_name);
+
 		RenderingDeviceDriverVulkan::UniformSetID uniform_set_create(std::span<BoundUniform> p_uniforms, ShaderID p_shader, uint32_t p_set_index, int p_linear_pool_index) override;
 
 		void uniform_set_free(UniformSetID p_uniform_set) override;
@@ -564,6 +566,7 @@ namespace Vulkan
 		bool _release_image_semaphore(CommandQueue* p_command_queue, uint32_t p_semaphore_index, bool p_release_on_swap_chain);
 		bool _recreate_image_semaphore(CommandQueue* p_command_queue, uint32_t p_semaphore_index, bool p_release_on_swap_chain);
 		VkDebugReportObjectTypeEXT _convert_to_debug_report_objectType(VkObjectType p_object_type);
+		void _set_object_name(VkObjectType p_object_type, uint64_t p_object_handle, std::string p_object_name);
 		bool _determine_swap_chain_format(RenderingContextDriverVulkan::SurfaceID p_surface, VkFormat& r_format, VkColorSpaceKHR& r_color_space);
 		void _swap_chain_release(SwapChain* p_swap_chain);
 		VmaPool _find_or_create_small_allocs_pool(uint32_t p_mem_type_index);

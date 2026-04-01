@@ -100,6 +100,118 @@ namespace Vulkan
 
 	static const uint32_t MAX_DYNAMIC_BUFFERS = 8u;
 
+	// Debug marker extensions.
+
+	VkDebugReportObjectTypeEXT RenderingDeviceDriverVulkan::_convert_to_debug_report_objectType(VkObjectType p_object_type) {
+		switch (p_object_type) {
+		case VK_OBJECT_TYPE_UNKNOWN:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_UNKNOWN_EXT;
+		case VK_OBJECT_TYPE_INSTANCE:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_INSTANCE_EXT;
+		case VK_OBJECT_TYPE_PHYSICAL_DEVICE:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_PHYSICAL_DEVICE_EXT;
+		case VK_OBJECT_TYPE_DEVICE:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_DEVICE_EXT;
+		case VK_OBJECT_TYPE_QUEUE:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_QUEUE_EXT;
+		case VK_OBJECT_TYPE_SEMAPHORE:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_SEMAPHORE_EXT;
+		case VK_OBJECT_TYPE_COMMAND_BUFFER:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_COMMAND_BUFFER_EXT;
+		case VK_OBJECT_TYPE_FENCE:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_FENCE_EXT;
+		case VK_OBJECT_TYPE_DEVICE_MEMORY:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_DEVICE_MEMORY_EXT;
+		case VK_OBJECT_TYPE_BUFFER:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_BUFFER_EXT;
+		case VK_OBJECT_TYPE_IMAGE:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_IMAGE_EXT;
+		case VK_OBJECT_TYPE_EVENT:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_EVENT_EXT;
+		case VK_OBJECT_TYPE_QUERY_POOL:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_QUERY_POOL_EXT;
+		case VK_OBJECT_TYPE_BUFFER_VIEW:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_BUFFER_VIEW_EXT;
+		case VK_OBJECT_TYPE_IMAGE_VIEW:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_IMAGE_VIEW_EXT;
+		case VK_OBJECT_TYPE_SHADER_MODULE:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_SHADER_MODULE_EXT;
+		case VK_OBJECT_TYPE_PIPELINE_CACHE:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_PIPELINE_CACHE_EXT;
+		case VK_OBJECT_TYPE_PIPELINE_LAYOUT:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_PIPELINE_LAYOUT_EXT;
+		case VK_OBJECT_TYPE_RENDER_PASS:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_RENDER_PASS_EXT;
+		case VK_OBJECT_TYPE_PIPELINE:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_PIPELINE_EXT;
+		case VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT_EXT;
+		case VK_OBJECT_TYPE_SAMPLER:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_SAMPLER_EXT;
+		case VK_OBJECT_TYPE_DESCRIPTOR_POOL:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_DESCRIPTOR_POOL_EXT;
+		case VK_OBJECT_TYPE_DESCRIPTOR_SET:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_DESCRIPTOR_SET_EXT;
+		case VK_OBJECT_TYPE_FRAMEBUFFER:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_FRAMEBUFFER_EXT;
+		case VK_OBJECT_TYPE_COMMAND_POOL:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_COMMAND_POOL_EXT;
+		case VK_OBJECT_TYPE_SAMPLER_YCBCR_CONVERSION:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_SAMPLER_YCBCR_CONVERSION_EXT;
+		case VK_OBJECT_TYPE_DESCRIPTOR_UPDATE_TEMPLATE:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_DESCRIPTOR_UPDATE_TEMPLATE_EXT;
+		case VK_OBJECT_TYPE_SURFACE_KHR:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_SURFACE_KHR_EXT;
+		case VK_OBJECT_TYPE_SWAPCHAIN_KHR:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_SWAPCHAIN_KHR_EXT;
+		case VK_OBJECT_TYPE_DISPLAY_KHR:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_DISPLAY_KHR_EXT;
+		case VK_OBJECT_TYPE_DISPLAY_MODE_KHR:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_DISPLAY_MODE_KHR_EXT;
+		case VK_OBJECT_TYPE_DEBUG_REPORT_CALLBACK_EXT:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_DEBUG_REPORT_CALLBACK_EXT_EXT;
+		case VK_OBJECT_TYPE_CU_MODULE_NVX:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_CU_MODULE_NVX_EXT;
+		case VK_OBJECT_TYPE_CU_FUNCTION_NVX:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_CU_FUNCTION_NVX_EXT;
+		case VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR_EXT;
+		case VK_OBJECT_TYPE_VALIDATION_CACHE_EXT:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_VALIDATION_CACHE_EXT_EXT;
+		case VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_NV:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_ACCELERATION_STRUCTURE_NV_EXT;
+		default:
+			break;
+		}
+
+		return VK_DEBUG_REPORT_OBJECT_TYPE_UNKNOWN_EXT;
+	}
+
+	void RenderingDeviceDriverVulkan::_set_object_name(VkObjectType p_object_type, uint64_t p_object_handle, std::string p_object_name) {
+		
+		if (vkSetDebugUtilsObjectNameEXT != nullptr) {		// recommended successor to vkDebugMarkerSetObjectNameEXT
+			std::string obj_data = p_object_name;
+			VkDebugUtilsObjectNameInfoEXT name_info;
+			name_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
+			name_info.pNext = nullptr;
+			name_info.objectType = p_object_type;
+			name_info.objectHandle = p_object_handle;
+			name_info.pObjectName = obj_data.data();
+			vkSetDebugUtilsObjectNameEXT(vk_device, &name_info);
+		}
+		else if (vkDebugMarkerSetObjectNameEXT != nullptr) {
+			// Debug marker extensions.
+			std::string obj_data = p_object_name;
+			VkDebugMarkerObjectNameInfoEXT name_info;
+			name_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
+			name_info.pNext = nullptr;
+			name_info.objectType = _convert_to_debug_report_objectType(p_object_type);
+			name_info.object = p_object_handle;
+			name_info.pObjectName = obj_data.data();
+			vkDebugMarkerSetObjectNameEXT(vk_device, &name_info);
+		}
+	}
+
 #pragma endregion
 
 #pragma region Device
@@ -871,90 +983,7 @@ namespace Vulkan
 		return true;
 	}
 
-	VkDebugReportObjectTypeEXT RenderingDeviceDriverVulkan::_convert_to_debug_report_objectType(VkObjectType p_object_type) {
-		switch (p_object_type) {
-		case VK_OBJECT_TYPE_UNKNOWN:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_UNKNOWN_EXT;
-		case VK_OBJECT_TYPE_INSTANCE:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_INSTANCE_EXT;
-		case VK_OBJECT_TYPE_PHYSICAL_DEVICE:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_PHYSICAL_DEVICE_EXT;
-		case VK_OBJECT_TYPE_DEVICE:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_DEVICE_EXT;
-		case VK_OBJECT_TYPE_QUEUE:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_QUEUE_EXT;
-		case VK_OBJECT_TYPE_SEMAPHORE:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_SEMAPHORE_EXT;
-		case VK_OBJECT_TYPE_COMMAND_BUFFER:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_COMMAND_BUFFER_EXT;
-		case VK_OBJECT_TYPE_FENCE:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_FENCE_EXT;
-		case VK_OBJECT_TYPE_DEVICE_MEMORY:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_DEVICE_MEMORY_EXT;
-		case VK_OBJECT_TYPE_BUFFER:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_BUFFER_EXT;
-		case VK_OBJECT_TYPE_IMAGE:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_IMAGE_EXT;
-		case VK_OBJECT_TYPE_EVENT:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_EVENT_EXT;
-		case VK_OBJECT_TYPE_QUERY_POOL:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_QUERY_POOL_EXT;
-		case VK_OBJECT_TYPE_BUFFER_VIEW:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_BUFFER_VIEW_EXT;
-		case VK_OBJECT_TYPE_IMAGE_VIEW:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_IMAGE_VIEW_EXT;
-		case VK_OBJECT_TYPE_SHADER_MODULE:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_SHADER_MODULE_EXT;
-		case VK_OBJECT_TYPE_PIPELINE_CACHE:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_PIPELINE_CACHE_EXT;
-		case VK_OBJECT_TYPE_PIPELINE_LAYOUT:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_PIPELINE_LAYOUT_EXT;
-		case VK_OBJECT_TYPE_RENDER_PASS:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_RENDER_PASS_EXT;
-		case VK_OBJECT_TYPE_PIPELINE:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_PIPELINE_EXT;
-		case VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT_EXT;
-		case VK_OBJECT_TYPE_SAMPLER:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_SAMPLER_EXT;
-		case VK_OBJECT_TYPE_DESCRIPTOR_POOL:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_DESCRIPTOR_POOL_EXT;
-		case VK_OBJECT_TYPE_DESCRIPTOR_SET:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_DESCRIPTOR_SET_EXT;
-		case VK_OBJECT_TYPE_FRAMEBUFFER:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_FRAMEBUFFER_EXT;
-		case VK_OBJECT_TYPE_COMMAND_POOL:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_COMMAND_POOL_EXT;
-		case VK_OBJECT_TYPE_SAMPLER_YCBCR_CONVERSION:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_SAMPLER_YCBCR_CONVERSION_EXT;
-		case VK_OBJECT_TYPE_DESCRIPTOR_UPDATE_TEMPLATE:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_DESCRIPTOR_UPDATE_TEMPLATE_EXT;
-		case VK_OBJECT_TYPE_SURFACE_KHR:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_SURFACE_KHR_EXT;
-		case VK_OBJECT_TYPE_SWAPCHAIN_KHR:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_SWAPCHAIN_KHR_EXT;
-		case VK_OBJECT_TYPE_DISPLAY_KHR:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_DISPLAY_KHR_EXT;
-		case VK_OBJECT_TYPE_DISPLAY_MODE_KHR:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_DISPLAY_MODE_KHR_EXT;
-		case VK_OBJECT_TYPE_DEBUG_REPORT_CALLBACK_EXT:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_DEBUG_REPORT_CALLBACK_EXT_EXT;
-		case VK_OBJECT_TYPE_CU_MODULE_NVX:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_CU_MODULE_NVX_EXT;
-		case VK_OBJECT_TYPE_CU_FUNCTION_NVX:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_CU_FUNCTION_NVX_EXT;
-		case VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR_EXT;
-		case VK_OBJECT_TYPE_VALIDATION_CACHE_EXT:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_VALIDATION_CACHE_EXT_EXT;
-		case VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_NV:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_ACCELERATION_STRUCTURE_NV_EXT;
-		default:
-			break;
-		}
 
-		return VK_DEBUG_REPORT_OBJECT_TYPE_UNKNOWN_EXT;
-	}
 #pragma endregion
 
 #pragma region Memory
@@ -5611,6 +5640,53 @@ namespace Vulkan
 #pragma region Misc
 	const RenderingShaderContainerFormat& RenderingDeviceDriverVulkan::get_shader_container_format() const {
 		return shader_container_format;
+	}
+
+	void RenderingDeviceDriverVulkan::set_object_name(ObjectType p_type, ID p_driver_id, const std::string& p_name) {
+		switch (p_type) {
+		case OBJECT_TYPE_TEXTURE: {
+			const TextureInfo* tex_info = (const TextureInfo*)p_driver_id.id;
+			if (tex_info->allocation.handle) {
+				_set_object_name(VK_OBJECT_TYPE_IMAGE, (uint64_t)tex_info->vk_view_create_info.image, p_name);
+			}
+			_set_object_name(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)tex_info->vk_view, p_name + " View");
+		} break;
+		case OBJECT_TYPE_SAMPLER: {
+			_set_object_name(VK_OBJECT_TYPE_SAMPLER, p_driver_id.id, p_name);
+		} break;
+		case OBJECT_TYPE_BUFFER: {
+			const BufferInfo* buf_info = (const BufferInfo*)p_driver_id.id;
+			_set_object_name(VK_OBJECT_TYPE_BUFFER, (uint64_t)buf_info->vk_buffer, p_name);
+			if (buf_info->vk_view) {
+				_set_object_name(VK_OBJECT_TYPE_BUFFER_VIEW, (uint64_t)buf_info->vk_view, p_name + " View");
+			}
+		} break;
+		case OBJECT_TYPE_SHADER: {
+			const ShaderInfo* shader_info = (const ShaderInfo*)p_driver_id.id;
+			for (uint32_t i = 0; i < shader_info->vk_descriptor_set_layouts.size(); i++) {
+				_set_object_name(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)shader_info->vk_descriptor_set_layouts[i], p_name);
+			}
+			_set_object_name(VK_OBJECT_TYPE_PIPELINE_LAYOUT, (uint64_t)shader_info->vk_pipeline_layout, p_name + " Pipeline Layout");
+		} break;
+		case OBJECT_TYPE_UNIFORM_SET: {
+			const UniformSetInfo* usi = (const UniformSetInfo*)p_driver_id.id;
+			_set_object_name(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)usi->vk_descriptor_set, p_name);
+		} break;
+		case OBJECT_TYPE_PIPELINE: {
+			_set_object_name(VK_OBJECT_TYPE_PIPELINE, (uint64_t)p_driver_id.id, p_name);
+		} break;
+		//case OBJECT_TYPE_ACCELERATION_STRUCTURE: {
+		//	const AccelerationStructureInfo* asi = (const AccelerationStructureInfo*)p_driver_id.id;
+		//	_set_object_name(VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR, (uint64_t)asi->vk_acceleration_structure, p_name);
+		//} break;
+		//case OBJECT_TYPE_RAYTRACING_PIPELINE: {
+		//	const RaytracingPipelineInfo* rpi = (const RaytracingPipelineInfo*)p_driver_id.id;
+		//	_set_object_name(VK_OBJECT_TYPE_PIPELINE, (uint64_t)rpi->vk_pipeline, p_name);
+		//} break;
+		default: {
+			DEV_ASSERT(false);
+		}
+		}
 	}
 
 #pragma endregion

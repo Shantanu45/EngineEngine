@@ -620,7 +620,7 @@ namespace Rendering
 		}
 
 #ifdef DEV_ENABLED
-		set_resource_name(id, "RID:" + itos(id.get_id()));
+		set_resource_name(id, std::format("RID:{}", id.get_id()));
 #endif
 		return id;
 	}
@@ -802,7 +802,7 @@ namespace Rendering
 			//_THREAD_SAFE_METHOD_
 
 #ifdef DEV_ENABLED
-				set_resource_name(id, "RID:" + itos(id.get_id()));
+				set_resource_name(id, std::format("RID {}", id.get_id()));
 #endif
 			// Now add all the dependencies.
 			_add_dependency(id, p_shader);
@@ -988,7 +988,7 @@ namespace Rendering
 			//_THREAD_SAFE_METHOD_
 
 #ifdef DEV_ENABLED
-			set_resource_name(id, "RID:" + itos(id.get_id()));
+			set_resource_name(id, std::format("RID {}", id.get_id()));
 #endif
 			// Now add all the dependencies.
 			_add_dependency(id, p_shader);
@@ -1253,7 +1253,7 @@ namespace Rendering
 
 		RID id = framebuffer_owner.make_rid(framebuffer);
 #ifdef DEV_ENABLED
-		set_resource_name(id, "RID:" + itos(id.get_id()));
+		set_resource_name(id, std::format("RID {}", id.get_id()));
 #endif
 
 		// This relies on the fact that HashMap will not change the address of an object after it's been inserted into the container.
@@ -1382,7 +1382,7 @@ namespace Rendering
 
 		RID id = framebuffer_owner.make_rid(framebuffer);
 #ifdef DEV_ENABLED
-		set_resource_name(id, "RID:" + itos(id.get_id()));
+		set_resource_name(id, std::format("RID {}", id.get_id()));
 #endif
 
 		for (int i = 0; i < p_texture_attachments.size(); i++) {
@@ -1474,7 +1474,7 @@ namespace Rendering
 
 			RID id = vertex_buffer_owner.make_rid(buffer);
 #ifdef DEV_ENABLED
-		set_resource_name(id, "RID:" + itos(id.get_id()));
+		set_resource_name(id, std::format("RID {}", id.get_id()));
 #endif
 		return id;
 	}
@@ -1517,7 +1517,7 @@ namespace Rendering
 
 		RID id = uniform_buffer_owner.make_rid(buffer);
 #ifdef DEV_ENABLED
-		set_resource_name(id, "RID:" + itos(id.get_id()));
+		set_resource_name(id, std::format("RID {}", id.get_id()));
 #endif
 		return id;
 	}
@@ -1955,7 +1955,7 @@ namespace Rendering
 
 		RID id = uniform_set_owner.make_rid(uniform_set);
 #ifdef DEV_ENABLED
-		set_resource_name(id, "RID:" + itos(id.get_id()));
+		set_resource_name(id, std::format("RID {}", id.get_id()));
 #endif
 		// Add dependencies.
 		_add_dependency(id, p_shader);
@@ -2280,7 +2280,7 @@ namespace Rendering
 
 			RID id = index_buffer_owner.make_rid(index_buffer);
 #ifdef DEV_ENABLED
-		set_resource_name(id, "RID:" + itos(id.get_id()));
+		set_resource_name(id, std::format("RID {}", id.get_id()));
 #endif
 		return id;
 	}
@@ -2386,7 +2386,7 @@ namespace Rendering
 
 			RID id = texture_buffer_owner.make_rid(texture_buffer);
 #ifdef DEV_ENABLED
-		set_resource_name(id, "RID:" + itos(id.get_id()));
+		set_resource_name(id, std::format("RID {}", id.get_id()));
 #endif
 		return id;
 	}
@@ -2596,7 +2596,7 @@ namespace Rendering
 
 		RID id = texture_owner.make_rid(texture);
 #ifdef DEV_ENABLED
-		set_resource_name(id, "RID:" + itos(id.get_id()));
+		set_resource_name(id, std::format("RID {}", id.get_id()));
 #endif
 
 		if (data.size()) {
@@ -2898,7 +2898,7 @@ namespace Rendering
 
 		RID id = sampler_owner.make_rid(sampler);
 #ifdef DEV_ENABLED
-		set_resource_name(id, "RID:" + itos(id.get_id()));
+		set_resource_name(id, std::format("RID {}", id.get_id()));
 #endif
 		return id;
 	}
@@ -3303,7 +3303,7 @@ namespace Rendering
 			//_THREAD_SAFE_METHOD_
 
 #ifdef DEV_ENABLED
-				set_resource_name(id, "RID:" + itos(id.get_id()));
+				set_resource_name(id, std::format("RID {}", id.get_id()));
 #endif
 			// Now add all the dependencies.
 			_add_dependency(id, p_shader);
@@ -3399,6 +3399,7 @@ namespace Rendering
 
 		imgui_texture_rid = texture_create(tf, TextureView());
 		auto imgui_texture = texture_owner.get_or_null(imgui_texture_rid);
+		set_resource_name(imgui_texture_rid, "Imgui UI");
 		std::vector<RenderingDeviceDriver::TextureID> textures{ imgui_texture->driver_id };
 		
 		imgui_device->initialize(p_devince_index, main_queue_family.id - 1, 2, _get_swap_chain_desired_count(), driver->swap_chain_get_format(screen_swap_chains[swapchain_index]/*temp*/), textures, screen_get_width(), screen_get_height());
@@ -3437,6 +3438,80 @@ namespace Rendering
 	Vulkan::ImGuiDevice* RenderingDevice::get_imgui_device()
 	{
 		return imgui_device.get();
+	}
+
+	// The full list of resources that can be named is in the VkObjectType enum.
+// We just expose the resources that are owned and can be accessed easily.
+	void RenderingDevice::set_resource_name(RID p_id, const std::string& p_name) {
+		//_THREAD_SAFE_METHOD_
+
+			if (texture_owner.owns(p_id)) {
+				Texture* texture = texture_owner.get_or_null(p_id);
+				driver->set_object_name(RDD::OBJECT_TYPE_TEXTURE, texture->driver_id, p_name);
+			}
+			else if (framebuffer_owner.owns(p_id)) {
+				//Framebuffer *framebuffer = framebuffer_owner.get_or_null(p_id);
+				// Not implemented for now as the relationship between Framebuffer and RenderPass is very complex.
+			}
+			else if (sampler_owner.owns(p_id)) {
+				RDD::SamplerID sampler_driver_id = *sampler_owner.get_or_null(p_id);
+				driver->set_object_name(RDD::OBJECT_TYPE_SAMPLER, sampler_driver_id, p_name);
+			}
+			else if (vertex_buffer_owner.owns(p_id)) {
+				Buffer* vertex_buffer = vertex_buffer_owner.get_or_null(p_id);
+				driver->set_object_name(RDD::OBJECT_TYPE_BUFFER, vertex_buffer->driver_id, p_name);
+			}
+			else if (index_buffer_owner.owns(p_id)) {
+				IndexBuffer* index_buffer = index_buffer_owner.get_or_null(p_id);
+				driver->set_object_name(RDD::OBJECT_TYPE_BUFFER, index_buffer->driver_id, p_name);
+			}
+			else if (shader_owner.owns(p_id)) {
+				Shader* shader = shader_owner.get_or_null(p_id);
+				driver->set_object_name(RDD::OBJECT_TYPE_SHADER, shader->driver_id, p_name);
+			}
+			else if (uniform_buffer_owner.owns(p_id)) {
+				Buffer* uniform_buffer = uniform_buffer_owner.get_or_null(p_id);
+				driver->set_object_name(RDD::OBJECT_TYPE_BUFFER, uniform_buffer->driver_id, p_name);
+			}
+			else if (texture_buffer_owner.owns(p_id)) {
+				Buffer* texture_buffer = texture_buffer_owner.get_or_null(p_id);
+				driver->set_object_name(RDD::OBJECT_TYPE_BUFFER, texture_buffer->driver_id, p_name);
+			}
+			else if (storage_buffer_owner.owns(p_id)) {
+				Buffer* storage_buffer = storage_buffer_owner.get_or_null(p_id);
+				driver->set_object_name(RDD::OBJECT_TYPE_BUFFER, storage_buffer->driver_id, p_name);
+			}
+			/*else if (instances_buffer_owner.owns(p_id)) {
+				InstancesBuffer* instances_buffer = instances_buffer_owner.get_or_null(p_id);
+				driver->set_object_name(RDD::OBJECT_TYPE_BUFFER, instances_buffer->buffer.driver_id, p_name);
+			}
+			else if (uniform_set_owner.owns(p_id)) {
+				UniformSet* uniform_set = uniform_set_owner.get_or_null(p_id);
+				driver->set_object_name(RDD::OBJECT_TYPE_UNIFORM_SET, uniform_set->driver_id, p_name);
+			}
+			else if (render_pipeline_owner.owns(p_id)) {
+				RenderPipeline* pipeline = render_pipeline_owner.get_or_null(p_id);
+				driver->set_object_name(RDD::OBJECT_TYPE_PIPELINE, pipeline->driver_id, p_name);
+			}
+			else if (compute_pipeline_owner.owns(p_id)) {
+				ComputePipeline* pipeline = compute_pipeline_owner.get_or_null(p_id);
+				driver->set_object_name(RDD::OBJECT_TYPE_PIPELINE, pipeline->driver_id, p_name);
+			}
+			else if (acceleration_structure_owner.owns(p_id)) {
+				AccelerationStructure* acceleration_structure = acceleration_structure_owner.get_or_null(p_id);
+				driver->set_object_name(RDD::OBJECT_TYPE_ACCELERATION_STRUCTURE, acceleration_structure->driver_id, p_name);
+			}
+			else if (raytracing_pipeline_owner.owns(p_id)) {
+				RaytracingPipeline* pipeline = raytracing_pipeline_owner.get_or_null(p_id);
+				driver->set_object_name(RDD::OBJECT_TYPE_RAYTRACING_PIPELINE, pipeline->driver_id, p_name);
+			}*/
+			else {
+				ERR_PRINT(std::format("Attempted to name invalid ID: {}", std::to_string(p_id.get_id())));
+				return;
+			}
+#ifdef DEV_ENABLED
+		resource_names[p_id] = p_name;
+#endif
 	}
 
 #pragma region Transfer worker

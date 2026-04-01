@@ -1018,6 +1018,7 @@ namespace Rendering
 		RenderingDeviceDriver::FramebufferID get_imgui_framebuffer();
 		void imgui_execute(void* p_draw_data, RDD::CommandBufferID p_command_buffer, RDD::PipelineID p_pipeline = RDD::PipelineID());
 		Vulkan::ImGuiDevice* get_imgui_device();
+		void set_resource_name(RID p_id, const std::string& p_name);
 		// TODO: #temp
 		void _submit_transfer_workers(RDD::CommandBufferID p_draw_command_buffer = RDD::CommandBufferID());
 		void _submit_transfer_barriers(RDD::CommandBufferID p_draw_command_buffer);

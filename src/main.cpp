@@ -133,7 +133,10 @@ struct TriangleApplication : EE::Application
 		tf2.format = RDC::DATA_FORMAT_R8G8B8A8_UNORM;
 
 		texture_uniform = device->texture_create(tf2, RD::TextureView(), { image.pixels });
+		device->set_resource_name(texture_uniform, "Wall texture");
 		texture_uniform_red = device->texture_create(tf2, RD::TextureView(), { image_red.pixels });
+		device->set_resource_name(texture_uniform_red, "Wall texture with red marking");
+
 
 		RDC::SamplerState s;
 		s.mag_filter = RDC::SAMPLER_FILTER_LINEAR;
