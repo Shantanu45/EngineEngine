@@ -12,6 +12,7 @@
 #include "rendering_device.h"
 #include "math/rect2.h"
 #include "rendering/gltf_loader.h"
+#include "rendering/utils.h"
 
 namespace Rendering
 {
@@ -64,6 +65,8 @@ namespace Rendering
 
 		bool pre_begin_frame();
 
+		double get_gpu_frame_time();
+		double get_cpu_frame_time();
 		bool begin_frame();
 
 		bool end_render_pass(RDD::CommandBufferID p_cmd);
@@ -143,5 +146,12 @@ namespace Rendering
 		std::unique_ptr<RendererCompositor> rd;
 
 		std::unordered_map<VERTEX_FORMAT_VARIATIONS, RenderingDevice::VertexFormatID> vertex_format_map;
+
+		std::vector<RenderUtilities::FrameProfileArea> frame_profile;
+		uint64_t frame_profile_frame = 0;
+
+		std::unordered_map<std::string, float> gpu_profile_task_time;
+		std::unordered_map<std::string, float> cpu_profile_task_time;
+
 	};
 }

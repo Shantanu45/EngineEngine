@@ -100,8 +100,68 @@ namespace Rendering
 
 	bool WSI::pre_begin_frame()
 	{
+		{
+
+			if (RenderUtilities::get_captured_timestamps_count()) {
+				std::vector<RenderUtilities::FrameProfileArea> new_profile;
+				if (RenderUtilities::capturing_timestamps) {
+					new_profile.resize(RenderUtilities::get_captured_timestamps_count());
+				}
+
+				uint64_t base_cpu = RenderUtilities::get_captured_timestamp_cpu_time(0);
+				uint64_t base_gpu = RenderUtilities::get_captured_timestamp_gpu_time(0);
+				for (uint32_t i = 0; i < RenderUtilities::get_captured_timestamps_count(); i++) {
+					uint64_t time_cpu = RenderUtilities::get_captured_timestamp_cpu_time(i);
+					uint64_t time_gpu = RenderUtilities::get_captured_timestamp_gpu_time(i);
+
+					std::string name = RenderUtilities::get_captured_timestamp_name(i);
+
+
+					if (RenderUtilities::capturing_timestamps) {
+						new_profile[i].gpu_msec = double((time_gpu - base_gpu) / 1000) / 1000.0;
+						new_profile[i].cpu_msec = double(time_cpu - base_cpu) / 1000.0;
+						new_profile[i].name = RenderUtilities::get_captured_timestamp_name(i);
+					}
+				}
+
+				frame_profile = new_profile;
+
+				for (int i = 0; i < frame_profile.size() - 1; i++) {
+					std::string name = frame_profile[i].name;
+					double time = frame_profile[i + 1].gpu_msec - frame_profile[i].gpu_msec;
+
+					if (gpu_profile_task_time.contains(name)) {
+						gpu_profile_task_time[name] += time;
+					}
+					else {
+						gpu_profile_task_time[name] = time;
+					}
+
+					if (cpu_profile_task_time.contains(name)) {
+						cpu_profile_task_time[name] += time;
+					}
+					else {
+						cpu_profile_task_time[name] = time;
+					}
+				}
+
+			}
+		}
 		return true;
 	}
+
+	double WSI::get_gpu_frame_time()
+	{
+		ERR_FAIL_COND_V_MSG((!RenderUtilities::capturing_timestamps) || (frame_profile.size() < 2), 0.0, "frame profile does not have enough values!");
+		return frame_profile[1].gpu_msec - frame_profile[0].gpu_msec;
+	}
+
+	double WSI::get_cpu_frame_time()
+	{
+		ERR_FAIL_COND_V_MSG((!RenderUtilities::capturing_timestamps) || (frame_profile.size() < 2), 0.0, "frame profile does not have enough values!");
+		return frame_profile[1].cpu_msec - frame_profile[0].cpu_msec;
+	}
+
 
 	bool WSI::begin_frame()
 	{

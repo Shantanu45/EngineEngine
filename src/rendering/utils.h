@@ -23,7 +23,7 @@ namespace RenderUtilities
 	uint64_t get_captured_timestamp_cpu_time(uint32_t p_index);
 	std::string get_captured_timestamp_name(uint32_t p_index);
 
-	inline bool capturing_timestamps = true;
+	inline bool capturing_timestamps = false;
 
 
 }
