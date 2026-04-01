@@ -11,7 +11,6 @@
 #include "compiler/compiler.h"
 #include "application/service_locator.h"
 #include "rendering/renderer_compositor.h"
-#include "pipeline_builder.h"
 
 namespace Rendering
 {

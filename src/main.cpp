@@ -14,7 +14,6 @@
 #include "application/application_entry/application_entry.h"
 #include "libassert/assert.hpp"
 #include "rendering/image_loader.h"
-
 #include "rendering/pipeline_builder.h"
 #include "rendering/render_passes/common.h"
 #include "rendering/camera.h"

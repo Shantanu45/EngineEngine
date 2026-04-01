@@ -10,8 +10,8 @@
 #include <map>
 #include "rendering_device_driver.h"
 #include "rendering_device.h"
-#include "rendering/gltf_loader.h"
 #include "math/rect2.h"
+#include "rendering/gltf_loader.h"
 
 namespace Rendering
 {
