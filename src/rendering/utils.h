@@ -9,6 +9,12 @@ using RD = Rendering::RenderingDevice;
 
 namespace RenderUtilities
 {
+	struct FrameProfileArea {
+		std::string name;
+		double gpu_msec;
+		double cpu_msec;
+	};
+
 	void capture_timestamps_begin();
 	void capture_timestamp(const std::string& p_name);
 	uint32_t get_captured_timestamps_count();
@@ -17,7 +23,10 @@ namespace RenderUtilities
 	uint64_t get_captured_timestamp_cpu_time(uint32_t p_index);
 	std::string get_captured_timestamp_name(uint32_t p_index);
 
-	inline bool capturing_timestamps = false;
+	inline bool capturing_timestamps = true;
+
+
+}
 
 #define TIMESTAMP_BEGIN() \
 	{ \
@@ -30,4 +39,3 @@ namespace RenderUtilities
 		if (RenderUtilities::capturing_timestamps) \
 			RenderUtilities::capture_timestamp(m_text); \
 	}
-}

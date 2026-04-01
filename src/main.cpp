@@ -186,6 +186,43 @@ struct TriangleApplication : EE::Application
 
 		auto device = wsi->get_rendering_device();
 
+		{
+
+			TIMESTAMP_BEGIN();
+
+			if (RenderUtilities::get_captured_timestamps_count()) {
+				std::vector<RenderUtilities::FrameProfileArea> new_profile;
+				if (RenderUtilities::capturing_timestamps) {
+					new_profile.resize(RenderUtilities::get_captured_timestamps_count());
+				}
+
+				uint64_t base_cpu = RenderUtilities::get_captured_timestamp_cpu_time(0);
+				uint64_t base_gpu = RenderUtilities::get_captured_timestamp_gpu_time(0);
+				for (uint32_t i = 0; i < RenderUtilities::get_captured_timestamps_count(); i++) {
+					uint64_t time_cpu = RenderUtilities::get_captured_timestamp_cpu_time(i);
+					uint64_t time_gpu = RenderUtilities::get_captured_timestamp_gpu_time(i);
+
+					std::string name = RenderUtilities::get_captured_timestamp_name(i);
+
+
+					if (RenderUtilities::capturing_timestamps) {
+						new_profile[i].gpu_msec = double((time_gpu - base_gpu) / 1000) / 1000.0;
+						new_profile[i].cpu_msec = double(time_cpu - base_cpu) / 1000.0;
+						new_profile[i].name = RenderUtilities::get_captured_timestamp_name(i);
+					}
+				}
+
+				frame_profile = new_profile;
+			}
+		}
+		double gpu_time = 0;
+		double cpu_time = 0;
+		if (!frame_profile.empty())
+		{
+			gpu_time = frame_profile[1].gpu_msec - frame_profile[0].gpu_msec;
+			cpu_time = frame_profile[1].cpu_msec - frame_profile[0].cpu_msec;
+		}
+
 		camera.update_from_input(input_system.get(), frame_time);
 
 		Camera_UBO ubo{};
@@ -210,6 +247,8 @@ struct TriangleApplication : EE::Application
 		
 		ImGui::Text("FPS: %.1f", timer->get_fps());
 		ImGui::Text("Frame Time: %.3f ms", timer->get_frame_time() * 1000.0);
+		ImGui::Text("GPU Time: %.3f ms", gpu_time);
+		ImGui::Text("CPU Time: %.3f ms", cpu_time);
 
 		// ---- Build the frame graph ----
 		FrameGraph fg;
@@ -221,7 +260,6 @@ struct TriangleApplication : EE::Application
 		Rendering::FrameGraphTexture imgui_tex;
 		imgui_tex.texture = imgui_fb;
 		FrameGraphResource imgui_res = fg.import("scene texture", scene_desc, std::move(imgui_tex));
-
 		Rendering::add_imgui_pass(fg, bb, imgui_res);
 		Rendering::add_blit_pass<basic_pass_resource>(fg, bb);
 
@@ -234,6 +272,7 @@ struct TriangleApplication : EE::Application
 		rc.device = device;
 		rc.wsi = wsi;
 		fg.execute(&rc, &rc);
+		TIMESTAMP_BEGIN();
 	}
 
 	void teardown_application() override
@@ -272,6 +311,8 @@ private:
 	Camera camera;
 
 	std::shared_ptr<EE::InputSystemInterface> input_system;
+	std::vector<RenderUtilities::FrameProfileArea> frame_profile;
+
 };
 
 namespace EE

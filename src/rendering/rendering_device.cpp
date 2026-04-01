@@ -3545,7 +3545,7 @@ namespace Rendering
 #endif
 	}
 
-	void RenderingDevice::capture_timestamp(const std::string& p_name) {
+	void RenderingDevice::capture_timestamp(const std::string& p_name) {			// write
 		//ERR_RENDER_THREAD_GUARD();
 
 		//ERR_FAIL_COND_MSG(draw_list.active && draw_list.state.draw_count > 0, "Capturing timestamps during draw list creation is not allowed. Offending timestamp was: " + p_name);
