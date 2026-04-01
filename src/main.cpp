@@ -18,6 +18,7 @@
 #include "rendering/render_passes/common.h"
 #include "rendering/camera.h"
 #include "input/input.h"
+#include "util/timer.h"
 
 struct basic_pass_resource
 {
@@ -203,6 +204,11 @@ struct TriangleApplication : EE::Application
 		imgui_fb = device->get_imgui_texture();
 
 		device->imgui_begin_frame();
+		const auto timer = Services::get().get<Util::FrameTimer>();
+
+		ImGui::Text("FPS: %.1f", timer->get_fps());
+		ImGui::Text("Frame Time: %.3f ms", timer->get_frame_time() * 1000.0);
+
 		
 		// ---- Build the frame graph ----
 		FrameGraph fg;

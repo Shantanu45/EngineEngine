@@ -18,6 +18,9 @@ namespace Util
 		void enter_idle();
 		void leave_idle();
 
+		double get_fps() const;
+
+		double get_fps_avg() const;
 	private:
 		int64_t start;
 		int64_t last;

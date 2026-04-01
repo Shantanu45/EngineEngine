@@ -125,11 +125,10 @@ namespace EE
 			application.info.pApplicationName = application.name.empty() ? "Maker" : application.name.c_str();
 			application.info.apiVersion = VK_API_VERSION_1_1;
 
-			// SHAN: test
 			auto is = Services::get().get<InputSystemInterface>();
 			set_input_handler(is);
 
-			get_frame_timer().reset();
+			get_frame_timer()->reset();
 			return true;
 		}
 
@@ -244,8 +243,8 @@ namespace EE
 		{
 			while (alive())
 			{
-				frame_time = get_frame_timer().frame();
-				elapsed_time = get_frame_timer().get_elapsed();
+				frame_time = get_frame_timer()->frame();
+				elapsed_time = get_frame_timer()->get_elapsed();
 
 				poll_input();
 
@@ -268,9 +267,9 @@ namespace EE
 			request_tear_down.store(true);
 		}
 	
-		Util::FrameTimer& get_frame_timer()
+		Util::FrameTimer* get_frame_timer()
 		{
-			return timer;
+			return Services::get().get<Util::FrameTimer>().get();
 		}
 
 	private:
@@ -290,7 +289,7 @@ namespace EE
 			std::string name;
 		} application;
 
-		Util::FrameTimer timer;
+		Util::FrameTimer* timer;
 
 		Application* _app;
 
@@ -312,6 +311,7 @@ namespace EE
 		locator.provide<InputSystemInterface>(std::make_shared<InputSystem>());
 
 		locator.provide<FilesystemInterface>(std::make_shared<Filesystem>());
+		locator.provide<Util::FrameTimer>(std::make_shared<Util::FrameTimer>());
 		std::shared_ptr<FilesystemInterface> fs = locator.get<FilesystemInterface>();
 		const std::string exe_path = Path::get_executable_path();
 		FileSystem::Filesystem::setup_default_filesystem(static_cast<Filesystem*>(fs.get()), Path::join(exe_path, "../../assets").c_str());		// 		default assets directory for now`
