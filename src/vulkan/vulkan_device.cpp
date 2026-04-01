@@ -8,6 +8,7 @@
 #include "vulkan_device.h"
 #include "libassert/assert.hpp"
 #include "util/error_macros.h"
+//#include "vma/vk_mem_alloc.h"
 #include <array>
 
 // Enable the use of re-spirv for optimizing shaders after applying specialization constants.
@@ -5687,6 +5688,32 @@ namespace Vulkan
 			DEV_ASSERT(false);
 		}
 		}
+	}
+
+	uint64_t RenderingDeviceDriverVulkan::get_total_memory_used() {
+		const VkPhysicalDeviceMemoryProperties* memory_properties = nullptr;
+		vmaGetMemoryProperties(allocator, &memory_properties);
+
+		VmaBudget* budgets = std::vector<VmaBudget>(memory_properties->memoryHeapCount).data();
+		vmaGetHeapBudgets(allocator, budgets);
+
+		uint64_t total_memory_used = 0;
+		for (uint32_t i = 0; i < memory_properties->memoryHeapCount; i++) {
+			total_memory_used += budgets[i].statistics.allocationBytes;
+		}
+
+		return total_memory_used;
+	}
+
+	uint64_t RenderingDeviceDriverVulkan::get_lazily_memory_used() {
+		return 0; // vmaCalculateLazilyAllocatedBytes(allocator); TODO: not available
+	}
+
+	bool RenderingDeviceDriverVulkan::is_composite_alpha_supported(CommandQueueID p_queue) const {
+		if (has_comp_alpha.contains((uint64_t)p_queue.id)) {
+			return has_comp_alpha.at((uint64_t)p_queue.id);
+		}
+		return false;
 	}
 
 #pragma endregion

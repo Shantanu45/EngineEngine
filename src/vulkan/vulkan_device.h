@@ -528,6 +528,12 @@ namespace Vulkan
 
 		void set_object_name(ObjectType p_type, ID p_driver_id, const std::string& p_name);
 
+		uint64_t get_total_memory_used() override;
+
+		uint64_t get_lazily_memory_used() override;
+
+		bool is_composite_alpha_supported(CommandQueueID p_queue) const override;
+
 		RenderingDeviceDriverVulkan::UniformSetID uniform_set_create(std::span<BoundUniform> p_uniforms, ShaderID p_shader, uint32_t p_set_index, int p_linear_pool_index) override;
 
 		void uniform_set_free(UniformSetID p_uniform_set) override;
