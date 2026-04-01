@@ -3,6 +3,7 @@
 #include "rendering/renderer_compositor.h"
 #include "rendering/fg/frame_graph.h"
 #include "rendering/fg/blackboard.h"
+#include "../utils.h"
 
 using RD = Rendering::RenderingDevice;
 using RDC = Rendering::RenderingDeviceCommons;

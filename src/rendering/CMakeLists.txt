@@ -70,6 +70,7 @@ set(ADDITIONAL_LIBRARY_DEPENDENCIES
 	TinyGLTF::TinyGLTF
 	stb::stb
 	imgui::imgui
+	util
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE ${ADDITIONAL_LIBRARY_DEPENDENCIES})

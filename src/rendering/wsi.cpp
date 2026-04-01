@@ -11,6 +11,7 @@
 #include "compiler/compiler.h"
 #include "application/service_locator.h"
 #include "rendering/renderer_compositor.h"
+#include "rendering/utils.h"
 
 namespace Rendering
 {
@@ -92,8 +93,6 @@ namespace Rendering
 			rd->initailize(DisplayServerEnums::MAIN_WINDOW_ID);
 			rendering_device->begin_frame();
 
-
-
 			return true;
 		}
 		return false;
@@ -106,7 +105,7 @@ namespace Rendering
 
 	bool WSI::begin_frame()
 	{
-
+		//TIMESTAMP_BEGIN();
 		rendering_device->_submit_transfer_barriers(rendering_device->get_current_command_buffer());
 
 		//rendering_device->screen_prepare_for_drawing(active_window);

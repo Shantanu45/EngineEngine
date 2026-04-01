@@ -806,8 +806,24 @@ namespace Rendering
 			// splitting the final render pass to the swapchain into its own cmd buffer.
 			//Device::CommandBufferPool command_buffer_pool;
 
+			struct Timestamp {
+				std::string description;
+				uint64_t value = 0;
+			};
+
+			RDD::QueryPoolID timestamp_pool;
+
+			std::vector<std::string> timestamp_names;
+			std::vector<uint64_t> timestamp_cpu_values;
+			uint32_t timestamp_count = 0;
+			std::vector<std::string> timestamp_result_names;
+			std::vector<uint64_t> timestamp_cpu_result_values;
+			std::vector<uint64_t> timestamp_result_values;
+			uint32_t timestamp_result_count = 0;
 			uint64_t index = 0;
 		};
+
+		uint32_t max_timestamp_query_elements = 0;
 
 		struct ScopedDebugMarker
 		{
@@ -1042,6 +1058,12 @@ namespace Rendering
 		void imgui_execute(void* p_draw_data, RDD::CommandBufferID p_command_buffer, RDD::PipelineID p_pipeline = RDD::PipelineID());
 		Vulkan::ImGuiDevice* get_imgui_device();
 		void set_resource_name(RID p_id, const std::string& p_name);
+		void capture_timestamp(const std::string& p_name);
+		uint32_t get_captured_timestamps_count() const;
+		uint64_t get_captured_timestamps_frame() const;
+		uint64_t get_captured_timestamp_gpu_time(uint32_t p_index) const;
+		uint64_t get_captured_timestamp_cpu_time(uint32_t p_index) const;
+		std::string get_captured_timestamp_name(uint32_t p_index) const;
 		inline RenderingDeviceDriver& get_driver() const
 		{
 			return *driver;
@@ -1266,6 +1288,3 @@ namespace Rendering
 	}
 
 }
-
-#define GPU_SCOPE(cmd, name, color) \
-	auto debug_marker = Rendering::RenderingDevice::ScopedDebugMarker(Rendering::RenderingDevice::get_singleton(), cmd, name, color);

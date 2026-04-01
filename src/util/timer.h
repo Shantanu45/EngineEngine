@@ -41,4 +41,5 @@ namespace Util
 	};
 
 	int64_t get_current_time_nsecs();
+	int64_t get_current_time_usec();
 }

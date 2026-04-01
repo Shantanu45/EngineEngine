@@ -12,6 +12,7 @@
 #include "math\helpers.h"
  //TODO: add abstraction for imgui
 #include "vulkan/imgui_vulkan_device.h"
+#include "util/timer.h"
 
 namespace Rendering
 {
@@ -180,6 +181,8 @@ namespace Rendering
 
 		frames.resize(frame_count);
 
+		max_timestamp_query_elements = 256;
+
 		bool frame_failed = false;
 		for (uint32_t i = 0; i < frames.size(); i++) {
 			frames[i].index = 0;
@@ -205,6 +208,15 @@ namespace Rendering
 			}
 			frames[i].fence_signaled = false;
 
+			frames[i].timestamp_pool = driver->timestamp_query_pool_create(max_timestamp_query_elements);
+			frames[i].timestamp_names.resize(max_timestamp_query_elements);
+			frames[i].timestamp_cpu_values.resize(max_timestamp_query_elements);
+			frames[i].timestamp_count = 0;
+			frames[i].timestamp_result_names.resize(max_timestamp_query_elements);
+			frames[i].timestamp_cpu_result_values.resize(max_timestamp_query_elements);
+			frames[i].timestamp_result_values.resize(max_timestamp_query_elements);
+			frames[i].timestamp_result_count = 0;
+
 			// Create the semaphores for the transfer workers.
 			frames[i].transfer_worker_semaphores.resize(transfer_worker_pool_max_size);
 			for (uint32_t j = 0; j < transfer_worker_pool_max_size; j++) {
@@ -229,7 +241,9 @@ namespace Rendering
 				if (frames[i].fence) {
 					driver->fence_free(frames[i].fence);
 				}
-
+				if (frames[i].timestamp_pool) {
+					driver->timestamp_query_pool_free(frames[i].timestamp_pool);
+				}
 				for (uint32_t j = 0; j < frames[i].transfer_worker_semaphores.size(); j++) {
 					if (frames[i].transfer_worker_semaphores[j]) {
 						driver->semaphore_free(frames[i].transfer_worker_semaphores[j]);
@@ -250,6 +264,13 @@ namespace Rendering
 
 		frames_drawn = frames.size();
 		frames_drawn++;
+		driver->command_buffer_begin(frames[0].command_buffer);
+		for (uint32_t i = 0; i < frames.size(); i++) {
+			// Reset all queries in a query pool before doing any operations with them..
+			driver->command_timestamp_query_pool_reset(frames[0].command_buffer, frames[i].timestamp_pool, max_timestamp_query_elements);
+		}
+
+		driver->command_buffer_end(frames[0].command_buffer);
 
 		// Convert block size from KB.
 		//upload_staging_buffers.block_size = GLOBAL_GET("rendering/rendering_device/staging_buffer/block_size_kb");
@@ -343,7 +364,7 @@ namespace Rendering
 			int f = (frame + i) % frames.size();
 			_free_pending_resources(f);
 			driver->command_pool_free(frames[i].command_pool);
-			//driver->timestamp_query_pool_free(frames[i].timestamp_pool);
+			driver->timestamp_query_pool_free(frames[i].timestamp_pool);
 			driver->semaphore_free(frames[i].semaphore);
 			driver->fence_free(frames[i].fence);
 
@@ -3333,6 +3354,17 @@ namespace Rendering
 			download_staging_buffers.current = (download_staging_buffers.current + 1) % download_staging_buffers.blocks.size();
 			download_staging_buffers.used = false;
 		}
+
+		if (frames[frame].timestamp_count) {
+			driver->timestamp_query_pool_get_results(frames[frame].timestamp_pool, frames[frame].timestamp_count, frames[frame].timestamp_result_values.data());
+			driver->command_timestamp_query_pool_reset(frames[frame].command_buffer, frames[frame].timestamp_pool, frames[frame].timestamp_count);
+			SWAP(frames[frame].timestamp_names, frames[frame].timestamp_result_names);
+			SWAP(frames[frame].timestamp_cpu_values, frames[frame].timestamp_cpu_result_values);
+		}
+
+		frames[frame].timestamp_result_count = frames[frame].timestamp_count;
+		frames[frame].timestamp_count = 0;
+		frames[frame].index = frames_drawn;
 	}
 
 	void RenderingDevice::end_frame()
@@ -3440,7 +3472,7 @@ namespace Rendering
 	}
 
 	// The full list of resources that can be named is in the VkObjectType enum.
-// We just expose the resources that are owned and can be accessed easily.
+	// We just expose the resources that are owned and can be accessed easily.
 	void RenderingDevice::set_resource_name(RID p_id, const std::string& p_name) {
 		//_THREAD_SAFE_METHOD_
 
@@ -3511,6 +3543,50 @@ namespace Rendering
 #ifdef DEV_ENABLED
 		resource_names[p_id] = p_name;
 #endif
+	}
+
+	void RenderingDevice::capture_timestamp(const std::string& p_name) {
+		//ERR_RENDER_THREAD_GUARD();
+
+		//ERR_FAIL_COND_MSG(draw_list.active && draw_list.state.draw_count > 0, "Capturing timestamps during draw list creation is not allowed. Offending timestamp was: " + p_name);
+		//ERR_FAIL_COND_MSG(compute_list.active && compute_list.state.dispatch_count > 0, "Capturing timestamps during compute list creation is not allowed. Offending timestamp was: " + p_name);
+		//ERR_FAIL_COND_MSG(raytracing_list.active && raytracing_list.state.trace_count > 0, "Capturing timestamps during raytracing list creation is not allowed. Offending timestamp was: " + p_name);
+		ERR_FAIL_COND_MSG(frames[frame].timestamp_count >= max_timestamp_query_elements, std::format("Tried capturing more timestamps than the configured maximum ({}). You can increase this limit in the project settings under 'Debug/Settings' called 'Max Timestamp Query Elements'.", max_timestamp_query_elements));
+
+		//draw_graph.add_capture_timestamp(frames[frame].timestamp_pool, frames[frame].timestamp_count);
+
+		driver->command_timestamp_write(get_current_command_buffer(), frames[frame].timestamp_pool, frames[frame].timestamp_count);
+
+		frames[frame].timestamp_names[frames[frame].timestamp_count] = p_name;
+		frames[frame].timestamp_cpu_values[frames[frame].timestamp_count] = Util::get_current_time_usec();
+		frames[frame].timestamp_count++;
+	}
+
+	uint32_t RenderingDevice::get_captured_timestamps_count() const {
+		//ERR_RENDER_THREAD_GUARD_V(0);
+		return frames[frame].timestamp_result_count;
+	}
+
+	uint64_t RenderingDevice::get_captured_timestamps_frame() const {
+		//ERR_RENDER_THREAD_GUARD_V(0);
+		return frames[frame].index;
+	}
+
+	uint64_t RenderingDevice::get_captured_timestamp_gpu_time(uint32_t p_index) const {
+		//ERR_RENDER_THREAD_GUARD_V(0);
+		ERR_FAIL_UNSIGNED_INDEX_V(p_index, frames[frame].timestamp_result_count, 0);
+		return driver->timestamp_query_result_to_time(frames[frame].timestamp_result_values[p_index]);
+	}
+
+	uint64_t RenderingDevice::get_captured_timestamp_cpu_time(uint32_t p_index) const {
+		//ERR_RENDER_THREAD_GUARD_V(0);
+		ERR_FAIL_UNSIGNED_INDEX_V(p_index, frames[frame].timestamp_result_count, 0);
+		return frames[frame].timestamp_cpu_result_values[p_index];
+	}
+
+	std::string RenderingDevice::get_captured_timestamp_name(uint32_t p_index) const {
+		ERR_FAIL_UNSIGNED_INDEX_V(p_index, frames[frame].timestamp_result_count, "");
+		return frames[frame].timestamp_result_names[p_index];
 	}
 
 #pragma region Transfer worker

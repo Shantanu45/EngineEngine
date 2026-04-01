@@ -115,6 +115,11 @@ namespace Util
 #endif
 	}
 
+	int64_t get_current_time_usec()
+	{
+		return get_current_time_nsecs() / 1000;
+	}
+
 	void Timer::start()
 	{
 		t = get_current_time_nsecs();
