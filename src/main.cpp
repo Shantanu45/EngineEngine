@@ -209,7 +209,6 @@ struct TriangleApplication : EE::Application
 		ImGui::Text("FPS: %.1f", timer->get_fps());
 		ImGui::Text("Frame Time: %.3f ms", timer->get_frame_time() * 1000.0);
 
-		
 		// ---- Build the frame graph ----
 		FrameGraph fg;
 		FrameGraphBlackboard bb;

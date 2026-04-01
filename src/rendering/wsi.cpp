@@ -41,6 +41,7 @@ namespace Rendering
 			}
 			if (rendering_context->initialize() == OK && _create_rendering_context_window(active_window, rendering_driver) == OK)
 			{
+				rendering_context->window_set_vsync_mode(active_window, DisplayServerEnums::VSYNC_DISABLED);
 				rendering_device = RenderingDevice::get_singleton();
 				// device initialization happens in function call below
 				if (!(rendering_device->initialize(rendering_context.get(), active_window) == OK))
