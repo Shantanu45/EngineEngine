@@ -483,7 +483,7 @@ namespace Rendering
 			ShaderStageSPIRVData sd;
 			sd.shader_stage = stage;
 			std::string error = p_spirv->get_stage_compile_error(stage);
-			ERR_FAIL_COND_V_MSG(!error.empty(), RID(), "Can't create a shader from an errored bytecode. Check errors in source bytecode.");
+			ERR_FAIL_COND_V_MSG(!error.empty(), RID(), std::format("Can't create a shader from an errored bytecode: \n Stage: {} \n Error: {}. Check errors in source bytecode.", (int)stage, error));
 			sd.spirv = p_spirv->get_stage_bytecode(stage);
 			if (sd.spirv.empty()) {
 				continue;

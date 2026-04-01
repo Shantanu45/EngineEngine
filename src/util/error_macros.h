@@ -36,6 +36,7 @@
 class ObjectID;
 
 enum ErrorHandlerType {
+	ERR_NONE,
 	ERR_HANDLER_ERROR,
 	ERR_HANDLER_WARNING,
 	ERR_HANDLER_SCRIPT,
@@ -52,6 +53,8 @@ constexpr const char *_error_handler_type_string(ErrorHandlerType p_type) {
 			return "SCRIPT ERROR";
 		case ERR_HANDLER_SHADER:
 			return "SHADER ERROR";
+		default:
+			return "NONE";
 	}
 	return "UNKNOWN ERROR";
 }
