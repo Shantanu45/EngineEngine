@@ -30,7 +30,7 @@ namespace Rendering
 			{
 				data.scene = builder.read(scene.scene, 1u);
 				data.ui = builder.read(ui.ui, 1u);
-				builder.set_side_effect();		// mark as non cullable
+				builder.set_side_effect();		// mark as non cull able
 			},
 
 			[=](const blit_pass_resource& data,
