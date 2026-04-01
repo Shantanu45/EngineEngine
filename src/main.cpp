@@ -264,7 +264,7 @@ struct TriangleApplication : EE::Application
 
 		fg.compile();
 
-		save_graph_to_file(fg, "file_graph.dot");
+		//save_graph_to_file(fg, "file_graph.dot");
 
 		Rendering::RenderContext rc;
 		rc.command_buffer = device->get_current_command_buffer();
