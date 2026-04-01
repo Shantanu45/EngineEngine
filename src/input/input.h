@@ -30,9 +30,9 @@ namespace EE
 	enum KeyState : uint8_t
 	{
 		KEY_NONE = 0,
-		KEY_DOWN = 1 << 0,		// 0000 0001 — key is currently held
-		KEY_PRESSED = 1 << 1,	// 0000 0010 — went down this frame
-		KEY_RELEASED = 1 << 2,  // 0000 0100 — went up this frame
+		KEY_DOWN = 1 << 0,		// 0000 0001 - key is currently held
+		KEY_PRESSED = 1 << 1,	// 0000 0010 - went down this frame
+		KEY_RELEASED = 1 << 2,  // 0000 0100 - went up this frame
 	};
 
 	enum class MouseButton
@@ -47,9 +47,9 @@ namespace EE
 	enum MouseState : uint8_t
 	{
 		MOUSE_NONE = 0,
-		MOUSE_DOWN = 1 << 0,      // 0000 0001 — button is held
-		MOUSE_PRESSED = 1 << 1,   // 0000 0010 — went down this frame
-		MOUSE_RELEASED = 1 << 2,  // 0000 0100 — went up this frame
+		MOUSE_DOWN = 1 << 0,      // 0000 0001 - button is held
+		MOUSE_PRESSED = 1 << 1,   // 0000 0010 - went down this frame
+		MOUSE_RELEASED = 1 << 2,  // 0000 0100 - went up this frame
 	};
 
 	class InputSystemInterface

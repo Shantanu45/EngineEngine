@@ -107,7 +107,7 @@ namespace FileSystem
 			DWORD lo = GetFileSize(file, &hi);
 			size = (uint64_t(hi) << 32) | uint32_t(lo);
 			/**
-			 * It does not actually map anything into your address space yet —
+			 * It does not actually map anything into your address space yet -
 			 * it just creates a kernel object that describes the mapping. .
 			 * */
 			file_mapping = CreateFileMappingW(file, nullptr, PAGE_READONLY, 0, 0, nullptr);
@@ -145,7 +145,7 @@ namespace FileSystem
 		uint64_t begin_map = offset & ~uint64_t(static_page_size_query.page_size - 1);		// if page_size = 4096(0000 1111 1111 1111) the ~ will be 1111 0000 0000 0000
 
 
-		// This is splitting a 64 - bit offset into two 32 - bit halves — 
+		// This is splitting a 64 - bit offset into two 32 - bit halves - 
 		// because the Windows API MapViewOfFile takes the file offset as two separate DWORD parameters instead of one uint64_t.
 		DWORD hi = DWORD(begin_map >> 32);		// shifts the upper half down into the lower 32 bits
 		DWORD lo = DWORD(begin_map & 0xffffffffu);		// masks off everything above bit 31
@@ -154,7 +154,7 @@ namespace FileSystem
 
 		// Maps a view of a file mapping into the address space of a calling process.
 		// MapViewOfFile is a Windows API function that maps a region of a file directly into the process's virtual address space 
-		// — so you can access file contents via a pointer instead of using read() / write() calls.
+		// - so you can access file contents via a pointer instead of using read() / write() calls.
 		void* mapped = MapViewOfFile(file_mapping, FILE_MAP_READ, hi, lo, mapped_size);
 		if (!mapped)
 			return {};

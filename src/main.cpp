@@ -187,7 +187,6 @@ struct TriangleApplication : EE::Application
 		auto device = wsi->get_rendering_device();
 
 		{
-
 			TIMESTAMP_BEGIN();
 
 			if (RenderUtilities::get_captured_timestamps_count()) {

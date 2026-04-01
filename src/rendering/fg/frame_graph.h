@@ -140,7 +140,7 @@ private:
  * It is the thing that takes a FrameGraphResource handle and gives you back the real GPU object.
  * 
  * It is essentially a scoped view into the graph's internal resource table, restricted to only the resources this pass declared in its setup lambda. 
- * You can only get resources that this pass registered a read or write for — anything else is inaccessible.
+ * You can only get resources that this pass registered a read or write for - anything else is inaccessible.
  */
 class FrameGraphPassResources {
   friend class FrameGraph;

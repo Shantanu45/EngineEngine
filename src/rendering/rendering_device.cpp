@@ -1604,13 +1604,13 @@ namespace Rendering
 						ERR_FAIL_V_MSG(RID(), std::format("Sampler (binding: {}) is an array of ({}) sampler elements, so it should be provided equal number of sampler IDs to satisfy it (IDs provided: {}).", uniform.binding, set_uniform.length, uniform.get_id_count()));
 					}
 					else {
-						ERR_FAIL_V_MSG(RID(), "Sampler (binding: {}) should provide one ID referencing a sampler (IDs provided: {}).", uniform.binding, uniform.get_id_count());
+						ERR_FAIL_V_MSG(RID(), std::format("Sampler (binding: {}) should provide one ID referencing a sampler (IDs provided: {}).", uniform.binding, uniform.get_id_count()));
 					}
 				}
 
 				for (uint32_t j = 0; j < uniform.get_id_count(); j++) {
 					RDD::SamplerID* sampler_driver_id = sampler_owner.get_or_null(uniform.get_id(j));
-					ERR_FAIL_NULL_V_MSG(sampler_driver_id, RID(), "Sampler (binding: {}, index {}) is not a valid sampler.", uniform.binding, j);
+					ERR_FAIL_NULL_V_MSG(sampler_driver_id, RID(), std::format("Sampler (binding: {}, index {}) is not a valid sampler.", uniform.binding, j));
 
 					driver_uniform.ids.push_back(*sampler_driver_id);
 				}
@@ -4036,7 +4036,7 @@ namespace Rendering
 		uint32_t required_align = _texture_alignment(texture);
 
 		ERR_FAIL_COND_V_MSG(required_size != (uint32_t)p_data.size(), ERR_INVALID_PARAMETER,
-			"Required size for texture update ({}) does not match data supplied size ({}).", required_size, p_data.size());
+			std::format("Required size for texture update ({}) does not match data supplied size ({}).", required_size, p_data.size()));
 
 		uint32_t block_w, block_h;
 		get_compressed_image_format_block_dimensions(texture->format, block_w, block_h);
