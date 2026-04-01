@@ -23,6 +23,7 @@ namespace Vulkan
 
 }
 
+
 namespace Rendering
 {
 	static Compiler::Stage compiler_stage_from_shader_stage(const RenderingDeviceCommons::ShaderStage stage)
@@ -176,6 +177,7 @@ namespace Rendering
 			STAGING_REQUIRED_ACTION_FLUSH_AND_STALL_ALL,
 			STAGING_REQUIRED_ACTION_STALL_PREVIOUS,
 		};
+
 
 		struct Uniform {
 			UniformType uniform_type = UNIFORM_TYPE_IMAGE;
@@ -807,6 +809,27 @@ namespace Rendering
 			uint64_t index = 0;
 		};
 
+		struct ScopedDebugMarker
+		{
+			ScopedDebugMarker(RenderingDevice* p_device, RenderingDeviceDriver::CommandBufferID p_command_buffer, const std::string& p_name, Color p_lable_color) :
+				command_buffer(p_command_buffer),
+				device(p_device)
+			{
+				device->get_driver().command_begin_label(command_buffer, p_name.c_str(), p_lable_color);
+			};
+			~ScopedDebugMarker()
+			{
+				device->get_driver().command_end_label(command_buffer);
+			};
+
+			ScopedDebugMarker(const ScopedDebugMarker&) = delete;
+			ScopedDebugMarker& operator=(const ScopedDebugMarker&) = delete;
+
+		private:
+			RenderingDevice* device;
+			RenderingDeviceDriver::CommandBufferID command_buffer;
+		};
+
 	public:
 
 		static RenderingDevice* get_singleton() {
@@ -1019,6 +1042,10 @@ namespace Rendering
 		void imgui_execute(void* p_draw_data, RDD::CommandBufferID p_command_buffer, RDD::PipelineID p_pipeline = RDD::PipelineID());
 		Vulkan::ImGuiDevice* get_imgui_device();
 		void set_resource_name(RID p_id, const std::string& p_name);
+		inline RenderingDeviceDriver& get_driver() const
+		{
+			return *driver;
+		}
 		// TODO: #temp
 		void _submit_transfer_workers(RDD::CommandBufferID p_draw_command_buffer = RDD::CommandBufferID());
 		void _submit_transfer_barriers(RDD::CommandBufferID p_draw_command_buffer);
@@ -1239,3 +1266,6 @@ namespace Rendering
 	}
 
 }
+
+#define GPU_SCOPE(cmd, name, color) \
+	auto debug_marker = Rendering::RenderingDevice::ScopedDebugMarker(Rendering::RenderingDevice::get_singleton(), cmd, name, color);

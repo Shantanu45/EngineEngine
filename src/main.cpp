@@ -52,7 +52,7 @@ void add_basic_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
 				uint32_t h = rc.device->screen_get_height();
 
 				Rect2i viewport(0, 0, w, h);
-
+				GPU_SCOPE(cmd, "Basic Pass", Color(1.0, 0.0, 0.0, 1.0));
 				rc.device->begin_render_pass_from_frame_buffer(frame_buffer,
 					viewport, Color());
 

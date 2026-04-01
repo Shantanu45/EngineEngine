@@ -42,6 +42,7 @@ namespace Rendering
 
 				auto& scene = resources.get<Rendering::FrameGraphTexture>(data.scene);
 				auto& ui = resources.get<Rendering::FrameGraphTexture>(data.ui);
+				GPU_SCOPE(rc.command_buffer, "Blit Pass", Color(0.0, 1.0, 0.0, 1.0));
 
 				wsi->blit_render_target_to_screen(scene.texture, ui.texture);
 			}
@@ -53,7 +54,7 @@ namespace Rendering
 	{
 		bb.add<imgui_pass_resource>() =
 			fg.add_callback_pass<imgui_pass_resource>(
-				"imgui Pass",
+				"Imgui Pass",
 
 				[image_handle](FrameGraph::Builder& builder, imgui_pass_resource& data)
 				{
@@ -70,6 +71,8 @@ namespace Rendering
 
 					// TODO: find alternative, not sure if its good to do it in a loop.
 					DEBUG_ASSERT(wsi->imgui_active, "Trying to add imgui pass when imgui_active if false, NOT ALLOWED!");
+
+					GPU_SCOPE(cmd, "Imgui Pass", Color(0.0, 0.0, 1.0, 1.0));
 
 					auto& scene = resources.get<Rendering::FrameGraphTexture>(data.ui);
 
