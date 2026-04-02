@@ -3156,10 +3156,14 @@ namespace Rendering
 		VertexDescriptionKey key;
 		key.vertex_formats = p_vertex_descriptions;
 
-		auto it_c = vertex_format_cache.find(key);
-		if (it_c != vertex_format_cache.end()) {
-			return it_c->second;
+		if (!vertex_format_cache.empty())
+		{
+			auto it_c = vertex_format_cache.find(key);
+			if (it_c != vertex_format_cache.end()) {
+				return it_c->second;
+			}
 		}
+
 
 		VertexAttributeBindingsMap bindings;
 		bool has_implicit = false;
