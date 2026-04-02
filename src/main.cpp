@@ -138,7 +138,6 @@ struct TriangleApplication : EE::Application
 
 		auto framebuffer_format = RD::get_singleton()->framebuffer_format_create(attachments);
 
-
 		RDC::PipelineDepthStencilState depth_state;
 		depth_state.enable_depth_test = true;
 		depth_state.enable_depth_write = true;
@@ -264,12 +263,8 @@ struct TriangleApplication : EE::Application
 		device->free_rid(camera_ubo);
 		device->free_rid(texture_uniform);
 		device->free_rid(texture_uniform_red);
-		//device->free_rid(texture_fb);
-		//device->free_rid(texture_depth);
-		//device->free_rid(imgui_fb);
 		device->free_rid(pipeline);
 		device->free_rid(sampler);
-		//device->free_rid(scene_fb);
 	}
 
 private:
