@@ -44,7 +44,7 @@ namespace Rendering
 				auto& ui = resources.get<Rendering::FrameGraphTexture>(data.ui);
 				GPU_SCOPE(rc.command_buffer, "Blit Pass", Color(0.0, 1.0, 0.0, 1.0));
 
-				wsi->blit_render_target_to_screen(scene.texture, ui.texture);
+				wsi->blit_render_target_to_screen(scene.texture_rid, ui.texture_rid);
 			}
 		);
 	}

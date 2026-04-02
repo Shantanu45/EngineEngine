@@ -248,17 +248,17 @@ struct TriangleApplication : EE::Application
 		};
 
 		Rendering::FrameGraphTexture scene_tex;
-		scene_tex.texture = texture_fb;
+		scene_tex.texture_rid = texture_fb;
 
 		Rendering::FrameGraphTexture depth_tex;
-		depth_tex.texture = texture_depth;
+		depth_tex.texture_rid = texture_depth;
 
 		FrameGraphResource scene_res = fg.import("scene texture", scene_desc, std::move(scene_tex));
 		FrameGraphResource depth_res = fg.import("depth texture", depth_desc, std::move(depth_tex));
 		add_basic_pass(fg, bb, scene_res, depth_res, scene_fb, pipeline, uniform_set);
 
 		Rendering::FrameGraphTexture imgui_tex;
-		imgui_tex.texture = imgui_fb;
+		imgui_tex.texture_rid = imgui_fb;
 		FrameGraphResource imgui_res = fg.import("scene texture", scene_desc, std::move(imgui_tex));
 		Rendering::add_imgui_pass(fg, bb, imgui_res);
 		Rendering::add_blit_pass<basic_pass_resource>(fg, bb);
