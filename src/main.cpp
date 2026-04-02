@@ -217,14 +217,6 @@ struct TriangleApplication : EE::Application
 
 		auto err = device->buffer_update(camera_ubo, 0, sizeof(Camera_UBO), &ubo);
 
-
-
-		Rendering::FrameGraphTexture scene_tex;
-		scene_tex.texture = texture_fb;
-
-		Rendering::FrameGraphTexture depth_tex;
-		depth_tex.texture = texture_depth;
-
 		imgui_fb = device->get_imgui_texture();
 
 		device->imgui_begin_frame();
@@ -242,6 +234,7 @@ struct TriangleApplication : EE::Application
 		FrameGraph fg;
 		FrameGraphBlackboard bb;
 
+
 		Rendering::FrameGraphTexture::Desc scene_desc{
 			tf,
 			RD::TextureView(),
@@ -253,6 +246,12 @@ struct TriangleApplication : EE::Application
 		RD::TextureView(),
 		"depth texture"
 		};
+
+		Rendering::FrameGraphTexture scene_tex;
+		scene_tex.texture = texture_fb;
+
+		Rendering::FrameGraphTexture depth_tex;
+		depth_tex.texture = texture_depth;
 
 		FrameGraphResource scene_res = fg.import("scene texture", scene_desc, std::move(scene_tex));
 		FrameGraphResource depth_res = fg.import("depth texture", depth_desc, std::move(depth_tex));
@@ -286,6 +285,7 @@ struct TriangleApplication : EE::Application
 		device->free_rid(texture_uniform);
 		device->free_rid(texture_uniform_red);
 		device->free_rid(texture_fb);
+		device->free_rid(texture_depth);
 		device->free_rid(imgui_fb);
 		device->free_rid(pipeline);
 		device->free_rid(sampler);
