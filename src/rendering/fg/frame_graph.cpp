@@ -86,12 +86,8 @@ void FrameGraph::execute(void *context, void *allocator) {
     for (auto &entry : m_resourceRegistry) {
         if (entry.m_last == &pass && entry.is_transient())
         {
-			printf("Destroying %s after pass %s\n",
-				entry.to_string().c_str(),
-				pass.m_name.c_str());
 			entry.destroy(allocator);
-
-      }
+        }
     }
   }
 }

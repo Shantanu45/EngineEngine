@@ -13,6 +13,8 @@
  //TODO: add abstraction for imgui
 #include "vulkan/imgui_vulkan_device.h"
 #include "util/timer.h"
+#include "cache.h"
+
 
 namespace Rendering
 {
@@ -315,6 +317,8 @@ namespace Rendering
 		upload_staging_buffers.current = 0;
 
 		download_staging_buffers.current = 0;
+
+		fb_cache = std::make_unique<FramebufferCache>(this);
 		return OK;
 	}
 
@@ -1401,6 +1405,14 @@ namespace Rendering
 		//framebuffer_cache->trackers = trackers;
 		//framebuffer.framebuffer_cache = framebuffer_cache;
 
+		FramebufferKey key{
+		.render_pass = framebuffer_formats[format_id].render_pass,
+		.width = size.x,
+		.height = size.y,
+		.layers = 1,			// TODO: use layers properly, or some other property
+		.attachments = p_texture_attachments
+		};
+
 		RID id = framebuffer_owner.make_rid(framebuffer);
 #ifdef DEV_ENABLED
 		set_resource_name(id, std::format("RID {}", id.get_id()));
@@ -1412,7 +1424,7 @@ namespace Rendering
 			}
 		}
 
-		auto frame_buffer = create_framebuffer_from_format_id(format_id, p_texture_attachments, size.x, size.y);
+		auto frame_buffer = fb_cache->get(key);// create_framebuffer_from_format_id(format_id, p_texture_attachments, size.x, size.y);
 		rid_to_frame_buffer_id[id] = frame_buffer;
 		// This relies on the fact that HashMap will not change the address of an object after it's been inserted into the container.
 		//framebuffer_cache->render_pass_creation_user_data = (void*)(&framebuffer_formats[framebuffer.format_id].E->key());
@@ -3043,6 +3055,11 @@ namespace Rendering
 		return true;
 	}
 
+	void RenderingDevice::free_framebuffer(RDD::FramebufferID p_frame_buffer)
+	{
+		driver->framebuffer_free(p_frame_buffer);
+	}
+
 	RDD::FramebufferID RenderingDevice::create_framebuffer(RDD::RenderPassID p_render_pass, std::span<RDD::TextureID> p_attachments, uint32_t p_width, uint32_t p_height)
 	{
 		auto id = driver->framebuffer_create(p_render_pass, p_attachments, p_width, p_height);
@@ -3058,6 +3075,16 @@ namespace Rendering
 			attachments.push_back(texture_owner.get_or_null(a)->driver_id);
 		}
 		return driver->framebuffer_create(framebuffer_formats[p_format_id].render_pass, attachments, p_width, p_height);
+	}
+
+	RDD::FramebufferID RenderingDevice::create_framebuffer_from_render_pass(RDD::RenderPassID p_render_pass, std::vector<RID> p_attachments, uint32_t p_width, uint32_t p_height)
+	{
+		std::vector<RDD::TextureID> attachments;
+		for (auto a : p_attachments)
+		{
+			attachments.push_back(texture_owner.get_or_null(a)->driver_id);
+		}
+		return driver->framebuffer_create(p_render_pass, attachments, p_width, p_height);
 	}
 
 	RDD::RenderPassID RenderingDevice::render_pass_from_format_id(FramebufferFormatID p_format_id)
@@ -3373,6 +3400,8 @@ namespace Rendering
 		//driver->command_end_render_pass(command_buffer);
 		frames_drawn++;
 		driver->command_buffer_end(command_buffer);
+
+		fb_cache->tick();
 	}
 
 	void  RenderingDevice::bind_render_pipeline(RDD::CommandBufferID p_command_buffer, RID pipeline)

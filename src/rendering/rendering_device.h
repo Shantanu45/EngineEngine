@@ -20,12 +20,12 @@
 namespace Vulkan
 {
 	class ImGuiDevice;
-
 }
 
 
 namespace Rendering
 {
+	class FramebufferCache;
 	static Compiler::Stage compiler_stage_from_shader_stage(const RenderingDeviceCommons::ShaderStage stage)
 	{
 		switch (stage)
@@ -1003,8 +1003,10 @@ namespace Rendering
 		bool begin_for_screen(DisplayServerEnums::WindowID p_screen = 0, const Color& p_clear_color = Color());
 
 		bool end_for_screen(DisplayServerEnums::WindowID p_screen);
+		void free_framebuffer(RDD::FramebufferID p_frame_buffer);
 		RDD::FramebufferID create_framebuffer(RDD::RenderPassID p_render_pass, std::span<RDD::TextureID> p_attachments, uint32_t p_width, uint32_t p_height);
 		RDD::FramebufferID create_framebuffer_from_format_id(FramebufferFormatID p_format_id, std::vector<RID> p_attachments, uint32_t p_width, uint32_t p_height);
+		RDD::FramebufferID create_framebuffer_from_render_pass(RDD::RenderPassID p_render_pass, std::vector<RID> p_attachments, uint32_t p_width, uint32_t p_height);
 		RDD::RenderPassID render_pass_from_format_id(FramebufferFormatID p_format_id);
 		bool begin_render_pass(RDD::RenderPassID p_render_pass, RDD::FramebufferID p_frame_buffer, Rect2i p_region, const Color& p_clear_color);
 		bool begin_render_pass_from_frame_buffer(RID p_frame_buffer, Rect2i p_region, const std::span<RenderingDeviceDriver::RenderPassClearValue>& p_clear_color);
@@ -1187,6 +1189,8 @@ namespace Rendering
 
 		std::unordered_map<RID, std::unordered_set<RID>> dependency_map; // IDs to IDs that depend on it.
 		std::unordered_map<RID, std::unordered_set<RID>> reverse_dependency_map; // Same as above, but in reverse.
+
+		std::unique_ptr<FramebufferCache> fb_cache;
 
 		std::vector<TransferWorker*> transfer_worker_pool;
 		uint32_t transfer_worker_pool_size = 0;
