@@ -4564,29 +4564,33 @@ namespace Vulkan
 		std::vector<VkSubpassDescription2KHR> vk_subpasses_vec(p_subpasses.size());
 		VkSubpassDescription2KHR* vk_subpasses = vk_subpasses_vec.data();
 
-		//std::vector<std::unique_ptr<VkAttachmentReference2KHR>> vk_subpass_depth_stencil_attachment;// = nullptr;
-
 		for (uint32_t i = 0; i < p_subpasses.size(); i++) {
 
-			vk_subpass_input_attachments_vec.resize(p_subpasses[i].input_references.size());
-			VkAttachmentReference2KHR* vk_subpass_input_attachments = vk_subpass_input_attachments_vec.data();
+			//vk_subpass_input_attachments_vec.resize(p_subpasses[i].input_references.size());
+			//VkAttachmentReference2KHR* vk_subpass_input_attachments = vk_subpass_input_attachments_vec.data();
 			for (uint32_t j = 0; j < p_subpasses[i].input_references.size(); j++) {
-				_attachment_reference_to_vk(p_subpasses[i].input_references[j], &vk_subpass_input_attachments[j]);
+				vk_subpass_input_attachments_vec.emplace_back();
+				auto& attachment = vk_subpass_input_attachments_vec.back();
+				_attachment_reference_to_vk(p_subpasses[i].input_references[j], &attachment);
 			}
 
-			vk_subpass_color_attachments_vec.resize(p_subpasses[i].color_references.size());
-			VkAttachmentReference2KHR* vk_subpass_color_attachments = vk_subpass_color_attachments_vec.data();
+			//vk_subpass_color_attachments_vec.resize(p_subpasses[i].color_references.size());
+			//VkAttachmentReference2KHR* vk_subpass_color_attachments = vk_subpass_color_attachments_vec.data();
 			for (uint32_t j = 0; j < p_subpasses[i].color_references.size(); j++) {
-				_attachment_reference_to_vk(p_subpasses[i].color_references[j], &vk_subpass_color_attachments[j]);
+				vk_subpass_color_attachments_vec.emplace_back();
+				auto& attachment = vk_subpass_color_attachments_vec.back();
+				_attachment_reference_to_vk(p_subpasses[i].color_references[j], &attachment);
 			}
 
-			vk_subpass_resolve_attachments_vec.resize(p_subpasses[i].resolve_references.size());
-			VkAttachmentReference2KHR* vk_subpass_resolve_attachments = vk_subpass_resolve_attachments_vec.data();
+			//vk_subpass_resolve_attachments_vec.resize(p_subpasses[i].resolve_references.size());
+			//VkAttachmentReference2KHR* vk_subpass_resolve_attachments = vk_subpass_resolve_attachments_vec.data();
 			for (uint32_t j = 0; j < p_subpasses[i].resolve_references.size(); j++) {
-				_attachment_reference_to_vk(p_subpasses[i].resolve_references[j], &vk_subpass_resolve_attachments[j]);
+				vk_subpass_resolve_attachments_vec.emplace_back();
+				auto& attachment = vk_subpass_resolve_attachments_vec.back();
+				_attachment_reference_to_vk(p_subpasses[i].resolve_references[j], &attachment);
 			}
 
-			VkAttachmentReference2KHR* vk_subpass_depth_stencil_attachment = nullptr;
+			//VkAttachmentReference2KHR* vk_subpass_depth_stencil_attachment = nullptr;
 			if (p_subpasses[i].depth_stencil_reference.attachment != AttachmentReference::UNUSED) {
 				vk_subpass_depth_stencil_attachment_vec.emplace_back(); // create element
 				auto& attachment = vk_subpass_depth_stencil_attachment_vec.back();
@@ -4599,10 +4603,10 @@ namespace Vulkan
 			vk_subpasses[i].pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 			vk_subpasses[i].viewMask = p_view_count == 1 ? 0 : view_mask;
 			vk_subpasses[i].inputAttachmentCount = p_subpasses[i].input_references.size();
-			vk_subpasses[i].pInputAttachments = vk_subpass_input_attachments;
+			vk_subpasses[i].pInputAttachments = vk_subpass_input_attachments_vec.data();
 			vk_subpasses[i].colorAttachmentCount = p_subpasses[i].color_references.size();
-			vk_subpasses[i].pColorAttachments = vk_subpass_color_attachments;
-			vk_subpasses[i].pResolveAttachments = vk_subpass_resolve_attachments;
+			vk_subpasses[i].pColorAttachments = vk_subpass_color_attachments_vec.data();
+			vk_subpasses[i].pResolveAttachments = vk_subpass_resolve_attachments_vec.data();
 			vk_subpasses[i].pDepthStencilAttachment = vk_subpass_depth_stencil_attachment_vec.data();
 			vk_subpasses[i].preserveAttachmentCount = p_subpasses[i].preserve_attachments.size();
 			vk_subpasses[i].pPreserveAttachments = p_subpasses[i].preserve_attachments.data();
