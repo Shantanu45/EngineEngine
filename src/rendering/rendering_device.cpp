@@ -319,6 +319,7 @@ namespace Rendering
 		download_staging_buffers.current = 0;
 
 		fb_cache = std::make_unique<FramebufferCache>(this);
+		tex_cache = std::make_unique<TransientTextureCache>(this);
 		return OK;
 	}
 
@@ -343,6 +344,9 @@ namespace Rendering
 			free_rid(s.second);
 		}
 		shader_cache.clear();
+
+		tex_cache->flush(this);
+		fb_cache->clear();
 
 		// Free all resources.
 		_free_rids(render_pipeline_owner, "Pipeline");
@@ -2422,6 +2426,16 @@ namespace Rendering
 		set_resource_name(id, std::format("RID {}", id.get_id()));
 #endif
 		return id;
+	}
+
+	RID RenderingDevice::acquire_texture(const RDD::TextureFormat& p_format, const RenderingDevice::TextureView& p_view, const std::vector<std::vector<uint8_t>>& p_data)
+	{
+		return tex_cache->acquire(p_format, p_view, p_data);
+	}
+
+	void RenderingDevice::release_texture(RID p_texture)
+	{
+		tex_cache->release(p_texture);
 	}
 
 	RID RenderingDevice::texture_create(const TextureFormat& p_format, const TextureView& p_view, const std::vector<std::vector<uint8_t>>& p_data /*= std::vector<std::vector<uint8_t>>()*/)
@@ -4973,7 +4987,7 @@ namespace Rendering
 		else if (framebuffer_owner.owns(p_id)) {
 			Framebuffer* framebuffer = framebuffer_owner.get_or_null(p_id);
 			frames[frame].framebuffers_to_dispose_of.push_back(*framebuffer);
-			driver->framebuffer_free(rid_to_frame_buffer_id[p_id]);			// temp untill we have cache
+			//driver->framebuffer_free(rid_to_frame_buffer_id[p_id]);			// temp untill we have cache
 			if (framebuffer->invalidated_callback != nullptr) {
 				framebuffer->invalidated_callback(framebuffer->invalidated_callback_userdata);
 			}

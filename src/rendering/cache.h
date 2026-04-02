@@ -60,13 +60,38 @@ namespace Rendering
 			uint64_t last_used_frame = 0;
 		};
 
-		RDD::FramebufferID create(const FramebufferKey& key);
-
+		RDD::FramebufferID _create(const FramebufferKey& key);
 
 		uint64_t current_frame = 0;
 
 		RenderingDevice* device;
 
 		std::unordered_map<FramebufferKey, CacheEntry, FramebufferKeyHash> cache;
+	};
+
+
+	class TransientTextureCache
+	{
+	public:
+		TransientTextureCache(RenderingDevice* p_device) : device(p_device) {}
+
+		RID acquire(const RDD::TextureFormat& p_format, const RenderingDevice::TextureView& p_view, const std::vector<std::vector<uint8_t>>& p_data);
+
+		void release(RID rid);
+
+		void flush(Rendering::RenderingDevice* device);
+
+	private:
+		bool _formats_match(const RDD::TextureFormat& a, const RDD::TextureFormat& b);
+
+		struct CacheEntry {
+			RID               rid;
+			RDD::TextureFormat format = {};
+			RDD::TextureView view = {};
+			bool              in_use = false;
+		};
+
+		std::vector<CacheEntry> cache;
+		RenderingDevice* device;
 	};
 }

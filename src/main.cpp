@@ -20,8 +20,6 @@
 #include "input/input.h"
 #include "util/timer.h"
 
-
-
 void add_basic_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
 	Size2i extent,
 	RID pipeline,
@@ -121,25 +119,6 @@ struct TriangleApplication : EE::Application
 		wsi->load_gltf("assets://gltf/two_cubes.glb",  "two_cubes");
 
 		auto device = wsi->get_rendering_device();
-
-		{ //texture
-			tf.texture_type = RD::TEXTURE_TYPE_2D;
-			tf.width = device->screen_get_width();
-			tf.height = device->screen_get_height();
-			tf.usage_bits = RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT;
-			tf.format = RD::DATA_FORMAT_R8G8B8A8_UNORM;
-
-			texture_fb = RD::get_singleton()->texture_create(tf, RD::TextureView());
-
-
-			tf_depth.texture_type = RD::TEXTURE_TYPE_2D;
-			tf_depth.width = device->screen_get_width();
-			tf_depth.height = device->screen_get_height();
-			tf_depth.usage_bits = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;// | RD::TEXTURE_USAGE_SAMPLING_BIT;
-			tf_depth.format = RD::DATA_FORMAT_D32_SFLOAT;
-
-			texture_depth = RD::get_singleton()->texture_create(tf_depth, RD::TextureView());
-		}
 
 		// Create frame buffer format
 
@@ -245,8 +224,6 @@ struct TriangleApplication : EE::Application
 
 		auto err = device->buffer_update(camera_ubo, 0, sizeof(Camera_UBO), &ubo);
 
-		imgui_fb = device->get_imgui_texture();
-
 		device->imgui_begin_frame();
 		const auto timer = Services::get().get<Util::FrameTimer>();
 		
@@ -261,28 +238,6 @@ struct TriangleApplication : EE::Application
 		// ---- Build the frame graph ----
 		FrameGraph fg;
 		FrameGraphBlackboard bb;
-
-
-		//Rendering::FrameGraphTexture::Desc scene_desc{
-		//	tf,
-		//	RD::TextureView(),
-		//	"scene texture"
-		//};
-
-		//Rendering::FrameGraphTexture::Desc depth_desc{
-		//tf_depth,
-		//RD::TextureView(),
-		//"depth texture"
-		//};
-
-		//Rendering::FrameGraphTexture scene_tex;
-		//scene_tex.texture_rid = texture_fb;
-
-		//Rendering::FrameGraphTexture depth_tex;
-		//depth_tex.texture_rid = texture_depth;
-
-		//FrameGraphResource scene_res = fg.import("scene texture", scene_desc, std::move(scene_tex));
-		//FrameGraphResource depth_res = fg.import("depth texture", depth_desc, std::move(depth_tex));
 
 		add_basic_pass(fg, bb, { device->screen_get_width(), device->screen_get_height() }, pipeline, uniform_set);
 		Rendering::add_imgui_pass(fg, bb, { device->screen_get_width(), device->screen_get_height() });
@@ -309,9 +264,9 @@ struct TriangleApplication : EE::Application
 		device->free_rid(camera_ubo);
 		device->free_rid(texture_uniform);
 		device->free_rid(texture_uniform_red);
-		device->free_rid(texture_fb);
-		device->free_rid(texture_depth);
-		device->free_rid(imgui_fb);
+		//device->free_rid(texture_fb);
+		//device->free_rid(texture_depth);
+		//device->free_rid(imgui_fb);
 		device->free_rid(pipeline);
 		device->free_rid(sampler);
 		//device->free_rid(scene_fb);
@@ -323,19 +278,10 @@ private:
 	RID texture_uniform_red;
 	RID sampler;
 	RID uniform_set;
-	RD::TextureFormat tf_depth;
 
 	Rendering::MeshPrimitive prim;
 
 	RID pipeline;
-
-	RID texture_fb;
-	RID texture_depth;
-	RID imgui_texture_fb;
-	RDC::TextureFormat tf;
-
-	RID scene_fb;
-	RID imgui_fb;
 	Camera camera;
 
 	std::shared_ptr<EE::InputSystemInterface> input_system;

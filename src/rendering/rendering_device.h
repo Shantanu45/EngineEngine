@@ -26,6 +26,7 @@ namespace Vulkan
 namespace Rendering
 {
 	class FramebufferCache;
+	class TransientTextureCache;
 	static Compiler::Stage compiler_stage_from_shader_stage(const RenderingDeviceCommons::ShaderStage stage)
 	{
 		switch (stage)
@@ -968,6 +969,8 @@ namespace Rendering
 #pragma region Texture
 
 		RID texture_buffer_create(uint32_t p_size_elements, DataFormat p_format, std::span<uint8_t> p_data = {});
+		RID acquire_texture(const RDD::TextureFormat& p_format, const RenderingDevice::TextureView& p_view, const std::vector<std::vector<uint8_t>>& p_data);
+		void release_texture(RID p_texture);
 		RID texture_create(const TextureFormat& p_format, const TextureView& p_view, const std::vector<std::vector<uint8_t>>& p_data = std::vector<std::vector<uint8_t>>());
 		RID texture_create_shared(const TextureView& p_view, RID p_with_texture);
 		RID texture_create_from_extension(TextureType p_type, DataFormat p_format, TextureSamples p_samples, BitField<RenderingDevice::TextureUsageBits> p_usage,
@@ -1191,6 +1194,7 @@ namespace Rendering
 		std::unordered_map<RID, std::unordered_set<RID>> reverse_dependency_map; // Same as above, but in reverse.
 
 		std::unique_ptr<FramebufferCache> fb_cache;
+		std::unique_ptr<TransientTextureCache> tex_cache;
 
 		std::vector<TransferWorker*> transfer_worker_pool;
 		uint32_t transfer_worker_pool_size = 0;

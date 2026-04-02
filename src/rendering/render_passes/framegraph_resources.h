@@ -51,7 +51,7 @@ namespace Rendering
 				return;
 			}
 
-			texture_rid = rc.device->texture_create(
+			texture_rid = rc.device->acquire_texture(
 				desc.texture_format,
 				desc.texture_view,
 				{}
@@ -65,7 +65,7 @@ namespace Rendering
 				return;
 			}
 
-			rc.device->free_rid(texture_rid);
+			rc.device->release_texture(texture_rid);
 		}
 
 		inline void pre_read(const Desc& desc, uint32_t flags, void* ctx) {
