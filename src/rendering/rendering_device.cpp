@@ -3079,19 +3079,16 @@ namespace Rendering
 		return true;
 	}
 
-	bool RenderingDevice::begin_render_pass_from_frame_buffer(RID p_frame_buffer, Rect2i p_region, const Color& p_clear_color)
+	bool RenderingDevice::begin_render_pass_from_frame_buffer(RID p_frame_buffer, Rect2i p_region, const std::span<RenderingDeviceDriver::RenderPassClearValue>& p_clear_color)
 	{
 		RDD::CommandBufferID command_buffer = frames[frame].command_buffer;
 		std::vector<Rect2i> viewport{ p_region };
-
-		std::array<RenderingDeviceDriver::RenderPassClearValue, 1> val;
-		val[0].color = p_clear_color;
 
 		auto frame_buffer = framebuffer_owner.get_or_null(p_frame_buffer);
 		auto frame_buffer_format = framebuffer_formats[frame_buffer->format_id];
 		auto render_pass = frame_buffer_format.render_pass;
 
-		driver->command_begin_render_pass(command_buffer, render_pass, rid_to_frame_buffer_id[p_frame_buffer], RenderingDeviceDriver::COMMAND_BUFFER_TYPE_PRIMARY, viewport[0], val);
+		driver->command_begin_render_pass(command_buffer, render_pass, rid_to_frame_buffer_id[p_frame_buffer], RenderingDeviceDriver::COMMAND_BUFFER_TYPE_PRIMARY, viewport[0], p_clear_color);
 		driver->command_render_set_viewport(command_buffer, viewport);
 		driver->command_render_set_scissor(command_buffer, viewport);
 		return true;

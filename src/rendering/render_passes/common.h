@@ -28,8 +28,8 @@ namespace Rendering
 
 			[&](FrameGraph::Builder& builder, blit_pass_resource& data)
 			{
-				data.scene = builder.read(scene.scene, 1u);
-				data.ui = builder.read(ui.ui, 1u);
+				data.scene = builder.read(scene.scene, TEXTURE_READ_FLAGS::READ_COLOR);
+				data.ui = builder.read(ui.ui, TEXTURE_READ_FLAGS::READ_COLOR);
 				builder.set_side_effect();		// mark as non cull able
 			},
 
@@ -58,7 +58,7 @@ namespace Rendering
 
 				[image_handle](FrameGraph::Builder& builder, imgui_pass_resource& data)
 				{
-					data.ui = builder.write(image_handle, 1u);
+					data.ui = builder.write(image_handle, TEXTURE_WRITE_FLAGS::WRITE_COLOR);
 				},
 
 				[=](const imgui_pass_resource& data,

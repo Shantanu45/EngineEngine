@@ -4530,7 +4530,7 @@ namespace Vulkan
 	// ----- SUBPASS -----
 
 	static void _attachment_reference_to_vk(const RenderingDeviceDriverVulkan::AttachmentReference& p_attachment_reference, VkAttachmentReference2KHR* r_vk_attachment_reference) {
-		*r_vk_attachment_reference = {};
+		//r_vk_attachment_reference = {};
 		r_vk_attachment_reference->sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2_KHR;
 		r_vk_attachment_reference->attachment = p_attachment_reference.attachment;
 		r_vk_attachment_reference->layout = RD_TO_VK_LAYOUT[p_attachment_reference.layout];
@@ -4563,6 +4563,9 @@ namespace Vulkan
 
 		std::vector<VkSubpassDescription2KHR> vk_subpasses_vec(p_subpasses.size());
 		VkSubpassDescription2KHR* vk_subpasses = vk_subpasses_vec.data();
+
+		//std::vector<std::unique_ptr<VkAttachmentReference2KHR>> vk_subpass_depth_stencil_attachment;// = nullptr;
+
 		for (uint32_t i = 0; i < p_subpasses.size(); i++) {
 
 			vk_subpass_input_attachments_vec.resize(p_subpasses[i].input_references.size());
@@ -4585,8 +4588,10 @@ namespace Vulkan
 
 			VkAttachmentReference2KHR* vk_subpass_depth_stencil_attachment = nullptr;
 			if (p_subpasses[i].depth_stencil_reference.attachment != AttachmentReference::UNUSED) {
-				vk_subpass_depth_stencil_attachment = vk_subpass_depth_stencil_attachment_vec.data();
-				_attachment_reference_to_vk(p_subpasses[i].depth_stencil_reference, vk_subpass_depth_stencil_attachment);
+				vk_subpass_depth_stencil_attachment_vec.emplace_back(); // create element
+				auto& attachment = vk_subpass_depth_stencil_attachment_vec.back();
+				//vk_subpass_depth_stencil_attachment = vk_subpass_depth_stencil_attachment_vec.data();
+				_attachment_reference_to_vk(p_subpasses[i].depth_stencil_reference, &attachment);
 			}
 
 			vk_subpasses[i] = {};
@@ -4598,7 +4603,7 @@ namespace Vulkan
 			vk_subpasses[i].colorAttachmentCount = p_subpasses[i].color_references.size();
 			vk_subpasses[i].pColorAttachments = vk_subpass_color_attachments;
 			vk_subpasses[i].pResolveAttachments = vk_subpass_resolve_attachments;
-			vk_subpasses[i].pDepthStencilAttachment = vk_subpass_depth_stencil_attachment;
+			vk_subpasses[i].pDepthStencilAttachment = vk_subpass_depth_stencil_attachment_vec.data();
 			vk_subpasses[i].preserveAttachmentCount = p_subpasses[i].preserve_attachments.size();
 			vk_subpasses[i].pPreserveAttachments = p_subpasses[i].preserve_attachments.data();
 

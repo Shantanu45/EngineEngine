@@ -1007,7 +1007,7 @@ namespace Rendering
 		RDD::FramebufferID create_framebuffer_from_format_id(FramebufferFormatID p_format_id, std::vector<RID> p_attachments, uint32_t p_width, uint32_t p_height);
 		RDD::RenderPassID render_pass_from_format_id(FramebufferFormatID p_format_id);
 		bool begin_render_pass(RDD::RenderPassID p_render_pass, RDD::FramebufferID p_frame_buffer, Rect2i p_region, const Color& p_clear_color);
-		bool begin_render_pass_from_frame_buffer(RID p_frame_buffer, Rect2i p_region, const Color& p_clear_color);
+		bool begin_render_pass_from_frame_buffer(RID p_frame_buffer, Rect2i p_region, const std::span<RenderingDeviceDriver::RenderPassClearValue>& p_clear_color);
 		RDD::CommandBufferID get_current_command_buffer();
 
 		/**

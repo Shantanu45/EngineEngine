@@ -58,26 +58,31 @@ namespace Rendering
 		PipelineBuilder& set_blend_state(const RDC::PipelineColorBlendState& p_blend_state)
 		{
 			blend_state = p_blend_state;
+			return *this;
 		}
 
 		PipelineBuilder& set_dynamic_state_flags(const BitField<RDC::PipelineDynamicStateFlags> p_dynamic_state_flags)
 		{
 			dynamic_state_flags = p_dynamic_state_flags;
+			return *this;
 		}
 
 		PipelineBuilder& set_multisample_state(const RDC::PipelineMultisampleState& p_multisample_state)
 		{
 			multisample_state = p_multisample_state;
+			return *this;
 		}
 
 		PipelineBuilder& set_depth_stencil_state(const RDC::PipelineDepthStencilState& p_depth_stencil_state)
 		{
 			depth_stencil_state = p_depth_stencil_state;
+			return *this;
 		}
 
 		PipelineBuilder& set_specialization_constants(const std::vector<RDC::PipelineSpecializationConstant>& p_specializatoin_constants)
 		{
 			specialization_constants = p_specializatoin_constants;
+			return *this;
 		}
 
 		RID build(RD::FramebufferFormatID p_frame_buffer_format, uint32_t p_render_subpass = 0)

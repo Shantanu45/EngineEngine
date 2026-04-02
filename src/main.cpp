@@ -24,10 +24,12 @@
 struct basic_pass_resource
 {
 	FrameGraphResource scene;
+	FrameGraphResource depth;
 };
 
 void add_basic_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
 	FrameGraphResource image_handle,
+	FrameGraphResource depth_handle,
 	RID frame_buffer,
 	RID pipeline,
 	RID uniform_set)
@@ -36,9 +38,10 @@ void add_basic_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
 		fg.add_callback_pass<basic_pass_resource>(
 			"Basic Pass",
 
-			[image_handle](FrameGraph::Builder& builder, basic_pass_resource& data)
+			[image_handle, depth_handle](FrameGraph::Builder& builder, basic_pass_resource& data)
 			{
-				data.scene = builder.write(image_handle, 1u);
+				data.scene = builder.write(image_handle, TEXTURE_WRITE_FLAGS::WRITE_COLOR);
+				data.depth = builder.write(depth_handle, TEXTURE_WRITE_FLAGS::WRITE_DEPTH);
 			},
 
 			[=](const basic_pass_resource& data,
@@ -55,8 +58,13 @@ void add_basic_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
 
 				Rect2i viewport(0, 0, w, h);
 				GPU_SCOPE(cmd, "Basic Pass", Color(1.0, 0.0, 0.0, 1.0));
+				std::array<RDD::RenderPassClearValue, 2> clear_values;
+				clear_values[0].color = Color();
+				clear_values[1].depth = 1.0;
+				clear_values[1].stencil = 0.0;
+
 				rc.device->begin_render_pass_from_frame_buffer(frame_buffer,
-					viewport, Color());
+					viewport, clear_values);
 
 				rc.device->bind_render_pipeline(cmd, pipeline);
 
@@ -102,7 +110,6 @@ struct TriangleApplication : EE::Application
 
 		std::vector<RID> fb_textures;
 		{ //texture
-			RD::TextureFormat tf;
 			tf.texture_type = RD::TEXTURE_TYPE_2D;
 			tf.width = device->screen_get_width();
 			tf.height = device->screen_get_height();
@@ -111,13 +118,29 @@ struct TriangleApplication : EE::Application
 
 			texture_fb = RD::get_singleton()->texture_create(tf, RD::TextureView());
 			fb_textures.push_back(texture_fb);
+
+
+			tf_depth.texture_type = RD::TEXTURE_TYPE_2D;
+			tf_depth.width = device->screen_get_width();
+			tf_depth.height = device->screen_get_height();
+			tf_depth.usage_bits = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;// | RD::TEXTURE_USAGE_SAMPLING_BIT;
+			tf_depth.format = RD::DATA_FORMAT_D32_SFLOAT;
+
+			texture_depth = RD::get_singleton()->texture_create(tf_depth, RD::TextureView());
+			fb_textures.push_back(texture_depth);
 		}
 
 		scene_fb = device->framebuffer_create(fb_textures);
 
+		RDC::PipelineDepthStencilState depth_state;
+		depth_state.enable_depth_test = true;
+		depth_state.enable_depth_write = true;
+		depth_state.depth_compare_operator = RDC::COMPARE_OP_LESS;
+
 		pipeline = Rendering::PipelineBuilder{}
 			.set_shader({ "assets://shaders/triangle_v2.vert", "assets://shaders/triangle_v2.frag" }, "triangle_shader")
 			.set_vertex_format(vertex_format)
+			.set_depth_stencil_state(depth_state)
 			.build_from_frame_buffer(scene_fb);		
 
 		camera_ubo = device->uniform_buffer_create(sizeof(Camera_UBO));
@@ -194,14 +217,13 @@ struct TriangleApplication : EE::Application
 
 		auto err = device->buffer_update(camera_ubo, 0, sizeof(Camera_UBO), &ubo);
 
-		Rendering::FrameGraphTexture::Desc scene_desc{
-			tf,
-			RD::TextureView(),
-			"scene texture"
-		};
+
 
 		Rendering::FrameGraphTexture scene_tex;
 		scene_tex.texture = texture_fb;
+
+		Rendering::FrameGraphTexture depth_tex;
+		depth_tex.texture = texture_depth;
 
 		imgui_fb = device->get_imgui_texture();
 
@@ -220,8 +242,21 @@ struct TriangleApplication : EE::Application
 		FrameGraph fg;
 		FrameGraphBlackboard bb;
 
+		Rendering::FrameGraphTexture::Desc scene_desc{
+			tf,
+			RD::TextureView(),
+			"scene texture"
+		};
+
+		Rendering::FrameGraphTexture::Desc depth_desc{
+		tf_depth,
+		RD::TextureView(),
+		"depth texture"
+		};
+
 		FrameGraphResource scene_res = fg.import("scene texture", scene_desc, std::move(scene_tex));
-		add_basic_pass(fg, bb, scene_res, scene_fb, pipeline, uniform_set);
+		FrameGraphResource depth_res = fg.import("depth texture", depth_desc, std::move(depth_tex));
+		add_basic_pass(fg, bb, scene_res, depth_res, scene_fb, pipeline, uniform_set);
 
 		Rendering::FrameGraphTexture imgui_tex;
 		imgui_tex.texture = imgui_fb;
@@ -263,12 +298,14 @@ private:
 	RID texture_uniform_red;
 	RID sampler;
 	RID uniform_set;
+	RD::TextureFormat tf_depth;
 
 	Rendering::MeshPrimitive prim;
 
 	RID pipeline;
 
 	RID texture_fb;
+	RID texture_depth;
 	RID imgui_texture_fb;
 	RDC::TextureFormat tf;
 

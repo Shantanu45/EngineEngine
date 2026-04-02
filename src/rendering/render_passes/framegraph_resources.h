@@ -10,6 +10,20 @@ using RDC = Rendering::RenderingDeviceCommons;
 using RDD = Rendering::RenderingDeviceDriver;
 
 
+enum TEXTURE_WRITE_FLAGS : uint8_t
+{
+	WRITE_COLOR,
+	WRITE_DEPTH,
+	WRITE_COUNT
+};
+
+enum TEXTURE_READ_FLAGS : uint8_t
+{
+	READ_COLOR,
+	READ_DEPTH,
+	READ_COUNT
+};
+
 namespace Rendering
 {
 	struct RenderContext
@@ -38,30 +52,49 @@ namespace Rendering
 
 		inline void pre_read(const Desc& desc, uint32_t flags, void* ctx) {
 			auto& rc = *static_cast<RenderContext*>(ctx);
+			if (flags == TEXTURE_READ_FLAGS::READ_COLOR)
+			{
+				RDD::TextureBarrier barrier2;
+				barrier2.src_access = RDD::BARRIER_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+				barrier2.dst_access = RDD::BARRIER_ACCESS_SHADER_READ_BIT;
+				barrier2.next_layout = RDD::TEXTURE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+				barrier2.prev_layout = RDD::TEXTURE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+				barrier2.subresources = { RDD::TEXTURE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+				barrier2.texture = rc.device->texture_id_from_rid(texture);
+				rc.device->apply_image_barrier(rc.command_buffer, RDD::PipelineStageBits::PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+					RDD::PipelineStageBits::PIPELINE_STAGE_FRAGMENT_SHADER_BIT, { &barrier2, 1 });
+			}
 
-			RDD::TextureBarrier barrier2;
-			barrier2.src_access = RDD::BARRIER_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-			barrier2.dst_access = RDD::BARRIER_ACCESS_SHADER_READ_BIT;
-			barrier2.next_layout = RDD::TEXTURE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-			barrier2.prev_layout = RDD::TEXTURE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-			barrier2.subresources = { RDD::TEXTURE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
-			barrier2.texture = rc.device->texture_id_from_rid(texture);
-			rc.device->apply_image_barrier(rc.command_buffer, RDD::PipelineStageBits::PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-				RDD::PipelineStageBits::PIPELINE_STAGE_FRAGMENT_SHADER_BIT, { &barrier2, 1 });
 		}
 
 		inline void pre_write(const Desc& desc, uint32_t flags, void* ctx) {
 			auto& rc = *static_cast<RenderContext*>(ctx);
 
-			RDD::TextureBarrier barrier;
-			barrier.src_access = 0;
-			barrier.dst_access = RDD::BARRIER_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-			barrier.prev_layout = RDD::TEXTURE_LAYOUT_UNDEFINED;
-			barrier.next_layout = RDD::TEXTURE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-			barrier.subresources = { RDD::TEXTURE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
-			barrier.texture = rc.device->texture_id_from_rid(texture);
-			rc.device->apply_image_barrier(rc.command_buffer, RDD::PipelineStageBits::PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-				RDD::PipelineStageBits::PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, { &barrier, 1 });
+			if (flags == TEXTURE_WRITE_FLAGS::WRITE_COLOR)
+			{
+				RDD::TextureBarrier barrier;
+				barrier.src_access = 0;
+				barrier.dst_access = RDD::BARRIER_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+				barrier.prev_layout = RDD::TEXTURE_LAYOUT_UNDEFINED;
+				barrier.next_layout = RDD::TEXTURE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+				barrier.subresources = { RDD::TEXTURE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+				barrier.texture = rc.device->texture_id_from_rid(texture);
+				rc.device->apply_image_barrier(rc.command_buffer, RDD::PipelineStageBits::PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+					RDD::PipelineStageBits::PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, { &barrier, 1 });
+			}
+			else if(flags == TEXTURE_WRITE_FLAGS::WRITE_DEPTH)
+			{
+				RDD::TextureBarrier barrier;
+				barrier.src_access = 0;
+				barrier.dst_access = RDD::BARRIER_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | RDD::BARRIER_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+				barrier.prev_layout = RDD::TEXTURE_LAYOUT_UNDEFINED;
+				barrier.next_layout = RDD::TEXTURE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+				barrier.subresources = { RDD::TEXTURE_ASPECT_DEPTH_BIT, 0, 1, 0, 1 };
+				barrier.texture = rc.device->texture_id_from_rid(texture);
+				rc.device->apply_image_barrier(rc.command_buffer, RDD::PipelineStageBits::PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+					RDD::PipelineStageBits::PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | RDD::PipelineStageBits::PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, { &barrier, 1 });
+			}
+
 		}
 
 		// to_string is used by the Graphviz dot exporter
