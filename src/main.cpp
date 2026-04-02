@@ -21,28 +21,39 @@
 #include "util/timer.h"
 
 
-struct basic_pass_resource
-{
-	FrameGraphResource scene;
-	FrameGraphResource depth;
-};
 
 void add_basic_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
-	FrameGraphResource image_handle,
-	FrameGraphResource depth_handle,
+	Size2i extent,
 	RID pipeline,
 	RID uniform_set)
 {
 	bb.add<basic_pass_resource>() =
 		fg.add_callback_pass<basic_pass_resource>(
 			"Basic Pass",
-
-			[image_handle, depth_handle](FrameGraph::Builder& builder, basic_pass_resource& data)
+			[&](FrameGraph::Builder& builder, basic_pass_resource& data)
 			{
-				data.scene = builder.write(image_handle, TEXTURE_WRITE_FLAGS::WRITE_COLOR);
-				data.depth = builder.write(depth_handle, TEXTURE_WRITE_FLAGS::WRITE_DEPTH);
-			},
+				RD::TextureFormat tf;
+				tf.texture_type = RD::TEXTURE_TYPE_2D;
+				tf.width = extent.x;
+				tf.height = extent.y;
+				tf.usage_bits = RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT;
+				tf.format = RD::DATA_FORMAT_R8G8B8A8_UNORM;
 
+				data.scene = builder.create<Rendering::FrameGraphTexture>("scene texture", { tf, RD::TextureView(), "scene texture" });
+
+				RD::TextureFormat tf_depth;
+				tf_depth.texture_type = RD::TEXTURE_TYPE_2D;
+				tf_depth.width = extent.x;
+				tf_depth.height = extent.y;
+				tf_depth.usage_bits = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;// | RD::TEXTURE_USAGE_SAMPLING_BIT;
+				tf_depth.format = RD::DATA_FORMAT_D32_SFLOAT;
+
+				data.depth = builder.create<Rendering::FrameGraphTexture>("depth texture", { tf_depth, RD::TextureView(), "depth texture" });
+
+
+				data.scene = builder.write(data.scene, TEXTURE_WRITE_FLAGS::WRITE_COLOR);
+				data.depth = builder.write(data.depth, TEXTURE_WRITE_FLAGS::WRITE_DEPTH);
+			},
 			[=](const basic_pass_resource& data,
 				FrameGraphPassResources& resources,
 				void* ctx)
@@ -252,33 +263,30 @@ struct TriangleApplication : EE::Application
 		FrameGraphBlackboard bb;
 
 
-		Rendering::FrameGraphTexture::Desc scene_desc{
-			tf,
-			RD::TextureView(),
-			"scene texture"
-		};
+		//Rendering::FrameGraphTexture::Desc scene_desc{
+		//	tf,
+		//	RD::TextureView(),
+		//	"scene texture"
+		//};
 
-		Rendering::FrameGraphTexture::Desc depth_desc{
-		tf_depth,
-		RD::TextureView(),
-		"depth texture"
-		};
+		//Rendering::FrameGraphTexture::Desc depth_desc{
+		//tf_depth,
+		//RD::TextureView(),
+		//"depth texture"
+		//};
 
-		Rendering::FrameGraphTexture scene_tex;
-		scene_tex.texture_rid = texture_fb;
+		//Rendering::FrameGraphTexture scene_tex;
+		//scene_tex.texture_rid = texture_fb;
 
-		Rendering::FrameGraphTexture depth_tex;
-		depth_tex.texture_rid = texture_depth;
+		//Rendering::FrameGraphTexture depth_tex;
+		//depth_tex.texture_rid = texture_depth;
 
-		FrameGraphResource scene_res = fg.import("scene texture", scene_desc, std::move(scene_tex));
-		FrameGraphResource depth_res = fg.import("depth texture", depth_desc, std::move(depth_tex));
-		add_basic_pass(fg, bb, scene_res, depth_res, pipeline, uniform_set);
+		//FrameGraphResource scene_res = fg.import("scene texture", scene_desc, std::move(scene_tex));
+		//FrameGraphResource depth_res = fg.import("depth texture", depth_desc, std::move(depth_tex));
 
-		Rendering::FrameGraphTexture imgui_tex;
-		imgui_tex.texture_rid = imgui_fb;
-		FrameGraphResource imgui_res = fg.import("scene texture", scene_desc, std::move(imgui_tex));
-		Rendering::add_imgui_pass(fg, bb, imgui_res);
-		Rendering::add_blit_pass<basic_pass_resource>(fg, bb);
+		add_basic_pass(fg, bb, { device->screen_get_width(), device->screen_get_height() }, pipeline, uniform_set);
+		Rendering::add_imgui_pass(fg, bb, { device->screen_get_width(), device->screen_get_height() });
+		Rendering::add_blit_pass(fg, bb);
 
 		fg.compile();
 

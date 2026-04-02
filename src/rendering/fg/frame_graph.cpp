@@ -54,7 +54,9 @@ void FrameGraph::compile() {
   // -- Calculate resources lifetime:
 
   for (auto &pass : m_passNodes) {
-    if (pass.m_refCount == 0) continue;
+    //if (pass.m_refCount == 0) continue;       // test
+    if (pass.m_refCount == 0 && !pass.hasSideEffect()) continue;
+
 
     for (const auto id : pass.m_creates)
       _get_resource_entry(id).m_producer = &pass;
@@ -82,8 +84,14 @@ void FrameGraph::execute(void *context, void *allocator) {
     std::invoke(*pass.m_exec, resources, context);
 
     for (auto &entry : m_resourceRegistry) {
-      if (entry.m_last == &pass && entry.is_transient())
-        entry.destroy(allocator);
+        if (entry.m_last == &pass && entry.is_transient())
+        {
+			printf("Destroying %s after pass %s\n",
+				entry.to_string().c_str(),
+				pass.m_name.c_str());
+			entry.destroy(allocator);
+
+      }
     }
   }
 }

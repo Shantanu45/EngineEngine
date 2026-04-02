@@ -1055,7 +1055,7 @@ namespace Rendering
 		void imgui_begin_frame();
 		RID get_imgui_texture();
 		RenderingDeviceDriver::FramebufferID get_imgui_framebuffer();
-		void imgui_execute(void* p_draw_data, RDD::CommandBufferID p_command_buffer, RDD::PipelineID p_pipeline = RDD::PipelineID());
+		void imgui_execute(void* p_draw_data, RDD::CommandBufferID p_command_buffer, RID p_frame_buffer, RDD::PipelineID p_pipeline = RDD::PipelineID());
 		Vulkan::ImGuiDevice* get_imgui_device();
 		void set_resource_name(RID p_id, const std::string& p_name);
 		void capture_timestamp(const std::string& p_name);

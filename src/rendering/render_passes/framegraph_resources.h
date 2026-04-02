@@ -44,14 +44,14 @@ namespace Rendering
 		RID texture_rid;
 
 		inline void create(const Desc& desc, void* ctx) {
-			auto& device = *static_cast<Rendering::RenderingDevice*>(ctx);
+			auto& rc = *static_cast<Rendering::RenderContext*>(ctx);
 
 			if (texture_rid.is_valid()) {
 				assert(false && "already created");
 				return;
 			}
 
-			texture_rid = device.texture_create(
+			texture_rid = rc.device->texture_create(
 				desc.texture_format,
 				desc.texture_view,
 				{}
@@ -59,13 +59,13 @@ namespace Rendering
 		}
 
 		inline void destroy(const Desc& desc, void* ctx) {
-			auto& device = *static_cast<Rendering::RenderingDevice*>(ctx);
+			auto& rc = *static_cast<Rendering::RenderContext*>(ctx);
 			if (texture_rid.is_null()) {
 				assert(false && "already destroyed");
 				return;
 			}
 
-			device.free_rid(texture_rid);
+			rc.device->free_rid(texture_rid);
 		}
 
 		inline void pre_read(const Desc& desc, uint32_t flags, void* ctx) {
@@ -98,6 +98,10 @@ namespace Rendering
 					RDD::PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
 					{ &barrier, 1 });
 			}
+			else
+			{
+
+			}
 		}
 
 		inline void pre_write(const Desc& desc, uint32_t flags, void* ctx) {
@@ -129,6 +133,10 @@ namespace Rendering
 					RDD::PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
 					RDD::PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
 					{ &barrier, 1 });
+			}
+			else
+			{
+
 			}
 		}
 

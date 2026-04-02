@@ -20,8 +20,8 @@ namespace Rendering
 
 		RID rd_texture = p_render_targets[0].render_target;		// 0 for now
 		RID rd_texture_ui = p_render_targets[0].ui;		// 0 for now
-
-		;
+		// #come back, textures are created every frame now, new id every time. fix this
+		RID uniform_set;
 		if (!render_target_descriptors.contains(rd_texture) || render_target_descriptors.contains(rd_texture_ui)) {
 			std::vector<RenderingDevice::Uniform> uniforms;
 			RenderingDevice::Uniform u;
@@ -40,7 +40,7 @@ namespace Rendering
 			uniforms.push_back(u_ui);
 
 
-			RID uniform_set = rendering_device->uniform_set_create(uniforms, blit.shader, 0);
+			uniform_set = rendering_device->uniform_set_create(uniforms, blit.shader, 0);
 
 			render_target_descriptors.insert({ rd_texture, uniform_set });
 			render_target_descriptors.insert({ rd_texture_ui, uniform_set });
@@ -50,7 +50,7 @@ namespace Rendering
 
 		rendering_device->bind_render_pipeline(rendering_device->get_current_command_buffer(), blit_pipeline);
 		rendering_device->bind_index_array(blit.array);
-		rendering_device->bind_uniform_set(blit.shader, render_target_descriptors.begin()->second, 0);
+		rendering_device->bind_uniform_set(blit.shader, uniform_set, 0);
 		
 		rendering_device->render_draw_indexed(rendering_device->get_current_command_buffer(), 6, 1, 0, 0, 0);
 

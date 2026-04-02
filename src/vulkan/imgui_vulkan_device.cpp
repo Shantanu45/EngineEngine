@@ -215,8 +215,8 @@ namespace Vulkan
 		render_pass_info.pAttachments = &color_attachment;
 		render_pass_info.subpassCount = 1;
 		render_pass_info.pSubpasses = &subpass;
-		render_pass_info.dependencyCount = 1;
-		render_pass_info.pDependencies = &dependency;
+		render_pass_info.dependencyCount = 0;//1;
+		render_pass_info.pDependencies = nullptr;// &dependency;
 
 		if (vkCreateRenderPass(device, &render_pass_info, nullptr, &vk_renderpass) != VK_SUCCESS)
 		{
