@@ -30,7 +30,6 @@ struct basic_pass_resource
 void add_basic_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
 	FrameGraphResource image_handle,
 	FrameGraphResource depth_handle,
-	RID frame_buffer,
 	RID pipeline,
 	RID uniform_set)
 {
@@ -51,12 +50,16 @@ void add_basic_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
 				auto& rc = *static_cast<Rendering::RenderContext*>(ctx);
 				auto cmd = rc.command_buffer;
 
-				auto& scene = resources.get<Rendering::FrameGraphTexture>(data.scene);
+				auto& scene_tex = resources.get<Rendering::FrameGraphTexture>(data.scene);
+				auto& depth_tex = resources.get<Rendering::FrameGraphTexture>(data.depth);
 
 				uint32_t w = rc.device->screen_get_width();
 				uint32_t h = rc.device->screen_get_height();
 
 				Rect2i viewport(0, 0, w, h);
+
+				RID frame_buffer = rc.device->framebuffer_create({scene_tex.texture_rid, depth_tex.texture_rid});
+
 				GPU_SCOPE(cmd, "Basic Pass", Color(1.0, 0.0, 0.0, 1.0));
 				std::array<RDD::RenderPassClearValue, 2> clear_values;
 				clear_values[0].color = Color();
@@ -108,7 +111,6 @@ struct TriangleApplication : EE::Application
 
 		auto device = wsi->get_rendering_device();
 
-		std::vector<RID> fb_textures;
 		{ //texture
 			tf.texture_type = RD::TEXTURE_TYPE_2D;
 			tf.width = device->screen_get_width();
@@ -117,7 +119,6 @@ struct TriangleApplication : EE::Application
 			tf.format = RD::DATA_FORMAT_R8G8B8A8_UNORM;
 
 			texture_fb = RD::get_singleton()->texture_create(tf, RD::TextureView());
-			fb_textures.push_back(texture_fb);
 
 
 			tf_depth.texture_type = RD::TEXTURE_TYPE_2D;
@@ -127,10 +128,26 @@ struct TriangleApplication : EE::Application
 			tf_depth.format = RD::DATA_FORMAT_D32_SFLOAT;
 
 			texture_depth = RD::get_singleton()->texture_create(tf_depth, RD::TextureView());
-			fb_textures.push_back(texture_depth);
 		}
 
-		scene_fb = device->framebuffer_create(fb_textures);
+		// Create frame buffer format
+
+		std::vector<RD::AttachmentFormat> attachments;
+
+		RD::AttachmentFormat color;
+		color.format = RD::DATA_FORMAT_R8G8B8A8_UNORM;
+		color.usage_flags = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT;
+
+		attachments.push_back(color);
+
+		RD::AttachmentFormat depth;
+		depth.format = RD::DATA_FORMAT_D32_SFLOAT;
+		depth.usage_flags = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+
+		attachments.push_back(depth);
+
+		auto framebuffer_format = RD::get_singleton()->framebuffer_format_create(attachments);
+
 
 		RDC::PipelineDepthStencilState depth_state;
 		depth_state.enable_depth_test = true;
@@ -141,7 +158,7 @@ struct TriangleApplication : EE::Application
 			.set_shader({ "assets://shaders/triangle_v2.vert", "assets://shaders/triangle_v2.frag" }, "triangle_shader")
 			.set_vertex_format(vertex_format)
 			.set_depth_stencil_state(depth_state)
-			.build_from_frame_buffer(scene_fb);		
+			.build(framebuffer_format);
 
 		camera_ubo = device->uniform_buffer_create(sizeof(Camera_UBO));
 
@@ -255,7 +272,7 @@ struct TriangleApplication : EE::Application
 
 		FrameGraphResource scene_res = fg.import("scene texture", scene_desc, std::move(scene_tex));
 		FrameGraphResource depth_res = fg.import("depth texture", depth_desc, std::move(depth_tex));
-		add_basic_pass(fg, bb, scene_res, depth_res, scene_fb, pipeline, uniform_set);
+		add_basic_pass(fg, bb, scene_res, depth_res, pipeline, uniform_set);
 
 		Rendering::FrameGraphTexture imgui_tex;
 		imgui_tex.texture_rid = imgui_fb;
