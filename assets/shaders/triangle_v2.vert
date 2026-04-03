@@ -8,13 +8,18 @@ layout(location = 3) in vec4 inTangent;
 layout(location = 0) out vec3 fragCol;
 layout(location = 1) out vec2 fragUV;
 
-layout(binding = 0) uniform UBO {
+//layout(binding = 0) uniform UBO {
+//    mat4 model;
+//    mat4 view_projectoin;
+//} ubo;
+
+layout(push_constant) uniform PushConstants {
     mat4 model;
     mat4 view_projectoin;
-} ubo;
+} pc;
 
 void main() {
-    gl_Position = ubo.view_projectoin * ubo.model * vec4(inPosition, 1.0);
+    gl_Position = pc.view_projectoin * pc.model * vec4(inPosition, 1.0);
     fragUV = inTexcoord;
     fragCol = inNormal; // use normal for debug color
 }

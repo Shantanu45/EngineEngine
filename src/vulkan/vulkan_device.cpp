@@ -3408,11 +3408,11 @@ namespace Vulkan
 			pipeline_layout_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 			pipeline_layout_create_info.setLayoutCount = shader_info.vk_descriptor_set_layouts.size();
 			pipeline_layout_create_info.pSetLayouts = shader_info.vk_descriptor_set_layouts.data();
+			std::vector<VkPushConstantRange> push_constant_range_vec;
 
 			if (shader_refl.push_constant_size > 0) {
-				std::vector<VkPushConstantRange> push_constant_range_vec;
-				VkPushConstantRange* push_constant_range = push_constant_range_vec.data();
-				*push_constant_range = {};
+				push_constant_range_vec.emplace_back();
+				VkPushConstantRange* push_constant_range = &(*(push_constant_range_vec.end() - 1));
 				push_constant_range->stageFlags = shader_info.vk_push_constant_stages;
 				push_constant_range->size = shader_refl.push_constant_size;
 				pipeline_layout_create_info.pushConstantRangeCount = 1;
