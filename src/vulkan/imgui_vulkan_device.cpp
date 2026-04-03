@@ -27,8 +27,7 @@ namespace Vulkan
 	}
 
 	Error ImGuiDevice::initialize(const uint32_t p_device_index, const uint32_t p_queue_family,
-		const uint32_t p_min_image_count, const uint32_t p_swapchain_image_count, const RenderingDeviceCommons::DataFormat p_swapchain_format,
-		std::span<RenderingDeviceDriver::TextureID> p_attachments, uint32_t width, uint32_t height)
+		const uint32_t p_min_image_count, const uint32_t p_swapchain_image_count, const RenderingDeviceCommons::DataFormat p_swapchain_format, uint32_t width, uint32_t height)
 	{
 		ImGui::CreateContext();
 
@@ -86,7 +85,6 @@ namespace Vulkan
 		init_info.CheckVkResultFn = check_vk_result;
 		ImGui_ImplVulkan_Init(&init_info);
 
-		framebuffer = _create_imgui_framebuffers(vk_renderpass, p_attachments, width, height);
 		return OK;
 	}
 
@@ -173,7 +171,7 @@ namespace Vulkan
 		vkDestroyRenderPass(device, vk_renderpass, nullptr);
 
 		// Destroy framebuffer last
-		vulkan_driver->framebuffer_free(framebuffer);
+		//vulkan_driver->framebuffer_free(framebuffer);
 	}
 
 	RenderingDeviceDriver::RenderPassID ImGuiDevice::_create_render_pass(VkDevice device, VkFormat swapchainFormat)
@@ -229,13 +227,6 @@ namespace Vulkan
 		RenderingDeviceDriver::RenderPassID render_pass_id(&render_pass_device_info);
 
 		return render_pass_id;
-	}
-
-	RenderingDeviceDriver::FramebufferID ImGuiDevice::_create_imgui_framebuffers(VkRenderPass p_render_pass, std::span<RenderingDeviceDriver::TextureID> p_attachments, uint32_t p_width, uint32_t p_height)
-	{
-		RenderingDeviceDriver::RenderPassID render_pass_id(&render_pass_device_info);
-		return vulkan_driver->framebuffer_create(render_pass_id, p_attachments, p_width, p_height);
-
 	}
 
 

@@ -266,13 +266,15 @@ namespace Rendering
 
 		frames_drawn = frames.size();
 		frames_drawn++;
-		driver->command_buffer_begin(frames[0].command_buffer);
 		for (uint32_t i = 0; i < frames.size(); i++) {
+			driver->command_buffer_begin(frames[i].command_buffer);
+
 			// Reset all queries in a query pool before doing any operations with them..
-			driver->command_timestamp_query_pool_reset(frames[0].command_buffer, frames[i].timestamp_pool, max_timestamp_query_elements);
+			driver->command_timestamp_query_pool_reset(frames[i].command_buffer, frames[i].timestamp_pool, max_timestamp_query_elements);
+			driver->command_buffer_end(frames[i].command_buffer);
+
 		}
 
-		driver->command_buffer_end(frames[0].command_buffer);
 
 		// Convert block size from KB.
 		//upload_staging_buffers.block_size = GLOBAL_GET("rendering/rendering_device/staging_buffer/block_size_kb");
@@ -3471,14 +3473,9 @@ namespace Rendering
 		tf.width = screen_get_width();
 		tf.height = screen_get_height();
 		tf.usage_bits = TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | TEXTURE_USAGE_SAMPLING_BIT;
-		tf.format = driver->swap_chain_get_format(screen_swap_chains[swapchain_index]/*temp*/);
-
-		imgui_texture_rid = texture_create(tf, TextureView());
-		auto imgui_texture = texture_owner.get_or_null(imgui_texture_rid);
-		set_resource_name(imgui_texture_rid, "Imgui UI");
-		std::vector<RenderingDeviceDriver::TextureID> textures{ imgui_texture->driver_id };
+		tf.format = driver->swap_chain_get_format(screen_swap_chains[swapchain_index]/*temp*/);;
 		
-		imgui_device->initialize(p_devince_index, main_queue_family.id - 1, 2, _get_swap_chain_desired_count(), driver->swap_chain_get_format(screen_swap_chains[swapchain_index]/*temp*/), textures, screen_get_width(), screen_get_height());
+		imgui_device->initialize(p_devince_index, main_queue_family.id - 1, 2, _get_swap_chain_desired_count(), driver->swap_chain_get_format(screen_swap_chains[swapchain_index]/*temp*/), screen_get_width(), screen_get_height());
 
 		return OK;
 	}
@@ -3492,18 +3489,12 @@ namespace Rendering
 		return imgui_texture_rid;
 	}
 
-	RenderingDeviceDriver::FramebufferID RenderingDevice::get_imgui_framebuffer() {
-		return  imgui_device->get_imgui_framebuffer();
-	}
-
 	void RenderingDevice::imgui_execute(void* p_draw_data, RDD::CommandBufferID p_command_buffer, RID p_frame_buffer, RDD::PipelineID p_pipeline /*= RDD::PipelineID()*/)
 	{
 		std::vector<Rect2i> viewport{ Rect2i(0, 0, screen_get_width(), screen_get_height()) };
 
 		std::array<RenderingDeviceDriver::RenderPassClearValue, 1> val;
 		val[0].color = Color();
-
-		//auto frame_buffer = framebuffer_owner.get_or_null(p_frame_buffer);
 
 		driver->command_begin_render_pass(p_command_buffer, imgui_device->get_imgui_renderpass(), rid_to_frame_buffer_id[p_frame_buffer], RenderingDeviceDriver::COMMAND_BUFFER_TYPE_PRIMARY, viewport[0], val);
 		driver->command_render_set_viewport(p_command_buffer, viewport);
@@ -3601,7 +3592,7 @@ namespace Rendering
 
 		//draw_graph.add_capture_timestamp(frames[frame].timestamp_pool, frames[frame].timestamp_count);
 
-		driver->command_timestamp_write(get_current_command_buffer(), frames[frame].timestamp_pool, frames[frame].timestamp_count);
+		driver->command_timestamp_write(frames[frame].command_buffer, frames[frame].timestamp_pool, frames[frame].timestamp_count);
 
 		frames[frame].timestamp_names[frames[frame].timestamp_count] = p_name;
 		frames[frame].timestamp_cpu_values[frames[frame].timestamp_count] = Util::get_current_time_usec();

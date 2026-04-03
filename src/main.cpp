@@ -210,7 +210,7 @@ struct TriangleApplication : EE::Application
 	
 	void render_frame(double frame_time, double elapsed_time) override
 	{
-		TIMESTAMP_BEGIN();
+		//TIMESTAMP_BEGIN();
 		auto wsi = get_wsi();
 
 		auto device = wsi->get_rendering_device();
@@ -226,13 +226,13 @@ struct TriangleApplication : EE::Application
 		device->imgui_begin_frame();
 		const auto timer = Services::get().get<Util::FrameTimer>();
 		
-		auto gpu_time = wsi->get_gpu_frame_time();
-		auto cpu_time = wsi->get_cpu_frame_time();
+		//auto gpu_time = wsi->get_gpu_frame_time();
+		//auto cpu_time = wsi->get_cpu_frame_time();
 
 		ImGui::Text("FPS: %.1f", timer->get_fps());
 		ImGui::Text("Frame Time: %.3f ms", timer->get_frame_time() * 1000.0);
-		ImGui::Text("CPUe Time: %.3f ms", cpu_time);
-		ImGui::Text("GPUe Time: %.3f ms", gpu_time);
+		//ImGui::Text("CPUe Time: %.3f ms", cpu_time);
+		//ImGui::Text("GPUe Time: %.3f ms", gpu_time);
 
 		// ---- Build the frame graph ----
 		FrameGraph fg;
@@ -251,7 +251,7 @@ struct TriangleApplication : EE::Application
 		rc.device = device;
 		rc.wsi = wsi;
 		fg.execute(&rc, &rc);
-		TIMESTAMP_BEGIN();
+		//TIMESTAMP_BEGIN();
 	}
 
 	void teardown_application() override
@@ -265,6 +265,7 @@ struct TriangleApplication : EE::Application
 		device->free_rid(texture_uniform_red);
 		device->free_rid(pipeline);
 		device->free_rid(sampler);
+		//device->free_rid(uniform_set);
 	}
 
 private:

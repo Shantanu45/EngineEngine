@@ -14,8 +14,7 @@ namespace Vulkan
 		virtual ~ImGuiDevice();
 
 		Error initialize(const uint32_t p_device_index, const uint32_t p_queue_family,
-			const uint32_t p_min_image_count, const uint32_t p_swapchain_image_count, const RenderingDeviceCommons::DataFormat p_swapchain_format,
-			std::span<RenderingDeviceDriver::TextureID> p_attachments, uint32_t width, uint32_t height);
+			const uint32_t p_min_image_count, const uint32_t p_swapchain_image_count, const RenderingDeviceCommons::DataFormat p_swapchain_format, uint32_t width, uint32_t height);
 
 		void poll_event(void* event);
 
@@ -24,11 +23,6 @@ namespace Vulkan
 		void render();
 
 		void end_frame();
-
-		RenderingDeviceDriver::FramebufferID get_imgui_framebuffer() {
-
-			return framebuffer;
-		}
 
 		RenderingDeviceDriver::RenderPassID get_imgui_renderpass() {
 			RenderingDeviceDriver::RenderPassID render_pass_id(&render_pass_device_info);
@@ -48,7 +42,6 @@ namespace Vulkan
 		WindowPlatformData platform_data;
 		VkDescriptorPool descriptor_pool = VK_NULL_HANDLE;
 
-		RenderingDeviceDriver::FramebufferID framebuffer;
 		RenderingDeviceDriver::RenderPassID renderbuffer;
 		VkRenderPass vk_renderpass;
 		RenderingDeviceDriverVulkan::RenderPassInfo render_pass_device_info;
