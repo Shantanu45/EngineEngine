@@ -6,11 +6,14 @@
 #include "rendering/camera.h"
 #include "input/input.h"
 #include "util/timer.h"
+#include "rendering/primitve_shapes.h"
+
 
 void add_basic_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
 	Size2i extent,
 	RID pipeline,
-	RID uniform_set)
+	RID uniform_set,
+	Rendering::MeshHandle mesh_handle)
 {
 	bb.add<basic_pass_resource>() =
 		fg.add_callback_pass<basic_pass_resource>(
@@ -71,7 +74,7 @@ void add_basic_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
 					rc.device->get_shader_rid("triangle_shader"),
 					uniform_set, 0);
 
-				rc.wsi->bind_and_draw_indexed(cmd, "two_cubes");
+				rc.wsi->draw_mesh(cmd, mesh_handle);
 
 				rc.wsi->end_render_pass(cmd);
 
@@ -104,7 +107,7 @@ struct TutorialApplication : EE::Application
 		wsi->create_new_vertex_format(wsi->get_default_vertex_attribute(), Rendering::VERTEX_FORMAT_VARIATIONS::DEFAULT);
 		auto vertex_format = wsi->get_vertex_format_by_type(Rendering::VERTEX_FORMAT_VARIATIONS::DEFAULT);
 
-		wsi->load_gltf("assets://gltf/two_cubes.glb", "two_cubes");
+		mesh_handle = Rendering::Shapes::upload_sphere(*wsi, 32, 32, "hires_sphere");
 
 		auto device = wsi->get_rendering_device();
 
@@ -221,7 +224,7 @@ struct TutorialApplication : EE::Application
 		FrameGraph fg;
 		FrameGraphBlackboard bb;
 
-		add_basic_pass(fg, bb, { device->screen_get_width(), device->screen_get_height() }, pipeline, uniform_set);
+		add_basic_pass(fg, bb, { device->screen_get_width(), device->screen_get_height() }, pipeline, uniform_set, mesh_handle);
 		Rendering::add_imgui_pass(fg, bb, { device->screen_get_width(), device->screen_get_height() });
 		Rendering::add_blit_pass(fg, bb);
 
@@ -263,6 +266,8 @@ private:
 	Camera camera;
 
 	std::shared_ptr<EE::InputSystemInterface> input_system;
+
+	Rendering::MeshHandle mesh_handle;
 };
 
 namespace EE
