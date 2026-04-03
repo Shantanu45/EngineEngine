@@ -355,7 +355,8 @@ namespace Rendering::Shapes
                 { std::cos(theta1) * radius, -half_h, std::sin(theta1) * radius },
                 n1, { float(j + 1) / float(slices), 0.0f }, tangent });
 
-            d.indices.insert(d.indices.end(), { tip_idx, tip_idx + 1, tip_idx + 2 });
+            //d.indices.insert(d.indices.end(), { tip_idx, tip_idx + 1, tip_idx + 2 });
+            d.indices.insert(d.indices.end(), { tip_idx, tip_idx + 2, tip_idx + 1 });
         }
 
         if (cap)
@@ -374,9 +375,15 @@ namespace Rendering::Shapes
                     { 1,0,0,1 }
                     });
             }
+            //for (uint32_t j = 0; j < slices; ++j)
+				//d.indices.insert(d.indices.end(),
+				//	{ center, ring_start + j + 1, ring_start + j });
             for (uint32_t j = 0; j < slices; ++j)
-                d.indices.insert(d.indices.end(),
-                    { center, ring_start + j + 1, ring_start + j });
+            {
+				d.indices.insert(d.indices.end(), { center, ring_start + j, ring_start + j + 1 });
+            }
+
+
         }
 
         return d;

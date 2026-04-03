@@ -107,7 +107,7 @@ struct TutorialApplication : EE::Application
 		wsi->create_new_vertex_format(wsi->get_default_vertex_attribute(), Rendering::VERTEX_FORMAT_VARIATIONS::DEFAULT);
 		auto vertex_format = wsi->get_vertex_format_by_type(Rendering::VERTEX_FORMAT_VARIATIONS::DEFAULT);
 
-		mesh_handle = Rendering::Shapes::upload_sphere(*wsi, 32, 32, "hires_sphere");
+		mesh_handle = Rendering::Shapes::upload_cone(*wsi, 32, 32, "hires_sphere");
 
 		auto device = wsi->get_rendering_device();
 
