@@ -25,13 +25,9 @@ namespace Rendering
 		DEBUG_ASSERT(name_to_handle.empty());
 	}
 
-	Rendering::MeshHandle MeshStorage::create_mesh(
-		const std::string& name,
-		std::span<uint8_t> vertex_data,
-		std::span<uint8_t> index_data,
-		const std::vector<PrimitiveRange>& ranges,
-		RenderingDevice::VertexFormatID vertex_format,
-		RenderingDeviceCommons::IndexBufferFormat index_format)
+	Rendering::MeshHandle MeshStorage::create_mesh( const std::string& name, std::span<uint8_t> vertex_data,
+		std::span<uint8_t> index_data, const std::vector<PrimitiveRange>& ranges,
+		RenderingDevice::VertexFormatID vertex_format, RenderingDeviceCommons::IndexBufferFormat index_format)
 	{
 		DEBUG_ASSERT(rd != nullptr, "MeshStorage not initialized");
 		DEBUG_ASSERT(!vertex_data.empty(), "Vertex data is empty");
@@ -59,15 +55,8 @@ namespace Rendering
 			PrimitiveGPU prim{};
 			prim.vertex_count = r.vertex_count;
 			prim.index_count = r.index_count;
-			prim.vertex_array = rd->vertex_array_create(
-				r.vertex_count,
-				vertex_format,
-				{ mesh.vertex_buffer },
-				{ r.vertex_byte_offset });
-			prim.index_array = rd->index_array_create(
-				mesh.index_buffer,
-				r.index_offset,
-				r.index_count);
+			prim.vertex_array = rd->vertex_array_create( r.vertex_count, vertex_format, { mesh.vertex_buffer }, { r.vertex_byte_offset });
+			prim.index_array = rd->index_array_create( mesh.index_buffer, r.index_offset, r.index_count);
 
 			mesh.primitives.push_back(prim);
 		}

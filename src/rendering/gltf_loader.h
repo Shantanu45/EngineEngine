@@ -14,15 +14,16 @@
 #include "util/error_macros.h"
 #include "filesystem/filesystem.h"
 #include "filesystem/path_utils.h"
+#include "math/math_common.h"
 
 namespace Rendering
 {
 
 	struct Vertex {
-		float position[3];
-		float normal[3];
-		float texcoord[2];
-		float tangent[4];
+		glm::vec3 position;
+		glm::vec3 normal;
+		glm::vec2 texcoord;
+		glm::vec4 tangent;
 	};
 
 	struct MeshPrimitive {
