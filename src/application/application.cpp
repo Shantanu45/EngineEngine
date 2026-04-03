@@ -1,11 +1,18 @@
+/*****************************************************************//**
+ * \file   application.cpp
+ * \brief  
+ * 
+ * \author Shantanu Kumar
+ * \date   March 2026
+ *********************************************************************/
 #include <iostream>
 #include <Windows.h>
 #include "application.h"
 #include "libassert/assert.hpp"
+//#include "rendering/rendering_context_driver.h"
 
 namespace EE
 {
-
 	static bool CreateConsole() {
 		// 1. Attempt to allocate a console
 		if (!AllocConsole()) {
@@ -38,43 +45,60 @@ namespace EE
 		return true;
 	}
 
-
 	Application::Application()
 	{
 		CreateConsole();
 		logger = std::make_unique<::Util::StdSpdLogger>();
+		application_wsi = std::make_unique<Rendering::WSI>();
 		::Util::set_logger_iface(logger.get());
 	}
 
 	Application::~Application()
 	{
-		teardown_wsi();
+		teardown_wsi(); 
+
 		FreeConsole();
 	}
 
-	bool Application::init_platform(std::unique_ptr<Vulkan::WSIPlatform> new_platform)
+	bool Application::on_init(DisplayServerEnums::WindowID p_window, Rendering::WindowData* p_window_data)
 	{
-		platform = std::move(new_platform);
-		application_wsi.set_platform(platform.get());
-		return true;
+		application_wsi->set_wsi_platform_data(p_window, *p_window_data);
+
+		if (init_wsi())
+		{
+			return true;
+		}
+		return false;
 	}
 
 	bool Application::init_wsi()
 	{
-		DEBUG_ASSERT(application_wsi.init_context());
-		DEBUG_ASSERT(application_wsi.init_device());
+		ERR_FAIL_COND_V_MSG((application_wsi->initialize("vulkan", DisplayServerEnums::WINDOW_MODE_WINDOWED, DisplayServerEnums::VSYNC_DISABLED, 0, {}, {}, 0, DisplayServerEnums::CONTEXT_ENGINE, 0) != OK), false, "failed to initalize WSI");
+
 		return true;
 	}
 
-	void Application::teardown_wsi()
+	bool Application::pre_frame()
 	{
-		application_wsi.teardown();
-		ready_modules = false;
-		ready_pipelines = false;
+		return application_wsi->pre_frame_loop();
+	}
+
+	void Application::run_frame(double frame_time, double elapsed_time)
+	{
+		application_wsi->pre_begin_frame();
+		if (!application_wsi->begin_frame())
+			return;
+
+		render_frame(frame_time, elapsed_time);
+
+		application_wsi->end_frame(true);
+		application_wsi->post_end_frame();
 	}
 
 	void Application::post_frame()
 	{
+		application_wsi->post_frame_loop();
+		teardown_application();
 	}
 
 	void Application::render_early_loading(double frame_time, double elapsed_time)
@@ -85,24 +109,16 @@ namespace EE
 	{
 	}
 
-	bool Application::poll()
+	void Application::app_poll(void* e)
 	{
-		auto& wsi = get_wsi();
-		if (!get_platform().alive(/*wsi*/))
-			return false;
-		return true;
+		application_wsi->poll(e);
 	}
 
-	void Application::run_frame()
+	void Application::teardown_wsi()
 	{
-		if (!application_wsi.begin_frame())
-		{
-			return;
-		}
-
-		render_frame(0, 0);
-
-		application_wsi.end_frame();
+		application_wsi->teardown();
+		ready_modules = false;
+		ready_pipelines = false;
 	}
 
 	void Application::_check_initialization_progress()

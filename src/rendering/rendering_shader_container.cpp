@@ -1,3 +1,10 @@
+/*****************************************************************//**
+ * \file   rendering_shader_container.cpp
+ * \brief  
+ * 
+ * \author Shantanu Kumar
+ * \date   March 2026
+ *********************************************************************/
 #include "rendering_shader_container.h"
 #include "spirv_reflect.h"
 
@@ -226,6 +233,30 @@ namespace Rendering
 		return shader_refl;
 	}
 
+	bool RenderingShaderContainer::from_shader_stage_spirv_data(std::vector<RenderingDeviceCommons::ShaderStageSPIRVData>& data)
+	{
+		shaders.resize(data.size());
+
+		for (int i = 0; i < data.size(); i++)
+		{
+			shaders[i].code_compressed_bytes = data[i].spirv;
+			shaders[i].shader_stage = data[i].shader_stage;
+		}
+		return true;
+	}
+
+	bool RenderingShaderContainer::from_bytes(const PackedByteArray& p_bytes)
+	{
+		// TODO:
+		return false;
+	}
+
+	PackedByteArray RenderingShaderContainer::to_bytes() const
+	{
+		// TODO:
+		return {};
+	}
+
 	void RenderingShaderContainer::_set_from_shader_reflection_post(const ReflectShader& p_shader)
 	{
 		// Do nothing!
@@ -335,7 +366,7 @@ namespace Rendering
 					"Compute shaders can only receive one stage, dedicated to compute.");
 			}
 			ERR_FAIL_COND_V_MSG(reflection.stages_bits.has_flag(stage_flag), FAILED,
-				std::format("Stage %s submitted more than once.", std::string(RDC::SHADER_STAGE_NAMES[stage])));
+				std::format("Stage {} submitted more than once.", std::string(RDC::SHADER_STAGE_NAMES[stage])));
 			reflection.stages_bits.set_flag(stage_flag);
 
 			{

@@ -1,3 +1,10 @@
+/*****************************************************************//**
+ * \file   input.h
+ * \brief  
+ * 
+ * \author Shantanu Kumar
+ * \date   March 2026
+ *********************************************************************/
 #pragma once
 #include <cstdint>
 #include "SDL3/SDL.h"
@@ -23,9 +30,9 @@ namespace EE
 	enum KeyState : uint8_t
 	{
 		KEY_NONE = 0,
-		KEY_DOWN = 1 << 0,		// 0000 0001 — key is currently held
-		KEY_PRESSED = 1 << 1,	// 0000 0010 — went down this frame
-		KEY_RELEASED = 1 << 2,  // 0000 0100 — went up this frame
+		KEY_DOWN = 1 << 0,		// 0000 0001 - key is currently held
+		KEY_PRESSED = 1 << 1,	// 0000 0010 - went down this frame
+		KEY_RELEASED = 1 << 2,  // 0000 0100 - went up this frame
 	};
 
 	enum class MouseButton
@@ -40,21 +47,41 @@ namespace EE
 	enum MouseState : uint8_t
 	{
 		MOUSE_NONE = 0,
-		MOUSE_DOWN = 1 << 0,      // 0000 0001 — button is held
-		MOUSE_PRESSED = 1 << 1,   // 0000 0010 — went down this frame
-		MOUSE_RELEASED = 1 << 2,  // 0000 0100 — went up this frame
+		MOUSE_DOWN = 1 << 0,      // 0000 0001 - button is held
+		MOUSE_PRESSED = 1 << 1,   // 0000 0010 - went down this frame
+		MOUSE_RELEASED = 1 << 2,  // 0000 0100 - went up this frame
 	};
 
-	class InputSystem
+	class InputSystemInterface
+	{
+	public:
+		virtual ~InputSystemInterface() = default;
+		virtual void on_sdl_event(const SDL_Event& e) = 0;
+
+		virtual bool is_held(Key k)      const = 0;
+		virtual bool just_pressed(Key k) const = 0;
+		virtual bool just_released(Key k) const = 0;
+
+		virtual bool is_mouse_held(MouseButton b) const = 0;
+		virtual bool just_mouse_pressed(MouseButton b) const = 0;
+		virtual bool just_mouse_released(MouseButton b) const = 0;
+		virtual glm::vec2 get_mouse_position() const = 0;
+
+		virtual glm::vec2 get_mouse_delta() const = 0;
+
+		virtual void update() = 0;
+	};
+
+	class InputSystem : public InputSystemInterface
 	{
 	public:
 		InputSystem();
 
-		void on_sdl_event(const SDL_Event& e);
+		virtual void on_sdl_event(const SDL_Event& e) override;
 
-		bool is_held(Key k)      const { return keys[static_cast<size_t>(k)] & KEY_DOWN; }
-		bool just_pressed(Key k) const { return keys[static_cast<size_t>(k)] & KEY_PRESSED; }
-		bool just_released(Key k)const { return keys[static_cast<size_t>(k)] & KEY_RELEASED; }
+		virtual bool is_held(Key k)      const override { return keys[static_cast<size_t>(k)] & KEY_DOWN; }
+		virtual bool just_pressed(Key k) const override { return keys[static_cast<size_t>(k)] & KEY_PRESSED; }
+		virtual bool just_released(Key k)const override { return keys[static_cast<size_t>(k)] & KEY_RELEASED; }
 
 		bool is_mouse_held(MouseButton b) const;
 		bool just_mouse_pressed(MouseButton b) const;
@@ -73,6 +100,7 @@ namespace EE
 		uint8_t mouse[static_cast<size_t>(MouseButton::Count)] = {};
 		glm::vec2 mouse_pos = {};
 		glm::vec2 mouse_delta = {};
+		glm::vec2 mouse_delta_accum = {};
 		glm::vec2 last_mouse_pos = {};
 	};
 }

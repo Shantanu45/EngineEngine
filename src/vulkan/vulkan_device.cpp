@@ -1,6 +1,14 @@
+/*****************************************************************//**
+ * \file   vulkan_device.cpp
+ * \brief  
+ * 
+ * \author Shantanu Kumar
+ * \date   March 2026
+ *********************************************************************/
 #include "vulkan_device.h"
 #include "libassert/assert.hpp"
 #include "util/error_macros.h"
+//#include "vma/vk_mem_alloc.h"
 #include <array>
 
 // Enable the use of re-spirv for optimizing shaders after applying specialization constants.
@@ -9,243 +17,12 @@
 // Only enable function inlining for re-spirv when dealing with a shader that uses specialization constants.
 #define RESPV_ONLY_INLINE_SHADERS_WITH_SPEC_CONSTANTS 1
 
+#define VULKAN_DEBUG
+
 namespace Vulkan
 {
 #pragma region Generic
-	static const VkFormat RD_TO_VK_FORMAT[RenderingDeviceCommons::DATA_FORMAT_MAX] = {
-	VK_FORMAT_R4G4_UNORM_PACK8,
-	VK_FORMAT_R4G4B4A4_UNORM_PACK16,
-	VK_FORMAT_B4G4R4A4_UNORM_PACK16,
-	VK_FORMAT_R5G6B5_UNORM_PACK16,
-	VK_FORMAT_B5G6R5_UNORM_PACK16,
-	VK_FORMAT_R5G5B5A1_UNORM_PACK16,
-	VK_FORMAT_B5G5R5A1_UNORM_PACK16,
-	VK_FORMAT_A1R5G5B5_UNORM_PACK16,
-	VK_FORMAT_R8_UNORM,
-	VK_FORMAT_R8_SNORM,
-	VK_FORMAT_R8_USCALED,
-	VK_FORMAT_R8_SSCALED,
-	VK_FORMAT_R8_UINT,
-	VK_FORMAT_R8_SINT,
-	VK_FORMAT_R8_SRGB,
-	VK_FORMAT_R8G8_UNORM,
-	VK_FORMAT_R8G8_SNORM,
-	VK_FORMAT_R8G8_USCALED,
-	VK_FORMAT_R8G8_SSCALED,
-	VK_FORMAT_R8G8_UINT,
-	VK_FORMAT_R8G8_SINT,
-	VK_FORMAT_R8G8_SRGB,
-	VK_FORMAT_R8G8B8_UNORM,
-	VK_FORMAT_R8G8B8_SNORM,
-	VK_FORMAT_R8G8B8_USCALED,
-	VK_FORMAT_R8G8B8_SSCALED,
-	VK_FORMAT_R8G8B8_UINT,
-	VK_FORMAT_R8G8B8_SINT,
-	VK_FORMAT_R8G8B8_SRGB,
-	VK_FORMAT_B8G8R8_UNORM,
-	VK_FORMAT_B8G8R8_SNORM,
-	VK_FORMAT_B8G8R8_USCALED,
-	VK_FORMAT_B8G8R8_SSCALED,
-	VK_FORMAT_B8G8R8_UINT,
-	VK_FORMAT_B8G8R8_SINT,
-	VK_FORMAT_B8G8R8_SRGB,
-	VK_FORMAT_R8G8B8A8_UNORM,
-	VK_FORMAT_R8G8B8A8_SNORM,
-	VK_FORMAT_R8G8B8A8_USCALED,
-	VK_FORMAT_R8G8B8A8_SSCALED,
-	VK_FORMAT_R8G8B8A8_UINT,
-	VK_FORMAT_R8G8B8A8_SINT,
-	VK_FORMAT_R8G8B8A8_SRGB,
-	VK_FORMAT_B8G8R8A8_UNORM,
-	VK_FORMAT_B8G8R8A8_SNORM,
-	VK_FORMAT_B8G8R8A8_USCALED,
-	VK_FORMAT_B8G8R8A8_SSCALED,
-	VK_FORMAT_B8G8R8A8_UINT,
-	VK_FORMAT_B8G8R8A8_SINT,
-	VK_FORMAT_B8G8R8A8_SRGB,
-	VK_FORMAT_A8B8G8R8_UNORM_PACK32,
-	VK_FORMAT_A8B8G8R8_SNORM_PACK32,
-	VK_FORMAT_A8B8G8R8_USCALED_PACK32,
-	VK_FORMAT_A8B8G8R8_SSCALED_PACK32,
-	VK_FORMAT_A8B8G8R8_UINT_PACK32,
-	VK_FORMAT_A8B8G8R8_SINT_PACK32,
-	VK_FORMAT_A8B8G8R8_SRGB_PACK32,
-	VK_FORMAT_A2R10G10B10_UNORM_PACK32,
-	VK_FORMAT_A2R10G10B10_SNORM_PACK32,
-	VK_FORMAT_A2R10G10B10_USCALED_PACK32,
-	VK_FORMAT_A2R10G10B10_SSCALED_PACK32,
-	VK_FORMAT_A2R10G10B10_UINT_PACK32,
-	VK_FORMAT_A2R10G10B10_SINT_PACK32,
-	VK_FORMAT_A2B10G10R10_UNORM_PACK32,
-	VK_FORMAT_A2B10G10R10_SNORM_PACK32,
-	VK_FORMAT_A2B10G10R10_USCALED_PACK32,
-	VK_FORMAT_A2B10G10R10_SSCALED_PACK32,
-	VK_FORMAT_A2B10G10R10_UINT_PACK32,
-	VK_FORMAT_A2B10G10R10_SINT_PACK32,
-	VK_FORMAT_R16_UNORM,
-	VK_FORMAT_R16_SNORM,
-	VK_FORMAT_R16_USCALED,
-	VK_FORMAT_R16_SSCALED,
-	VK_FORMAT_R16_UINT,
-	VK_FORMAT_R16_SINT,
-	VK_FORMAT_R16_SFLOAT,
-	VK_FORMAT_R16G16_UNORM,
-	VK_FORMAT_R16G16_SNORM,
-	VK_FORMAT_R16G16_USCALED,
-	VK_FORMAT_R16G16_SSCALED,
-	VK_FORMAT_R16G16_UINT,
-	VK_FORMAT_R16G16_SINT,
-	VK_FORMAT_R16G16_SFLOAT,
-	VK_FORMAT_R16G16B16_UNORM,
-	VK_FORMAT_R16G16B16_SNORM,
-	VK_FORMAT_R16G16B16_USCALED,
-	VK_FORMAT_R16G16B16_SSCALED,
-	VK_FORMAT_R16G16B16_UINT,
-	VK_FORMAT_R16G16B16_SINT,
-	VK_FORMAT_R16G16B16_SFLOAT,
-	VK_FORMAT_R16G16B16A16_UNORM,
-	VK_FORMAT_R16G16B16A16_SNORM,
-	VK_FORMAT_R16G16B16A16_USCALED,
-	VK_FORMAT_R16G16B16A16_SSCALED,
-	VK_FORMAT_R16G16B16A16_UINT,
-	VK_FORMAT_R16G16B16A16_SINT,
-	VK_FORMAT_R16G16B16A16_SFLOAT,
-	VK_FORMAT_R32_UINT,
-	VK_FORMAT_R32_SINT,
-	VK_FORMAT_R32_SFLOAT,
-	VK_FORMAT_R32G32_UINT,
-	VK_FORMAT_R32G32_SINT,
-	VK_FORMAT_R32G32_SFLOAT,
-	VK_FORMAT_R32G32B32_UINT,
-	VK_FORMAT_R32G32B32_SINT,
-	VK_FORMAT_R32G32B32_SFLOAT,
-	VK_FORMAT_R32G32B32A32_UINT,
-	VK_FORMAT_R32G32B32A32_SINT,
-	VK_FORMAT_R32G32B32A32_SFLOAT,
-	VK_FORMAT_R64_UINT,
-	VK_FORMAT_R64_SINT,
-	VK_FORMAT_R64_SFLOAT,
-	VK_FORMAT_R64G64_UINT,
-	VK_FORMAT_R64G64_SINT,
-	VK_FORMAT_R64G64_SFLOAT,
-	VK_FORMAT_R64G64B64_UINT,
-	VK_FORMAT_R64G64B64_SINT,
-	VK_FORMAT_R64G64B64_SFLOAT,
-	VK_FORMAT_R64G64B64A64_UINT,
-	VK_FORMAT_R64G64B64A64_SINT,
-	VK_FORMAT_R64G64B64A64_SFLOAT,
-	VK_FORMAT_B10G11R11_UFLOAT_PACK32,
-	VK_FORMAT_E5B9G9R9_UFLOAT_PACK32,
-	VK_FORMAT_D16_UNORM,
-	VK_FORMAT_X8_D24_UNORM_PACK32,
-	VK_FORMAT_D32_SFLOAT,
-	VK_FORMAT_S8_UINT,
-	VK_FORMAT_D16_UNORM_S8_UINT,
-	VK_FORMAT_D24_UNORM_S8_UINT,
-	VK_FORMAT_D32_SFLOAT_S8_UINT,
-	VK_FORMAT_BC1_RGB_UNORM_BLOCK,
-	VK_FORMAT_BC1_RGB_SRGB_BLOCK,
-	VK_FORMAT_BC1_RGBA_UNORM_BLOCK,
-	VK_FORMAT_BC1_RGBA_SRGB_BLOCK,
-	VK_FORMAT_BC2_UNORM_BLOCK,
-	VK_FORMAT_BC2_SRGB_BLOCK,
-	VK_FORMAT_BC3_UNORM_BLOCK,
-	VK_FORMAT_BC3_SRGB_BLOCK,
-	VK_FORMAT_BC4_UNORM_BLOCK,
-	VK_FORMAT_BC4_SNORM_BLOCK,
-	VK_FORMAT_BC5_UNORM_BLOCK,
-	VK_FORMAT_BC5_SNORM_BLOCK,
-	VK_FORMAT_BC6H_UFLOAT_BLOCK,
-	VK_FORMAT_BC6H_SFLOAT_BLOCK,
-	VK_FORMAT_BC7_UNORM_BLOCK,
-	VK_FORMAT_BC7_SRGB_BLOCK,
-	VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK,
-	VK_FORMAT_ETC2_R8G8B8_SRGB_BLOCK,
-	VK_FORMAT_ETC2_R8G8B8A1_UNORM_BLOCK,
-	VK_FORMAT_ETC2_R8G8B8A1_SRGB_BLOCK,
-	VK_FORMAT_ETC2_R8G8B8A8_UNORM_BLOCK,
-	VK_FORMAT_ETC2_R8G8B8A8_SRGB_BLOCK,
-	VK_FORMAT_EAC_R11_UNORM_BLOCK,
-	VK_FORMAT_EAC_R11_SNORM_BLOCK,
-	VK_FORMAT_EAC_R11G11_UNORM_BLOCK,
-	VK_FORMAT_EAC_R11G11_SNORM_BLOCK,
-	VK_FORMAT_ASTC_4x4_UNORM_BLOCK,
-	VK_FORMAT_ASTC_4x4_SRGB_BLOCK,
-	VK_FORMAT_ASTC_5x4_UNORM_BLOCK,
-	VK_FORMAT_ASTC_5x4_SRGB_BLOCK,
-	VK_FORMAT_ASTC_5x5_UNORM_BLOCK,
-	VK_FORMAT_ASTC_5x5_SRGB_BLOCK,
-	VK_FORMAT_ASTC_6x5_UNORM_BLOCK,
-	VK_FORMAT_ASTC_6x5_SRGB_BLOCK,
-	VK_FORMAT_ASTC_6x6_UNORM_BLOCK,
-	VK_FORMAT_ASTC_6x6_SRGB_BLOCK,
-	VK_FORMAT_ASTC_8x5_UNORM_BLOCK,
-	VK_FORMAT_ASTC_8x5_SRGB_BLOCK,
-	VK_FORMAT_ASTC_8x6_UNORM_BLOCK,
-	VK_FORMAT_ASTC_8x6_SRGB_BLOCK,
-	VK_FORMAT_ASTC_8x8_UNORM_BLOCK,
-	VK_FORMAT_ASTC_8x8_SRGB_BLOCK,
-	VK_FORMAT_ASTC_10x5_UNORM_BLOCK,
-	VK_FORMAT_ASTC_10x5_SRGB_BLOCK,
-	VK_FORMAT_ASTC_10x6_UNORM_BLOCK,
-	VK_FORMAT_ASTC_10x6_SRGB_BLOCK,
-	VK_FORMAT_ASTC_10x8_UNORM_BLOCK,
-	VK_FORMAT_ASTC_10x8_SRGB_BLOCK,
-	VK_FORMAT_ASTC_10x10_UNORM_BLOCK,
-	VK_FORMAT_ASTC_10x10_SRGB_BLOCK,
-	VK_FORMAT_ASTC_12x10_UNORM_BLOCK,
-	VK_FORMAT_ASTC_12x10_SRGB_BLOCK,
-	VK_FORMAT_ASTC_12x12_UNORM_BLOCK,
-	VK_FORMAT_ASTC_12x12_SRGB_BLOCK,
-	VK_FORMAT_G8B8G8R8_422_UNORM,
-	VK_FORMAT_B8G8R8G8_422_UNORM,
-	VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM,
-	VK_FORMAT_G8_B8R8_2PLANE_420_UNORM,
-	VK_FORMAT_G8_B8_R8_3PLANE_422_UNORM,
-	VK_FORMAT_G8_B8R8_2PLANE_422_UNORM,
-	VK_FORMAT_G8_B8_R8_3PLANE_444_UNORM,
-	VK_FORMAT_R10X6_UNORM_PACK16,
-	VK_FORMAT_R10X6G10X6_UNORM_2PACK16,
-	VK_FORMAT_R10X6G10X6B10X6A10X6_UNORM_4PACK16,
-	VK_FORMAT_G10X6B10X6G10X6R10X6_422_UNORM_4PACK16,
-	VK_FORMAT_B10X6G10X6R10X6G10X6_422_UNORM_4PACK16,
-	VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_420_UNORM_3PACK16,
-	VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16,
-	VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_422_UNORM_3PACK16,
-	VK_FORMAT_G10X6_B10X6R10X6_2PLANE_422_UNORM_3PACK16,
-	VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_444_UNORM_3PACK16,
-	VK_FORMAT_R12X4_UNORM_PACK16,
-	VK_FORMAT_R12X4G12X4_UNORM_2PACK16,
-	VK_FORMAT_R12X4G12X4B12X4A12X4_UNORM_4PACK16,
-	VK_FORMAT_G12X4B12X4G12X4R12X4_422_UNORM_4PACK16,
-	VK_FORMAT_B12X4G12X4R12X4G12X4_422_UNORM_4PACK16,
-	VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_420_UNORM_3PACK16,
-	VK_FORMAT_G12X4_B12X4R12X4_2PLANE_420_UNORM_3PACK16,
-	VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_422_UNORM_3PACK16,
-	VK_FORMAT_G12X4_B12X4R12X4_2PLANE_422_UNORM_3PACK16,
-	VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_444_UNORM_3PACK16,
-	VK_FORMAT_G16B16G16R16_422_UNORM,
-	VK_FORMAT_B16G16R16G16_422_UNORM,
-	VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM,
-	VK_FORMAT_G16_B16R16_2PLANE_420_UNORM,
-	VK_FORMAT_G16_B16_R16_3PLANE_422_UNORM,
-	VK_FORMAT_G16_B16R16_2PLANE_422_UNORM,
-	VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM,
-	VK_FORMAT_ASTC_4x4_SFLOAT_BLOCK,
-	VK_FORMAT_ASTC_5x4_SFLOAT_BLOCK,
-	VK_FORMAT_ASTC_5x5_SFLOAT_BLOCK,
-	VK_FORMAT_ASTC_6x5_SFLOAT_BLOCK,
-	VK_FORMAT_ASTC_6x6_SFLOAT_BLOCK,
-	VK_FORMAT_ASTC_8x5_SFLOAT_BLOCK,
-	VK_FORMAT_ASTC_8x6_SFLOAT_BLOCK,
-	VK_FORMAT_ASTC_8x8_SFLOAT_BLOCK,
-	VK_FORMAT_ASTC_10x5_SFLOAT_BLOCK,
-	VK_FORMAT_ASTC_10x6_SFLOAT_BLOCK,
-	VK_FORMAT_ASTC_10x8_SFLOAT_BLOCK,
-	VK_FORMAT_ASTC_10x10_SFLOAT_BLOCK,
-	VK_FORMAT_ASTC_12x10_SFLOAT_BLOCK,
-	VK_FORMAT_ASTC_12x12_SFLOAT_BLOCK,
-	};
+	
 
 	std::string hex_encode_buffer(const uint8_t* buffer, int len) {
 		static const char hex[] = "0123456789abcdef";
@@ -323,6 +100,118 @@ namespace Vulkan
 	}
 
 	static const uint32_t MAX_DYNAMIC_BUFFERS = 8u;
+
+	// Debug marker extensions.
+
+	VkDebugReportObjectTypeEXT RenderingDeviceDriverVulkan::_convert_to_debug_report_objectType(VkObjectType p_object_type) {
+		switch (p_object_type) {
+		case VK_OBJECT_TYPE_UNKNOWN:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_UNKNOWN_EXT;
+		case VK_OBJECT_TYPE_INSTANCE:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_INSTANCE_EXT;
+		case VK_OBJECT_TYPE_PHYSICAL_DEVICE:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_PHYSICAL_DEVICE_EXT;
+		case VK_OBJECT_TYPE_DEVICE:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_DEVICE_EXT;
+		case VK_OBJECT_TYPE_QUEUE:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_QUEUE_EXT;
+		case VK_OBJECT_TYPE_SEMAPHORE:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_SEMAPHORE_EXT;
+		case VK_OBJECT_TYPE_COMMAND_BUFFER:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_COMMAND_BUFFER_EXT;
+		case VK_OBJECT_TYPE_FENCE:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_FENCE_EXT;
+		case VK_OBJECT_TYPE_DEVICE_MEMORY:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_DEVICE_MEMORY_EXT;
+		case VK_OBJECT_TYPE_BUFFER:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_BUFFER_EXT;
+		case VK_OBJECT_TYPE_IMAGE:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_IMAGE_EXT;
+		case VK_OBJECT_TYPE_EVENT:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_EVENT_EXT;
+		case VK_OBJECT_TYPE_QUERY_POOL:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_QUERY_POOL_EXT;
+		case VK_OBJECT_TYPE_BUFFER_VIEW:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_BUFFER_VIEW_EXT;
+		case VK_OBJECT_TYPE_IMAGE_VIEW:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_IMAGE_VIEW_EXT;
+		case VK_OBJECT_TYPE_SHADER_MODULE:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_SHADER_MODULE_EXT;
+		case VK_OBJECT_TYPE_PIPELINE_CACHE:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_PIPELINE_CACHE_EXT;
+		case VK_OBJECT_TYPE_PIPELINE_LAYOUT:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_PIPELINE_LAYOUT_EXT;
+		case VK_OBJECT_TYPE_RENDER_PASS:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_RENDER_PASS_EXT;
+		case VK_OBJECT_TYPE_PIPELINE:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_PIPELINE_EXT;
+		case VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT_EXT;
+		case VK_OBJECT_TYPE_SAMPLER:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_SAMPLER_EXT;
+		case VK_OBJECT_TYPE_DESCRIPTOR_POOL:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_DESCRIPTOR_POOL_EXT;
+		case VK_OBJECT_TYPE_DESCRIPTOR_SET:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_DESCRIPTOR_SET_EXT;
+		case VK_OBJECT_TYPE_FRAMEBUFFER:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_FRAMEBUFFER_EXT;
+		case VK_OBJECT_TYPE_COMMAND_POOL:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_COMMAND_POOL_EXT;
+		case VK_OBJECT_TYPE_SAMPLER_YCBCR_CONVERSION:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_SAMPLER_YCBCR_CONVERSION_EXT;
+		case VK_OBJECT_TYPE_DESCRIPTOR_UPDATE_TEMPLATE:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_DESCRIPTOR_UPDATE_TEMPLATE_EXT;
+		case VK_OBJECT_TYPE_SURFACE_KHR:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_SURFACE_KHR_EXT;
+		case VK_OBJECT_TYPE_SWAPCHAIN_KHR:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_SWAPCHAIN_KHR_EXT;
+		case VK_OBJECT_TYPE_DISPLAY_KHR:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_DISPLAY_KHR_EXT;
+		case VK_OBJECT_TYPE_DISPLAY_MODE_KHR:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_DISPLAY_MODE_KHR_EXT;
+		case VK_OBJECT_TYPE_DEBUG_REPORT_CALLBACK_EXT:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_DEBUG_REPORT_CALLBACK_EXT_EXT;
+		case VK_OBJECT_TYPE_CU_MODULE_NVX:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_CU_MODULE_NVX_EXT;
+		case VK_OBJECT_TYPE_CU_FUNCTION_NVX:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_CU_FUNCTION_NVX_EXT;
+		case VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR_EXT;
+		case VK_OBJECT_TYPE_VALIDATION_CACHE_EXT:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_VALIDATION_CACHE_EXT_EXT;
+		case VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_NV:
+			return VK_DEBUG_REPORT_OBJECT_TYPE_ACCELERATION_STRUCTURE_NV_EXT;
+		default:
+			break;
+		}
+
+		return VK_DEBUG_REPORT_OBJECT_TYPE_UNKNOWN_EXT;
+	}
+
+	void RenderingDeviceDriverVulkan::_set_object_name(VkObjectType p_object_type, uint64_t p_object_handle, std::string p_object_name) {
+		
+		if (vkSetDebugUtilsObjectNameEXT != nullptr) {		// recommended successor to vkDebugMarkerSetObjectNameEXT
+			std::string obj_data = p_object_name;
+			VkDebugUtilsObjectNameInfoEXT name_info;
+			name_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
+			name_info.pNext = nullptr;
+			name_info.objectType = p_object_type;
+			name_info.objectHandle = p_object_handle;
+			name_info.pObjectName = obj_data.data();
+			vkSetDebugUtilsObjectNameEXT(vk_device, &name_info);
+		}
+		else if (vkDebugMarkerSetObjectNameEXT != nullptr) {
+			// Debug marker extensions.
+			std::string obj_data = p_object_name;
+			VkDebugMarkerObjectNameInfoEXT name_info;
+			name_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
+			name_info.pNext = nullptr;
+			name_info.objectType = _convert_to_debug_report_objectType(p_object_type);
+			name_info.object = p_object_handle;
+			name_info.pObjectName = obj_data.data();
+			vkDebugMarkerSetObjectNameEXT(vk_device, &name_info);
+		}
+	}
 
 #pragma endregion
 
@@ -448,7 +337,7 @@ namespace Vulkan
 
 #ifdef VULKAN_DEBUG
 		for (uint32_t i = 0; i < device_extension_count; i++) {
-			LOGI(String("VULKAN: Found device extension ") + String::utf8(device_extensions[i].extensionName));
+			LOGI(std::format("VULKAN: Found device extension {}", std::string(device_extensions[i].extensionName)).c_str());
 		}
 #endif
 
@@ -468,7 +357,7 @@ namespace Vulkan
 					ERR_FAIL_V_MSG(ERR_BUG, msg.c_str());
 				}
 				else {
-					LOGI("Optional extension %s not found.", requested_extension.first);
+					LOGI("Optional extension %s not found.", requested_extension.first.c_str());
 				}
 			}
 		}
@@ -481,7 +370,7 @@ namespace Vulkan
 
 		// Check for required features.
 		if (!physical_device_features.imageCubeArray || !physical_device_features.independentBlend) {
-			std::string error_string = std::format("Your GPU (%s) does not support the following features which are required to use Vulkan-based renderers in Godot:\n\n", context_device.name);
+			std::string error_string = std::format("Your GPU ({}) does not support the following features which are required to use Vulkan-based renderers in Godot:\n\n", context_device.name);
 			if (!physical_device_features.imageCubeArray) {
 				error_string += "- No support for image cube arrays.\n";
 			}
@@ -1095,93 +984,8 @@ namespace Vulkan
 		return true;
 	}
 
-	VkDebugReportObjectTypeEXT RenderingDeviceDriverVulkan::_convert_to_debug_report_objectType(VkObjectType p_object_type) {
-		switch (p_object_type) {
-		case VK_OBJECT_TYPE_UNKNOWN:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_UNKNOWN_EXT;
-		case VK_OBJECT_TYPE_INSTANCE:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_INSTANCE_EXT;
-		case VK_OBJECT_TYPE_PHYSICAL_DEVICE:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_PHYSICAL_DEVICE_EXT;
-		case VK_OBJECT_TYPE_DEVICE:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_DEVICE_EXT;
-		case VK_OBJECT_TYPE_QUEUE:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_QUEUE_EXT;
-		case VK_OBJECT_TYPE_SEMAPHORE:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_SEMAPHORE_EXT;
-		case VK_OBJECT_TYPE_COMMAND_BUFFER:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_COMMAND_BUFFER_EXT;
-		case VK_OBJECT_TYPE_FENCE:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_FENCE_EXT;
-		case VK_OBJECT_TYPE_DEVICE_MEMORY:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_DEVICE_MEMORY_EXT;
-		case VK_OBJECT_TYPE_BUFFER:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_BUFFER_EXT;
-		case VK_OBJECT_TYPE_IMAGE:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_IMAGE_EXT;
-		case VK_OBJECT_TYPE_EVENT:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_EVENT_EXT;
-		case VK_OBJECT_TYPE_QUERY_POOL:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_QUERY_POOL_EXT;
-		case VK_OBJECT_TYPE_BUFFER_VIEW:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_BUFFER_VIEW_EXT;
-		case VK_OBJECT_TYPE_IMAGE_VIEW:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_IMAGE_VIEW_EXT;
-		case VK_OBJECT_TYPE_SHADER_MODULE:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_SHADER_MODULE_EXT;
-		case VK_OBJECT_TYPE_PIPELINE_CACHE:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_PIPELINE_CACHE_EXT;
-		case VK_OBJECT_TYPE_PIPELINE_LAYOUT:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_PIPELINE_LAYOUT_EXT;
-		case VK_OBJECT_TYPE_RENDER_PASS:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_RENDER_PASS_EXT;
-		case VK_OBJECT_TYPE_PIPELINE:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_PIPELINE_EXT;
-		case VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT_EXT;
-		case VK_OBJECT_TYPE_SAMPLER:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_SAMPLER_EXT;
-		case VK_OBJECT_TYPE_DESCRIPTOR_POOL:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_DESCRIPTOR_POOL_EXT;
-		case VK_OBJECT_TYPE_DESCRIPTOR_SET:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_DESCRIPTOR_SET_EXT;
-		case VK_OBJECT_TYPE_FRAMEBUFFER:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_FRAMEBUFFER_EXT;
-		case VK_OBJECT_TYPE_COMMAND_POOL:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_COMMAND_POOL_EXT;
-		case VK_OBJECT_TYPE_SAMPLER_YCBCR_CONVERSION:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_SAMPLER_YCBCR_CONVERSION_EXT;
-		case VK_OBJECT_TYPE_DESCRIPTOR_UPDATE_TEMPLATE:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_DESCRIPTOR_UPDATE_TEMPLATE_EXT;
-		case VK_OBJECT_TYPE_SURFACE_KHR:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_SURFACE_KHR_EXT;
-		case VK_OBJECT_TYPE_SWAPCHAIN_KHR:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_SWAPCHAIN_KHR_EXT;
-		case VK_OBJECT_TYPE_DISPLAY_KHR:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_DISPLAY_KHR_EXT;
-		case VK_OBJECT_TYPE_DISPLAY_MODE_KHR:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_DISPLAY_MODE_KHR_EXT;
-		case VK_OBJECT_TYPE_DEBUG_REPORT_CALLBACK_EXT:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_DEBUG_REPORT_CALLBACK_EXT_EXT;
-		case VK_OBJECT_TYPE_CU_MODULE_NVX:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_CU_MODULE_NVX_EXT;
-		case VK_OBJECT_TYPE_CU_FUNCTION_NVX:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_CU_FUNCTION_NVX_EXT;
-		case VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR_EXT;
-		case VK_OBJECT_TYPE_VALIDATION_CACHE_EXT:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_VALIDATION_CACHE_EXT_EXT;
-		case VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_NV:
-			return VK_DEBUG_REPORT_OBJECT_TYPE_ACCELERATION_STRUCTURE_NV_EXT;
-		default:
-			break;
-		}
 
-		return VK_DEBUG_REPORT_OBJECT_TYPE_UNKNOWN_EXT;
-	}
 #pragma endregion
-
-	// TODO: do I need to use vold device to call vulkan functions!!??
 
 #pragma region Memory
 
@@ -1192,7 +996,7 @@ namespace Vulkan
 			return small_allocs_pools[p_mem_type_index];
 		}
 
-		LOGI("Creating VMA small objects pool for memory type index %s", std::to_string(p_mem_type_index));
+		LOGI("Creating VMA small objects pool for memory type index %d", p_mem_type_index);
 
 		VmaPoolCreateInfo pci = {};
 		pci.memoryTypeIndex = p_mem_type_index;
@@ -1216,7 +1020,9 @@ namespace Vulkan
 
 #pragma region Buffer
 
-	RenderingDeviceDriverVulkan::BufferID RenderingDeviceDriverVulkan::buffer_create(uint64_t p_size, BitField<RenderingDeviceDriverVulkan::BufferUsageBits> p_usage, RenderingDeviceDriverVulkan::MemoryAllocationType p_allocation_type, uint64_t p_frames_drawn) {
+	RenderingDeviceDriverVulkan::BufferID RenderingDeviceDriverVulkan::buffer_create(uint64_t p_size, BitField<RenderingDeviceDriverVulkan::BufferUsageBits> p_usage, 
+		RenderingDeviceDriverVulkan::MemoryAllocationType p_allocation_type, uint64_t p_frames_drawn) {
+
 		uint32_t alignment = 16u; // 16 bytes is reasonable.
 		if (p_usage.has_flag(BUFFER_USAGE_UNIFORM_BIT)) {
 			// Some GPUs (e.g. NVIDIA) have absurdly high alignments, like 256 bytes.
@@ -1288,16 +1094,19 @@ namespace Vulkan
 		if (false/*!Engine::get_singleton()->is_extra_gpu_memory_tracking_enabled()*/) {
 			alloc_create_info.preferredFlags &= ~vma_flags_to_remove;
 			alloc_create_info.usage = vma_usage;
+
 			VkResult err = vmaCreateBuffer(allocator, &create_info, &alloc_create_info, &vk_buffer, &allocation, &alloc_info);
-			ERR_FAIL_COND_V_MSG(err, BufferID(), std::format( "Can't create buffer of size: %s , error %s", std::to_string(p_size), std::to_string(err)));
+			ERR_FAIL_COND_V_MSG(err, BufferID(), std::format( "Can't create buffer of size: {} , error {}", std::to_string(p_size), std::to_string(err)));
 		}
 		else {
+			/*static uint32_t num = 1;
+			LOGI("buffer alloc: %d", num++);*/
 			VkResult err = vkCreateBuffer(vk_device, &create_info, nullptr, &vk_buffer);
-			ERR_FAIL_COND_V_MSG(err, BufferID(), std::format("Can't create buffer of size: %s , error %s", std::to_string(p_size) + std::to_string(err)));
+			ERR_FAIL_COND_V_MSG(err, BufferID(), std::format("Can't create buffer of size: {} , error {}", std::to_string(p_size), std::to_string(err)));
 			err = vmaAllocateMemoryForBuffer(allocator, vk_buffer, &alloc_create_info, &allocation, &alloc_info);
-			ERR_FAIL_COND_V_MSG(err, BufferID(), std::format("Can't allocate memory for buffer of size: %s, error %s .", std::to_string(p_size), std::to_string(err)));
+			ERR_FAIL_COND_V_MSG(err, BufferID(), std::format("Can't allocate memory for buffer of size: {}, error {} .", std::to_string(p_size), std::to_string(err)));
 			err = vmaBindBufferMemory2(allocator, allocation, 0, vk_buffer, nullptr);
-			ERR_FAIL_COND_V_MSG(err, BufferID(), std::format("Can't bind memory to buffer of size: %s, error %s .", std::to_string(p_size), std::to_string(err)));
+			ERR_FAIL_COND_V_MSG(err, BufferID(), std::format("Can't bind memory to buffer of size: {}, error {} .", std::to_string(p_size), std::to_string(err)));
 		}
 
 		// Bookkeep.
@@ -1305,7 +1114,7 @@ namespace Vulkan
 		if (p_usage.has_flag(BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT)) {
 			void* persistent_ptr = nullptr;
 			VkResult err = vmaMapMemory(allocator, allocation, &persistent_ptr);
-			ERR_FAIL_COND_V_MSG(err, BufferID(), std::format("vmaMapMemory failed with error %s .", std::to_string(err)));
+			ERR_FAIL_COND_V_MSG(err, BufferID(), std::format("vmaMapMemory failed with error {} .", std::to_string(err)));
 
 			BufferDynamicInfo* dyn_buffer = new BufferDynamicInfo;		// TODO: dealloc
 			buf_info = dyn_buffer;
@@ -1340,6 +1149,8 @@ namespace Vulkan
 			vmaDestroyBuffer(allocator, buf_info->vk_buffer, buf_info->allocation.handle);
 		}
 		else {
+			/*static uint32_t de_num = 1;
+			LOGI("buffer de alloc: %d", de_num++);*/
 			vkDestroyBuffer(vk_device, buf_info->vk_buffer, nullptr);
 			vmaFreeMemory(allocator, buf_info->allocation.handle);
 		}
@@ -1364,7 +1175,7 @@ namespace Vulkan
 		view_create_info.range = buf_info->allocation.size;
 
 		VkResult res = vkCreateBufferView(vk_device, &view_create_info, nullptr, &buf_info->vk_view);
-		ERR_FAIL_COND_V_MSG(res, false, std::format("Unable to create buffer view, error %s .", std::to_string(res)));
+		ERR_FAIL_COND_V_MSG(res, false, std::format("Unable to create buffer view, error {} .", std::to_string(res)));
 
 		return true;
 	}
@@ -1379,7 +1190,7 @@ namespace Vulkan
 		ERR_FAIL_COND_V_MSG(buf_info->is_dynamic(), nullptr, "Buffer must NOT have BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT. Use buffer_persistent_map_advance() instead.");
 		void* data_ptr = nullptr;
 		VkResult err = vmaMapMemory(allocator, buf_info->allocation.handle, &data_ptr);
-		ERR_FAIL_COND_V_MSG(err, nullptr, std::format("vmaMapMemory failed with error %s .", std::to_string(err)));
+		ERR_FAIL_COND_V_MSG(err, nullptr, std::format("vmaMapMemory failed with error {} .", std::to_string(err)));
 		return (uint8_t*)data_ptr;
 	}
 
@@ -1623,15 +1434,17 @@ namespace Vulkan
 		if (false/*!Engine::get_singleton()->is_extra_gpu_memory_tracking_enabled()*/) {
 			alloc_create_info.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
 			VkResult err = vmaCreateImage(allocator, &create_info, &alloc_create_info, &vk_image, &allocation, &alloc_info);
-			ERR_FAIL_COND_V_MSG(err, TextureID(), std::format("vmaCreateImage failed with error %s .", std::to_string(err)));
+			ERR_FAIL_COND_V_MSG(err, TextureID(), std::format("vmaCreateImage failed with error {} .", std::to_string(err)));
 		}
 		else {
+			//static uint32_t num = 1;
+			//LOGI("buffer alloc: %d", num++);
 			VkResult err = vkCreateImage(vk_device, &create_info, nullptr, &vk_image);
-			ERR_FAIL_COND_V_MSG(err, TextureID(), std::format("vkCreateImage failed with error %s", std::to_string(err)));
+			ERR_FAIL_COND_V_MSG(err, TextureID(), std::format("vkCreateImage failed with error {}", std::to_string(err)));
 			err = vmaAllocateMemoryForImage(allocator, vk_image, &alloc_create_info, &allocation, &alloc_info);
-			ERR_FAIL_COND_V_MSG(err, TextureID(), std::format("Can't allocate memory for image, error: %s", std::to_string(err)));
+			ERR_FAIL_COND_V_MSG(err, TextureID(), std::format("Can't allocate memory for image, error: {}", std::to_string(err)));
 			err = vmaBindImageMemory2(allocator, allocation, 0, vk_image, nullptr);
-			ERR_FAIL_COND_V_MSG(err, TextureID(), std::format("Can't bind memory to image, error: %s", std::to_string(err)));
+			ERR_FAIL_COND_V_MSG(err, TextureID(), std::format("Can't bind memory to image, error: {}", std::to_string(err)));
 		}
 
 		// Create view.
@@ -1671,11 +1484,13 @@ namespace Vulkan
 				vmaDestroyImage(allocator, vk_image, allocation);
 			}
 			else {
+				//static uint32_t de_num = 1;
+				//LOGI("de_num buffer alloc: %d", de_num++);
 				vkDestroyImage(vk_device, vk_image, nullptr);
 				vmaFreeMemory(allocator, allocation);
 			}
 
-			ERR_FAIL_COND_V_MSG(err, TextureID(), std::format("vkCreateImageView failed with error %s .", std::to_string(err)));
+			ERR_FAIL_COND_V_MSG(err, TextureID(), std::format("vkCreateImageView failed with error {} .", std::to_string(err)));
 		}
 
 		// Bookkeep.
@@ -1721,7 +1536,7 @@ namespace Vulkan
 		VkImageView vk_image_view = VK_NULL_HANDLE;
 		VkResult err = vkCreateImageView(vk_device, &image_view_create_info, nullptr, &vk_image_view);
 		if (err) {
-			ERR_FAIL_COND_V_MSG(err, TextureID(), std::format("vkCreateImageView failed with error %s .",std::to_string(err)));
+			ERR_FAIL_COND_V_MSG(err, TextureID(), std::format("vkCreateImageView failed with error {} .",std::to_string(err)));
 		}
 
 		// Bookkeep.
@@ -1776,7 +1591,7 @@ namespace Vulkan
 
 		VkImageView new_vk_image_view = VK_NULL_HANDLE;
 		VkResult err = vkCreateImageView(vk_device, &image_view_create_info, nullptr, &new_vk_image_view);
-		ERR_FAIL_COND_V_MSG(err, TextureID(), std::format("vkCreateImageView failed with error %s .", std::to_string(err)));
+		ERR_FAIL_COND_V_MSG(err, TextureID(), std::format("vkCreateImageView failed with error {} .", std::to_string(err)));
 
 		// Bookkeep.
 
@@ -1829,7 +1644,7 @@ namespace Vulkan
 
 		VkImageView new_vk_image_view = VK_NULL_HANDLE;
 		VkResult err = vkCreateImageView(vk_device, &image_view_create_info, nullptr, &new_vk_image_view);
-		ERR_FAIL_COND_V_MSG(err, TextureID(), std::format("vkCreateImageView failed with error %s .", std::to_string(err)));
+		ERR_FAIL_COND_V_MSG(err, TextureID(), std::format("vkCreateImageView failed with error {} .", std::to_string(err)));
 
 		// Bookkeep.
 
@@ -1840,7 +1655,7 @@ namespace Vulkan
 		tex_info->allocation = {};
 
 #if PRINT_NATIVE_COMMANDS
-		LOGI(std::format("vkCreateImageView: 0x%uX for 0x%uX (%d %d %d %d)", uint64_t(new_vk_image_view), uint64_t(owner_tex_info->vk_view_create_info.image), p_mipmap, p_mipmaps, p_layer, p_layers));
+		LOGI(std::format("vkCreateImageView: {} for {} ({} {} {} {})", uint64_t(new_vk_image_view), uint64_t(owner_tex_info->vk_view_create_info.image), p_mipmap, p_mipmaps, p_layer, p_layers));
 #endif
 
 		return TextureID(tex_info);
@@ -1854,6 +1669,8 @@ namespace Vulkan
 				vmaDestroyImage(allocator, tex_info->vk_view_create_info.image, tex_info->allocation.handle);
 			}
 			else {
+				//static uint32_t de_num_tex = 1;
+				//LOGI("de_num_tex buffer alloc: %d", de_num_tex++);
 				vkDestroyImage(vk_device, tex_info->vk_image, nullptr);
 				vmaFreeMemory(allocator, tex_info->allocation.handle);
 			}
@@ -1904,7 +1721,7 @@ namespace Vulkan
 
 		void* data_ptr = nullptr;
 		VkResult err = vmaMapMemory(allocator, tex->allocation.handle, &data_ptr);
-		ERR_FAIL_COND_V_MSG(err, std::vector<uint8_t>(), std::format("vmaMapMemory failed with error %s .", std::to_string(err)));
+		ERR_FAIL_COND_V_MSG(err, std::vector<uint8_t>(), std::format("vmaMapMemory failed with error {} .", std::to_string(err)));
 
 		{
 			uint8_t* w = image_data.data();
@@ -2025,7 +1842,7 @@ namespace Vulkan
 
 		VkSampler vk_sampler = VK_NULL_HANDLE;
 		VkResult res = vkCreateSampler(vk_device, &sampler_create_info, nullptr, &vk_sampler);
-		ERR_FAIL_COND_V_MSG(res, SamplerID(), std::format("vkCreateSampler failed with error %s .", std::to_string(res)));
+		ERR_FAIL_COND_V_MSG(res, SamplerID(), std::format("vkCreateSampler failed with error {} .", std::to_string(res)));
 
 		return SamplerID(vk_sampler);
 	}
@@ -2183,23 +2000,23 @@ namespace Vulkan
 		//}
 
 #if PRINT_NATIVE_COMMANDS
-		LOGI(std::format("vkCmdPipelineBarrier MEMORY %d BUFFER %d TEXTURE %d ACCELERATION STRUCTURE %d", p_memory_barriers.size(), p_buffer_barriers.size(), p_texture_barriers.size(), p_acceleration_structure_barriers.size()));
+		LOGI(std::format("vkCmdPipelineBarrier MEMORY {} BUFFER {} TEXTURE {} ACCELERATION STRUCTURE {}", p_memory_barriers.size(), p_buffer_barriers.size(), p_texture_barriers.size(), p_acceleration_structure_barriers.size()));
 		for (uint32_t i = 0; i < p_memory_barriers.size(); i++) {
-			LOGI(std::format("  VkMemoryBarrier #%d src 0x%uX dst 0x%uX", i, vk_memory_barriers[i].srcAccessMask, vk_memory_barriers[i].dstAccessMask));
+			LOGI(std::format("  VkMemoryBarrier #{} src {} dst {}", i, vk_memory_barriers[i].srcAccessMask, vk_memory_barriers[i].dstAccessMask));
 		}
 
 		for (uint32_t i = 0; i < p_buffer_barriers.size(); i++) {
-			LOGI(std::format("  VkBufferMemoryBarrier #%d src 0x%uX dst 0x%uX buffer 0x%ux", i, vk_buffer_barriers[i].srcAccessMask, vk_buffer_barriers[i].dstAccessMask, uint64_t(vk_buffer_barriers[i].buffer)));
+			LOGI(std::format("  VkBufferMemoryBarrier #{} src 0x%uX dst {} buffer {}", i, vk_buffer_barriers[i].srcAccessMask, vk_buffer_barriers[i].dstAccessMask, uint64_t(vk_buffer_barriers[i].buffer)));
 		}
 
 		for (uint32_t i = 0; i < p_texture_barriers.size(); i++) {
-			LOGI(std::format("  VkImageMemoryBarrier #%d src 0x%uX dst 0x%uX image 0x%ux old %d new %d (%d %d %d %d)", i, vk_image_barriers[i].srcAccessMask, vk_image_barriers[i].dstAccessMask,
+			LOGI(std::format("  VkImageMemoryBarrier #{} src {} dst {}X image {} old {} new {} ({} {} {} {})", i, vk_image_barriers[i].srcAccessMask, vk_image_barriers[i].dstAccessMask,
 				uint64_t(vk_image_barriers[i].image), vk_image_barriers[i].oldLayout, vk_image_barriers[i].newLayout, vk_image_barriers[i].subresourceRange.baseMipLevel, vk_image_barriers[i].subresourceRange.levelCount,
 				vk_image_barriers[i].subresourceRange.baseArrayLayer, vk_image_barriers[i].subresourceRange.layerCount));
 		}
 
 		for (uint32_t i = 0; i < p_acceleration_structure_barriers.size(); i++) {
-			LOGI(std::format("  VkBufferMemoryBarrier #%d src 0x%uX dst 0x%uX acceleration structure buffer 0x%ux", i, vk_accel_barriers[i].srcAccessMask, vk_accel_barriers[i].dstAccessMask, uint64_t(vk_accel_barriers[i].buffer)));
+			LOGI(std::format("  VkBufferMemoryBarrier #{} src 0x%uX dst {} acceleration structure buffer {}", i, vk_accel_barriers[i].srcAccessMask, vk_accel_barriers[i].dstAccessMask, uint64_t(vk_accel_barriers[i].buffer)));
 		}
 #endif
 
@@ -2541,7 +2358,7 @@ namespace Vulkan
 			ERR_FAIL_COND_V_MSG(
 				err != VK_SUCCESS && err != VK_SUBOPTIMAL_KHR,
 				FAILED,
-				std::format("QueuePresentKHR failed with error: %s .", get_vulkan_result(err)));
+				std::format("QueuePresentKHR failed with error: {} .", get_vulkan_result(err)));
 		}
 
 		return OK;
@@ -2586,7 +2403,7 @@ namespace Vulkan
 
 		VkCommandPool vk_command_pool = VK_NULL_HANDLE;
 		VkResult res = vkCreateCommandPool(vk_device, &cmd_pool_info, nullptr, &vk_command_pool);
-		ERR_FAIL_COND_V_MSG(res, CommandPoolID(), std::format("vkCreateCommandPool failed with error %s .",std::to_string(res)));
+		ERR_FAIL_COND_V_MSG(res, CommandPoolID(), std::format("vkCreateCommandPool failed with error {} .",std::to_string(res)));
 
 		CommandPool* command_pool = new CommandPool;
 		command_pool->vk_command_pool = vk_command_pool;
@@ -2599,7 +2416,7 @@ namespace Vulkan
 
 		CommandPool* command_pool = (CommandPool*)(p_cmd_pool.id);
 		VkResult err = vkResetCommandPool(vk_device, command_pool->vk_command_pool, 0);
-		ERR_FAIL_COND_V_MSG(err, false, std::format("vkResetCommandPool failed with error %s .", std::to_string(err)));
+		ERR_FAIL_COND_V_MSG(err, false, std::format("vkResetCommandPool failed with error {} .", std::to_string(err)));
 
 		return true;
 	}
@@ -2636,7 +2453,7 @@ namespace Vulkan
 
 		VkCommandBuffer vk_command_buffer = VK_NULL_HANDLE;
 		VkResult err = vkAllocateCommandBuffers(vk_device, &cmd_buf_info, &vk_command_buffer);
-		ERR_FAIL_COND_V_MSG(err, CommandBufferID(), std::format("vkAllocateCommandBuffers failed with error %s .", std::to_string(err)));
+		ERR_FAIL_COND_V_MSG(err, CommandBufferID(), std::format("vkAllocateCommandBuffers failed with error {} .", std::to_string(err)));
 
 		CommandBufferInfo* command_buffer = new CommandBufferInfo;
 		command_buffer->vk_command_buffer = vk_command_buffer;
@@ -2652,7 +2469,7 @@ namespace Vulkan
 		cmd_buf_begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
 		VkResult err = vkBeginCommandBuffer(command_buffer->vk_command_buffer, &cmd_buf_begin_info);
-		ERR_FAIL_COND_V_MSG(err, false, std::format("vkBeginCommandBuffer failed with error %s .", std::to_string(err)));
+		ERR_FAIL_COND_V_MSG(err, false, std::format("vkBeginCommandBuffer failed with error {} .", std::to_string(err)));
 
 		return true;
 	}
@@ -2674,7 +2491,7 @@ namespace Vulkan
 		cmd_buf_begin_info.pInheritanceInfo = &inheritance_info;
 
 		VkResult err = vkBeginCommandBuffer(command_buffer->vk_command_buffer, &cmd_buf_begin_info);
-		ERR_FAIL_COND_V_MSG(err, false, std::format("vkBeginCommandBuffer failed with error %s .", std::to_string(err)));
+		ERR_FAIL_COND_V_MSG(err, false, std::format("vkBeginCommandBuffer failed with error {} .", std::to_string(err)));
 
 		return true;
 	}
@@ -2918,7 +2735,7 @@ namespace Vulkan
 		bool present_mode_available = (std::find(present_modes.begin(), present_modes.end(), present_mode) != present_modes.end());
 		if (!present_mode_available) {
 			// Present mode is not available, fall back to FIFO which is guaranteed to be supported.
-			WARN_PRINT(std::format("The requested V-Sync mode %s is not available. Falling back to V-Sync mode Enabled.", present_mode_name));
+			WARN_PRINT(std::format("The requested V-Sync mode {} is not available. Falling back to V-Sync mode Enabled.", present_mode_name));
 			surface->vsync_mode = DisplayServerEnums::VSyncMode::VSYNC_ENABLED;
 			present_mode = VkPresentModeKHR::VK_PRESENT_MODE_FIFO_KHR;
 		}
@@ -3264,13 +3081,13 @@ namespace Vulkan
 
 		VkFramebuffer vk_framebuffer = VK_NULL_HANDLE;
 		VkResult err = vkCreateFramebuffer(vk_device, &framebuffer_create_info, nullptr, &vk_framebuffer);
-		ERR_FAIL_COND_V_MSG(err, FramebufferID(), std::format("vkCreateFramebuffer failed with error %s .", std::to_string(err)));
+		ERR_FAIL_COND_V_MSG(err, FramebufferID(), std::format("vkCreateFramebuffer failed with error {} .", std::to_string(err)));
 
 #if PRINT_NATIVE_COMMANDS
-		LOGI(std::format("vkCreateFramebuffer 0x%uX with %d attachments", uint64_t(vk_framebuffer), p_attachments.size()));
+		LOGI(std::format("vkCreateFramebuffer {} with {} attachments", uint64_t(vk_framebuffer), p_attachments.size()));
 		for (uint32_t i = 0; i < p_attachments.size(); i++) {
 			const TextureInfo* attachment_info = (const TextureInfo*)p_attachments[i].id;
-			LOGI(std::format("  Attachment #%d: IMAGE 0x%uX VIEW 0x%uX", i, uint64_t(attachment_info->vk_view_create_info.image), uint64_t(attachment_info->vk_view)));
+			LOGI(std::format("  Attachment #{}: IMAGE {} VIEW {}", i, uint64_t(attachment_info->vk_view_create_info.image), uint64_t(attachment_info->vk_view)));
 		}
 #endif
 
@@ -3493,7 +3310,7 @@ namespace Vulkan
 
 			res = vkCreateShaderModule(vk_device, &shader_module_create_info, nullptr, &vk_module);
 			if (res != VK_SUCCESS) {
-				error_text = std::format("Error (%d) creating module for shader stage %s.", std::to_string(res), std::string(SHADER_STAGE_NAMES[shader_refl.stages_vector[i]]));
+				error_text = std::format("Error ({}) creating module for shader stage {}.", std::to_string(res), std::string(SHADER_STAGE_NAMES[shader_refl.stages_vector[i]]));
 				break;
 			}
 
@@ -3577,7 +3394,7 @@ namespace Vulkan
 				VkDescriptorSetLayout layout = VK_NULL_HANDLE;
 				res = vkCreateDescriptorSetLayout(vk_device, &layout_create_info, nullptr, &layout);
 				if (res) {
-					error_text = std::format("Error (%d) creating descriptor set layout for set %d.", std::to_string(res), i);
+					error_text = std::format("Error ({}) creating descriptor set layout for set {}.", std::to_string(res), i);
 					break;
 				}
 
@@ -3591,11 +3408,11 @@ namespace Vulkan
 			pipeline_layout_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 			pipeline_layout_create_info.setLayoutCount = shader_info.vk_descriptor_set_layouts.size();
 			pipeline_layout_create_info.pSetLayouts = shader_info.vk_descriptor_set_layouts.data();
+			std::vector<VkPushConstantRange> push_constant_range_vec;
 
 			if (shader_refl.push_constant_size > 0) {
-				std::vector<VkPushConstantRange> push_constant_range_vec;
-				VkPushConstantRange* push_constant_range = push_constant_range_vec.data();
-				*push_constant_range = {};
+				push_constant_range_vec.emplace_back();
+				VkPushConstantRange* push_constant_range = &(*(push_constant_range_vec.end() - 1));
 				push_constant_range->stageFlags = shader_info.vk_push_constant_stages;
 				push_constant_range->size = shader_refl.push_constant_size;
 				pipeline_layout_create_info.pushConstantRangeCount = 1;
@@ -3604,7 +3421,7 @@ namespace Vulkan
 
 			res = vkCreatePipelineLayout(vk_device, &pipeline_layout_create_info, nullptr, &shader_info.vk_pipeline_layout);
 			if (res != VK_SUCCESS) {
-				error_text = std::format("Error (%d) creating pipeline layout.", std::to_string(res));
+				error_text = std::format("Error ({}) creating pipeline layout.", std::to_string(res));
 			}
 		}
 
@@ -3676,8 +3493,146 @@ namespace Vulkan
 		}
 		si->vk_stages_create_info.clear();
 	}
-#pragma endregion
 
+	bool RenderingDeviceDriverVulkan::has_feature(Features p_feature)
+	{
+		switch (p_feature) {
+		case SUPPORTS_HALF_FLOAT:
+			return false;// TODO: shader_capabilities.shader_float16_is_supported&& physical_device_features.shaderInt16&& storage_buffer_capabilities.storage_buffer_16_bit_access_is_supported;
+		case SUPPORTS_FRAGMENT_SHADER_WITH_ONLY_SIDE_EFFECTS:
+			return true;
+		case SUPPORTS_BUFFER_DEVICE_ADDRESS:
+			return buffer_device_address_support;
+		case SUPPORTS_IMAGE_ATOMIC_32_BIT:
+			return true;
+		case SUPPORTS_VULKAN_MEMORY_MODEL:
+			return vulkan_memory_model_support && vulkan_memory_model_device_scope_support;
+		case SUPPORTS_FRAMEBUFFER_DEPTH_RESOLVE:
+			return framebuffer_depth_resolve;
+		case SUPPORTS_POINT_SIZE:
+			return true;
+		//case SUPPORTS_RAY_QUERY:
+		//	return acceleration_structure_capabilities.acceleration_structure_support && ray_query_support;
+		//case SUPPORTS_RAYTRACING_PIPELINE:
+		//	return acceleration_structure_capabilities.acceleration_structure_support && raytracing_capabilities.raytracing_pipeline_support;
+		case SUPPORTS_HDR_OUTPUT:
+#if defined(WINDOWS_ENABLED)
+			// When using a Vulkan swapchain on Windows, some configurations
+			// involving integrated GPU hardware do not function correctly
+			// with HDR output.
+			return false;
+#else
+			return context_driver->is_colorspace_supported();
+#endif // defined(WINDOWS_ENABLED)
+		default:
+			return false;
+		}
+	}
+
+	uint64_t RenderingDeviceDriverVulkan::limit_get(Limit p_limit)
+	{
+		const VkPhysicalDeviceLimits& limits = physical_device_properties.limits;
+		uint64_t safe_unbounded = ((uint64_t)1 << 30);
+		switch (p_limit)
+		{
+		case LIMIT_MAX_BOUND_UNIFORM_SETS:
+			return limits.maxBoundDescriptorSets;
+		case LIMIT_MAX_FRAMEBUFFER_COLOR_ATTACHMENTS:
+			return limits.maxColorAttachments;
+		case LIMIT_MAX_TEXTURES_PER_UNIFORM_SET:
+			return limits.maxDescriptorSetSampledImages;
+		case LIMIT_MAX_SAMPLERS_PER_UNIFORM_SET:
+			return limits.maxDescriptorSetSamplers;
+		case LIMIT_MAX_STORAGE_BUFFERS_PER_UNIFORM_SET:
+			return limits.maxDescriptorSetStorageBuffers;
+		case LIMIT_MAX_STORAGE_IMAGES_PER_UNIFORM_SET:
+			return limits.maxDescriptorSetStorageImages;
+		case LIMIT_MAX_UNIFORM_BUFFERS_PER_UNIFORM_SET:
+			return limits.maxDescriptorSetUniformBuffers;
+		case LIMIT_MAX_DRAW_INDEXED_INDEX:
+			return limits.maxDrawIndexedIndexValue;
+		case LIMIT_MAX_FRAMEBUFFER_HEIGHT:
+			return limits.maxFramebufferHeight;
+		case LIMIT_MAX_FRAMEBUFFER_WIDTH:
+			return limits.maxFramebufferWidth;
+		case LIMIT_MAX_TEXTURE_ARRAY_LAYERS:
+			return limits.maxImageArrayLayers;
+		case LIMIT_MAX_TEXTURE_SIZE_1D:
+			return limits.maxImageDimension1D;
+		case LIMIT_MAX_TEXTURE_SIZE_2D:
+			return limits.maxImageDimension2D;
+		case LIMIT_MAX_TEXTURE_SIZE_3D:
+			return limits.maxImageDimension3D;
+		case LIMIT_MAX_TEXTURE_SIZE_CUBE:
+			return limits.maxImageDimensionCube;
+		case LIMIT_MAX_TEXTURES_PER_SHADER_STAGE:
+			return limits.maxPerStageDescriptorSampledImages;
+		case LIMIT_MAX_SAMPLERS_PER_SHADER_STAGE:
+			return limits.maxPerStageDescriptorSamplers;
+		case LIMIT_MAX_STORAGE_BUFFERS_PER_SHADER_STAGE:
+			return limits.maxPerStageDescriptorStorageBuffers;
+		case LIMIT_MAX_STORAGE_IMAGES_PER_SHADER_STAGE:
+			return limits.maxPerStageDescriptorStorageImages;
+		case LIMIT_MAX_UNIFORM_BUFFERS_PER_SHADER_STAGE:
+			return limits.maxPerStageDescriptorUniformBuffers;
+		case LIMIT_MAX_PUSH_CONSTANT_SIZE:
+			return limits.maxPushConstantsSize;
+		case LIMIT_MAX_UNIFORM_BUFFER_SIZE:
+			return limits.maxUniformBufferRange;
+		case LIMIT_MAX_VERTEX_INPUT_ATTRIBUTE_OFFSET:
+			return limits.maxVertexInputAttributeOffset;
+		case LIMIT_MAX_VERTEX_INPUT_ATTRIBUTES:
+			return limits.maxVertexInputAttributes;
+		case LIMIT_MAX_VERTEX_INPUT_BINDINGS:
+			return limits.maxVertexInputBindings;
+		case LIMIT_MAX_VERTEX_INPUT_BINDING_STRIDE:
+			return limits.maxVertexInputBindingStride;
+		case LIMIT_MIN_UNIFORM_BUFFER_OFFSET_ALIGNMENT:
+			return limits.minUniformBufferOffsetAlignment;
+		case LIMIT_MAX_COMPUTE_WORKGROUP_COUNT_X:
+			return limits.maxComputeWorkGroupCount[0];
+		case LIMIT_MAX_COMPUTE_WORKGROUP_COUNT_Y:
+			return limits.maxComputeWorkGroupCount[1];
+		case LIMIT_MAX_COMPUTE_WORKGROUP_COUNT_Z:
+			return limits.maxComputeWorkGroupCount[2];
+		case LIMIT_MAX_COMPUTE_WORKGROUP_INVOCATIONS:
+			return limits.maxComputeWorkGroupInvocations;
+		case LIMIT_MAX_COMPUTE_WORKGROUP_SIZE_X:
+			return limits.maxComputeWorkGroupSize[0];
+		case LIMIT_MAX_COMPUTE_WORKGROUP_SIZE_Y:
+			return limits.maxComputeWorkGroupSize[1];
+		case LIMIT_MAX_COMPUTE_WORKGROUP_SIZE_Z:
+			return limits.maxComputeWorkGroupSize[2];
+		case LIMIT_MAX_COMPUTE_SHARED_MEMORY_SIZE:
+			return limits.maxComputeSharedMemorySize;
+		case LIMIT_MAX_VIEWPORT_DIMENSIONS_X:
+			return limits.maxViewportDimensions[0];
+		case LIMIT_MAX_VIEWPORT_DIMENSIONS_Y:
+			return limits.maxViewportDimensions[1];
+		case LIMIT_SUBGROUP_SIZE:
+			//return subgroup_capabilities.size;
+		case LIMIT_SUBGROUP_MIN_SIZE:
+			//return subgroup_capabilities.min_size;
+		case LIMIT_SUBGROUP_MAX_SIZE:
+			//return subgroup_capabilities.max_size;
+		case LIMIT_SUBGROUP_IN_SHADERS:
+			//return subgroup_capabilities.supported_stages_flags_rd();
+		case LIMIT_SUBGROUP_OPERATIONS:
+			//return subgroup_capabilities.supported_operations_flags_rd();
+		case LIMIT_MAX_SHADER_VARYINGS:
+			// The Vulkan spec states that built in varyings like gl_FragCoord should count against this, but in
+			// practice, that doesn't seem to be the case. The validation layers don't even complain.
+			return MIN(limits.maxVertexOutputComponents / 4, limits.maxFragmentInputComponents / 4);
+		default: {
+#ifdef DEV_ENABLED
+			WARN_PRINT("Returning maximum value for unknown limit " + itos(p_limit) + ".");
+#endif
+			return safe_unbounded;
+		}
+		}
+	}
+
+#pragma endregion
 
 #pragma region Uniform Set
 
@@ -3790,7 +3745,7 @@ namespace Vulkan
 		VkDescriptorPool vk_pool = VK_NULL_HANDLE;
 		VkResult res = vkCreateDescriptorPool(vk_device, &descriptor_set_pool_create_info, nullptr, &vk_pool);
 		if (res) {
-			ERR_FAIL_COND_V_MSG(res, VK_NULL_HANDLE, std::format("vkCreateDescriptorPool failed with error %s .", std::to_string(res)));
+			ERR_FAIL_COND_V_MSG(res, VK_NULL_HANDLE, std::format("vkCreateDescriptorPool failed with error {} .", std::to_string(res)));
 		}
 
 		return vk_pool;
@@ -3829,6 +3784,22 @@ namespace Vulkan
 		std::vector<VkWriteDescriptorSet> vk_writes_vec(p_uniforms.size());
 		VkWriteDescriptorSet* vk_writes = vk_writes_vec.data();
 		uint32_t writes_amount = 0;
+
+		// TODO: i think we can get away with one vector of each type. 
+		std::vector<std::unique_ptr<VkDescriptorBufferInfo>> vk_buf_info_vec;
+		std::vector<std::unique_ptr<VkDescriptorBufferInfo>> vk_buf_info_vec_dynamic;
+		std::vector<std::unique_ptr<VkDescriptorBufferInfo>> vk_buf_info_vec_storage;
+		std::vector<std::unique_ptr<VkDescriptorBufferInfo>> vk_buf_info_vec_storage_dynamic;
+		std::vector<std::unique_ptr<VkDescriptorImageInfo>> vk_img_infos_vec_sampler;
+		std::vector<std::unique_ptr<VkDescriptorImageInfo>> vk_img_infos_vec_texture;
+		std::vector<std::unique_ptr<VkDescriptorImageInfo>> vk_img_infos_vec;
+		std::vector<std::unique_ptr<VkDescriptorImageInfo>> vk_img_infos_vec_input_attachment;
+		std::vector<std::unique_ptr<VkDescriptorImageInfo>> vk_img_infos_vec_texture_buffer;
+		std::vector<std::unique_ptr<VkDescriptorImageInfo>> vk_img_infos_vec_texture_sampler;
+		std::vector<std::unique_ptr<VkDescriptorBufferInfo>> vk_texbuf_infos_vec;
+		std::vector<std::unique_ptr<VkDescriptorBufferInfo>> vk_texbuf_infos_vec_sampler;
+		std::vector<std::unique_ptr<VkBufferView>> vk_texbuf_views_vec;
+		std::vector<std::unique_ptr<VkBufferView>> vk_texbuf_views_vec_sampler;
 		for (uint32_t i = 0; i < p_uniforms.size(); i++) {
 			const BoundUniform& uniform = p_uniforms[i];
 
@@ -3846,11 +3817,12 @@ namespace Vulkan
 					add_write = false;
 				}
 				else {
-					std::vector<VkDescriptorImageInfo> vk_img_infos_vec(num_descriptors);
-
-					VkDescriptorImageInfo* vk_img_infos = vk_img_infos_vec.data();
 
 					for (uint32_t j = 0; j < num_descriptors; j++) {
+						vk_img_infos_vec_sampler.emplace_back(std::make_unique<VkDescriptorImageInfo>());
+						VkDescriptorImageInfo* vk_img_infos = vk_img_infos_vec_sampler.back().get();
+
+
 						vk_img_infos[j] = {};
 						vk_img_infos[j].sampler = (VkSampler)uniform.ids[j].id;
 						vk_img_infos[j].imageView = VK_NULL_HANDLE;
@@ -3858,16 +3830,18 @@ namespace Vulkan
 					}
 
 					vk_writes[writes_amount].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
-					vk_writes[writes_amount].pImageInfo = vk_img_infos;
+					vk_writes[writes_amount].pImageInfo = (vk_img_infos_vec_sampler.end() - num_descriptors)->get();
 				}
 			} break;
 			case UNIFORM_TYPE_SAMPLER_WITH_TEXTURE: {
 				num_descriptors = uniform.ids.size() / 2;
-				std::vector<VkDescriptorImageInfo> vk_img_infos_vec(num_descriptors);
-
-				VkDescriptorImageInfo* vk_img_infos = vk_img_infos_vec.data();
 
 				for (uint32_t j = 0; j < num_descriptors; j++) {
+
+				vk_img_infos_vec_texture_sampler.emplace_back(std::make_unique<VkDescriptorImageInfo>());
+				VkDescriptorImageInfo* vk_img_infos = vk_img_infos_vec_texture_sampler.back().get();
+
+
 #ifdef DEBUG_ENABLED
 					if (((const TextureInfo*)uniform.ids[j * 2 + 1].id)->transient) {
 						ERR_PRINT("TEXTURE_USAGE_TRANSIENT_BIT texture must not be used for sampling in a shader.");
@@ -3880,34 +3854,37 @@ namespace Vulkan
 				}
 
 				vk_writes[writes_amount].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-				vk_writes[writes_amount].pImageInfo = vk_img_infos;
+				vk_writes[writes_amount].pImageInfo = (vk_img_infos_vec_texture_sampler.end() - num_descriptors)->get();;
 			} break;
 			case UNIFORM_TYPE_TEXTURE: {
 				num_descriptors = uniform.ids.size();
-				std::vector<VkDescriptorImageInfo> vk_img_infos_vec(num_descriptors);
-
-				VkDescriptorImageInfo* vk_img_infos = vk_img_infos_vec.data();
 
 				for (uint32_t j = 0; j < num_descriptors; j++) {
+				vk_img_infos_vec_texture.emplace_back(std::make_unique<VkDescriptorImageInfo>());
+				VkDescriptorImageInfo* vk_img_infos = vk_img_infos_vec_texture.back().get();
+
 #ifdef DEBUG_ENABLED
 					if (((const TextureInfo*)uniform.ids[j].id)->transient) {
 						ERR_PRINT("TEXTURE_USAGE_TRANSIENT_BIT texture must not be used for sampling in a shader.");
 					}
 #endif
-					vk_img_infos[j] = {};
-					vk_img_infos[j].imageView = ((const TextureInfo*)uniform.ids[j].id)->vk_view;
-					vk_img_infos[j].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+					//vk_img_infos[j] = {};
+					vk_img_infos->imageView = ((const TextureInfo*)uniform.ids[j].id)->vk_view;
+					vk_img_infos->imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 				}
 
 				vk_writes[writes_amount].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-				vk_writes[writes_amount].pImageInfo = vk_img_infos;
+				DEBUG_ASSERT(vk_img_infos_vec_texture.size() >= num_descriptors);
+				vk_writes[writes_amount].pImageInfo = (vk_img_infos_vec_texture.end() - num_descriptors)->get();
 			} break;
 			case UNIFORM_TYPE_IMAGE: {
 				num_descriptors = uniform.ids.size();
-				std::vector<VkDescriptorImageInfo> vk_img_infos_vec(num_descriptors);
-				VkDescriptorImageInfo* vk_img_infos = vk_img_infos_vec.data();
 
 				for (uint32_t j = 0; j < num_descriptors; j++) {
+
+				vk_img_infos_vec.emplace_back(std::make_unique<VkDescriptorImageInfo>()); ;
+
+				VkDescriptorImageInfo* vk_img_infos = vk_img_infos_vec.back().get();
 #ifdef DEBUG_ENABLED
 					if (((const TextureInfo*)uniform.ids[j].id)->transient) {
 						ERR_PRINT("TEXTURE_USAGE_TRANSIENT_BIT texture must not be used for sampling in a shader.");
@@ -3919,17 +3896,18 @@ namespace Vulkan
 				}
 
 				vk_writes[writes_amount].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-				vk_writes[writes_amount].pImageInfo = vk_img_infos;
+				vk_writes[writes_amount].pImageInfo = (vk_img_infos_vec.end() - num_descriptors)->get();
 			} break;
 			case UNIFORM_TYPE_TEXTURE_BUFFER: {
 				num_descriptors = uniform.ids.size();
-				std::vector<VkDescriptorBufferInfo> vk_buf_infos_vec(num_descriptors);
-				VkDescriptorBufferInfo* vk_buf_infos = vk_buf_infos_vec.data();
-
-				std::vector<VkBufferView> vk_buf_views_vec(num_descriptors);
-				VkBufferView* vk_buf_views = vk_buf_views_vec.data();
 
 				for (uint32_t j = 0; j < num_descriptors; j++) {
+					vk_texbuf_infos_vec.emplace_back(std::make_unique<VkDescriptorBufferInfo>());
+					VkDescriptorBufferInfo* vk_buf_infos = vk_texbuf_infos_vec.back().get();
+
+					vk_texbuf_views_vec.emplace_back(std::make_unique<VkBufferView>());
+					VkBufferView* vk_buf_views = vk_texbuf_views_vec.back().get();
+
 					const BufferInfo* buf_info = (const BufferInfo*)uniform.ids[j].id;
 					vk_buf_infos[j] = {};
 					vk_buf_infos[j].buffer = buf_info->vk_buffer;
@@ -3939,19 +3917,21 @@ namespace Vulkan
 				}
 
 				vk_writes[writes_amount].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
-				vk_writes[writes_amount].pBufferInfo = vk_buf_infos;
-				vk_writes[writes_amount].pTexelBufferView = vk_buf_views;
+				vk_writes[writes_amount].pBufferInfo = (vk_texbuf_infos_vec.end() - num_descriptors)->get();
+				vk_writes[writes_amount].pTexelBufferView = (vk_texbuf_views_vec.end() - num_descriptors)->get();
 			} break;
 			case UNIFORM_TYPE_SAMPLER_WITH_TEXTURE_BUFFER: {
 				num_descriptors = uniform.ids.size() / 2;
-				std::vector<VkDescriptorImageInfo> vk_img_infos_vec(num_descriptors);
-				VkDescriptorImageInfo* vk_img_infos = vk_img_infos_vec.data();
-				std::vector<VkDescriptorBufferInfo> vk_buf_infos_vec(num_descriptors);
-				VkDescriptorBufferInfo* vk_buf_infos = vk_buf_infos_vec.data();
-				std::vector<VkBufferView> vk_buf_views_vec(num_descriptors);
-				VkBufferView* vk_buf_views = vk_buf_views_vec.data();
-
 				for (uint32_t j = 0; j < num_descriptors; j++) {
+					vk_texbuf_infos_vec_sampler.emplace_back(std::make_unique<VkDescriptorBufferInfo>());
+					VkDescriptorBufferInfo* vk_buf_infos = vk_texbuf_infos_vec_sampler.back().get();
+
+					vk_texbuf_views_vec_sampler.emplace_back(std::make_unique<VkBufferView>());
+					VkBufferView* vk_buf_views = vk_texbuf_views_vec_sampler.back().get();
+
+					vk_img_infos_vec_texture_buffer.emplace_back(std::make_unique<VkDescriptorImageInfo>());
+					VkDescriptorImageInfo* vk_img_infos = vk_img_infos_vec_texture_buffer.back().get();
+
 					vk_img_infos[j] = {};
 					vk_img_infos[j].sampler = (VkSampler)uniform.ids[j * 2 + 0].id;
 
@@ -3964,39 +3944,38 @@ namespace Vulkan
 				}
 
 				vk_writes[writes_amount].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
-				vk_writes[writes_amount].pImageInfo = vk_img_infos;
-				vk_writes[writes_amount].pBufferInfo = vk_buf_infos;
-				vk_writes[writes_amount].pTexelBufferView = vk_buf_views;
+				vk_writes[writes_amount].pImageInfo = (vk_img_infos_vec_texture_buffer.end() - num_descriptors)->get();
+				vk_writes[writes_amount].pBufferInfo = (vk_texbuf_infos_vec_sampler.end() - num_descriptors)->get();
+				vk_writes[writes_amount].pTexelBufferView = (vk_texbuf_views_vec_sampler.end() - num_descriptors)->get();
 			} break;
 			case UNIFORM_TYPE_IMAGE_BUFFER: {
 				CRASH_NOW_MSG("Unimplemented!"); // TODO.
 			} break;
 			case UNIFORM_TYPE_UNIFORM_BUFFER: {
 				const BufferInfo* buf_info = (const BufferInfo*)uniform.ids[0].id;
-				std::vector<VkDescriptorBufferInfo> vk_buf_info_vec;
-				VkDescriptorBufferInfo* vk_buf_info = vk_buf_info_vec.data();
-				*vk_buf_info = {};
+				vk_buf_info_vec.emplace_back(std::make_unique<VkDescriptorBufferInfo>());
+				VkDescriptorBufferInfo* vk_buf_info = vk_buf_info_vec.back().get();
+
 				vk_buf_info->buffer = buf_info->vk_buffer;
 				vk_buf_info->range = buf_info->size;
 
 				ERR_FAIL_COND_V_MSG(buf_info->is_dynamic(), UniformSetID(),
-					std::format("Sent a buffer with BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT but binding ( %s ), set ( %s ) is UNIFORM_TYPE_UNIFORM_BUFFER instead of UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC.", std::to_string(uniform.binding), std::to_string(p_set_index)));
+					std::format("Sent a buffer with BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT but binding ( {} ), set ( {} ) is UNIFORM_TYPE_UNIFORM_BUFFER instead of UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC.", std::to_string(uniform.binding), std::to_string(p_set_index)));
 
 				vk_writes[writes_amount].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 				vk_writes[writes_amount].pBufferInfo = vk_buf_info;
 			} break;
 			case UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC: {
 				const BufferInfo* buf_info = (const BufferInfo*)uniform.ids[0].id;
-				std::vector<VkDescriptorBufferInfo> vk_buf_info_vec;
-				VkDescriptorBufferInfo* vk_buf_info = vk_buf_info_vec.data();
-				*vk_buf_info = {};
+				vk_buf_info_vec_dynamic.emplace_back(std::make_unique<VkDescriptorBufferInfo>());
+				VkDescriptorBufferInfo* vk_buf_info = vk_buf_info_vec_dynamic.back().get();
 				vk_buf_info->buffer = buf_info->vk_buffer;
 				vk_buf_info->range = buf_info->size;
 
 				ERR_FAIL_COND_V_MSG(!buf_info->is_dynamic(), UniformSetID(),
-					std::format("Sent a buffer without BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT but binding ( %s ), set ( %s ) is UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC instead of UNIFORM_TYPE_UNIFORM_BUFFER.", std::to_string(uniform.binding), std::to_string(p_set_index) ));
+					std::format("Sent a buffer without BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT but binding ( {} ), set ( {} ) is UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC instead of UNIFORM_TYPE_UNIFORM_BUFFER.", std::to_string(uniform.binding), std::to_string(p_set_index) ));
 				ERR_FAIL_COND_V_MSG(num_dynamic_buffers >= MAX_DYNAMIC_BUFFERS, UniformSetID(),
-					std::format("Uniform set exceeded the limit of dynamic/persistent buffers. ( %s ).", std::to_string(MAX_DYNAMIC_BUFFERS)));
+					std::format("Uniform set exceeded the limit of dynamic/persistent buffers. ( {} ).", std::to_string(MAX_DYNAMIC_BUFFERS)));
 
 				dynamic_buffers[num_dynamic_buffers++] = buf_info;
 				vk_writes[writes_amount].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
@@ -4004,30 +3983,29 @@ namespace Vulkan
 			} break;
 			case UNIFORM_TYPE_STORAGE_BUFFER: {
 				const BufferInfo* buf_info = (const BufferInfo*)uniform.ids[0].id;
-				std::vector<VkDescriptorBufferInfo> vk_buf_info_vec;
-				VkDescriptorBufferInfo* vk_buf_info = vk_buf_info_vec.data();
-				*vk_buf_info = {};
+				vk_buf_info_vec_storage.emplace_back(std::make_unique<VkDescriptorBufferInfo>());
+				VkDescriptorBufferInfo* vk_buf_info = vk_buf_info_vec_storage.back().get();
 				vk_buf_info->buffer = buf_info->vk_buffer;
 				vk_buf_info->range = buf_info->size;
 
 				ERR_FAIL_COND_V_MSG(buf_info->is_dynamic(), UniformSetID(),
-					std::format("Sent a buffer with BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT but binding ( %s ), set ( %s ) is UNIFORM_TYPE_STORAGE_BUFFER instead of UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC.", std::to_string(uniform.binding), std::to_string(p_set_index)));
+					std::format("Sent a buffer with BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT but binding ( {} ), set ( {} ) is UNIFORM_TYPE_STORAGE_BUFFER instead of UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC.", std::to_string(uniform.binding), std::to_string(p_set_index)));
 
 				vk_writes[writes_amount].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 				vk_writes[writes_amount].pBufferInfo = vk_buf_info;
 			} break;
 			case UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC: {
 				const BufferInfo* buf_info = (const BufferInfo*)uniform.ids[0].id;
-				std::vector<VkDescriptorBufferInfo> vk_buf_info_vec;
-				VkDescriptorBufferInfo* vk_buf_info = vk_buf_info_vec.data();
-				*vk_buf_info = {};
+				vk_buf_info_vec_storage_dynamic.emplace_back(std::make_unique<VkDescriptorBufferInfo>());
+				VkDescriptorBufferInfo* vk_buf_info = vk_buf_info_vec_storage_dynamic.back().get();
+
 				vk_buf_info->buffer = buf_info->vk_buffer;
 				vk_buf_info->range = buf_info->size;
 
 				ERR_FAIL_COND_V_MSG(!buf_info->is_dynamic(), UniformSetID(),
-					std::format("Sent a buffer without BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT but binding ( %s ), set ( %s ) is UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC instead of UNIFORM_TYPE_STORAGE_BUFFER.", std::to_string(uniform.binding), std::to_string(p_set_index)));
+					std::format("Sent a buffer without BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT but binding ( {} ), set ( {} ) is UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC instead of UNIFORM_TYPE_STORAGE_BUFFER.", std::to_string(uniform.binding), std::to_string(p_set_index)));
 				ERR_FAIL_COND_V_MSG(num_dynamic_buffers >= MAX_DYNAMIC_BUFFERS, UniformSetID(),
-					std::format("Uniform set exceeded the limit of dynamic/persistent buffers. ( %s )", std::to_string(MAX_DYNAMIC_BUFFERS)));
+					std::format("Uniform set exceeded the limit of dynamic/persistent buffers. ( {} )", std::to_string(MAX_DYNAMIC_BUFFERS)));
 
 				dynamic_buffers[num_dynamic_buffers++] = buf_info;
 				vk_writes[writes_amount].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
@@ -4035,17 +4013,18 @@ namespace Vulkan
 			} break;
 			case UNIFORM_TYPE_INPUT_ATTACHMENT: {
 				num_descriptors = uniform.ids.size();
-				std::vector<VkDescriptorImageInfo> vk_img_infos_vec(num_descriptors);
-				VkDescriptorImageInfo* vk_img_infos = vk_img_infos_vec.data();
-
+				
 				for (uint32_t j = 0; j < uniform.ids.size(); j++) {
+				vk_img_infos_vec_input_attachment.emplace_back(std::make_unique<VkDescriptorImageInfo>());
+
+					VkDescriptorImageInfo* vk_img_infos = vk_img_infos_vec_input_attachment.back().get();
 					vk_img_infos[j] = {};
 					vk_img_infos[j].imageView = ((const TextureInfo*)uniform.ids[j].id)->vk_view;
 					vk_img_infos[j].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 				}
 
 				vk_writes[writes_amount].descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
-				vk_writes[writes_amount].pImageInfo = vk_img_infos;
+				vk_writes[writes_amount].pImageInfo = (vk_img_infos_vec_input_attachment.end() - num_descriptors)->get();
 			} break;
 			//case UNIFORM_TYPE_ACCELERATION_STRUCTURE: {
 			//	const AccelerationStructureInfo* accel_info = (const AccelerationStructureInfo*)uniform.ids[0].id;
@@ -4069,13 +4048,18 @@ namespace Vulkan
 				writes_amount++;
 			}
 
-			ERR_FAIL_COND_V_MSG(pool_key.uniform_type[uniform.type] == MAX_UNIFORM_POOL_ELEMENT, UniformSetID(), std::format("Uniform set reached the limit of bindings for the same type ( %s )", std::to_string(MAX_UNIFORM_POOL_ELEMENT)));
+			ERR_FAIL_COND_V_MSG(pool_key.uniform_type[uniform.type] == MAX_UNIFORM_POOL_ELEMENT, UniformSetID(), std::format("Uniform set reached the limit of bindings for the same type ( {} )", std::to_string(MAX_UNIFORM_POOL_ELEMENT)));
 			pool_key.uniform_type[uniform.type] += num_descriptors;
 		}
 
 		bool linear_pool = p_linear_pool_index >= 0;
-		DescriptorSetPools::iterator pool_sets_it = linear_pool ? linear_descriptor_set_pools[p_linear_pool_index].find(pool_key) : descriptor_set_pools.find(pool_key);
-		if (pool_sets_it == linear_descriptor_set_pools[p_linear_pool_index].end()) {
+		auto& pool = linear_pool
+			? linear_descriptor_set_pools[p_linear_pool_index]
+			: descriptor_set_pools;
+
+		auto pool_sets_it = pool.find(pool_key);
+
+		if (pool_sets_it == pool.end()) {
 			if (linear_pool) {
 				pool_sets_it = linear_descriptor_set_pools[p_linear_pool_index].insert({ pool_key, std::unordered_map<VkDescriptorPool, uint32_t>() }).first;
 			}
@@ -4103,7 +4087,7 @@ namespace Vulkan
 
 				// "Fragmented pool" and "out of memory pool" errors are handled by creating more pools. Any other error is unexpected.
 				if (res != VK_ERROR_FRAGMENTED_POOL && res != VK_ERROR_OUT_OF_POOL_MEMORY) {
-					ERR_FAIL_V_MSG(UniformSetID(), std::format("Cannot allocate descriptor sets, error %s .", std::to_string(res)));
+					ERR_FAIL_V_MSG(UniformSetID(), std::format("Cannot allocate descriptor sets, error {} .", std::to_string(res)));
 				}
 			}
 		}
@@ -4116,7 +4100,7 @@ namespace Vulkan
 			// All errors are unexpected at this stage.
 			if (res) {
 				vkDestroyDescriptorPool(vk_device, descriptor_set_allocate_info.descriptorPool, nullptr);
-				ERR_FAIL_V_MSG(UniformSetID(),std::format("Cannot allocate descriptor sets, error %s ."), std::to_string(res));
+				ERR_FAIL_V_MSG(UniformSetID(),std::format("Cannot allocate descriptor sets, error {} .", std::to_string(res)));
 			}
 		}
 
@@ -4274,7 +4258,7 @@ namespace Vulkan
 		vkCmdFillBuffer(command_buffer->vk_command_buffer, buf_info->vk_buffer, p_offset, p_size, 0);
 	}
 
-	void RenderingDeviceDriverVulkan::command_copy_buffer(CommandBufferID p_cmd_buffer, BufferID p_src_buffer, BufferID p_dst_buffer, std::span<BufferCopyRegion> p_regions) {
+	void RenderingDeviceDriverVulkan::command_copy_buffer(CommandBufferID p_cmd_buffer, BufferID p_src_buffer, BufferID p_dst_buffer, std::span<BufferCopyRegion> p_regions)   {
 		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
 		const BufferInfo* src_buf_info = (const BufferInfo*)p_src_buffer.id;
 		const BufferInfo* dst_buf_info = (const BufferInfo*)p_dst_buffer.id;
@@ -4546,7 +4530,7 @@ namespace Vulkan
 	// ----- SUBPASS -----
 
 	static void _attachment_reference_to_vk(const RenderingDeviceDriverVulkan::AttachmentReference& p_attachment_reference, VkAttachmentReference2KHR* r_vk_attachment_reference) {
-		*r_vk_attachment_reference = {};
+		//r_vk_attachment_reference = {};
 		r_vk_attachment_reference->sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2_KHR;
 		r_vk_attachment_reference->attachment = p_attachment_reference.attachment;
 		r_vk_attachment_reference->layout = RD_TO_VK_LAYOUT[p_attachment_reference.layout];
@@ -4572,34 +4556,46 @@ namespace Vulkan
 			vk_attachments[i].initialLayout = RD_TO_VK_LAYOUT[p_attachments[i].initial_layout];
 			vk_attachments[i].finalLayout = RD_TO_VK_LAYOUT[p_attachments[i].final_layout];
 		}
+		std::vector<VkAttachmentReference2KHR> vk_subpass_input_attachments_vec;
+		std::vector<VkAttachmentReference2KHR> vk_subpass_color_attachments_vec;
+		std::vector<VkAttachmentReference2KHR> vk_subpass_resolve_attachments_vec;
+		std::vector<VkAttachmentReference2KHR> vk_subpass_depth_stencil_attachment_vec;
 
 		std::vector<VkSubpassDescription2KHR> vk_subpasses_vec(p_subpasses.size());
 		VkSubpassDescription2KHR* vk_subpasses = vk_subpasses_vec.data();
+
 		for (uint32_t i = 0; i < p_subpasses.size(); i++) {
 
-			std::vector<VkAttachmentReference2KHR> vk_subpass_input_attachments_vec(p_subpasses[i].input_references.size());
-			VkAttachmentReference2KHR* vk_subpass_input_attachments = vk_subpass_input_attachments_vec.data();
+			//vk_subpass_input_attachments_vec.resize(p_subpasses[i].input_references.size());
+			//VkAttachmentReference2KHR* vk_subpass_input_attachments = vk_subpass_input_attachments_vec.data();
 			for (uint32_t j = 0; j < p_subpasses[i].input_references.size(); j++) {
-				_attachment_reference_to_vk(p_subpasses[i].input_references[j], &vk_subpass_input_attachments[j]);
+				vk_subpass_input_attachments_vec.emplace_back();
+				auto& attachment = vk_subpass_input_attachments_vec.back();
+				_attachment_reference_to_vk(p_subpasses[i].input_references[j], &attachment);
 			}
 
-			std::vector<VkAttachmentReference2KHR> vk_subpass_color_attachments_vec(p_subpasses[i].color_references.size());
-			VkAttachmentReference2KHR* vk_subpass_color_attachments = vk_subpass_color_attachments_vec.data();
+			//vk_subpass_color_attachments_vec.resize(p_subpasses[i].color_references.size());
+			//VkAttachmentReference2KHR* vk_subpass_color_attachments = vk_subpass_color_attachments_vec.data();
 			for (uint32_t j = 0; j < p_subpasses[i].color_references.size(); j++) {
-				_attachment_reference_to_vk(p_subpasses[i].color_references[j], &vk_subpass_color_attachments[j]);
+				vk_subpass_color_attachments_vec.emplace_back();
+				auto& attachment = vk_subpass_color_attachments_vec.back();
+				_attachment_reference_to_vk(p_subpasses[i].color_references[j], &attachment);
 			}
 
-			std::vector<VkAttachmentReference2KHR> vk_subpass_resolve_attachments_vec(p_subpasses[i].resolve_references.size());
-			VkAttachmentReference2KHR* vk_subpass_resolve_attachments = vk_subpass_resolve_attachments_vec.data();
+			//vk_subpass_resolve_attachments_vec.resize(p_subpasses[i].resolve_references.size());
+			//VkAttachmentReference2KHR* vk_subpass_resolve_attachments = vk_subpass_resolve_attachments_vec.data();
 			for (uint32_t j = 0; j < p_subpasses[i].resolve_references.size(); j++) {
-				_attachment_reference_to_vk(p_subpasses[i].resolve_references[j], &vk_subpass_resolve_attachments[j]);
+				vk_subpass_resolve_attachments_vec.emplace_back();
+				auto& attachment = vk_subpass_resolve_attachments_vec.back();
+				_attachment_reference_to_vk(p_subpasses[i].resolve_references[j], &attachment);
 			}
 
-			VkAttachmentReference2KHR* vk_subpass_depth_stencil_attachment = nullptr;
+			//VkAttachmentReference2KHR* vk_subpass_depth_stencil_attachment = nullptr;
 			if (p_subpasses[i].depth_stencil_reference.attachment != AttachmentReference::UNUSED) {
-				std::vector<VkAttachmentReference2KHR> vk_subpass_depth_stencil_attachment_vec;
-				vk_subpass_depth_stencil_attachment = vk_subpass_depth_stencil_attachment_vec.data();
-				_attachment_reference_to_vk(p_subpasses[i].depth_stencil_reference, vk_subpass_depth_stencil_attachment);
+				vk_subpass_depth_stencil_attachment_vec.emplace_back(); // create element
+				auto& attachment = vk_subpass_depth_stencil_attachment_vec.back();
+				//vk_subpass_depth_stencil_attachment = vk_subpass_depth_stencil_attachment_vec.data();
+				_attachment_reference_to_vk(p_subpasses[i].depth_stencil_reference, &attachment);
 			}
 
 			vk_subpasses[i] = {};
@@ -4607,11 +4603,11 @@ namespace Vulkan
 			vk_subpasses[i].pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 			vk_subpasses[i].viewMask = p_view_count == 1 ? 0 : view_mask;
 			vk_subpasses[i].inputAttachmentCount = p_subpasses[i].input_references.size();
-			vk_subpasses[i].pInputAttachments = vk_subpass_input_attachments;
+			vk_subpasses[i].pInputAttachments = vk_subpass_input_attachments_vec.data();
 			vk_subpasses[i].colorAttachmentCount = p_subpasses[i].color_references.size();
-			vk_subpasses[i].pColorAttachments = vk_subpass_color_attachments;
-			vk_subpasses[i].pResolveAttachments = vk_subpass_resolve_attachments;
-			vk_subpasses[i].pDepthStencilAttachment = vk_subpass_depth_stencil_attachment;
+			vk_subpasses[i].pColorAttachments = vk_subpass_color_attachments_vec.data();
+			vk_subpasses[i].pResolveAttachments = vk_subpass_resolve_attachments_vec.data();
+			vk_subpasses[i].pDepthStencilAttachment = vk_subpass_depth_stencil_attachment_vec.data();
 			vk_subpasses[i].preserveAttachmentCount = p_subpasses[i].preserve_attachments.size();
 			vk_subpasses[i].pPreserveAttachments = p_subpasses[i].preserve_attachments.data();
 
@@ -4716,7 +4712,7 @@ namespace Vulkan
 
 		VkRenderPass vk_render_pass = VK_NULL_HANDLE;
 		VkResult res = _create_render_pass(vk_device, &create_info, nullptr, &vk_render_pass);
-		ERR_FAIL_COND_V_MSG(res, RenderPassID(), std::format("vkCreateRenderPass2KHR failed with error %s .", std::to_string(res)));
+		ERR_FAIL_COND_V_MSG(res, RenderPassID(), std::format("vkCreateRenderPass2KHR failed with error {} .", std::to_string(res)));
 
 		RenderPassInfo* render_pass = new RenderPassInfo;
 		render_pass->vk_render_pass = vk_render_pass;
@@ -4732,9 +4728,13 @@ namespace Vulkan
 
 	// ----- COMMANDS -----
 
-	void RenderingDeviceDriverVulkan::command_begin_render_pass(CommandBufferID p_cmd_buffer, RenderPassID p_render_pass, FramebufferID p_framebuffer, CommandBufferType p_cmd_buffer_type, const Rect2i& p_rect, std::span<RenderingDeviceDriver::RenderPassClearValue> p_clear_values) {
+	void RenderingDeviceDriverVulkan::command_begin_render_pass(CommandBufferID p_cmd_buffer, RenderPassID p_render_pass, 
+		FramebufferID p_framebuffer, CommandBufferType p_cmd_buffer_type, const Rect2i& p_rect,
+		std::span<RenderingDeviceDriver::RenderPassClearValue> p_clear_values) {
+
 		CommandBufferInfo* command_buffer = (CommandBufferInfo*)(p_cmd_buffer.id);
 		RenderPassInfo* render_pass = (RenderPassInfo*)(p_render_pass.id);
+
 		Framebuffer* framebuffer = (Framebuffer*)(p_framebuffer.id);
 
 		if (framebuffer->swap_chain_acquired) {
@@ -4777,8 +4777,8 @@ namespace Vulkan
 
 	void RenderingDeviceDriverVulkan::command_end_render_pass(CommandBufferID p_cmd_buffer) {
 		CommandBufferInfo* command_buffer = (CommandBufferInfo*)(p_cmd_buffer.id);
-		DEV_ASSERT(command_buffer->active_framebuffer != nullptr && "A framebuffer must be active.");
-		DEV_ASSERT(command_buffer->active_render_pass != nullptr && "A render pass must be active.");
+		DEBUG_ASSERT(command_buffer->active_framebuffer != nullptr && "A framebuffer must be active.");
+		DEBUG_ASSERT(command_buffer->active_render_pass != nullptr && "A render pass must be active.");
 
 		//if (vkEndRenderPass2KHR != nullptr && fdm_capabilities.offset_supported && command_buffer->active_render_pass->uses_fragment_density_map) {
 		//	std::vector<VkOffset2D> fragment_density_offsets;
@@ -4943,7 +4943,6 @@ namespace Vulkan
 		vkCmdDrawIndirectCount(command_buffer->vk_command_buffer, indirect_buf_info->vk_buffer, p_offset, count_buf_info->vk_buffer, p_count_buffer_offset, p_max_draw_count, p_stride);
 	}
 
-
 	void RenderingDeviceDriverVulkan::command_render_bind_vertex_buffers(CommandBufferID p_cmd_buffer, uint32_t p_binding_count, const BufferID* p_buffers, const uint64_t* p_offsets, uint64_t p_dynamic_offsets) {
 		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
 
@@ -5012,14 +5011,15 @@ namespace Vulkan
 								std::span<PipelineSpecializationConstant> p_specialization_constants) {
 		// Vertex.
 		const VkPipelineVertexInputStateCreateInfo* vertex_input_state_create_info = nullptr;
+		std::vector< VkPipelineVertexInputStateCreateInfo> null_vertex_input_state_vec;
+
 		if (p_vertex_format.id) {
 			const VertexFormatInfo* vf_info = (const VertexFormatInfo*)p_vertex_format.id;
 			vertex_input_state_create_info = &vf_info->vk_create_info;
 		}
 		else {
-			std::vector< VkPipelineVertexInputStateCreateInfo> null_vertex_input_state_vec;
+			null_vertex_input_state_vec.resize(1);
 			VkPipelineVertexInputStateCreateInfo* null_vertex_input_state = null_vertex_input_state_vec.data();
-			*null_vertex_input_state = {};
 			null_vertex_input_state->sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 			vertex_input_state_create_info = null_vertex_input_state;
 		}
@@ -5234,13 +5234,13 @@ namespace Vulkan
 		thread_local std::vector<VkSpecializationMapEntry> specialization_entries;
 
 #if RECORD_PIPELINE_STATISTICS
-		thread_local LocalVector<uint64_t> respv_run_time;
-		thread_local LocalVector<uint64_t> respv_size;
+		thread_local std::vector<uint64_t> respv_run_time;
+		thread_local std::vector<uint64_t> respv_size;
 		uint32_t stage_count = shader_info->vk_stages_create_info.size();
 		respv_run_time.clear();
 		respv_size.clear();
-		respv_run_time.resize_initialized(stage_count);
-		respv_size.resize_initialized(stage_count);
+		respv_run_time.resize(stage_count);
+		respv_size.resize(stage_count);
 #endif
 
 		respv_shader_modules.clear();
@@ -5277,7 +5277,7 @@ namespace Vulkan
 							}
 						}
 
-						LOGI(std::format("re-spirv transformed the shader from %d bytes to %d bytes with constants %s (%d).", shader_info->respv_stage_shaders[i].inlinedSpirvWords.size() * sizeof(uint32_t), respv_optimized_data.size(), spec_constants, p_shader.id));
+						LOGI(std::format("re-spirv transformed the shader from {} bytes to {} bytes with constants {} ({}).", shader_info->respv_stage_shaders[i].inlinedSpirvWords.size() * sizeof(uint32_t), respv_optimized_data.size(), spec_constants, p_shader.id));
 #endif
 
 						// Create the shader module with the optimized output.
@@ -5646,6 +5646,87 @@ namespace Vulkan
 	}
 
 #pragma endregion
+
+#pragma region Misc
+	const RenderingShaderContainerFormat& RenderingDeviceDriverVulkan::get_shader_container_format() const {
+		return shader_container_format;
+	}
+
+	void RenderingDeviceDriverVulkan::set_object_name(ObjectType p_type, ID p_driver_id, const std::string& p_name) {
+		switch (p_type) {
+		case OBJECT_TYPE_TEXTURE: {
+			const TextureInfo* tex_info = (const TextureInfo*)p_driver_id.id;
+			if (tex_info->allocation.handle) {
+				_set_object_name(VK_OBJECT_TYPE_IMAGE, (uint64_t)tex_info->vk_view_create_info.image, p_name);
+			}
+			_set_object_name(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)tex_info->vk_view, p_name + " View");
+		} break;
+		case OBJECT_TYPE_SAMPLER: {
+			_set_object_name(VK_OBJECT_TYPE_SAMPLER, p_driver_id.id, p_name);
+		} break;
+		case OBJECT_TYPE_BUFFER: {
+			const BufferInfo* buf_info = (const BufferInfo*)p_driver_id.id;
+			_set_object_name(VK_OBJECT_TYPE_BUFFER, (uint64_t)buf_info->vk_buffer, p_name);
+			if (buf_info->vk_view) {
+				_set_object_name(VK_OBJECT_TYPE_BUFFER_VIEW, (uint64_t)buf_info->vk_view, p_name + " View");
+			}
+		} break;
+		case OBJECT_TYPE_SHADER: {
+			const ShaderInfo* shader_info = (const ShaderInfo*)p_driver_id.id;
+			for (uint32_t i = 0; i < shader_info->vk_descriptor_set_layouts.size(); i++) {
+				_set_object_name(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)shader_info->vk_descriptor_set_layouts[i], p_name);
+			}
+			_set_object_name(VK_OBJECT_TYPE_PIPELINE_LAYOUT, (uint64_t)shader_info->vk_pipeline_layout, p_name + " Pipeline Layout");
+		} break;
+		case OBJECT_TYPE_UNIFORM_SET: {
+			const UniformSetInfo* usi = (const UniformSetInfo*)p_driver_id.id;
+			_set_object_name(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)usi->vk_descriptor_set, p_name);
+		} break;
+		case OBJECT_TYPE_PIPELINE: {
+			_set_object_name(VK_OBJECT_TYPE_PIPELINE, (uint64_t)p_driver_id.id, p_name);
+		} break;
+		//case OBJECT_TYPE_ACCELERATION_STRUCTURE: {
+		//	const AccelerationStructureInfo* asi = (const AccelerationStructureInfo*)p_driver_id.id;
+		//	_set_object_name(VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR, (uint64_t)asi->vk_acceleration_structure, p_name);
+		//} break;
+		//case OBJECT_TYPE_RAYTRACING_PIPELINE: {
+		//	const RaytracingPipelineInfo* rpi = (const RaytracingPipelineInfo*)p_driver_id.id;
+		//	_set_object_name(VK_OBJECT_TYPE_PIPELINE, (uint64_t)rpi->vk_pipeline, p_name);
+		//} break;
+		default: {
+			DEV_ASSERT(false);
+		}
+		}
+	}
+
+	uint64_t RenderingDeviceDriverVulkan::get_total_memory_used() {
+		const VkPhysicalDeviceMemoryProperties* memory_properties = nullptr;
+		vmaGetMemoryProperties(allocator, &memory_properties);
+
+		VmaBudget* budgets = std::vector<VmaBudget>(memory_properties->memoryHeapCount).data();
+		vmaGetHeapBudgets(allocator, budgets);
+
+		uint64_t total_memory_used = 0;
+		for (uint32_t i = 0; i < memory_properties->memoryHeapCount; i++) {
+			total_memory_used += budgets[i].statistics.allocationBytes;
+		}
+
+		return total_memory_used;
+	}
+
+	uint64_t RenderingDeviceDriverVulkan::get_lazily_memory_used() {
+		return 0; // vmaCalculateLazilyAllocatedBytes(allocator); TODO: not available
+	}
+
+	bool RenderingDeviceDriverVulkan::is_composite_alpha_supported(CommandQueueID p_queue) const {
+		if (has_comp_alpha.contains((uint64_t)p_queue.id)) {
+			return has_comp_alpha.at((uint64_t)p_queue.id);
+		}
+		return false;
+	}
+
+#pragma endregion
+
 
 	RenderingDeviceDriverVulkan::~RenderingDeviceDriverVulkan()
 	{

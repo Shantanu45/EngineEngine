@@ -13,8 +13,8 @@ namespace Util
 	public:
 		enum ErrorType {
 			NONE,
-			ERR_WARNING,
 			ERR_ERROR,
+			ERR_WARNING,
 			ERR_SCRIPT,
 			ERR_SHADER,
 		};

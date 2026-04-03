@@ -1,3 +1,10 @@
+/*****************************************************************//**
+ * \file   filesystem.cpp
+ * \brief  
+ * 
+ * \author Shantanu Kumar
+ * \date   March 2026
+ *********************************************************************/
 #define NOMINMAX
 #include "filesystem.h"
 #include "path_utils.h"
@@ -8,7 +15,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
-//#include "util/string_helpers.h"
 
 namespace FileSystem
 {
@@ -238,7 +244,7 @@ namespace FileSystem
 		std::shared_ptr<File> file = open(path, FileMode::ReadOnly);
 		if (!file) return nullptr;
 		return file->map(file);
-		// file destroyed here — safe because ScratchFilesystemFile/ConstantMemoryFile/FileSlice
+		// file destroyed here - safe because ScratchFilesystemFile/ConstantMemoryFile/FileSlice
 		// pass nullptr as the FileMapping's handle, so ~FileMapping won't call unmap on it.
 		// OSFilesystem mappings keep a handle ref inside the mapping itself (platform mmap).
 	}

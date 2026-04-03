@@ -1,3 +1,10 @@
+/*****************************************************************//**
+ * \file   vulkan_device.h
+ * \brief  
+ * 
+ * \author Shantanu Kumar
+ * \date   March 2026
+ *********************************************************************/
 #pragma once
 #include <mutex>
 #include <span>
@@ -517,6 +524,16 @@ namespace Vulkan
 
 		void command_end_label(CommandBufferID p_cmd_buffer) override;
 
+		const RenderingShaderContainerFormat& get_shader_container_format() const override;
+
+		void set_object_name(ObjectType p_type, ID p_driver_id, const std::string& p_name);
+
+		uint64_t get_total_memory_used() override;
+
+		uint64_t get_lazily_memory_used() override;
+
+		bool is_composite_alpha_supported(CommandQueueID p_queue) const override;
+
 		RenderingDeviceDriverVulkan::UniformSetID uniform_set_create(std::span<BoundUniform> p_uniforms, ShaderID p_shader, uint32_t p_set_index, int p_linear_pool_index) override;
 
 		void uniform_set_free(UniformSetID p_uniform_set) override;
@@ -535,6 +552,13 @@ namespace Vulkan
 
 		void shader_destroy_modules(ShaderID p_shader) override;
 
+		virtual bool has_feature(Features p_feature) override final;
+
+		virtual uint64_t limit_get(Limit p_limit) override final;
+
+		VkDevice vulkan_device_get() const {
+			return vk_device;
+		}
 	private:
 		void _register_requested_device_extension(const std::string& p_extension_name, bool p_required);
 		Error _initialize_device_extensions();
@@ -548,6 +572,7 @@ namespace Vulkan
 		bool _release_image_semaphore(CommandQueue* p_command_queue, uint32_t p_semaphore_index, bool p_release_on_swap_chain);
 		bool _recreate_image_semaphore(CommandQueue* p_command_queue, uint32_t p_semaphore_index, bool p_release_on_swap_chain);
 		VkDebugReportObjectTypeEXT _convert_to_debug_report_objectType(VkObjectType p_object_type);
+		void _set_object_name(VkObjectType p_object_type, uint64_t p_object_handle, std::string p_object_name);
 		bool _determine_swap_chain_format(RenderingContextDriverVulkan::SurfaceID p_surface, VkFormat& r_format, VkColorSpaceKHR& r_color_space);
 		void _swap_chain_release(SwapChain* p_swap_chain);
 		VmaPool _find_or_create_small_allocs_pool(uint32_t p_mem_type_index);
@@ -555,6 +580,11 @@ namespace Vulkan
 		VkDescriptorPool _descriptor_set_pool_create(const DescriptorSetPoolKey& p_key, bool p_linear_pool);
 		void _descriptor_set_pool_unreference(DescriptorSetPools::iterator p_pool_sets_it, VkDescriptorPool p_vk_descriptor_pool, int p_linear_pool_index);
 		VkSampleCountFlagBits _ensure_supported_sample_count(TextureSamples p_requested_sample_count) ;
+
+		VkQueue _get_vk_queue(uint32_t family, uint32_t index)
+		{
+			return queue_families[family][index].queue;
+		}
 
 
 	private:
@@ -594,6 +624,8 @@ namespace Vulkan
 		// It cannot change after creating the PSOs, since we need to skipping samplers when creating uniform sets.
 		bool immutable_samplers_enabled = true;
 		RenderingShaderContainerFormatVulkan shader_container_format;
+
+		friend class ImGuiDevice;
 
 	};
 }

@@ -1,3 +1,10 @@
+/*****************************************************************//**
+ * \file   rendering_context_driver.h
+ * \brief  
+ * 
+ * \author Shantanu Kumar
+ * \date   March 2026
+ *********************************************************************/
 #pragma once
 #include <cstdint>
 #include <unordered_map>
@@ -16,8 +23,6 @@ namespace DisplayServerEnums
 		VSYNC_ADAPTIVE,
 		VSYNC_MAILBOX
 	};
-
-	typedef int WindowID;
 
 	enum {
 		MAIN_WINDOW_ID = 0,
@@ -151,6 +156,7 @@ namespace Rendering
 		virtual void surface_destroy(SurfaceID p_surface) = 0;
 		virtual bool is_debug_utils_enabled() const = 0;
 		virtual void set_platform_surface_extension(std::vector<const char*> ext) = 0;
+		virtual bool init_loader_and_extensions(WindowPlatformData::Platform p_platform, bool force_reload = false) = 0;
 
 		std::string get_driver_and_device_memory_report() const;
 

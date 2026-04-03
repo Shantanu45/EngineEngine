@@ -58,6 +58,28 @@ namespace Util
 		return get_current_time_nsecs();
 	}
 
+	double FrameTimer::get_fps() const
+	{
+		double dt = get_frame_time();
+		return dt > 0.0 ? 1.0 / dt : 0.0;
+	}
+
+	double FrameTimer::get_fps_avg() const
+	{
+		constexpr int samples = 5;
+		static double history[samples] = {};
+		static int index = 0;
+
+		history[index] = get_frame_time();
+		index = (index + 1) % samples;
+
+		double sum = 0.0;
+		for (double v : history) sum += v;
+
+		double avg = sum / samples;
+		return avg > 0.0 ? 1.0 / avg : 0.0;
+	}
+
 #ifdef _WIN32
 	struct QPCFreq
 	{
@@ -91,6 +113,11 @@ namespace Util
 
 		return ts.tv_sec * 1000000000ll + ts.tv_nsec;
 #endif
+	}
+
+	int64_t get_current_time_usec()
+	{
+		return get_current_time_nsecs() / 1000;
 	}
 
 	void Timer::start()

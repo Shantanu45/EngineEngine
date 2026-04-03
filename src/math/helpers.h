@@ -1,11 +1,13 @@
 #pragma once
 #include "math_common.h"
 #include <glm/gtc/epsilon.hpp>
+#include "glm/gtc/round.hpp"
 #include <string>
+#include "util/typedefs.h"
 
 namespace math_helpers
 {
-    glm::vec2 orthogonal(const glm::vec2& v) {
+    _FORCE_INLINE_ glm::vec2 orthogonal(const glm::vec2& v) {
         return glm::vec2(v.y, -v.x);  // or (-v.y, v.x)
     }
 
@@ -16,7 +18,7 @@ namespace math_helpers
             return glm::epsilonEqual(a, b, (T)CMP_EPSILON);
         }
         else {
-            // For glm::vec2, vec3, etc. — epsilon must also be a vector
+            // For glm::vec2, vec3, etc. - epsilon must also be a vector
             return glm::all(glm::epsilonEqual(a, b, T(CMP_EPSILON)));
         }
     }
@@ -38,4 +40,14 @@ namespace math_helpers
         oss << ")";
         return oss.str();
     }
+
+
+	template<typename T>
+	T nearest_power_of_two(T v)
+	{
+		T lower = glm::floorPowerOfTwo(v);
+		T upper = glm::ceilPowerOfTwo(v);
+
+		return (v - lower < upper - v) ? lower : upper;
+	}
 }

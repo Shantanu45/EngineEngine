@@ -1,3 +1,10 @@
+/*****************************************************************//**
+ * \file   application_sdl3.cpp
+ * \brief  
+ * 
+ * \author Shantanu Kumar
+ * \date   March 2026
+ *********************************************************************/
 #include <memory>
 #include "application.h"
 #include "application_entry/application_entry.h"
@@ -7,12 +14,41 @@
 #include "util/timer.h"
 #include "volk.h"
 #include "input/input.h"
-#include "vulkan/wsi.h"
-#include "rendering/wsi_platform.h"
+#include "application_events.h"
 
 namespace EE
 {
-	class WSIPlatformSDL : public Rendering::WSIPlatform
+	class IPlatform
+	{
+	public:
+		virtual ~IPlatform() = default;
+
+		virtual int run(Application* app) = 0;
+
+		virtual std::unique_ptr<Rendering::WindowData> create_window_data() = 0;
+		virtual std::vector<const char*> get_device_extensions()
+		{
+			return { "VK_KHR_swapchain" };
+		}
+
+		virtual uint32_t get_surface_width() = 0;
+		virtual uint32_t get_surface_height() = 0;
+		virtual bool alive(/*WSI& wsi*/) = 0;
+		virtual void poll_input() = 0;
+
+		virtual WindowPlatformData get_window_platform_data(DisplayServerEnums::WindowID p_window_id) = 0;
+
+		virtual void release_resources()
+		{
+		}
+
+	protected:
+		unsigned current_swapchain_width = 0;
+		unsigned current_swapchain_height = 0;
+
+	};
+
+	class WSIPlatformSDL : public IPlatform
 	{
 	public:
 		~WSIPlatformSDL()
@@ -26,6 +62,30 @@ namespace EE
 			bool fullscreen = false;
 			bool threaded = true;
 		};
+
+		int run(Application* app) override
+		{
+			_app = app;
+			ERR_FAIL_COND_V_MSG(!init(app->get_name(), app->get_default_width(), app->get_default_height()), EXIT_FAILURE, "SDL initialization failed");
+			auto data = create_window_data();
+			
+			ERR_FAIL_COND_V_MSG(!app->on_init(DisplayServerEnums::MAIN_WINDOW_ID, data.get()), EXIT_FAILURE, "on init failed");
+			ERR_FAIL_COND_V_MSG(!app->pre_frame(), EXIT_FAILURE, "pre frame failed");
+
+			event_manager = Services::get().get<EventManager>().get();
+
+			run_loop(app);
+			app->post_frame();
+			return EXIT_SUCCESS;
+		}
+
+		std::unique_ptr<Rendering::WindowData> create_window_data() override
+		{
+			std::unique_ptr wd = std::make_unique<Rendering::WindowData>();
+			wd->platfform_data = get_window_platform_data(DisplayServerEnums::MAIN_WINDOW_ID);
+			wd->window_resolution = { get_surface_width(), get_surface_height() };
+			return wd;
+		}
 
 		explicit WSIPlatformSDL(const Options& options_)
 		{
@@ -50,19 +110,6 @@ namespace EE
 			SDL_SetEventEnabled(SDL_EVENT_DROP_FILE, false);
 			SDL_SetEventEnabled(SDL_EVENT_DROP_TEXT, false);
 
-			if (!SDL_Vulkan_LoadLibrary(nullptr))
-			{
-				LOGE("Failed to load Vulkan library.\n");
-				return false;
-			}
-
-			if (!Vulkan::RenderingContextDriverVulkan::init_loader(
-				reinterpret_cast<PFN_vkGetInstanceProcAddr>(SDL_Vulkan_GetVkGetInstanceProcAddr())))
-			{
-				LOGE("Failed to initialize Vulkan loader.\n");
-				return false;
-			}
-
 			wake_event_type = SDL_RegisterEvents(1);
 
 			application.name = name;
@@ -82,14 +129,14 @@ namespace EE
 			application.info.pApplicationName = application.name.empty() ? "Maker" : application.name.c_str();
 			application.info.apiVersion = VK_API_VERSION_1_1;
 
-			// SHAN: test
-			std::unique_ptr is = std::make_unique<InputSystem>();
-			set_input_handler(std::move(is));
+			auto is = Services::get().get<InputSystemInterface>();
+			set_input_handler(is);
 
+			get_frame_timer()->reset();
 			return true;
 		}
 
-		void set_input_handler(std::unique_ptr<InputSystem> input) { this->input = std::move(input); }
+		void set_input_handler(std::shared_ptr<InputSystemInterface> input) { this->input = input; }
 
 		bool process_sdl_event(const SDL_Event& e)
 		{
@@ -100,7 +147,12 @@ namespace EE
 				return false;
 
 			case SDL_EVENT_WINDOW_RESIZED:
+			{
+				int w = e.window.data1;
+				int h = e.window.data2;
+				event_manager->enqueue<WindowResizeEvent>(w, h);
 				break;
+			}
 			case SDL_EVENT_KEY_DOWN:
 			case SDL_EVENT_KEY_UP:
 			case SDL_EVENT_MOUSE_BUTTON_DOWN:
@@ -132,9 +184,11 @@ namespace EE
 		void run_message_loop()
 		{
 			SDL_Event e;
+
+			input->update();
 			while (async_loop_alive && SDL_WaitEvent(&e))		// SDL_WaitEvent (Blocking), CPU Usage: Very low (OS puts thread to sleep), Best for: Applications that don't need continuous updates (editors, menus, idle apps)
 			{
-				input->update();
+				_app->app_poll(&e);
 				if (!process_sdl_event(e))
 					break;
 			}
@@ -143,9 +197,11 @@ namespace EE
 		bool iterate_message_loop()
 		{
 			SDL_Event e;
+
+			input->update();
 			while (SDL_PollEvent(&e))			// SDL_PollEvent (Non-blocking), CPU Usage: High (busy-waiting), Best for: Games that need constant 60+ FPS rendering
 			{
-				input->update();
+				_app->app_poll(&e);
 				if (!process_sdl_event(e))
 					return false;
 			}
@@ -164,14 +220,6 @@ namespace EE
 		void run_loop(Application* app)
 		{
 			thread_main(app);
-		}
-
-		std::vector<const char*> get_instance_extensions() override
-		{
-			uint32_t count;
-			const char* const* ext = SDL_Vulkan_GetInstanceExtensions(&count);
-
-			return { ext, ext + count };
 		}
 
 		WindowPlatformData get_window_platform_data(DisplayServerEnums::WindowID p_window_id) override
@@ -202,8 +250,18 @@ namespace EE
 
 		void thread_main(Application* app/*, Global::GlobalManagersHandle ctx*/)
 		{
-			while (app->poll())
-				app->run_frame();
+			while (alive())
+			{
+				frame_time = get_frame_timer()->frame();
+				elapsed_time = get_frame_timer()->get_elapsed();
+
+				poll_input();
+
+				event_manager->dispatch();
+
+				app->run_frame(frame_time, elapsed_time);
+
+			}
 		}
 
 		bool alive(/*Vulkan::WSI&*/) override
@@ -220,8 +278,13 @@ namespace EE
 			request_tear_down.store(true);
 		}
 	
+		Util::FrameTimer* get_frame_timer()
+		{
+			return Services::get().get<Util::FrameTimer>().get();
+		}
+
 	private:
-		std::unique_ptr<InputSystem> input;
+		std::shared_ptr<InputSystemInterface> input;
 		uint32_t wake_event_type = 0;
 		bool async_loop_alive = true;  // TODO:
 
@@ -236,6 +299,15 @@ namespace EE
 			VkApplicationInfo info = {};
 			std::string name;
 		} application;
+
+		Util::FrameTimer* timer;
+
+		Application* _app;
+
+		double frame_time;
+		double elapsed_time;
+
+		EventManager* event_manager;
 	};
 }
 
@@ -243,33 +315,32 @@ namespace EE
 {
 	int application_main(Application* (*create_application)(int, char**), int argc, char* argv[])
 	{
-
 		WSIPlatformSDL::Options options;
 		int exit_code;
 
+		Locator::ServiceLocator& locator = Services::get();
+
+		// Register real implementations
+		locator.provide<InputSystemInterface>(std::make_shared<InputSystem>());
+
+		locator.provide<FilesystemInterface>(std::make_shared<Filesystem>());
+		locator.provide<Util::FrameTimer>(std::make_shared<Util::FrameTimer>());
+		locator.provide<EE::EventManager>(std::make_shared<EE::EventManager>());
+		std::shared_ptr<FilesystemInterface> fs = locator.get<FilesystemInterface>();
+		const std::string exe_path = Path::get_executable_path();
+		FileSystem::Filesystem::setup_default_filesystem(static_cast<Filesystem*>(fs.get()), Path::join(exe_path, "../../assets").c_str());		// 		default assets directory for now`
+		//auto fs = Services::get().get<FilesystemInterface>();
+
+		// creates application
 		auto app = std::unique_ptr<Application>(create_application(argc, argv));
 		int ret;
 
 		if (app)
 		{
+			// creates platform 
 			auto platform = std::make_unique<WSIPlatformSDL>(options);
-			auto* platform_handle = platform.get();
+			return platform->run(app.get());
 
-			if (!platform->init(app->get_name(), app->get_default_width(), app->get_default_height()))
-				return 1;
-
-			if (!app->init_platform(std::move(platform)))
-				return 1;
-
-			if (!app->init_wsi())
-			{
-				return 1;
-			}
-
-			platform_handle->run_loop(app.get());
-
-			app.reset();
-			ret = EXIT_SUCCESS;
 		}
 		else
 		{

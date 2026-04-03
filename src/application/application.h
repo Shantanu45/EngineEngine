@@ -1,8 +1,16 @@
+/*****************************************************************//**
+ * \file   application.h
+ * \brief  
+ * 
+ * \author Shantanu Kumar
+ * \date   March 2026
+ *********************************************************************/
 #pragma once
 #include <memory>
 #include <string>
 #include "util/logger.h"
-#include "vulkan/wsi.h"
+#include "rendering/wsi.h"
+#include "service_locator.h"
 
 namespace EE
 {
@@ -11,16 +19,32 @@ namespace EE
 	public:
 		Application();
 		virtual ~Application();
-		virtual void render_frame(double frame_time, double elapsed_time) = 0;
-		bool init_platform(std::unique_ptr<Vulkan::WSIPlatform> new_platform);
+
+		bool on_init(DisplayServerEnums::WindowID p_window, Rendering::WindowData* p_window_data);
+
 		bool init_wsi();
-		void teardown_wsi();
+
+		virtual bool pre_frame();
+
+		/**
+		 * application must overload at least this function. runs in loop between begin and end frame
+		 * 
+		 * \param frame_time
+		 * \param elapsed_time
+		 */
+		virtual void render_frame(double frame_time, double elapsed_time) = 0;
+
+		void run_frame(double frame_time, double elapsed_time);
 
 		virtual void post_frame();
+
+		virtual void teardown_application() = 0;
 
 		virtual void render_early_loading(double frame_time, double elapsed_time);
 
 		virtual void render_loading(double frame_time, double elapsed_time);
+
+		virtual void app_poll(void* e);
 
 		virtual std::string get_name()
 		{
@@ -42,27 +66,19 @@ namespace EE
 			return 720;
 		}
 
-		Vulkan::WSI& get_wsi()
+		Rendering::WSI* get_wsi() const
 		{
-			return application_wsi;
+			return application_wsi.get();
 		}
 
-		Vulkan::WSIPlatform& get_platform()
-		{
-			return *platform;
-		}
+		void teardown_wsi();
 
-		bool poll();
-		void run_frame();
-		//void show_message_box(const std::string& str, Vulkan::WSIPlatform::MessageType type);
 
 	protected:
 		void request_shutdown()
 		{
 			requested_shutdown = true;
 		}
-
-		//void poll_input_tracker_async(InputTrackerHandler* override_handler);
 
 	private:
 		bool requested_shutdown = false;
@@ -75,10 +91,6 @@ namespace EE
 
 		std::unique_ptr<::Util::Logger> logger = nullptr;
 
-		Vulkan::RenderingContextDriverVulkan vulkan_context;
-		std::unique_ptr<Vulkan::RenderingDeviceDriverVulkan> vulkan_device_ptr = nullptr;
-
-		std::unique_ptr<Vulkan::WSIPlatform> platform;
-		Vulkan::WSI application_wsi;
+		std::unique_ptr<Rendering::WSI> application_wsi;
 	};
 }

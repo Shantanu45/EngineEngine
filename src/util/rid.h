@@ -73,5 +73,15 @@ public:
 	uint32_t hash() const { return hash_xxhash_one_64(_id); }
 };
 
+// needed for hash based library data structures to work.
+namespace std {
+	template<>
+	struct hash<RID> {
+		size_t operator()(const RID& r) const noexcept {
+			return r.hash();   // call your member hash
+		}
+	};
+}
+
 template <>
 struct is_zero_constructible<RID> : std::true_type {};

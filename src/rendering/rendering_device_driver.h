@@ -1,3 +1,10 @@
+/*****************************************************************//**
+ * \file   rendering_device_driver.h
+ * \brief  
+ * 
+ * \author Shantanu Kumar
+ * \date   March 2026
+ *********************************************************************/
 #pragma once
 #include "rendering_device_commons.h";
 #include "rendering_context_driver.h"
@@ -811,13 +818,13 @@ namespace Rendering
 			uint32_t version_minor = 0;
 		};
 
-		//virtual void set_object_name(ObjectType p_type, ID p_driver_id, const std::string& p_name) = 0;
+		virtual void set_object_name(ObjectType p_type, ID p_driver_id, const std::string& p_name) = 0;
 		//virtual uint64_t get_resource_native_handle(DriverResource p_type, ID p_driver_id) = 0;
-		//virtual uint64_t get_total_memory_used() = 0;
-		//virtual uint64_t get_lazily_memory_used() = 0;
-		//virtual uint64_t limit_get(Limit p_limit) = 0;
+		virtual uint64_t get_total_memory_used() = 0;
+		virtual uint64_t get_lazily_memory_used() = 0;
+		virtual uint64_t limit_get(Limit p_limit) = 0;
 		virtual uint64_t api_trait_get(ApiTrait p_trait);
-		//virtual bool has_feature(Features p_feature) = 0;
+		virtual bool has_feature(Features p_feature) = 0;
 		//virtual const MultiviewCapabilities& get_multiview_capabilities() = 0;
 		//virtual const FragmentShadingRateCapabilities& get_fragment_shading_rate_capabilities() = 0;
 		//virtual const FragmentDensityMapCapabilities& get_fragment_density_map_capabilities() = 0;
@@ -825,9 +832,9 @@ namespace Rendering
 		//virtual std::string get_api_version() const = 0;
 		//virtual std::string get_pipeline_cache_uuid() const = 0;
 		//virtual const Capabilities& get_capabilities() const = 0;
-		//virtual const RenderingShaderContainerFormat& get_shader_container_format() const = 0;
+		virtual const RenderingShaderContainerFormat& get_shader_container_format() const = 0;
 
-		//virtual bool is_composite_alpha_supported(CommandQueueID p_queue) const { return false; }
+		virtual bool is_composite_alpha_supported(CommandQueueID p_queue) const { return false; }
 
 		/******************/
 

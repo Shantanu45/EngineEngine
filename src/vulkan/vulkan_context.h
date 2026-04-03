@@ -1,10 +1,20 @@
+/*****************************************************************//**
+ * \file   vulkan_context.h
+ * \brief  
+ * 
+ * \author Shantanu Kumar
+ * \date   March 2026
+ *********************************************************************/
 #pragma once
-#include "vulkan_common.h"
-#include "util/error_list.h"
 #include <set>
 #include <unordered_map>
 #include <string>
+#include "vulkan_common.h"
+#include "util/error_list.h"
 #include "rendering/rendering_context_driver.h"
+#include "libassert/assert.hpp"
+#define VULKAN_DEBUG
+
 
 namespace Vulkan
 {
@@ -48,7 +58,7 @@ namespace Vulkan
 
 		RenderingContextDriverVulkan::SurfaceID set_surface(VkSurfaceKHR vk_surface);
 
-		static bool init_loader(PFN_vkGetInstanceProcAddr addr, bool force_reload = false);
+		bool init_loader_and_extensions(WindowPlatformData::Platform p_platform, bool force_reload = false) override;
 
 		VkApplicationInfo get_promoted_application_info() const;
 

@@ -3,9 +3,33 @@ set(PROJECT_NAME rendering)
 file(GLOB SOURCES CONFIGURE_DEPENDS "*.cpp")
 file(GLOB HEADERS CONFIGURE_DEPENDS "*.h")
 
+file(GLOB FrameGraph CONFIGURE_DEPENDS "fg/*.cpp")
+file(GLOB FrameGraphHeaders CONFIGURE_DEPENDS "fg/*.h")
+file(GLOB FrameGraphInl CONFIGURE_DEPENDS "fg/*.inl")
+
+set(FG 
+    ${FrameGraph}
+    ${FrameGraphHeaders}
+    ${FrameGraphInl}
+)
+
+source_group("framegraph" FILES ${FG})
+
+file(GLOB RenderPassesCpp CONFIGURE_DEPENDS "render_passes/*.cpp")
+file(GLOB RenderPassesHeader CONFIGURE_DEPENDS "render_passes/*.h")
+
+set(RP
+    ${RenderPassesCpp}
+    ${RenderPassesHeader}
+)
+
+source_group("render_passes" FILES ${RP})
+
 add_library(${PROJECT_NAME} STATIC 
 ${SOURCES} 
 ${HEADERS}
+${FG}
+${RP}
 )
 
 setup_msvc_options(${PROJECT_NAME})
@@ -18,6 +42,9 @@ find_package(VulkanMemoryAllocator REQUIRED)
 find_package(shaderc REQUIRED)
 find_package(xxHash REQUIRED)
 find_package(spirv-reflect-static REQUIRED)
+find_package(TinyGLTF REQUIRED)
+find_package(stb REQUIRED)
+find_package(imgui REQUIRED)
 
 
 set(INCLUDES 
@@ -40,6 +67,11 @@ set(ADDITIONAL_LIBRARY_DEPENDENCIES
 	spirv-reflect-static
 	filesystem
 	compiler
+	TinyGLTF::TinyGLTF
+	stb::stb
+	imgui::imgui
+	util
+	event
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE ${ADDITIONAL_LIBRARY_DEPENDENCIES})
