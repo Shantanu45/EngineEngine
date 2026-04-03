@@ -178,11 +178,6 @@ struct TriangleApplication : EE::Application
 		sampler = device->sampler_create(s);
 
 		std::vector<RD::Uniform> uniforms;
-		//RD::Uniform u;
-		//u.uniform_type = RDC::UNIFORM_TYPE_UNIFORM_BUFFER;
-		//u.binding = 0;
-		//u.append_id(camera_ubo);
-		//uniforms.push_back(u);
 
 		RD::Uniform tu;
 		tu.uniform_type = RDC::UNIFORM_TYPE_TEXTURE;
@@ -220,8 +215,6 @@ struct TriangleApplication : EE::Application
 		Camera_UBO ubo{};
 		ubo.model = glm::mat4(1.0f); // identity for now
 		ubo.view_projection = camera.get_view_projection();
-
-		//auto err = device->buffer_update(camera_ubo, 0, sizeof(Camera_UBO), &ubo);
 
 		device->set_push_constant(&ubo, sizeof(Camera_UBO), device->get_shader_rid("triangle_shader"));
 
