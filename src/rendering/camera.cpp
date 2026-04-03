@@ -32,8 +32,12 @@ void Camera::set_orthographic(float p_left, float p_right, float p_bottom, float
 
 bool Camera::on_resize(const EE::WindowResizeEvent& e)
 {
-	set_aspect(static_cast<float>(e.width)/e.height);
-	return true;
+	if (_recalculate_on_resize)
+	{
+		set_aspect(static_cast<float>(e.width) / e.height);
+		return true;
+	}
+	return false;
 }
 
 void Camera::set_euler_degrees(float p_pitch, float p_yaw, float p_roll /*= 0.0f*/)

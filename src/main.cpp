@@ -106,6 +106,7 @@ struct TriangleApplication : EE::Application
 		RenderUtilities::capturing_timestamps = true;
 
 		camera.set_perspective(60.0f, 16.0f / 9.0f, 0.1f, 1000.0f);
+		camera.set_reset_on_resize();
 		camera.set_mode(CameraMode::Fly);
 
 		auto wsi = get_wsi();

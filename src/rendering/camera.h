@@ -83,6 +83,9 @@ public:
 	// --- Mode ----------------------------------------------------------------
 
 	void set_mode(CameraMode p_mode) { _mode = p_mode; }
+	void set_reset_on_resize(const bool p_val = true) {
+		_recalculate_on_resize = p_val;
+	}
 	CameraMode get_mode() const { return _mode; }
 
 	// --- Transform -----------------------------------------------------------
@@ -205,6 +208,7 @@ private:
 	// --- State ---------------------------------------------------------------
 
 	CameraMode       _mode = CameraMode::Fly;
+	bool			_recalculate_on_resize = false;
 	CameraProjection _projection_type = CameraProjection::Perspective;
 
 	CameraControls controls;
