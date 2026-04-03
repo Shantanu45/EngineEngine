@@ -1,0 +1,159 @@
+1. Regular queued events — fire-and-forget, dispatched on the next dispatch() call
+cpp// Define the event
+class PlayerDiedEvent : public EE::Event
+{
+public:
+    GRANITE_EVENT_TYPE_DECL(PlayerDiedEvent)
+
+    explicit PlayerDiedEvent(int player_id, const std::string &cause)
+        : EE::Event(get_type_id()), player_id(player_id), cause(cause) {}
+
+    int player_id;
+    std::string cause;
+};
+
+// Define a handler class
+class ScoreSystem : public EE::EventHandler
+{
+public:
+    ScoreSystem(EE::EventManager *mgr)
+    {
+        mgr->register_handler<ScoreSystem, PlayerDiedEvent, &ScoreSystem::on_player_died>(this);
+    }
+
+    // Return true to keep receiving events, false to unregister
+    bool on_player_died(const PlayerDiedEvent &e)
+    {
+        printf("Player %d died from %s\n", e.player_id, e.cause.c_str());
+        return true;
+    }
+};
+
+// Usage
+EE::EventManager manager;
+ScoreSystem score_system(&manager);
+
+// Enqueue — handler is NOT called yet
+manager.enqueue<PlayerDiedEvent>(42, "lava");
+manager.enqueue<PlayerDiedEvent>(7,  "fall");
+
+// Handlers are called here for all queued events
+manager.dispatch();
+
+2. Inline dispatch — synchronous, handler called immediately, no queue involved
+cppclass InputEvent : public EE::Event
+{
+public:
+    GRANITE_EVENT_TYPE_DECL(InputEvent)
+
+    explicit InputEvent(int key, bool pressed)
+        : EE::Event(get_type_id()), key(key), pressed(pressed) {}
+
+    int key;
+    bool pressed;
+};
+
+class InputHandler : public EE::EventHandler
+{
+public:
+    InputHandler(EE::EventManager *mgr)
+    {
+        mgr->register_handler<InputHandler, InputEvent, &InputHandler::on_input>(this);
+    }
+
+    bool on_input(const InputEvent &e)
+    {
+        printf("Key %d %s\n", e.key, e.pressed ? "down" : "up");
+        return true;
+    }
+};
+
+// Usage
+EE::EventManager manager;
+InputHandler input_handler(&manager);
+
+InputEvent e(KEY_SPACE, true);
+
+// Handler is called immediately, right here
+manager.dispatch_inline(e);
+
+// Or with the templated version (no need to construct first)
+manager.dispatch_inline(InputEvent(KEY_SPACE, false));
+
+3. Latched events — persistent state events; new handlers immediately receive all currently active latched events on registration, and receive a "down" callback when dequeued
+cpp// Latched events typically represent state that is "on" until explicitly turned off
+// e.g. a device being connected, a level being loaded, a resource being available
+class DeviceConnectedEvent : public EE::Event
+{
+public:
+    GRANITE_EVENT_TYPE_DECL(DeviceConnectedEvent)
+
+    explicit DeviceConnectedEvent(int device_id, const std::string &name)
+        : EE::Event(get_type_id()), device_id(device_id), name(name) {}
+
+    int device_id;
+    std::string name;
+};
+
+class DeviceSystem : public EE::EventHandler
+{
+public:
+    DeviceSystem(EE::EventManager *mgr)
+    {
+        // Register with up AND down callbacks
+        mgr->register_latch_handler
+            DeviceSystem,
+            DeviceConnectedEvent,
+            &DeviceSystem::on_device_connected,    // called when device connects (or on registration if already connected)
+            &DeviceSystem::on_device_disconnected  // called when dequeue_latched is called
+        >(this);
+    }
+
+    void on_device_connected(const DeviceConnectedEvent &e)
+    {
+        printf("Device %d (%s) connected\n", e.device_id, e.name.c_str());
+    }
+
+    void on_device_disconnected(const DeviceConnectedEvent &e)
+    {
+        printf("Device %d (%s) disconnected\n", e.device_id, e.name.c_str());
+    }
+};
+
+// Usage
+EE::EventManager manager;
+
+// Enqueue the latched event — returns a cookie to identify it later
+// on_device_connected is called immediately on any already-registered handlers
+uint64_t cookie = manager.enqueue_latched<DeviceConnectedEvent>(1, "Xbox Controller");
+
+// Register AFTER the event was enqueued —
+// on_device_connected is still called immediately for this handler
+// because it catches up on all active latched events
+DeviceSystem device_system(&manager);
+
+// Later, when the device disconnects:
+// on_device_disconnected is called on all handlers, event is removed
+manager.dequeue_latched(cookie);
+
+// Or remove ALL active DeviceConnectedEvents at once:
+manager.dequeue_all_latched(DeviceConnectedEvent::get_type_id());
+
+Self-unregistering handler — the return value of regular handlers controls lifetime
+cppclass OneShot : public EE::EventHandler
+{
+public:
+    OneShot(EE::EventManager *mgr)
+    {
+        mgr->register_handler<OneShot, PlayerDiedEvent, &OneShot::on_player_died>(this);
+    }
+
+    bool on_player_died(const PlayerDiedEvent &e)
+    {
+        printf("Got it once, goodbye\n");
+        return false; // returning false unregisters this handler automatically
+    }
+};
+
+Key behavioural differences at a glance
+QueuedInlineLatchedWhen handler is calledNext dispatch()ImmediatelyImmediately + on new registrationsPersists after dispatchNoNoYes, until dequeue_latchedHas "down" callbackNoNoYesLate registration catches upNoNoYesIdentified by cookieNoNoYes
