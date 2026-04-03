@@ -71,6 +71,7 @@ set(ADDITIONAL_LIBRARY_DEPENDENCIES
 	stb::stb
 	imgui::imgui
 	util
+	event
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE ${ADDITIONAL_LIBRARY_DEPENDENCIES})

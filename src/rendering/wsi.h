@@ -13,6 +13,7 @@
 #include "math/rect2.h"
 #include "rendering/gltf_loader.h"
 #include "rendering/utils.h"
+#include "application/application_events.h"
 
 namespace Rendering
 {
@@ -30,7 +31,7 @@ namespace Rendering
 		COUNT
 	};
 
-	class WSI
+	class WSI : public EE::EventHandler
 	{
 		struct PrimitiveData {
 			uint32_t vertexOffset;  // offset into the big vertex buffer
@@ -54,6 +55,8 @@ namespace Rendering
 		};
 		
 		WSI();
+
+		bool on_resize(const EE::WindowResizeEvent& e);
 
 		Error initialize(const std::string& p_rendering_driver, DisplayServerEnums::WindowMode p_mode, DisplayServerEnums::VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i* p_position, const Vector2i& p_resolution, int p_screen, DisplayServerEnums::Context p_context, int64_t p_parent_window);
 

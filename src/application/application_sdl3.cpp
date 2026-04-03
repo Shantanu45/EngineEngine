@@ -14,6 +14,7 @@
 #include "util/timer.h"
 #include "volk.h"
 #include "input/input.h"
+#include "application_events.h"
 
 namespace EE
 {
@@ -70,6 +71,9 @@ namespace EE
 			
 			ERR_FAIL_COND_V_MSG(!app->on_init(DisplayServerEnums::MAIN_WINDOW_ID, data.get()), EXIT_FAILURE, "on init failed");
 			ERR_FAIL_COND_V_MSG(!app->pre_frame(), EXIT_FAILURE, "pre frame failed");
+
+			event_manager = Services::get().get<EventManager>().get();
+
 			run_loop(app);
 			app->post_frame();
 			return EXIT_SUCCESS;
@@ -143,7 +147,12 @@ namespace EE
 				return false;
 
 			case SDL_EVENT_WINDOW_RESIZED:
+			{
+				int w = e.window.data1;
+				int h = e.window.data2;
+				event_manager->enqueue<WindowResizeEvent>(w, h);
 				break;
+			}
 			case SDL_EVENT_KEY_DOWN:
 			case SDL_EVENT_KEY_UP:
 			case SDL_EVENT_MOUSE_BUTTON_DOWN:
@@ -248,6 +257,8 @@ namespace EE
 
 				poll_input();
 
+				event_manager->dispatch();
+
 				app->run_frame(frame_time, elapsed_time);
 
 			}
@@ -295,6 +306,8 @@ namespace EE
 
 		double frame_time;
 		double elapsed_time;
+
+		EventManager* event_manager;
 	};
 }
 
@@ -312,6 +325,7 @@ namespace EE
 
 		locator.provide<FilesystemInterface>(std::make_shared<Filesystem>());
 		locator.provide<Util::FrameTimer>(std::make_shared<Util::FrameTimer>());
+		locator.provide<EE::EventManager>(std::make_shared<EE::EventManager>());
 		std::shared_ptr<FilesystemInterface> fs = locator.get<FilesystemInterface>();
 		const std::string exe_path = Path::get_executable_path();
 		FileSystem::Filesystem::setup_default_filesystem(static_cast<Filesystem*>(fs.get()), Path::join(exe_path, "../../assets").c_str());		// 		default assets directory for now`

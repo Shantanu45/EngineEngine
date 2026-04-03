@@ -1,6 +1,13 @@
 #include "camera.h"
 #include <glm\gtc\quaternion.hpp>
 
+Camera::Camera()
+{
+	auto event_manager = Services::get().get<EE::EventManager>();
+	event_manager->register_handler<Camera, EE::WindowResizeEvent, &Camera::on_resize>(this);
+	_recalculate_projection(); _recalculate_view();
+}
+
 void Camera::set_perspective(float p_fov_degrees, float p_aspect, float p_near, float p_far)
 {
 	_projection_type = CameraProjection::Perspective;
@@ -21,6 +28,12 @@ void Camera::set_orthographic(float p_left, float p_right, float p_bottom, float
 	_near = p_near;
 	_far = p_far;
 	_recalculate_projection();
+}
+
+bool Camera::on_resize(const EE::WindowResizeEvent& e)
+{
+	set_aspect(static_cast<float>(e.width)/e.height);
+	return true;
 }
 
 void Camera::set_euler_degrees(float p_pitch, float p_yaw, float p_roll /*= 0.0f*/)

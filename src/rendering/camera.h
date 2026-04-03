@@ -10,7 +10,8 @@
 #include <array>
 #include "math/helpers.h"
 #include "input/input.h"
-
+#include "application/application_events.h"
+#include "application/service_locator.h"
 
 // -----------------------------------------------------------------------------
 //  Camera
@@ -58,11 +59,12 @@ struct CameraControls
 	float speed = 1.0f;
 };
 
-class Camera {
+class Camera : public EE::EventHandler
+{
 public:
 	// --- Construction --------------------------------------------------------
 
-	Camera() { _recalculate_projection(); _recalculate_view(); }
+	Camera();
 
 	// --- Projection settings -------------------------------------------------
 
@@ -75,6 +77,8 @@ public:
 		_aspect = p_aspect;
 		_recalculate_projection();
 	}
+
+	bool on_resize(const EE::WindowResizeEvent& e);
 
 	// --- Mode ----------------------------------------------------------------
 

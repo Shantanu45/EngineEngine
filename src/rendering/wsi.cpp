@@ -17,7 +17,14 @@ namespace Rendering
 {
 	WSI::WSI()
 	{
+		auto event_manager = Services::get().get<EE::EventManager>();
+		event_manager->register_handler<WSI, EE::WindowResizeEvent, &WSI::on_resize>(this);
+	}
 
+	bool WSI::on_resize(const EE::WindowResizeEvent& e)
+	{
+		rendering_device->on_resize(active_window);
+		return true;
 	}
 
 	Error WSI::initialize(const std::string& p_rendering_driver, DisplayServerEnums::WindowMode p_mode, DisplayServerEnums::VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i* p_position, const Vector2i& p_resolution, int p_screen, DisplayServerEnums::Context p_context, int64_t p_parent_window)

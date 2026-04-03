@@ -905,6 +905,7 @@ namespace Rendering
 		 */
 		Error screen_create(DisplayServerEnums::WindowID p_screen = DisplayServerEnums::MAIN_WINDOW_ID);
 
+		void on_resize(const DisplayServerEnums::WindowID active_window);
 		/**
 		 * Flush and resize swap chain (if needed). Also acquires swapchain frame buffer
 		 * 

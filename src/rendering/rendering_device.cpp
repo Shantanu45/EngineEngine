@@ -1072,6 +1072,13 @@ namespace Rendering
 		return OK;
 	}
 
+	void RenderingDevice::on_resize(const DisplayServerEnums::WindowID p_window)
+	{
+		_flush_and_stall_for_all_frames();
+		driver->swap_chain_resize(main_queue, screen_swap_chains[p_window], _get_swap_chain_desired_count());
+		//context->surface_set_needs_resize(screen_swap_chains[p_window]., true);
+	}
+
 	Error RenderingDevice::screen_prepare_for_drawing(DisplayServerEnums::WindowID p_screen)
 	{
 		std::unordered_map<DisplayServerEnums::WindowID, RDD::SwapChainID>::const_iterator it = screen_swap_chains.find(p_screen);
