@@ -203,12 +203,10 @@ struct TutorialApplication : EE::Application
 
 		device->free_rid(color_ubo);
 		device->free_rid(pipeline_color);
-		device->free_rid(sampler);
 	}
 
 private:
 	RID color_ubo;
-	RID sampler;
 	RID uniform_set;
 
 	Rendering::MeshPrimitive prim;
