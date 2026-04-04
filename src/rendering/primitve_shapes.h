@@ -461,15 +461,73 @@ namespace Rendering::Shapes
         return upload(*wsi.get_mesh_storage(), name, make_cone(slices, cap), wsi.get_vertex_format_by_type(fmt));
     }
 
-    // Upload all primitives at once — useful for a debug/editor setup
-    inline void upload_all(WSI& wsi, VERTEX_FORMAT_VARIATIONS fmt = VERTEX_FORMAT_VARIATIONS::DEFAULT)
-    {
-        upload_quad(wsi, "primitive_quad", fmt);
-        upload_plane(wsi, 1, "primitive_plane", fmt);
-        upload_cube(wsi, "primitive_cube", fmt);
-        upload_sphere(wsi, 16, 16, "primitive_sphere", fmt);
-        upload_cylinder(wsi, 16, true, "primitive_cylinder", fmt);
-        upload_cone(wsi, 16, true, "primitive_cone", fmt);
-    }
+	// Single line from point A to point B
+	inline ShapeData make_line(glm::vec3 from = { -0.5f, 0, 0 }, glm::vec3 to = { 0.5f, 0, 0 })
+	{
+		ShapeData d;
+		d.vertices =
+		{
+			{ from, { 0,1,0 }, { 0.0f, 0.0f }, { 1,0,0,1 } },
+			{ to,   { 0,1,0 }, { 1.0f, 0.0f }, { 1,0,0,1 } },
+		};
+		d.indices = { 0, 1 };
+		return d;
+	}
+
+	// Grid on the XZ plane, centered at origin
+	// half_size = how many cells each side, spacing = world units per cell
+	inline ShapeData make_grid(uint32_t half_size = 10, float spacing = 1.0f)
+	{
+		ShapeData d;
+		const float extent = float(half_size) * spacing;
+
+		for (int i = -(int)half_size; i <= (int)half_size; ++i)
+		{
+			float pos = float(i) * spacing;
+
+			// Lines along Z
+			d.vertices.push_back({ { pos,  0.0f, -extent }, { 0,1,0 }, { 0,0 }, { 1,0,0,1 } });
+			d.vertices.push_back({ { pos,  0.0f,  extent }, { 0,1,0 }, { 1,0 }, { 1,0,0,1 } });
+
+			// Lines along X
+			d.vertices.push_back({ { -extent, 0.0f, pos }, { 0,1,0 }, { 0,0 }, { 1,0,0,1 } });
+			d.vertices.push_back({ {  extent, 0.0f, pos }, { 0,1,0 }, { 1,0 }, { 1,0,0,1 } });
+		}
+
+		// Sequential index pairs
+		for (uint32_t i = 0; i < d.vertices.size(); i += 2)
+			d.indices.insert(d.indices.end(), { i, i + 1 });
+
+		return d;
+	}
+
+	inline MeshHandle upload_line(WSI& wsi,
+		glm::vec3 from = { -0.5f, 0, 0 }, glm::vec3 to = { 0.5f, 0, 0 },
+		const std::string& name = "primitive_line",
+		VERTEX_FORMAT_VARIATIONS fmt = VERTEX_FORMAT_VARIATIONS::DEFAULT)
+	{
+		return upload(*wsi.get_mesh_storage(), name, make_line(from, to), wsi.get_vertex_format_by_type(fmt));
+	}
+
+	inline MeshHandle upload_grid(WSI& wsi,
+		uint32_t half_size = 10, float spacing = 1.0f,
+		const std::string& name = "primitive_grid",
+		VERTEX_FORMAT_VARIATIONS fmt = VERTEX_FORMAT_VARIATIONS::DEFAULT)
+	{
+		return upload(*wsi.get_mesh_storage(), name, make_grid(half_size, spacing), wsi.get_vertex_format_by_type(fmt));
+	}
+
+	// Upload all primitives at once — useful for a debug/editor setup
+	inline void upload_all(WSI& wsi, VERTEX_FORMAT_VARIATIONS fmt = VERTEX_FORMAT_VARIATIONS::DEFAULT)
+	{
+		upload_quad(wsi, "primitive_quad", fmt);
+		upload_plane(wsi, 1, "primitive_plane", fmt);
+		upload_cube(wsi, "primitive_cube", fmt);
+		upload_sphere(wsi, 16, 16, "primitive_sphere", fmt);
+		upload_cylinder(wsi, 16, true, "primitive_cylinder", fmt);
+		upload_cone(wsi, 16, true, "primitive_cone", fmt);
+		upload_line(wsi, {}, {}, "primitive_line", fmt);
+		upload_grid(wsi, 10, 1.0f, "primitive_grid", fmt);
+	}
 
 } // namespace Rendering::Shapes
