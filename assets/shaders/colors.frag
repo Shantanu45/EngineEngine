@@ -9,6 +9,7 @@ layout(binding = 0) uniform Colors {
     vec3 object_color;
     vec3 light_color;
     vec3 light_pos;
+    vec3 view_pos;
 } color;
 
 void main()
@@ -21,7 +22,14 @@ void main()
     vec3 lightDir = normalize(color.light_pos - FragPos);
     float diff = max(dot(norm, lightDir), 0.0);
     vec3 diffuse = diff * color.light_color;
+
+    // specular
+    float specularStrength = 0.5;
+    vec3 viewDir = normalize(color.view_pos - FragPos);
+    vec3 reflectDir = reflect(-lightDir, norm);  
+    float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);
+    vec3 specular = specularStrength * spec * color.light_color;  
             
-    vec3 result = (ambient + diffuse) * color.object_color;
+    vec3 result = (ambient + diffuse + specular) * color.object_color;
     FragColor = vec4(result, 1.0);
 }
