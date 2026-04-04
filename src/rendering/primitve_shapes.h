@@ -523,11 +523,8 @@ namespace Rendering::Shapes
     // shaft_radius = radius of the cylinder
     // head_radius  = radius of the cone base
 	inline ShapeData make_arrow(
-		float    shaft_length = 0.75f,
-		float    head_height = 0.25f,
-		float    shaft_radius = 0.02f,
-		float    head_radius = 0.06f,
-		uint32_t slices = 8)
+		float    shaft_length = 0.75f, float    head_height = 0.25f,
+		float    shaft_radius = 0.02f, float    head_radius = 0.06f, uint32_t slices = 8)
 	{
 		ShapeData d;
 		const float tau = 2.0f * std::numbers::pi_v<float>;
