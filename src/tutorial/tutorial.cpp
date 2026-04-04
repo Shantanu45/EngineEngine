@@ -66,7 +66,13 @@ void add_basic_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
 				clear_values[1].depth = 1.0;
 				clear_values[1].stencil = 0.0;
 
+
 				rc.device->begin_render_pass_from_frame_buffer(frame_buffer, viewport, clear_values);
+				rc.device->set_push_constant(&camera_pc, sizeof(Camera_UBO), rc.device->get_shader_rid("grid_shader"));
+				rc.device->bind_render_pipeline(cmd, pipelines[2]);
+				//rc.device->get_driver().command_render_set_line_width(rc.device->get_current_command_buffer(), 1);
+
+				rc.wsi->draw_mesh(cmd, mesh_handles[2]);
 
 				rc.device->bind_render_pipeline(cmd, pipelines[0]);
 				rc.device->set_push_constant(&camera_pc, sizeof(Camera_UBO), rc.device->get_shader_rid("color_shader"));
@@ -80,6 +86,9 @@ void add_basic_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
 				rc.device->set_push_constant(&cube_pc, sizeof(Camera_UBO), rc.device->get_shader_rid("cube_shader"));
 
 				rc.wsi->draw_mesh(cmd, mesh_handles[1]);
+
+
+
 
 				rc.wsi->end_render_pass(cmd);
 
@@ -110,7 +119,7 @@ struct TutorialApplication : EE::Application
 
 		light_mesh = Rendering::Shapes::upload_cube(*wsi, "light_cube");
 		object_mesh = Rendering::Shapes::upload_cube(*wsi, "object_cube");
-
+		grid_mesh = Rendering::Shapes::upload_grid(*wsi, 10, 1, "object_grid");
 
 		// Create frame buffer format
 
@@ -146,6 +155,13 @@ struct TutorialApplication : EE::Application
 			.set_vertex_format(vertex_format)
 			.build(framebuffer_format);
 
+		pipeline_grid = Rendering::PipelineBuilder{}
+			.set_shader({ "assets://shaders/grid.vert", "assets://shaders/grid.frag" }, "grid_shader")
+			.set_vertex_format(vertex_format)
+			.set_render_primitive(RDC::RENDER_PRIMITIVE_LINES)
+			.build(framebuffer_format);
+
+
 		wsi->submit_transfer_workers();
 		return wsi->pre_frame_loop();
 	}
@@ -177,7 +193,7 @@ struct TutorialApplication : EE::Application
 		fg.reset();
 		bb.reset();
 
-		add_basic_pass(fg, bb, { device->screen_get_width(), device->screen_get_height() }, { pipeline_color, pipeline_light }, uniform_set, { object_mesh, light_mesh }, camera_pc);
+		add_basic_pass(fg, bb, { device->screen_get_width(), device->screen_get_height() }, { pipeline_color, pipeline_light, pipeline_grid}, uniform_set, { object_mesh, light_mesh, grid_mesh }, camera_pc);
 		Rendering::add_imgui_pass(fg, bb, { device->screen_get_width(), device->screen_get_height() });
 		Rendering::add_blit_pass(fg, bb);
 
@@ -210,12 +226,14 @@ private:
 
 	RID pipeline_color;
 	RID pipeline_light;
+	RID pipeline_grid;
 	Camera camera;
 
 	std::shared_ptr<EE::InputSystemInterface> input_system;
 
 	Rendering::MeshHandle light_mesh;
 	Rendering::MeshHandle object_mesh;
+	Rendering::MeshHandle grid_mesh;
 
 	Rendering::WSI* wsi;
 	Rendering::RenderingDevice* device;

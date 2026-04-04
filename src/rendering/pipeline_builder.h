@@ -49,7 +49,7 @@ namespace Rendering
 			return *this;
 		}
 
-		PipelineBuilder& set_render_primitive(RDC::RenderPrimitive& p_render_primitive)
+		PipelineBuilder& set_render_primitive(RDC::RenderPrimitive p_render_primitive)
 		{
 			render_primitive = p_render_primitive;
 			return *this;
