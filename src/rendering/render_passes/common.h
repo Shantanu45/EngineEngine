@@ -7,7 +7,6 @@
 struct basic_pass_resource
 {
 	FrameGraphResource scene;
-	FrameGraphResource depth;
 };
 
 namespace Rendering
@@ -36,7 +35,7 @@ namespace Rendering
 			{
 				data.scene = builder.read(scene_handle.scene, TEXTURE_READ_FLAGS::READ_COLOR);
 				data.ui = builder.read(ui_handle.ui, TEXTURE_READ_FLAGS::READ_COLOR);
-				builder.read(scene_handle.depth, TEXTURE_READ_FLAGS::READ_COUNT);
+				//builder.read(scene_handle.depth, TEXTURE_READ_FLAGS::READ_COUNT);
 				builder.set_side_effect();		// mark as non cull able
 			},
 

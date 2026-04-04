@@ -39,9 +39,7 @@ void add_basic_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
 
 				data.scene = builder.create<Rendering::FrameGraphTexture>("scene texture", { tf, RD::TextureView(), "scene texture" });
 
-
 				data.scene = builder.write(data.scene, TEXTURE_WRITE_FLAGS::WRITE_COLOR);
-				//data.depth = builder.write(data.depth, TEXTURE_WRITE_FLAGS::WRITE_DEPTH);
 			},
 			[=](const basic_pass_resource& data,
 				FrameGraphPassResources& resources,
@@ -83,7 +81,6 @@ void add_basic_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
 
 				rc.wsi->end_render_pass(cmd);
 
-				//rc.device->_submit_transfer_barriers(cmd);
 			});
 }
 
@@ -100,8 +97,8 @@ struct TutorialApplication : EE::Application
 		camera.set_reset_on_resize();
 		camera.set_mode(CameraMode::Fly);
 
-		auto wsi = get_wsi();
-		auto device = wsi->get_rendering_device();
+		wsi = get_wsi();
+		device = wsi->get_rendering_device();
 
 		wsi->set_vertex_data_mode(Rendering::WSI::VERTEX_DATA_MODE::INTERLEVED_DATA);
 		wsi->set_index_buffer_format(RDC::IndexBufferFormat::INDEX_BUFFER_FORMAT_UINT32);
@@ -153,8 +150,6 @@ struct TutorialApplication : EE::Application
 
 	void render_frame(double frame_time, double elapsed_time) override
 	{
-		auto wsi = get_wsi();
-		auto device = wsi->get_rendering_device();
 
 		camera.update_from_input(input_system.get(), frame_time);
 
@@ -169,16 +164,14 @@ struct TutorialApplication : EE::Application
 
 		device->buffer_update(color_ubo, 0, sizeof(Colors_UBO), &colors);
 
-
 		device->imgui_begin_frame();
 		const auto timer = Services::get().get<Util::FrameTimer>();
 
 		ImGui::Text("FPS: %.1f", timer->get_fps());
 		ImGui::Text("Frame Time: %.3f ms", timer->get_frame_time() * 1000.0);
 
-		// ---- Build the frame graph ----
-		FrameGraph fg;
-		FrameGraphBlackboard bb;
+		fg.reset();
+		bb.reset();
 
 		add_basic_pass(fg, bb, { device->screen_get_width(), device->screen_get_height() }, { pipeline_color, pipeline_light }, uniform_set, { object_mesh, light_mesh }, camera_pc);
 		Rendering::add_imgui_pass(fg, bb, { device->screen_get_width(), device->screen_get_height() });
@@ -219,6 +212,13 @@ private:
 
 	Rendering::MeshHandle light_mesh;
 	Rendering::MeshHandle object_mesh;
+
+	Rendering::WSI* wsi;
+	Rendering::RenderingDevice* device;
+
+	// ---- Build the frame graph ----
+	FrameGraph fg;
+	FrameGraphBlackboard bb;
 };
 
 namespace EE

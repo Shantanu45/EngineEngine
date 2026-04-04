@@ -89,6 +89,16 @@ public:
   /** Invokes execution callbacks. */
   void execute(void *context = nullptr, void *allocator = nullptr);
 
+  /**
+   * resets nodes.
+   * 
+   */
+  void reset() {
+	  m_passNodes.clear();
+	  m_resourceNodes.clear();
+	  m_resourceRegistry.clear();
+  }
+
   template <typename Writer>
   std::ostream &debugOutput(std::ostream &, Writer &&) const;
 
