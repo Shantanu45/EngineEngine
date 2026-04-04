@@ -517,6 +517,122 @@ namespace Rendering::Shapes
 		return upload(*wsi.get_mesh_storage(), name, make_grid(half_size, spacing), wsi.get_vertex_format_by_type(fmt));
 	}
 
+	// Arrow along +Y, from origin to tip — all triangles, one pipeline
+    // shaft_length = length of the cylinder shaft
+    // head_height  = height of the cone
+    // shaft_radius = radius of the cylinder
+    // head_radius  = radius of the cone base
+	inline ShapeData make_arrow(
+		float    shaft_length = 0.75f,
+		float    head_height = 0.25f,
+		float    shaft_radius = 0.02f,
+		float    head_radius = 0.06f,
+		uint32_t slices = 8)
+	{
+		ShapeData d;
+		const float tau = 2.0f * std::numbers::pi_v<float>;
+
+		// ---- Shaft (cylinder) -------------------------------------------------------
+		const float shaft_bottom = 0.0f;
+		const float shaft_top = shaft_length;
+
+		for (uint32_t j = 0; j <= slices; ++j)
+		{
+			float theta = tau * float(j) / float(slices);
+			float ct = std::cos(theta), st = std::sin(theta);
+			float u = float(j) / float(slices);
+
+			glm::vec3 normal = { ct, 0.0f, st };
+			glm::vec4 tangent = { -st, 0.0f, ct, 1.0f };
+
+			d.vertices.push_back({ { ct * shaft_radius, shaft_bottom, st * shaft_radius }, normal, { u, 0.0f }, tangent });
+			d.vertices.push_back({ { ct * shaft_radius, shaft_top,    st * shaft_radius }, normal, { u, 1.0f }, tangent });
+		}
+
+		for (uint32_t j = 0; j < slices; ++j)
+		{
+			uint32_t b0 = j * 2, t0 = j * 2 + 1;
+			uint32_t b1 = (j + 1) * 2, t1 = (j + 1) * 2 + 1;
+			d.indices.insert(d.indices.end(), { b0, b1, t0,  t0, b1, t1 });
+		}
+
+		// Shaft bottom cap
+		{
+			uint32_t center = static_cast<uint32_t>(d.vertices.size());
+			d.vertices.push_back({ { 0, shaft_bottom, 0 }, { 0,-1,0 }, { 0.5f,0.5f }, { 1,0,0,1 } });
+			uint32_t ring = static_cast<uint32_t>(d.vertices.size());
+			for (uint32_t j = 0; j <= slices; ++j)
+			{
+				float theta = tau * float(j) / float(slices);
+				d.vertices.push_back({
+					{ std::cos(theta) * shaft_radius, shaft_bottom, std::sin(theta) * shaft_radius },
+					{ 0,-1,0 }, { 0.5f + 0.5f * std::cos(theta), 0.5f + 0.5f * std::sin(theta) }, { 1,0,0,1 } });
+			}
+			for (uint32_t j = 0; j < slices; ++j)
+				d.indices.insert(d.indices.end(), { center, ring + j + 1, ring + j });
+		}
+
+		// ---- Head (cone) ------------------------------------------------------------
+		const float cone_bottom = shaft_top;
+		const float cone_top = shaft_top + head_height;
+		const float half_h = head_height * 0.5f;
+		const float cone_mid_y = cone_bottom + half_h;
+
+		const float slope_len = std::sqrt(head_height * head_height + head_radius * head_radius);
+		const float ny = head_radius / slope_len;
+		const float nr = head_height / slope_len;
+
+		for (uint32_t j = 0; j < slices; ++j)
+		{
+			float theta0 = tau * float(j) / float(slices);
+			float theta1 = tau * float(j + 1) / float(slices);
+			float mid = (theta0 + theta1) * 0.5f;
+
+			glm::vec3 tip_normal = { nr * std::cos(mid), ny, nr * std::sin(mid) };
+			glm::vec4 tangent = { -std::sin(mid), 0, std::cos(mid), 1 };
+
+			glm::vec3 n0 = { nr * std::cos(theta0), ny, nr * std::sin(theta0) };
+			glm::vec3 n1 = { nr * std::cos(theta1), ny, nr * std::sin(theta1) };
+
+			uint32_t tip_idx = static_cast<uint32_t>(d.vertices.size());
+			d.vertices.push_back({ { 0, cone_top,    0                                       }, tip_normal, { 0.5f, 1.0f }, tangent });
+			d.vertices.push_back({ { std::cos(theta0) * head_radius, cone_bottom, std::sin(theta0) * head_radius }, n0, { float(j) / float(slices), 0.0f }, tangent });
+			d.vertices.push_back({ { std::cos(theta1) * head_radius, cone_bottom, std::sin(theta1) * head_radius }, n1, { float(j + 1) / float(slices), 0.0f }, tangent });
+
+			d.indices.insert(d.indices.end(), { tip_idx, tip_idx + 2, tip_idx + 1 });
+		}
+
+		// Cone base cap
+		{
+			uint32_t center = static_cast<uint32_t>(d.vertices.size());
+			d.vertices.push_back({ { 0, cone_bottom, 0 }, { 0,-1,0 }, { 0.5f,0.5f }, { 1,0,0,1 } });
+			uint32_t ring = static_cast<uint32_t>(d.vertices.size());
+			for (uint32_t j = 0; j <= slices; ++j)
+			{
+				float theta = tau * float(j) / float(slices);
+				d.vertices.push_back({
+					{ std::cos(theta) * head_radius, cone_bottom, std::sin(theta) * head_radius },
+					{ 0,-1,0 }, { 0.5f + 0.5f * std::cos(theta), 0.5f + 0.5f * std::sin(theta) }, { 1,0,0,1 } });
+			}
+			for (uint32_t j = 0; j < slices; ++j)
+				d.indices.insert(d.indices.end(), { center, ring + j, ring + j + 1 });
+		}
+
+		return d;
+	}
+
+	inline MeshHandle upload_arrow(WSI& wsi,
+		float shaft_length = 0.75f,
+		float head_height = 0.25f,
+		float shaft_radius = 0.02f,
+		float head_radius = 0.06f,
+		uint32_t slices = 8,
+		const std::string& name = "primitive_arrow",
+		VERTEX_FORMAT_VARIATIONS fmt = VERTEX_FORMAT_VARIATIONS::DEFAULT)
+	{
+		return upload(*wsi.get_mesh_storage(), name, make_arrow(shaft_length, head_height, shaft_radius, head_radius, slices), wsi.get_vertex_format_by_type(fmt));
+	}
+
 	// Upload all primitives at once — useful for a debug/editor setup
 	inline void upload_all(WSI& wsi, VERTEX_FORMAT_VARIATIONS fmt = VERTEX_FORMAT_VARIATIONS::DEFAULT)
 	{
@@ -528,6 +644,7 @@ namespace Rendering::Shapes
 		upload_cone(wsi, 16, true, "primitive_cone", fmt);
 		upload_line(wsi, {}, {}, "primitive_line", fmt);
 		upload_grid(wsi, 10, 1.0f, "primitive_grid", fmt);
+        upload_arrow(wsi, 0.75f, 0.25f, 0.02f, 0.06f, 8, "primitive_arrow", fmt);
 	}
 
 } // namespace Rendering::Shapes
