@@ -16,6 +16,7 @@ struct alignas(16) Camera_UBO {
 struct alignas(16) Colors_UBO {
 	glm::vec3 object_color;
 	glm::vec3 light_color;
+	glm::vec3 light_pos;
 };
 
 void add_basic_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
@@ -161,6 +162,7 @@ struct TutorialApplication : EE::Application
 		Colors_UBO colors{};
 		colors.light_color = { 1.0f, 1.0f, 1.0f };
 		colors.object_color = { 1.0f, 0.5f, 0.31f };
+		colors.light_pos = { 1.2f, 1.0f, 2.0f };
 
 		device->buffer_update(color_ubo, 0, sizeof(Colors_UBO), &colors);
 

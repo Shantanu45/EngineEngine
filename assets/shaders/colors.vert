@@ -10,7 +10,12 @@ layout(push_constant) uniform PushConstants {
     mat4 view_projectoin;
 } pc;
 
+layout(location = 0) out vec3 FragPos;
+layout(location = 1) out vec3 Normal;
+
 void main()
 {
 	gl_Position = pc.view_projectoin * pc.model * vec4(inPosition, 1.0);
+    FragPos = vec3(pc.model * vec4(inPosition, 1.0));
+    Normal = inNormal;
 }
