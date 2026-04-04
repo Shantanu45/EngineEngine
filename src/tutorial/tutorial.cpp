@@ -153,7 +153,6 @@ struct TutorialApplication : EE::Application
 
 	void render_frame(double frame_time, double elapsed_time) override
 	{
-		//TIMESTAMP_BEGIN();
 		auto wsi = get_wsi();
 		auto device = wsi->get_rendering_device();
 
@@ -163,22 +162,13 @@ struct TutorialApplication : EE::Application
 		camera_pc.model = glm::mat4(1.0f); // identity for now
 		camera_pc.view_projection = camera.get_view_projection();
 
-		//device->set_push_constant(&ubo, sizeof(Camera_UBO), device->get_shader_rid("color_shader"));
-
-		//Camera_UBO ubo_light{};
-		//ubo_light.view_projection = ubo.view_projection;
-		//glm::vec3 lightPos(1.2f, 1.0f, 2.0f);
-		//ubo_light.model = glm::translate(glm::mat4(1.0f), lightPos);
-
-		//device->set_push_constant(&ubo_light, sizeof(Camera_UBO), device->get_shader_rid("cube_shader"));
-
+		// setup Color_UBO
 		Colors_UBO colors{};
 		colors.light_color = { 1.0f, 1.0f, 1.0f };
 		colors.object_color = { 1.0f, 0.5f, 0.31f };
 
 		device->buffer_update(color_ubo, 0, sizeof(Colors_UBO), &colors);
 
-		// setup Color_UBO
 
 		device->imgui_begin_frame();
 		const auto timer = Services::get().get<Util::FrameTimer>();
@@ -203,7 +193,6 @@ struct TutorialApplication : EE::Application
 		rc.device = device;
 		rc.wsi = wsi;
 		fg.execute(&rc, &rc);
-		//TIMESTAMP_BEGIN();
 	}
 
 	void teardown_application() override
