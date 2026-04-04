@@ -20,12 +20,19 @@ struct alignas(16) Colors_UBO {
 	glm::vec3 view_pos;     float _pad3;
 };
 
+struct GridPushConstants {
+	glm::mat4 mvp;
+	glm::vec3 camera_pos;
+	float     pad;          // vec3 needs 16-byte alignment in GLSL
+};
+
 void add_basic_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
 	Size2i extent,
 	std::vector<RID> pipelines,
 	RID uniform_set,
 	std::vector<Rendering::MeshHandle> mesh_handles,
-	Camera_UBO camera_pc)
+	Camera_UBO camera_pc, 
+	glm::vec3 cam_pos)
 {
 	bb.add<basic_pass_resource>() =
 		fg.add_callback_pass<basic_pass_resource>(
@@ -66,9 +73,12 @@ void add_basic_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
 				clear_values[1].depth = 1.0;
 				clear_values[1].stencil = 0.0;
 
+				GridPushConstants pc{};
+				pc.mvp = camera_pc.view_projection * camera_pc.model;
+				pc.camera_pos = cam_pos;
 
 				rc.device->begin_render_pass_from_frame_buffer(frame_buffer, viewport, clear_values);
-				rc.device->set_push_constant(&camera_pc, sizeof(Camera_UBO), rc.device->get_shader_rid("grid_shader"));
+				rc.device->set_push_constant(&pc, sizeof(GridPushConstants), rc.device->get_shader_rid("grid_shader"));
 				rc.device->bind_render_pipeline(cmd, pipelines[2]);
 				//rc.device->get_driver().command_render_set_line_width(rc.device->get_current_command_buffer(), 1);
 
@@ -193,7 +203,7 @@ struct TutorialApplication : EE::Application
 		fg.reset();
 		bb.reset();
 
-		add_basic_pass(fg, bb, { device->screen_get_width(), device->screen_get_height() }, { pipeline_color, pipeline_light, pipeline_grid}, uniform_set, { object_mesh, light_mesh, grid_mesh }, camera_pc);
+		add_basic_pass(fg, bb, { device->screen_get_width(), device->screen_get_height() }, { pipeline_color, pipeline_light, pipeline_grid}, uniform_set, { object_mesh, light_mesh, grid_mesh }, camera_pc, camera.get_position());
 		Rendering::add_imgui_pass(fg, bb, { device->screen_get_width(), device->screen_get_height() });
 		Rendering::add_blit_pass(fg, bb);
 
