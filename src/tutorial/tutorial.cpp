@@ -9,6 +9,7 @@
 #include "rendering/primitve_shapes.h"
 #include "rendering/drawable.h"
 #include "rendering/uniform_buffer.h"
+#include "rendering/uniform_set_builder.h"
 
 struct alignas(16) Camera_UBO {
 	glm::mat4 model;
@@ -103,47 +104,54 @@ struct TutorialApplication : EE::Application
 		wsi->set_vertex_data_mode(Rendering::WSI::VERTEX_DATA_MODE::INTERLEVED_DATA);
 		wsi->set_index_buffer_format(RDC::IndexBufferFormat::INDEX_BUFFER_FORMAT_UINT32);
 
-		wsi->create_new_vertex_format(wsi->get_default_vertex_attribute(), Rendering::VERTEX_FORMAT_VARIATIONS::DEFAULT);
-		auto vertex_format = wsi->get_vertex_format_by_type(Rendering::VERTEX_FORMAT_VARIATIONS::DEFAULT);
+		wsi->create_new_vertex_format(
+			wsi->get_default_vertex_attribute(),
+			Rendering::VERTEX_FORMAT_VARIATIONS::DEFAULT);
+		auto vertex_format = wsi->get_vertex_format_by_type(
+			Rendering::VERTEX_FORMAT_VARIATIONS::DEFAULT);
 
+		// --- Meshes ---
 		light_mesh = Rendering::Shapes::upload_cube(*wsi, "light_cube");
 		object_mesh = Rendering::Shapes::upload_cube(*wsi, "object_cube");
 		grid_mesh = Rendering::Shapes::upload_grid(*wsi, 10, 1, "object_grid");
 
-		std::vector<RD::AttachmentFormat> attachments;
-
+		// --- Framebuffer format ---
 		RD::AttachmentFormat color;
 		color.format = RD::DATA_FORMAT_R8G8B8A8_UNORM;
-		color.usage_flags = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT;
+		color.usage_flags = RD::TEXTURE_USAGE_SAMPLING_BIT
+			| RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT;
 
-		attachments.push_back(color);
+		auto framebuffer_format = RD::get_singleton()->framebuffer_format_create({ color });
 
-		auto framebuffer_format = RD::get_singleton()->framebuffer_format_create(attachments);
-
+		// --- Pipelines ---
 		pipeline_color = Rendering::PipelineBuilder{}
-			.set_shader({ "assets://shaders/light_map.vert", "assets://shaders/light_map.frag" }, "light_map")
+			.set_shader({ "assets://shaders/light_map.vert",
+						  "assets://shaders/light_map.frag" }, "light_map")
 			.set_vertex_format(vertex_format)
 			.build(framebuffer_format);
 
 		pipeline_light = Rendering::PipelineBuilder{}
-			.set_shader({ "assets://shaders/light_cube.vert", "assets://shaders/light_cube.frag" }, "cube_shader")
+			.set_shader({ "assets://shaders/light_cube.vert",
+						  "assets://shaders/light_cube.frag" }, "cube_shader")
 			.set_vertex_format(vertex_format)
 			.build(framebuffer_format);
 
 		pipeline_grid = Rendering::PipelineBuilder{}
-			.set_shader({ "assets://shaders/grid.vert", "assets://shaders/grid.frag" }, "grid_shader")
+			.set_shader({ "assets://shaders/grid.vert",
+						  "assets://shaders/grid.frag" }, "grid_shader")
 			.set_vertex_format(vertex_format)
 			.set_render_primitive(RDC::RENDER_PRIMITIVE_LINES)
 			.build(framebuffer_format);
 
-		// UBO creation
+		// --- UBOs ---
 		material_ubo.create(device, "Material UBO");
 		light_ubo.create(device, "Light UBO");
 		view_ubo.create(device, "View UBO");
 
+		// --- Textures ---
 		auto fs = Services::get().get<FilesystemInterface>();
 		Rendering::ImageLoader img_loader(*fs);
-		// image
+
 		auto diffuse_image = img_loader.load_from_file("assets://textures/container2.png");
 		auto specular_image = img_loader.load_from_file("assets://textures/container2_specular.png");
 
@@ -152,39 +160,25 @@ struct TutorialApplication : EE::Application
 		tf.height = diffuse_image.height;
 		tf.array_layers = 1;
 		tf.texture_type = RDC::TEXTURE_TYPE_2D;
-		tf.usage_bits = RDC::TEXTURE_USAGE_SAMPLING_BIT | RDC::TEXTURE_USAGE_CAN_UPDATE_BIT;
+		tf.usage_bits = RDC::TEXTURE_USAGE_SAMPLING_BIT
+			| RDC::TEXTURE_USAGE_CAN_UPDATE_BIT;
 		tf.format = RDC::DATA_FORMAT_R8G8B8A8_UNORM;
 
 		diffuse_uniform = device->texture_create(tf, RD::TextureView(), { diffuse_image.pixels });
-		device->set_resource_name(diffuse_uniform, "Diffuse texture");
-
 		specular_uniform = device->texture_create(tf, RD::TextureView(), { specular_image.pixels });
+		device->set_resource_name(diffuse_uniform, "Diffuse texture");
 		device->set_resource_name(specular_uniform, "Specular texture");
 
 		auto sampler = device->sampler_create(RD::SamplerState());
 
-		// Uniform set — buffers via as_uniform(), textures manually
-		std::vector<RD::Uniform> uniforms = {
-			material_ubo.as_uniform(0),
-			light_ubo.as_uniform(1),
-			view_ubo.as_uniform(2),
-		};
-
-		RD::Uniform du;
-		du.uniform_type = RDC::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
-		du.binding = 3;
-		du.append_id(sampler);
-		du.append_id(diffuse_uniform);
-		uniforms.push_back(du);
-
-		RD::Uniform su;
-		su.uniform_type = RDC::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
-		su.binding = 4;
-		su.append_id(sampler);
-		su.append_id(specular_uniform);
-		uniforms.push_back(su);
-
-		uniform_set = device->uniform_set_create( uniforms, device->get_shader_rid("light_map"), 0);
+		// --- Uniform set ---
+		uniform_set = Rendering::UniformSetBuilder{}
+			.add(material_ubo.as_uniform(0))
+			.add(light_ubo.as_uniform(1))
+			.add(view_ubo.as_uniform(2))
+			.add_texture(3, sampler, diffuse_uniform)
+			.add_texture(4, sampler, specular_uniform)
+			.build(device, device->get_shader_rid("light_map"), 0);
 
 		wsi->submit_transfer_workers();
 		return wsi->pre_frame_loop();
