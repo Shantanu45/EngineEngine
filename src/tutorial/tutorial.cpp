@@ -7,6 +7,7 @@
 #include "input/input.h"
 #include "util/timer.h"
 #include "rendering/primitve_shapes.h"
+#include "rendering/drawable.h"
 
 struct alignas(16) Camera_UBO {
 	glm::mat4 model;
@@ -30,13 +31,11 @@ struct GridPushConstants {
 	float     pad;          // vec3 needs 16-byte alignment in GLSL
 };
 
-void add_basic_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
-	Size2i extent,
-	std::vector<RID> pipelines,
-	RID uniform_set,
-	std::vector<Rendering::MeshHandle> mesh_handles,
-	Camera_UBO camera_pc, 
-	glm::vec3 cam_pos)
+void add_basic_pass(
+	FrameGraph& fg,
+	FrameGraphBlackboard& bb,
+	Size2i                  extent,
+	std::vector<Rendering::Drawable>   drawables)   // <-- replaces all those parallel params
 {
 	bb.add<basic_pass_resource>() =
 		fg.add_callback_pass<basic_pass_resource>(
@@ -47,65 +46,42 @@ void add_basic_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
 				tf.texture_type = RD::TEXTURE_TYPE_2D;
 				tf.width = extent.x;
 				tf.height = extent.y;
-				tf.usage_bits = RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT;
+				tf.usage_bits = RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT
+					| RD::TEXTURE_USAGE_SAMPLING_BIT;
 				tf.format = RD::DATA_FORMAT_R8G8B8A8_UNORM;
 
-				data.scene = builder.create<Rendering::FrameGraphTexture>("scene texture", { tf, RD::TextureView(), "scene texture" });
-
+				data.scene = builder.create<Rendering::FrameGraphTexture>(
+					"scene texture", { tf, RD::TextureView(), "scene texture" });
 				data.scene = builder.write(data.scene, TEXTURE_WRITE_FLAGS::WRITE_COLOR);
 			},
 			[=](const basic_pass_resource& data,
 				FrameGraphPassResources& resources,
 				void* ctx)
 			{
-				Camera_UBO cube_pc = camera_pc; // mutable local copy
 				auto& rc = *static_cast<Rendering::RenderContext*>(ctx);
-				auto cmd = rc.command_buffer;
+				auto  cmd = rc.command_buffer;
 
 				auto& scene_tex = resources.get<Rendering::FrameGraphTexture>(data.scene);
 
 				uint32_t w = rc.device->screen_get_width();
 				uint32_t h = rc.device->screen_get_height();
 
-				Rect2i viewport(0, 0, w, h);
-
-				RID frame_buffer = rc.device->framebuffer_create({ scene_tex.texture_rid});
+				RID frame_buffer = rc.device->framebuffer_create({ scene_tex.texture_rid });
 
 				GPU_SCOPE(cmd, "Basic Pass", Color(1.0, 0.0, 0.0, 1.0));
+
 				std::array<RDD::RenderPassClearValue, 2> clear_values;
 				clear_values[0].color = Color();
 				clear_values[1].depth = 1.0;
 				clear_values[1].stencil = 0.0;
 
-				GridPushConstants pc{};
-				pc.mvp = camera_pc.view_projection * camera_pc.model;
-				pc.camera_pos = cam_pos;
+				rc.device->begin_render_pass_from_frame_buffer(
+					frame_buffer, Rect2i(0, 0, w, h), clear_values);
 
-				rc.device->begin_render_pass_from_frame_buffer(frame_buffer, viewport, clear_values);
-				rc.device->set_push_constant(&pc, sizeof(GridPushConstants), rc.device->get_shader_rid("grid_shader"));
-				rc.device->bind_render_pipeline(cmd, pipelines[2]);
-				//rc.device->get_driver().command_render_set_line_width(rc.device->get_current_command_buffer(), 1);
-
-				rc.wsi->draw_mesh(cmd, mesh_handles[2]);
-
-				rc.device->bind_render_pipeline(cmd, pipelines[0]);
-				rc.device->set_push_constant(&camera_pc, sizeof(Camera_UBO), rc.device->get_shader_rid("light_map"));
-				rc.device->bind_uniform_set( rc.device->get_shader_rid("light_map"), uniform_set, 0);
-
-				rc.wsi->draw_mesh(cmd, mesh_handles[0]);
-
-				rc.device->bind_render_pipeline(cmd, pipelines[1]);
-				glm::vec3 lightPos(1.2f, 1.0f, 2.0f);
-				cube_pc.model = glm::translate(glm::mat4(1.0f), lightPos);
-				rc.device->set_push_constant(&cube_pc, sizeof(Camera_UBO), rc.device->get_shader_rid("cube_shader"));
-
-				rc.wsi->draw_mesh(cmd, mesh_handles[1]);
-
-
-
+				for (const auto& drawable : drawables)
+					submit_drawable(rc, cmd, drawable);
 
 				rc.wsi->end_render_pass(cmd);
-
 			});
 }
 
@@ -232,43 +208,57 @@ struct TutorialApplication : EE::Application
 
 	void render_frame(double frame_time, double elapsed_time) override
 	{
-
 		camera.update_from_input(input_system.get(), frame_time);
 
-		Camera_UBO camera_pc{};
-		camera_pc.model = glm::mat4(1.0f); // identity for now
+		// --- Build per-frame data ---
+		Camera_UBO camera_pc;
+		camera_pc.model = glm::mat4(1.0f);
 		camera_pc.view_projection = camera.get_view_projection();
 
-		Material_UBO mat;
-		mat.shininess = 32;
+		glm::vec3 lightPos(1.2f, 1.0f, 2.0f);
+		Camera_UBO light_pc;
+		light_pc.model = glm::translate(glm::mat4(1.0f), lightPos);
+		light_pc.view_projection = camera.get_view_projection();
 
-		Light_UBO light;
-		light.ambient = {0.1, 0.1, 0.0, 0.0 };
-		light.diffuse =	 {0.5, 0.5, 0.0, 0.0 };
-		light.position = {1.0, 1.0, 1.0, 0.0};
-		light.specular = {1.0, 1.0, 1.0, 0.0 };
+		GridPushConstants grid_pc;
+		grid_pc.mvp = camera_pc.view_projection * camera_pc.model;
+		grid_pc.camera_pos = camera.get_position();
+
+		// --- Upload UBOs ---
+		Material_UBO mat{ 32.0f };
+		Light_UBO light{
+			{1.0f, 1.0f, 1.0f, 0.0f},
+			{0.1f, 0.1f, 0.0f, 0.0f},
+			{0.5f, 0.5f, 0.0f, 0.0f},
+			{1.0f, 1.0f, 1.0f, 0.0f}
+		};
+		glm::vec4 cam_pos = glm::vec4(camera.get_position(), 0.0f);
 
 		device->buffer_update(material_ubo, 0, sizeof(Material_UBO), &mat);
 		device->buffer_update(light_ubo, 0, sizeof(Light_UBO), &light);
-		glm::vec4 cam_pos = glm::vec4(camera.get_position(), 0.0);
 		device->buffer_update(view_ubo, 0, sizeof(glm::vec4), &cam_pos);
 
+		// --- Build drawables — order here is draw order ---
+		std::vector<Rendering::Drawable> drawables = {
+			Rendering::Drawable::make(pipeline_grid,  grid_mesh,   "grid_shader",  Rendering::PushConstantData::from(grid_pc)),
+			Rendering::Drawable::make(pipeline_color, object_mesh, "light_map",    Rendering::PushConstantData::from(camera_pc), uniform_set),
+			Rendering::Drawable::make(pipeline_light, light_mesh,  "cube_shader",  Rendering::PushConstantData::from(light_pc)),
+		};
+
+		// --- Frame graph ---
 		device->imgui_begin_frame();
 		const auto timer = Services::get().get<Util::FrameTimer>();
-
 		ImGui::Text("FPS: %.1f", timer->get_fps());
 		ImGui::Text("Frame Time: %.3f ms", timer->get_frame_time() * 1000.0);
 
 		fg.reset();
 		bb.reset();
 
-		add_basic_pass(fg, bb, { device->screen_get_width(), device->screen_get_height() }, { pipeline_color, pipeline_light, pipeline_grid}, uniform_set, { object_mesh, light_mesh, grid_mesh }, camera_pc, camera.get_position());
+		add_basic_pass(fg, bb, { device->screen_get_width(), device->screen_get_height() }, drawables);
 		Rendering::add_imgui_pass(fg, bb, { device->screen_get_width(), device->screen_get_height() });
 		Rendering::add_blit_pass(fg, bb);
 
 		fg.compile();
-
-		//save_graph_to_file(fg, "file_graph.dot");
 
 		Rendering::RenderContext rc;
 		rc.command_buffer = device->get_current_command_buffer();
