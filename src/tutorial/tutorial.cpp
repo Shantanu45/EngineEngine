@@ -110,9 +110,14 @@ struct TutorialApplication : EE::Application
 		auto vertex_format = wsi->get_vertex_format_by_type(
 			Rendering::VERTEX_FORMAT_VARIATIONS::DEFAULT);
 
+		auto fs = Services::get().get<FilesystemInterface>();
+		mesh_loader = std::make_unique<Rendering::MeshLoader>(*fs);
+		mesh_storage->initialize(device);
+
 		// --- Meshes ---
 		light_mesh = Rendering::Shapes::upload_cube(*wsi, "light_cube");
-		object_mesh = Rendering::Shapes::upload_cube(*wsi, "object_cube");
+		//object_mesh = Rendering::Shapes::upload_cube(*wsi, "object_cube");
+		object_mesh = mesh_loader->load_gltf(*mesh_storage, "assets://gltf/cube.glb", "cube", vertex_format);
 		grid_mesh = Rendering::Shapes::upload_grid(*wsi, 10, 1, "object_grid");
 
 		// --- Framebuffer format ---
@@ -149,7 +154,6 @@ struct TutorialApplication : EE::Application
 		view_ubo.create(device, "View UBO");
 
 		// --- Textures ---
-		auto fs = Services::get().get<FilesystemInterface>();
 		Rendering::ImageLoader img_loader(*fs);
 
 		auto diffuse_image = img_loader.load_from_file("assets://textures/container2.png");
@@ -169,7 +173,7 @@ struct TutorialApplication : EE::Application
 		device->set_resource_name(diffuse_uniform, "Diffuse texture");
 		device->set_resource_name(specular_uniform, "Specular texture");
 
-		auto sampler = device->sampler_create(RD::SamplerState());
+		sampler = device->sampler_create(RD::SamplerState());
 
 		// --- Uniform set ---
 		uniform_set = Rendering::UniformSetBuilder{}
@@ -255,6 +259,8 @@ struct TutorialApplication : EE::Application
 		device->free_rid(diffuse_uniform);
 		device->free_rid(specular_uniform);
 		device->free_rid(pipeline_color);
+		device->free_rid(sampler);
+		mesh_storage->finalize();
 	}
 
 private:
@@ -271,6 +277,8 @@ private:
 	RID pipeline_light;
 	RID pipeline_grid;
 
+	RID sampler;
+
 	Camera camera;
 	std::shared_ptr<EE::InputSystemInterface> input_system;
 
@@ -283,6 +291,9 @@ private:
 
 	FrameGraph           fg;
 	FrameGraphBlackboard bb;
+
+	std::unique_ptr<Rendering::MeshStorage> mesh_storage = std::make_unique<Rendering::MeshStorage>();
+	std::unique_ptr<Rendering::MeshLoader>  mesh_loader;
 };
 
 namespace EE
