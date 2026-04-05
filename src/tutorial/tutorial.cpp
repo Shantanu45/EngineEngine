@@ -13,11 +13,18 @@ struct alignas(16) Camera_UBO {
 	glm::mat4 view_projection;
 };
 
-struct alignas(16) Colors_UBO {
-	glm::vec3 object_color; float _pad0;
-	glm::vec3 light_color;  float _pad1;
-	glm::vec3 light_pos;    float _pad2;
-	glm::vec3 view_pos;     float _pad3;
+struct alignas(16) Material_UBO {
+	glm::vec4 ambient;
+	glm::vec4 diffuse;
+	glm::vec4 specular;
+	float shininess;
+};
+
+struct Light_UBO {
+	glm::vec4 position;
+	glm::vec4 ambient;
+	glm::vec4 diffuse;
+	glm::vec4 specular;
 };
 
 struct GridPushConstants {
@@ -80,13 +87,13 @@ void add_basic_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
 				rc.device->begin_render_pass_from_frame_buffer(frame_buffer, viewport, clear_values);
 				rc.device->set_push_constant(&pc, sizeof(GridPushConstants), rc.device->get_shader_rid("grid_shader"));
 				rc.device->bind_render_pipeline(cmd, pipelines[2]);
-				//rc.device->get_driver().command_render_set_line_width(rc.device->get_current_command_buffer(), 1);
+				rc.device->get_driver().command_render_set_line_width(rc.device->get_current_command_buffer(), 1);
 
 				rc.wsi->draw_mesh(cmd, mesh_handles[2]);
 
 				rc.device->bind_render_pipeline(cmd, pipelines[0]);
-				rc.device->set_push_constant(&camera_pc, sizeof(Camera_UBO), rc.device->get_shader_rid("color_shader"));
-				rc.device->bind_uniform_set( rc.device->get_shader_rid("color_shader"), uniform_set, 0);
+				rc.device->set_push_constant(&camera_pc, sizeof(Camera_UBO), rc.device->get_shader_rid("material_shader"));
+				rc.device->bind_uniform_set( rc.device->get_shader_rid("material_shader"), uniform_set, 0);
 
 				rc.wsi->draw_mesh(cmd, mesh_handles[0]);
 
@@ -144,21 +151,36 @@ struct TutorialApplication : EE::Application
 		auto framebuffer_format = RD::get_singleton()->framebuffer_format_create(attachments);
 
 		pipeline_color = Rendering::PipelineBuilder{}
-			.set_shader({ "assets://shaders/colors.vert", "assets://shaders/colors.frag" }, "color_shader")
+			.set_shader({ "assets://shaders/material.vert", "assets://shaders/material.frag" }, "material_shader")
 			.set_vertex_format(vertex_format)
 			.build(framebuffer_format);
 
-		color_ubo = device->uniform_buffer_create(sizeof(Colors_UBO));
+		material_ubo = device->uniform_buffer_create(sizeof(Material_UBO));
+		light_ubo = device->uniform_buffer_create(sizeof(Light_UBO));
+		view_ubo = device->uniform_buffer_create(sizeof(glm::vec4));
 
 		std::vector<RD::Uniform> uniforms;
 
 		RD::Uniform u;
 		u.uniform_type = RDC::UNIFORM_TYPE_UNIFORM_BUFFER;
 		u.binding = 0;
-		u.append_id(color_ubo);
+		u.append_id(material_ubo);
 		uniforms.push_back(u);
 
-		uniform_set = device->uniform_set_create(uniforms, device->get_shader_rid("color_shader"), 0);
+		RD::Uniform lu;
+		lu.uniform_type = RDC::UNIFORM_TYPE_UNIFORM_BUFFER;
+		lu.binding = 1;
+		lu.append_id(light_ubo);
+		uniforms.push_back(lu);
+
+		RD::Uniform vu;
+		vu.uniform_type = RDC::UNIFORM_TYPE_UNIFORM_BUFFER;
+		vu.binding = 2;
+		vu.append_id(view_ubo);
+		uniforms.push_back(vu);
+
+
+		uniform_set = device->uniform_set_create(uniforms, device->get_shader_rid("material_shader"), 0);
 
 		pipeline_light = Rendering::PipelineBuilder{}
 			.set_shader({ "assets://shaders/light_cube.vert", "assets://shaders/light_cube.frag" }, "cube_shader")
@@ -185,14 +207,22 @@ struct TutorialApplication : EE::Application
 		camera_pc.model = glm::mat4(1.0f); // identity for now
 		camera_pc.view_projection = camera.get_view_projection();
 
-		// setup Color_UBO
-		Colors_UBO colors{};
-		colors.light_color = { 1.0f, 1.0f, 1.0f };
-		colors.object_color = { 1.0f, 0.5f, 0.31f };
-		colors.light_pos = { 1.2f, 1.0f, 2.0f };
-		colors.view_pos = camera.get_position();
+		Material_UBO mat;
+		mat.ambient = { 1.0f, 0.5f, 0.31f , 0.0};
+		mat.diffuse = { 1.0f, 0.5f, 0.31f, 0.0 };
+		mat.shininess = 32;
+		mat.specular = { 0.5f, 0.5f, 0.5f , 0.0 };
 
-		device->buffer_update(color_ubo, 0, sizeof(Colors_UBO), &colors);
+		Light_UBO light;
+		light.ambient = {0.1, 0.1, 0.0, 0.0 };
+		light.diffuse =	 {0.5, 0.5, 0.0, 0.0 };
+		light.position = {1.0, 1.0, 1.0, 0.0};
+		light.specular = {1.0, 1.0, 1.0, 0.0 };
+
+		device->buffer_update(material_ubo, 0, sizeof(Material_UBO), &mat);
+		device->buffer_update(light_ubo, 0, sizeof(Light_UBO), &light);
+		glm::vec4 cam_pos = glm::vec4(camera.get_position(), 0.0);
+		device->buffer_update(view_ubo, 0, sizeof(glm::vec4), &cam_pos);
 
 		device->imgui_begin_frame();
 		const auto timer = Services::get().get<Util::FrameTimer>();
@@ -224,12 +254,16 @@ struct TutorialApplication : EE::Application
 
 		auto device = wsi->get_rendering_device();
 
-		device->free_rid(color_ubo);
+		device->free_rid(material_ubo);
+		device->free_rid(light_ubo);
+		device->free_rid(view_ubo);
 		device->free_rid(pipeline_color);
 	}
 
 private:
-	RID color_ubo;
+	RID material_ubo;
+	RID light_ubo;
+	RID view_ubo;
 	RID uniform_set;
 
 	Rendering::MeshPrimitive prim;

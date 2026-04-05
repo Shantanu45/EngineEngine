@@ -944,6 +944,19 @@ namespace Rendering
 		bool uniform_set_is_valid(RID p_uniform_set);
 
 		Error buffer_copy(RID p_src_buffer, RID p_dst_buffer, uint32_t p_src_offset, uint32_t p_dst_offset, uint32_t p_size);
+
+		/**
+		 * Offset would only matter if you had packed multiple UBOs into a single buffer, like:
+				|--Material_UBO--|--Light_UBO--|
+				0               64            128.
+		 * 
+		 * \param p_buffer
+		 * \param p_offset
+		 * \param p_size
+		 * \param p_data
+		 * \param p_skip_check
+		 * \return 
+		 */
 		Error buffer_update(RID p_buffer, uint32_t p_offset, uint32_t p_size, const void* p_data, bool p_skip_check = false);
 		Error buffer_clear(RID p_buffer, uint32_t p_offset, uint32_t p_size);
 		void buffer_flush(RID p_buffer);
