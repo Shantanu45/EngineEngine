@@ -14,9 +14,6 @@ struct alignas(16) Camera_UBO {
 };
 
 struct alignas(16) Material_UBO {
-	glm::vec4 ambient;
-	glm::vec4 diffuse;
-	glm::vec4 specular;
 	float shininess;
 };
 
@@ -87,13 +84,13 @@ void add_basic_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
 				rc.device->begin_render_pass_from_frame_buffer(frame_buffer, viewport, clear_values);
 				rc.device->set_push_constant(&pc, sizeof(GridPushConstants), rc.device->get_shader_rid("grid_shader"));
 				rc.device->bind_render_pipeline(cmd, pipelines[2]);
-				rc.device->get_driver().command_render_set_line_width(rc.device->get_current_command_buffer(), 1);
+				//rc.device->get_driver().command_render_set_line_width(rc.device->get_current_command_buffer(), 1);
 
 				rc.wsi->draw_mesh(cmd, mesh_handles[2]);
 
 				rc.device->bind_render_pipeline(cmd, pipelines[0]);
-				rc.device->set_push_constant(&camera_pc, sizeof(Camera_UBO), rc.device->get_shader_rid("material_shader"));
-				rc.device->bind_uniform_set( rc.device->get_shader_rid("material_shader"), uniform_set, 0);
+				rc.device->set_push_constant(&camera_pc, sizeof(Camera_UBO), rc.device->get_shader_rid("light_map"));
+				rc.device->bind_uniform_set( rc.device->get_shader_rid("light_map"), uniform_set, 0);
 
 				rc.wsi->draw_mesh(cmd, mesh_handles[0]);
 
@@ -151,13 +148,35 @@ struct TutorialApplication : EE::Application
 		auto framebuffer_format = RD::get_singleton()->framebuffer_format_create(attachments);
 
 		pipeline_color = Rendering::PipelineBuilder{}
-			.set_shader({ "assets://shaders/material.vert", "assets://shaders/material.frag" }, "material_shader")
+			.set_shader({ "assets://shaders/light_map.vert", "assets://shaders/light_map.frag" }, "light_map")
 			.set_vertex_format(vertex_format)
 			.build(framebuffer_format);
 
 		material_ubo = device->uniform_buffer_create(sizeof(Material_UBO));
 		light_ubo = device->uniform_buffer_create(sizeof(Light_UBO));
 		view_ubo = device->uniform_buffer_create(sizeof(glm::vec4));
+
+		auto fs = Services::get().get<FilesystemInterface>();
+		Rendering::ImageLoader img_loader(*fs);
+		// image
+		auto diffuse_image = img_loader.load_from_file("assets://textures/container2.png");
+		auto specular_image = img_loader.load_from_file("assets://textures/container2_specular.png");
+
+		RDC::TextureFormat tf;
+		tf.width = diffuse_image.width;
+		tf.height = diffuse_image.height;
+		tf.array_layers = 1;
+		tf.texture_type = RDC::TEXTURE_TYPE_2D;
+		tf.usage_bits = RDC::TEXTURE_USAGE_SAMPLING_BIT | RDC::TEXTURE_USAGE_CAN_UPDATE_BIT;
+		tf.format = RDC::DATA_FORMAT_R8G8B8A8_UNORM;
+
+		diffuse_uniform = device->texture_create(tf, RD::TextureView(), { diffuse_image.pixels });
+		device->set_resource_name(diffuse_uniform, "Diffuse texture");
+
+		specular_uniform = device->texture_create(tf, RD::TextureView(), { specular_image.pixels });
+		device->set_resource_name(specular_uniform, "Specular texture");
+
+		auto sampler = device->sampler_create(RD::SamplerState());
 
 		std::vector<RD::Uniform> uniforms;
 
@@ -179,8 +198,21 @@ struct TutorialApplication : EE::Application
 		vu.append_id(view_ubo);
 		uniforms.push_back(vu);
 
+		RD::Uniform du;
+		du.uniform_type = RDC::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+		du.binding = 3;
+		du.append_id(sampler);
+		du.append_id(diffuse_uniform);
+		uniforms.push_back(du);
 
-		uniform_set = device->uniform_set_create(uniforms, device->get_shader_rid("material_shader"), 0);
+		RD::Uniform su;
+		su.uniform_type = RDC::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+		su.binding = 4;
+		su.append_id(sampler);
+		su.append_id(specular_uniform);
+		uniforms.push_back(su);
+
+		uniform_set = device->uniform_set_create(uniforms, device->get_shader_rid("light_map"), 0);
 
 		pipeline_light = Rendering::PipelineBuilder{}
 			.set_shader({ "assets://shaders/light_cube.vert", "assets://shaders/light_cube.frag" }, "cube_shader")
@@ -208,10 +240,7 @@ struct TutorialApplication : EE::Application
 		camera_pc.view_projection = camera.get_view_projection();
 
 		Material_UBO mat;
-		mat.ambient = { 1.0f, 0.5f, 0.31f , 0.0};
-		mat.diffuse = { 1.0f, 0.5f, 0.31f, 0.0 };
 		mat.shininess = 32;
-		mat.specular = { 0.5f, 0.5f, 0.5f , 0.0 };
 
 		Light_UBO light;
 		light.ambient = {0.1, 0.1, 0.0, 0.0 };
@@ -256,6 +285,8 @@ struct TutorialApplication : EE::Application
 
 		device->free_rid(material_ubo);
 		device->free_rid(light_ubo);
+		device->free_rid(diffuse_uniform);
+		device->free_rid(specular_uniform);
 		device->free_rid(view_ubo);
 		device->free_rid(pipeline_color);
 	}
@@ -265,6 +296,9 @@ private:
 	RID light_ubo;
 	RID view_ubo;
 	RID uniform_set;
+
+	RID diffuse_uniform;
+	RID specular_uniform;
 
 	Rendering::MeshPrimitive prim;
 
