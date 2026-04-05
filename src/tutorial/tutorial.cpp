@@ -8,6 +8,7 @@
 #include "util/timer.h"
 #include "rendering/primitve_shapes.h"
 #include "rendering/drawable.h"
+#include "rendering/uniform_buffer.h"
 
 struct alignas(16) Camera_UBO {
 	glm::mat4 model;
@@ -75,10 +76,9 @@ void add_basic_pass(
 				clear_values[1].depth = 1.0;
 				clear_values[1].stencil = 0.0;
 
-				rc.device->begin_render_pass_from_frame_buffer(
-					frame_buffer, Rect2i(0, 0, w, h), clear_values);
+				rc.device->begin_render_pass_from_frame_buffer( frame_buffer, Rect2i(0, 0, w, h), clear_values);
 
-				for (const auto& drawable : drawables)
+				for (const auto& drawable : drawables) 
 					submit_drawable(rc, cmd, drawable);
 
 				rc.wsi->end_render_pass(cmd);
@@ -88,7 +88,6 @@ void add_basic_pass(
 
 struct TutorialApplication : EE::Application
 {
-
 	bool pre_frame() override
 	{
 		input_system = Services::get().get<EE::InputSystemInterface>();
@@ -111,8 +110,6 @@ struct TutorialApplication : EE::Application
 		object_mesh = Rendering::Shapes::upload_cube(*wsi, "object_cube");
 		grid_mesh = Rendering::Shapes::upload_grid(*wsi, 10, 1, "object_grid");
 
-		// Create frame buffer format
-
 		std::vector<RD::AttachmentFormat> attachments;
 
 		RD::AttachmentFormat color;
@@ -128,9 +125,21 @@ struct TutorialApplication : EE::Application
 			.set_vertex_format(vertex_format)
 			.build(framebuffer_format);
 
-		material_ubo = device->uniform_buffer_create(sizeof(Material_UBO));
-		light_ubo = device->uniform_buffer_create(sizeof(Light_UBO));
-		view_ubo = device->uniform_buffer_create(sizeof(glm::vec4));
+		pipeline_light = Rendering::PipelineBuilder{}
+			.set_shader({ "assets://shaders/light_cube.vert", "assets://shaders/light_cube.frag" }, "cube_shader")
+			.set_vertex_format(vertex_format)
+			.build(framebuffer_format);
+
+		pipeline_grid = Rendering::PipelineBuilder{}
+			.set_shader({ "assets://shaders/grid.vert", "assets://shaders/grid.frag" }, "grid_shader")
+			.set_vertex_format(vertex_format)
+			.set_render_primitive(RDC::RENDER_PRIMITIVE_LINES)
+			.build(framebuffer_format);
+
+		// UBO creation
+		material_ubo.create(device, "Material UBO");
+		light_ubo.create(device, "Light UBO");
+		view_ubo.create(device, "View UBO");
 
 		auto fs = Services::get().get<FilesystemInterface>();
 		Rendering::ImageLoader img_loader(*fs);
@@ -154,25 +163,12 @@ struct TutorialApplication : EE::Application
 
 		auto sampler = device->sampler_create(RD::SamplerState());
 
-		std::vector<RD::Uniform> uniforms;
-
-		RD::Uniform u;
-		u.uniform_type = RDC::UNIFORM_TYPE_UNIFORM_BUFFER;
-		u.binding = 0;
-		u.append_id(material_ubo);
-		uniforms.push_back(u);
-
-		RD::Uniform lu;
-		lu.uniform_type = RDC::UNIFORM_TYPE_UNIFORM_BUFFER;
-		lu.binding = 1;
-		lu.append_id(light_ubo);
-		uniforms.push_back(lu);
-
-		RD::Uniform vu;
-		vu.uniform_type = RDC::UNIFORM_TYPE_UNIFORM_BUFFER;
-		vu.binding = 2;
-		vu.append_id(view_ubo);
-		uniforms.push_back(vu);
+		// Uniform set — buffers via as_uniform(), textures manually
+		std::vector<RD::Uniform> uniforms = {
+			material_ubo.as_uniform(0),
+			light_ubo.as_uniform(1),
+			view_ubo.as_uniform(2),
+		};
 
 		RD::Uniform du;
 		du.uniform_type = RDC::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
@@ -188,19 +184,7 @@ struct TutorialApplication : EE::Application
 		su.append_id(specular_uniform);
 		uniforms.push_back(su);
 
-		uniform_set = device->uniform_set_create(uniforms, device->get_shader_rid("light_map"), 0);
-
-		pipeline_light = Rendering::PipelineBuilder{}
-			.set_shader({ "assets://shaders/light_cube.vert", "assets://shaders/light_cube.frag" }, "cube_shader")
-			.set_vertex_format(vertex_format)
-			.build(framebuffer_format);
-
-		pipeline_grid = Rendering::PipelineBuilder{}
-			.set_shader({ "assets://shaders/grid.vert", "assets://shaders/grid.frag" }, "grid_shader")
-			.set_vertex_format(vertex_format)
-			.set_render_primitive(RDC::RENDER_PRIMITIVE_LINES)
-			.build(framebuffer_format);
-
+		uniform_set = device->uniform_set_create( uniforms, device->get_shader_rid("light_map"), 0);
 
 		wsi->submit_transfer_workers();
 		return wsi->pre_frame_loop();
@@ -210,7 +194,6 @@ struct TutorialApplication : EE::Application
 	{
 		camera.update_from_input(input_system.get(), frame_time);
 
-		// --- Build per-frame data ---
 		Camera_UBO camera_pc;
 		camera_pc.model = glm::mat4(1.0f);
 		camera_pc.view_projection = camera.get_view_projection();
@@ -224,28 +207,22 @@ struct TutorialApplication : EE::Application
 		grid_pc.mvp = camera_pc.view_projection * camera_pc.model;
 		grid_pc.camera_pos = camera.get_position();
 
-		// --- Upload UBOs ---
-		Material_UBO mat{ 32.0f };
-		Light_UBO light{
+		// Upload — type-safe, no sizeof, no casting
+		material_ubo.upload(device, Material_UBO{ 32.0f });
+		light_ubo.upload(device, Light_UBO{
 			{1.0f, 1.0f, 1.0f, 0.0f},
 			{0.1f, 0.1f, 0.0f, 0.0f},
 			{0.5f, 0.5f, 0.0f, 0.0f},
-			{1.0f, 1.0f, 1.0f, 0.0f}
-		};
-		glm::vec4 cam_pos = glm::vec4(camera.get_position(), 0.0f);
+			{1.0f, 1.0f, 1.0f, 0.0f},
+			});
+		view_ubo.upload(device, glm::vec4(camera.get_position(), 0.0f));
 
-		device->buffer_update(material_ubo, 0, sizeof(Material_UBO), &mat);
-		device->buffer_update(light_ubo, 0, sizeof(Light_UBO), &light);
-		device->buffer_update(view_ubo, 0, sizeof(glm::vec4), &cam_pos);
-
-		// --- Build drawables — order here is draw order ---
 		std::vector<Rendering::Drawable> drawables = {
-			Rendering::Drawable::make(pipeline_grid,  grid_mesh,   "grid_shader",  Rendering::PushConstantData::from(grid_pc)),
-			Rendering::Drawable::make(pipeline_color, object_mesh, "light_map",    Rendering::PushConstantData::from(camera_pc), uniform_set),
-			Rendering::Drawable::make(pipeline_light, light_mesh,  "cube_shader",  Rendering::PushConstantData::from(light_pc)),
+			Rendering::Drawable::make(pipeline_grid, grid_mesh, "grid_shader", Rendering::PushConstantData::from(grid_pc)),
+			Rendering::Drawable::make(pipeline_color, object_mesh, "light_map", Rendering::PushConstantData::from(camera_pc), uniform_set),
+			Rendering::Drawable::make(pipeline_light, light_mesh,  "cube_shader", Rendering::PushConstantData::from(light_pc)),
 		};
 
-		// --- Frame graph ---
 		device->imgui_begin_frame();
 		const auto timer = Services::get().get<Util::FrameTimer>();
 		ImGui::Text("FPS: %.1f", timer->get_fps());
@@ -254,8 +231,11 @@ struct TutorialApplication : EE::Application
 		fg.reset();
 		bb.reset();
 
-		add_basic_pass(fg, bb, { device->screen_get_width(), device->screen_get_height() }, drawables);
-		Rendering::add_imgui_pass(fg, bb, { device->screen_get_width(), device->screen_get_height() });
+		add_basic_pass(fg, bb,
+			{ device->screen_get_width(), device->screen_get_height() },
+			drawables);
+		Rendering::add_imgui_pass(fg, bb,
+			{ device->screen_get_width(), device->screen_get_height() });
 		Rendering::add_blit_pass(fg, bb);
 
 		fg.compile();
@@ -270,33 +250,34 @@ struct TutorialApplication : EE::Application
 	void teardown_application() override
 	{
 		auto wsi = get_wsi();
-
 		auto device = wsi->get_rendering_device();
 
-		device->free_rid(material_ubo);
-		device->free_rid(light_ubo);
+		// UBOs
+		material_ubo.free(device);
+		light_ubo.free(device);
+		view_ubo.free(device);
+
+		// Textures — still bare RIDs, unchanged
 		device->free_rid(diffuse_uniform);
 		device->free_rid(specular_uniform);
-		device->free_rid(view_ubo);
 		device->free_rid(pipeline_color);
 	}
 
 private:
-	RID material_ubo;
-	RID light_ubo;
-	RID view_ubo;
-	RID uniform_set;
+	// UBOs — typed, self-describing
+	Rendering::UniformBuffer<Material_UBO> material_ubo;
+	Rendering::UniformBuffer<Light_UBO>    light_ubo;
+	Rendering::UniformBuffer<glm::vec4>    view_ubo;
 
+	RID uniform_set;
 	RID diffuse_uniform;
 	RID specular_uniform;
-
-	Rendering::MeshPrimitive prim;
 
 	RID pipeline_color;
 	RID pipeline_light;
 	RID pipeline_grid;
-	Camera camera;
 
+	Camera camera;
 	std::shared_ptr<EE::InputSystemInterface> input_system;
 
 	Rendering::MeshHandle light_mesh;
@@ -306,8 +287,7 @@ private:
 	Rendering::WSI* wsi;
 	Rendering::RenderingDevice* device;
 
-	// ---- Build the frame graph ----
-	FrameGraph fg;
+	FrameGraph           fg;
 	FrameGraphBlackboard bb;
 };
 
