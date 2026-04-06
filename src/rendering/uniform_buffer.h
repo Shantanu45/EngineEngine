@@ -40,7 +40,7 @@ namespace Rendering
 		// one field changed (e.g. just the light position)
 		template<typename Field>
 		void upload_field(RenderingDevice* device, Field T::* member, const Field& value) {
-			const size_t offset = offsetof_member(member);
+			const size_t offset = _offsetof_member(member);
 			device->buffer_update(rid, offset, sizeof(Field), &value);
 		}
 
@@ -71,7 +71,7 @@ namespace Rendering
 	private:
 		// Helper to compute byte offset of a member pointer at compile time
 		template<typename Field>
-		static size_t offsetof_member(Field T::* member) {
+		static size_t _offsetof_member(Field T::* member) {
 			// Standard-layout types only — fine for UBO structs
 			alignas(T) char buf[sizeof(T)] = {};
 			T* obj = reinterpret_cast<T*>(buf);

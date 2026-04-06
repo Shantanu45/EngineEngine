@@ -165,8 +165,7 @@ struct TutorialApplication : EE::Application
 		tf.height = diffuse_image.height;
 		tf.array_layers = 1;
 		tf.texture_type = RDC::TEXTURE_TYPE_2D;
-		tf.usage_bits = RDC::TEXTURE_USAGE_SAMPLING_BIT
-			| RDC::TEXTURE_USAGE_CAN_UPDATE_BIT;
+		tf.usage_bits = RDC::TEXTURE_USAGE_SAMPLING_BIT | RDC::TEXTURE_USAGE_CAN_UPDATE_BIT;
 		tf.format = RDC::DATA_FORMAT_R8G8B8A8_UNORM;
 
 		diffuse_uniform = device->texture_create(tf, RD::TextureView(), { diffuse_image.pixels });
