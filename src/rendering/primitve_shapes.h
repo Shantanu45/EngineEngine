@@ -422,43 +422,43 @@ namespace Rendering::Shapes
     }
 
     // Per-shape convenience uploaders via WSI
-    inline MeshHandle upload_quad(WSI& wsi, const std::string& name = "primitive_quad",
+    inline MeshHandle upload_quad(WSI& wsi, MeshStorage& mesh_storage, const std::string& name = "primitive_quad",
         VERTEX_FORMAT_VARIATIONS fmt = VERTEX_FORMAT_VARIATIONS::DEFAULT)
     {
-        return upload(*wsi.get_mesh_storage(), name, make_quad(), wsi.get_vertex_format_by_type(fmt));
+        return upload(mesh_storage, name, make_quad(), wsi.get_vertex_format_by_type(fmt));
     }
 
-    inline MeshHandle upload_plane(WSI& wsi, uint32_t subdivisions = 1, const std::string& name = "primitive_plane",
+    inline MeshHandle upload_plane(WSI& wsi, MeshStorage& mesh_storage, uint32_t subdivisions = 1, const std::string& name = "primitive_plane",
         VERTEX_FORMAT_VARIATIONS fmt = VERTEX_FORMAT_VARIATIONS::DEFAULT)
     {
-        return upload(*wsi.get_mesh_storage(), name, make_plane(subdivisions), wsi.get_vertex_format_by_type(fmt));
+        return upload(mesh_storage, name, make_plane(subdivisions), wsi.get_vertex_format_by_type(fmt));
     }
 
-    inline MeshHandle upload_cube(WSI& wsi, const std::string& name = "primitive_cube",
+    inline MeshHandle upload_cube(WSI& wsi, MeshStorage& mesh_storage, const std::string& name = "primitive_cube",
         VERTEX_FORMAT_VARIATIONS fmt = VERTEX_FORMAT_VARIATIONS::DEFAULT)
     {
-        return upload(*wsi.get_mesh_storage(), name, make_cube(), wsi.get_vertex_format_by_type(fmt));
+        return upload(mesh_storage, name, make_cube(), wsi.get_vertex_format_by_type(fmt));
     }
 
-    inline MeshHandle upload_sphere(WSI& wsi, uint32_t stacks = 16, uint32_t slices = 16,
+    inline MeshHandle upload_sphere(WSI& wsi, MeshStorage& mesh_storage, uint32_t stacks = 16, uint32_t slices = 16,
         const std::string& name = "primitive_sphere",
         VERTEX_FORMAT_VARIATIONS fmt = VERTEX_FORMAT_VARIATIONS::DEFAULT)
     {
-        return upload(*wsi.get_mesh_storage(), name, make_sphere(stacks, slices), wsi.get_vertex_format_by_type(fmt));
+        return upload(mesh_storage, name, make_sphere(stacks, slices), wsi.get_vertex_format_by_type(fmt));
     }
 
-    inline MeshHandle upload_cylinder(WSI& wsi, uint32_t slices = 16, bool caps = true,
+    inline MeshHandle upload_cylinder(WSI& wsi, MeshStorage& mesh_storage, uint32_t slices = 16, bool caps = true,
         const std::string& name = "primitive_cylinder",
         VERTEX_FORMAT_VARIATIONS fmt = VERTEX_FORMAT_VARIATIONS::DEFAULT)
     {
-        return upload(*wsi.get_mesh_storage(), name, make_cylinder(slices, caps), wsi.get_vertex_format_by_type(fmt));
+        return upload(mesh_storage, name, make_cylinder(slices, caps), wsi.get_vertex_format_by_type(fmt));
     }
 
-    inline MeshHandle upload_cone(WSI& wsi, uint32_t slices = 16, bool cap = true,
+    inline MeshHandle upload_cone(WSI& wsi, MeshStorage& mesh_storage, uint32_t slices = 16, bool cap = true,
         const std::string& name = "primitive_cone",
         VERTEX_FORMAT_VARIATIONS fmt = VERTEX_FORMAT_VARIATIONS::DEFAULT)
     {
-        return upload(*wsi.get_mesh_storage(), name, make_cone(slices, cap), wsi.get_vertex_format_by_type(fmt));
+        return upload(mesh_storage, name, make_cone(slices, cap), wsi.get_vertex_format_by_type(fmt));
     }
 
 	// Single line from point A to point B
@@ -501,20 +501,20 @@ namespace Rendering::Shapes
 		return d;
 	}
 
-	inline MeshHandle upload_line(WSI& wsi,
+	inline MeshHandle upload_line(WSI& wsi, MeshStorage& mesh_storage,
 		glm::vec3 from = { -0.5f, 0, 0 }, glm::vec3 to = { 0.5f, 0, 0 },
 		const std::string& name = "primitive_line",
 		VERTEX_FORMAT_VARIATIONS fmt = VERTEX_FORMAT_VARIATIONS::DEFAULT)
 	{
-		return upload(*wsi.get_mesh_storage(), name, make_line(from, to), wsi.get_vertex_format_by_type(fmt));
+		return upload(mesh_storage, name, make_line(from, to), wsi.get_vertex_format_by_type(fmt));
 	}
 
-	inline MeshHandle upload_grid(WSI& wsi,
+	inline MeshHandle upload_grid(WSI& wsi, MeshStorage& mesh_storage,
 		uint32_t half_size = 10, float spacing = 1.0f,
 		const std::string& name = "primitive_grid",
 		VERTEX_FORMAT_VARIATIONS fmt = VERTEX_FORMAT_VARIATIONS::DEFAULT)
 	{
-		return upload(*wsi.get_mesh_storage(), name, make_grid(half_size, spacing), wsi.get_vertex_format_by_type(fmt));
+		return upload(mesh_storage, name, make_grid(half_size, spacing), wsi.get_vertex_format_by_type(fmt));
 	}
 
 	// Arrow along +Y, from origin to tip — all triangles, one pipeline
@@ -618,7 +618,7 @@ namespace Rendering::Shapes
 		return d;
 	}
 
-	inline MeshHandle upload_arrow(WSI& wsi,
+	inline MeshHandle upload_arrow(WSI& wsi, MeshStorage& mesh_storage,
 		float shaft_length = 0.75f,
 		float head_height = 0.25f,
 		float shaft_radius = 0.02f,
@@ -627,21 +627,21 @@ namespace Rendering::Shapes
 		const std::string& name = "primitive_arrow",
 		VERTEX_FORMAT_VARIATIONS fmt = VERTEX_FORMAT_VARIATIONS::DEFAULT)
 	{
-		return upload(*wsi.get_mesh_storage(), name, make_arrow(shaft_length, head_height, shaft_radius, head_radius, slices), wsi.get_vertex_format_by_type(fmt));
+		return upload(mesh_storage, name, make_arrow(shaft_length, head_height, shaft_radius, head_radius, slices), wsi.get_vertex_format_by_type(fmt));
 	}
 
 	// Upload all primitives at once — useful for a debug/editor setup
-	inline void upload_all(WSI& wsi, VERTEX_FORMAT_VARIATIONS fmt = VERTEX_FORMAT_VARIATIONS::DEFAULT)
+	inline void upload_all(WSI& wsi, MeshStorage& mesh_storage, VERTEX_FORMAT_VARIATIONS fmt = VERTEX_FORMAT_VARIATIONS::DEFAULT)
 	{
-		upload_quad(wsi, "primitive_quad", fmt);
-		upload_plane(wsi, 1, "primitive_plane", fmt);
-		upload_cube(wsi, "primitive_cube", fmt);
-		upload_sphere(wsi, 16, 16, "primitive_sphere", fmt);
-		upload_cylinder(wsi, 16, true, "primitive_cylinder", fmt);
-		upload_cone(wsi, 16, true, "primitive_cone", fmt);
-		upload_line(wsi, {}, {}, "primitive_line", fmt);
-		upload_grid(wsi, 10, 1.0f, "primitive_grid", fmt);
-        upload_arrow(wsi, 0.75f, 0.25f, 0.02f, 0.06f, 8, "primitive_arrow", fmt);
+		upload_quad(wsi, mesh_storage, "primitive_quad", fmt);
+		upload_plane(wsi, mesh_storage, 1, "primitive_plane", fmt);
+		upload_cube(wsi, mesh_storage, "primitive_cube", fmt);
+		upload_sphere(wsi, mesh_storage, 16, 16, "primitive_sphere", fmt);
+		upload_cylinder(wsi, mesh_storage, 16, true, "primitive_cylinder", fmt);
+		upload_cone(wsi, mesh_storage, 16, true, "primitive_cone", fmt);
+		upload_line(wsi, mesh_storage, {}, {}, "primitive_line", fmt);
+		upload_grid(wsi, mesh_storage, 10, 1.0f, "primitive_grid", fmt);
+        upload_arrow(wsi, mesh_storage, 0.75f, 0.25f, 0.02f, 0.06f, 8, "primitive_arrow", fmt);
 	}
 
 } // namespace Rendering::Shapes

@@ -1,11 +1,15 @@
-// drawable.h
-
-#include "rendering_device.h"
-#include "mesh_loader.h"
-#include "render_passes/framegraph_resources.h"
+#pragma once
+#include <array>
+#include <cstring>
+#include "rendering/rendering_device.h"
+#include "rendering/mesh_storage.h"
 
 namespace Rendering
 {
+
+	// ----------------------------------------------------------------
+	// Push constants
+	// ----------------------------------------------------------------
 	struct PushConstantData {
 		std::array<uint8_t, 128> data;
 		uint32_t                 size = 0;
@@ -20,18 +24,24 @@ namespace Rendering
 		}
 	};
 
-	struct Drawable 
-	{
-		RID                    pipeline;
-		Rendering::MeshHandle  mesh;
-		RID                    uniform_set;        // invalid RID = skip binding
-		uint32_t               uniform_set_index = 0;
+	// ----------------------------------------------------------------
+	// Drawable
+	// ----------------------------------------------------------------
+	struct Drawable {
+		RID                   pipeline;
+		MeshHandle            mesh;
+		RID                   uniform_set;
+		uint32_t              uniform_set_index = 0;
 		const char* shader_name;
-		PushConstantData       push_constants;
+		PushConstantData      push_constants;
 
-		// Convenience factory so construction reads clearly at the call site
-		static Drawable make(RID pipeline,Rendering::MeshHandle mesh, const char* shader_name,
-								PushConstantData pc, RID uniform_set = RID(), uint32_t uniform_set_index = 0)
+		static Drawable make(
+			RID pipeline,
+			MeshHandle mesh,
+			const char* shader_name,
+			PushConstantData pc,
+			RID uniform_set = RID(),
+			uint32_t uniform_set_index = 0)
 		{
 			Drawable d;
 			d.pipeline = pipeline;
@@ -44,12 +54,22 @@ namespace Rendering
 		}
 	};
 
-	// The single draw function — all your per-object GPU state goes through here
-	inline void submit_drawable(Rendering::RenderContext& rc, RDD::CommandBufferID cmd, const Drawable& drawable)
+	// ----------------------------------------------------------------
+	// Submit — lives here because it needs Drawable + MeshStorage
+	// but has no dependency on WSI
+	// ----------------------------------------------------------------
+	inline void submit_drawable(
+		RenderContext& rc,
+		RDD::CommandBufferID cmd,
+		const Drawable& drawable,
+		MeshStorage& storage)
 	{
 		rc.device->bind_render_pipeline(cmd, drawable.pipeline);
 
-		rc.device->set_push_constant( drawable.push_constants.data.data(), drawable.push_constants.size, rc.device->get_shader_rid(drawable.shader_name));
+		rc.device->set_push_constant(
+			drawable.push_constants.data.data(),
+			drawable.push_constants.size,
+			rc.device->get_shader_rid(drawable.shader_name));
 
 		if (drawable.uniform_set.is_valid()) {
 			rc.device->bind_uniform_set(
@@ -58,7 +78,17 @@ namespace Rendering
 				drawable.uniform_set_index);
 		}
 
-		rc.wsi->draw_mesh(cmd, drawable.mesh);
-	}
-}
+		const MeshGPU* mesh = storage.get(drawable.mesh);
+		if (!mesh) {
+			LOGE("submit_drawable: mesh handle {} not found in storage", drawable.mesh);
+			return;
+		}
 
+		for (auto& prim : mesh->primitives) {
+			rc.device->bind_vertex_array(prim.vertex_array);
+			rc.device->bind_index_array(prim.index_array);
+			rc.device->render_draw_indexed(cmd, prim.index_count, 1, 0, 0, 0);
+		}
+	}
+
+} // namespace Rendering

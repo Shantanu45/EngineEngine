@@ -74,23 +74,21 @@ namespace Rendering
 
         // -- Mesh API --------------------------------------------------
         // Load a gltf/glb into MeshStorage. Returns INVALID_MESH on failure.
-        MeshHandle load_gltf(
-            const std::string& p_path,
-            const std::string& p_name,
-            VERTEX_FORMAT_VARIATIONS p_type = VERTEX_FORMAT_VARIATIONS::DEFAULT);
 
         // Draw all primitives of a mesh by handle or name
-        void draw_mesh(RenderingDeviceDriver::CommandBufferID p_cmd, MeshHandle p_handle);
-        void draw_mesh(RenderingDeviceDriver::CommandBufferID p_cmd, const std::string& p_name);
+        //void draw_mesh(RenderingDeviceDriver::CommandBufferID p_cmd, MeshHandle p_handle);
+        //void draw_mesh(RenderingDeviceDriver::CommandBufferID p_cmd, const std::string& p_name);
 
-        MeshStorage* get_mesh_storage() { return mesh_storage.get(); }
+        //MeshStorage* get_mesh_storage() { return mesh_storage.get(); }
         // --------------------------------------------------------------
 
         // -- Vertex format API -----------------------------------------
-        void                                          create_new_vertex_format(const std::vector<RenderingDeviceCommons::VertexAttribute>& p_attributes, VERTEX_FORMAT_VARIATIONS p_type);
-        RenderingDevice::VertexFormatID               get_vertex_format_by_type(VERTEX_FORMAT_VARIATIONS p_type);
+        void create_new_vertex_format(const std::vector<RenderingDeviceCommons::VertexAttribute>& p_attributes, 
+            VERTEX_FORMAT_VARIATIONS p_type);
+        RenderingDevice::VertexFormatID get_vertex_format_by_type(VERTEX_FORMAT_VARIATIONS p_type);
         std::vector<RenderingDeviceCommons::VertexAttribute> get_default_vertex_attribute();
-        RenderingDeviceCommons::VertexAttribute       get_vertex_attribute(uint32_t p_binding, uint32_t p_location, RenderingDeviceCommons::DataFormat p_format, uint32_t p_offset, uint32_t p_stride);
+        RenderingDeviceCommons::VertexAttribute get_vertex_attribute(uint32_t p_binding, 
+            uint32_t p_location, RenderingDeviceCommons::DataFormat p_format, uint32_t p_offset, uint32_t p_stride);
         // --------------------------------------------------------------
 
         RenderingDevice* get_rendering_device() { return rendering_device; }
@@ -110,10 +108,12 @@ namespace Rendering
         bool imgui_active = true;
 
     private:
-        Error _create_rendering_context_window(DisplayServerEnums::WindowID p_window_id, const std::string& p_rendering_driver = "vulkan");
+        Error _create_rendering_context_window(DisplayServerEnums::WindowID p_window_id, 
+            const std::string& p_rendering_driver = "vulkan");
         void  _destroy_rendering_context_window(DisplayServerEnums::WindowID p_window_id);
         void  _free_pending_resources(int p_frame);
-        std::vector<uint8_t> _get_attrib_interleaved(const std::vector<RenderingDeviceCommons::VertexAttribute>& p_attribs, const std::vector<uint8_t>& p_vertex_data);
+        std::vector<uint8_t> _get_attrib_interleaved(const std::vector<RenderingDeviceCommons::VertexAttribute>& p_attribs,
+            const std::vector<uint8_t>& p_vertex_data);
 
     private:
         std::unique_ptr<RenderingContextDriver> rendering_context = nullptr;
@@ -129,8 +129,6 @@ namespace Rendering
         RenderingDeviceCommons::IndexBufferFormat index_data_format = RenderingDeviceCommons::IndexBufferFormat::INDEX_BUFFER_FORMAT_UINT32;
 
         // -- Mesh ------------------------------------------------------
-        std::unique_ptr<MeshStorage> mesh_storage;
-        std::unique_ptr<MeshLoader>  mesh_loader;
         // --------------------------------------------------------------
 
         std::unique_ptr<RendererCompositor> rd;

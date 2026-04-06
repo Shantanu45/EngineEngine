@@ -37,7 +37,8 @@ void add_basic_pass(
 	FrameGraph& fg,
 	FrameGraphBlackboard& bb,
 	Size2i                  extent,
-	std::vector<Rendering::Drawable>   drawables)   // <-- replaces all those parallel params
+	std::vector<Rendering::Drawable>   drawables,
+	Rendering::MeshStorage& storage)   // <-- replaces all those parallel params
 {
 	bb.add<basic_pass_resource>() =
 		fg.add_callback_pass<basic_pass_resource>(
@@ -56,7 +57,7 @@ void add_basic_pass(
 					"scene texture", { tf, RD::TextureView(), "scene texture" });
 				data.scene = builder.write(data.scene, TEXTURE_WRITE_FLAGS::WRITE_COLOR);
 			},
-			[=](const basic_pass_resource& data,
+			[=, &storage](const basic_pass_resource& data,
 				FrameGraphPassResources& resources,
 				void* ctx)
 			{
@@ -79,8 +80,8 @@ void add_basic_pass(
 
 				rc.device->begin_render_pass_from_frame_buffer( frame_buffer, Rect2i(0, 0, w, h), clear_values);
 
-				for (const auto& drawable : drawables) 
-					submit_drawable(rc, cmd, drawable);
+				for (const auto& drawable : drawables)
+					submit_drawable(rc, cmd, drawable, storage);
 
 				rc.wsi->end_render_pass(cmd);
 			});
@@ -115,10 +116,10 @@ struct TutorialApplication : EE::Application
 		mesh_storage->initialize(device);
 
 		// --- Meshes ---
-		light_mesh = Rendering::Shapes::upload_cube(*wsi, "light_cube");
-		//object_mesh = Rendering::Shapes::upload_cube(*wsi, "object_cube");
+		light_mesh = Rendering::Shapes::upload_cube(*wsi, *mesh_storage, "light_cube");
+		//object_mesh = Rendering::Shapes::upload_cube(*wsi, *mesh_storage, "object_cube");
 		object_mesh = mesh_loader->load_gltf(*mesh_storage, "assets://gltf/cube.glb", "cube", vertex_format);
-		grid_mesh = Rendering::Shapes::upload_grid(*wsi, 10, 1, "object_grid");
+		grid_mesh = Rendering::Shapes::upload_grid(*wsi, *mesh_storage, 10, 1, "object_grid");
 
 		// --- Framebuffer format ---
 		RD::AttachmentFormat color;
@@ -230,8 +231,7 @@ struct TutorialApplication : EE::Application
 		bb.reset();
 
 		add_basic_pass(fg, bb,
-			{ device->screen_get_width(), device->screen_get_height() },
-			drawables);
+			{ device->screen_get_width(), device->screen_get_height() }, drawables, *mesh_storage);
 		Rendering::add_imgui_pass(fg, bb,
 			{ device->screen_get_width(), device->screen_get_height() });
 		Rendering::add_blit_pass(fg, bb);

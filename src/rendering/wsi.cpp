@@ -74,10 +74,10 @@ namespace Rendering
             }
 
             // Mesh subsystem
-            auto fs = Services::get().get<FilesystemInterface>();
-            mesh_storage = std::make_unique<MeshStorage>();
-            mesh_storage->initialize(rendering_device);
-            mesh_loader = std::make_unique<MeshLoader>(*fs);
+            //auto fs = Services::get().get<FilesystemInterface>();
+            //mesh_storage = std::make_unique<MeshStorage>();
+            ///mesh_storage->initialize(rendering_device);
+            //mesh_loader = std::make_unique<MeshLoader>(*fs);
         }
 
         return OK;
@@ -206,20 +206,7 @@ namespace Rendering
 
     // -- Mesh ---------------------------------------------------------------------
 
-    MeshHandle WSI::load_gltf(const std::string& p_path, const std::string& p_name, VERTEX_FORMAT_VARIATIONS p_type)
-    {
-        DEBUG_ASSERT(mesh_storage != nullptr, "WSI not initialized before load_gltf");
-        DEBUG_ASSERT(mesh_loader != nullptr, "WSI not initialized before load_gltf");
-
-        return mesh_loader->load_gltf(
-            *mesh_storage,
-            p_path,
-            p_name,
-            get_vertex_format_by_type(p_type),
-            index_data_format);
-    }
-
-    void WSI::draw_mesh(RenderingDeviceDriver::CommandBufferID p_cmd, MeshHandle p_handle)
+    /*void WSI::draw_mesh(RenderingDeviceDriver::CommandBufferID p_cmd, MeshHandle p_handle)
     {
         const MeshGPU* mesh = mesh_storage->get(p_handle);
         if (!mesh)
@@ -251,7 +238,7 @@ namespace Rendering
             rendering_device->bind_index_array(prim.index_array);
             rendering_device->render_draw_indexed(p_cmd, prim.index_count, 1, 0, 0, 0);
         }
-    }
+    }*/
 
     // -- Vertex format -------------------------------------------------------------
 
@@ -316,7 +303,7 @@ namespace Rendering
         rd->finalize();
 
         // MeshStorage handles all GPU resource cleanup
-        mesh_storage->finalize();
+        //mesh_storage->finalize();
 
         rendering_device->finalize();
     }
