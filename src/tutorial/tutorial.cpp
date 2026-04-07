@@ -11,6 +11,13 @@
 #include "rendering/uniform_buffer.h"
 #include "rendering/uniform_set_builder.h"
 
+/**
+ *	Set 0 — Per-frame global data   (camera, time, lights)
+	Set 1 — Per-pass data           (shadow maps, render targets)
+	Set 2 — Per-material data       (textures, material params)
+	Set 3 — Per-object data         (model matrix, bone data).
+ */
+
 struct alignas(16) CameraData {
 	glm::mat4 view;
 	glm::mat4 proj;
@@ -32,13 +39,6 @@ struct alignas(16) ObjectData_UBO {
 struct alignas(16) Material_UBO {
 	float shininess;
 };
-
-//struct Light_UBO {
-//	glm::vec4 position;
-//	glm::vec4 ambient;
-//	glm::vec4 diffuse;
-//	glm::vec4 specular;
-//};
 
 struct alignas(16) PointLight_UBO {
 	glm::vec3 position;
