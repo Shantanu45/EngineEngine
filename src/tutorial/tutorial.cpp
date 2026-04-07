@@ -191,12 +191,12 @@ struct TutorialApplication : EE::Application
         // --- Sky box ---
 
 		std::array<std::string, 6> faces = {
-	    "assets://textures/skybox/right.jpg",
-	    "assets://textures/skybox/left.jpg",
-	    "assets://textures/skybox/top.jpg",
-	    "assets://textures/skybox/bottom.jpg",
-	    "assets://textures/skybox/front.jpg",
-	    "assets://textures/skybox/back.jpg",
+	        "assets://textures/skybox/right.jpg",
+	        "assets://textures/skybox/left.jpg",
+	        "assets://textures/skybox/top.jpg",
+	        "assets://textures/skybox/bottom.jpg",
+	        "assets://textures/skybox/front.jpg",
+	        "assets://textures/skybox/back.jpg",
 		};
 
 		auto face0 = img_loader.load_from_file(faces[0]);
