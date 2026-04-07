@@ -40,12 +40,6 @@ struct Light_UBO {
 	glm::vec4 specular;
 };
 
-struct GridPushConstants {
-	glm::mat4 mvp;
-	glm::vec3 camera_pos;
-	float     pad;          // vec3 needs 16-byte alignment in GLSL
-};
-
 void add_basic_pass(
 	FrameGraph& fg,
 	FrameGraphBlackboard& bb,
@@ -164,10 +158,8 @@ struct TutorialApplication : EE::Application
 
 		// --- UBOs ---
 		frame_ubo.create(device, "Frame UBO");
-		object_ubo.create(device, "Object UBO");
 		material_ubo.create(device, "Material UBO");
 		light_ubo.create(device, "Light UBO");
-		light_object_ubo.create(device, "Light Object UBO");
 
 		// --- Textures ---
 		Rendering::ImageLoader img_loader(*fs);
@@ -209,17 +201,11 @@ struct TutorialApplication : EE::Application
 			.build(device, device->get_shader_rid("light_map"), 0);
 
 		// --- Uniform set 3: per-object data ---
-		uniform_set_3 = Rendering::UniformSetBuilder{}
-			.add(object_ubo.as_uniform(0))       // set 3, binding 0 — ObjectData
-			.build(device, device->get_shader_rid("light_map"), 3);
 
 		uniform_set_0_light = Rendering::UniformSetBuilder{}
 			.add(frame_ubo.as_uniform(0))   // only FrameUBO, nothing else
 			.build(device, device->get_shader_rid("cube_shader"), 0);
 
-		uniform_set_3_light = Rendering::UniformSetBuilder{}
-			.add(light_object_ubo.as_uniform(0))
-			.build(device, device->get_shader_rid("cube_shader"), 3);
 
 		wsi->submit_transfer_workers();
 		return wsi->pre_frame_loop();
@@ -240,14 +226,12 @@ struct TutorialApplication : EE::Application
 		// object cube — identity at origin
 		glm::mat4 model = glm::mat4(1.0f);
 		glm::mat4 normalMatrix = glm::transpose(glm::inverse(model));
-		object_ubo.upload(device, ObjectData_UBO{ model, normalMatrix });
 
 		// light cube — positioned at light source
 		glm::vec3 lightPos = glm::vec3(1.2f, 1.0f, 2.0f);
 		glm::mat4 light_model = glm::translate(glm::mat4(1.0f), lightPos);
 		light_model = glm::scale(light_model, glm::vec3(0.2f)); // small cube
 		glm::mat4 light_normal = glm::transpose(glm::inverse(light_model));
-		light_object_ubo.upload(device, ObjectData_UBO{ light_model, light_normal });
 
 		// --- Material & Light (unchanged) ---
 		material_ubo.upload(device, Material_UBO{ 32.0f });
@@ -259,20 +243,18 @@ struct TutorialApplication : EE::Application
 			{1.0f, 1.0f, 1.0f, 0.0f},  // specular
 			});
 
-		// --- Grid still uses push constants (unchanged) ---
-		GridPushConstants grid_pc;
-		grid_pc.mvp = frame_data.camera.proj * frame_data.camera.view * model;
-		grid_pc.camera_pos = camera.get_position();
-
 		std::vector<Rendering::Drawable> drawables = {
-			Rendering::Drawable::make(pipeline_grid,  grid_mesh,   "grid_shader",
-				Rendering::PushConstantData::from(grid_pc)),
+			Rendering::Drawable::make(pipeline_grid, grid_mesh, "grid_shader",
+				Rendering::PushConstantData::from(ObjectData_UBO{ model, normalMatrix }),
+				{ { uniform_set_0_light, 0 }}),
 
-		Rendering::Drawable::make(pipeline_color, object_mesh, "light_map", {},
-			{ { uniform_set_0, 0 }, { uniform_set_3, 3 } }),
+			Rendering::Drawable::make(pipeline_color, object_mesh, "light_map",
+				Rendering::PushConstantData::from(ObjectData_UBO{ model, normalMatrix }),
+				{ { uniform_set_0, 0 } }),  
 
-		Rendering::Drawable::make(pipeline_light, light_mesh, "cube_shader", {},
-			{ { uniform_set_0_light, 0 }, { uniform_set_3_light, 3 } }),
+			Rendering::Drawable::make(pipeline_light, light_mesh, "cube_shader",
+				Rendering::PushConstantData::from(ObjectData_UBO{ light_model, light_normal }),
+				{ { uniform_set_0_light, 0 } }), 
 		};
 
 		device->imgui_begin_frame();
@@ -305,12 +287,9 @@ struct TutorialApplication : EE::Application
 
 		// UBOs
 		frame_ubo.free(device);
-		object_ubo.free(device);
 		material_ubo.free(device);
 		light_ubo.free(device);
-		light_object_ubo.free(device);
 		device->free_rid(uniform_set_0_light);
-		device->free_rid(uniform_set_3_light);
 
 		// Textures — still bare RIDs, unchanged
 		device->free_rid(diffuse_uniform);
@@ -325,14 +304,10 @@ private:
 	Rendering::UniformBuffer<Material_UBO> material_ubo;
 	Rendering::UniformBuffer<Light_UBO>    light_ubo;
 	Rendering::UniformBuffer<FrameData_UBO>    frame_ubo;
-	Rendering::UniformBuffer<ObjectData_UBO>    object_ubo;
-	Rendering::UniformBuffer<ObjectData_UBO> light_object_ubo;
 	//Rendering::UniformBuffer<glm::vec4>    view_ubo;
 
 	RID uniform_set_0;
-	RID uniform_set_3;
 	RID uniform_set_0_light;
-	RID uniform_set_3_light;
 	RID diffuse_uniform;
 	RID specular_uniform;
 

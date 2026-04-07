@@ -11,7 +11,7 @@ layout(set = 0, binding = 0) uniform FrameUBO {
     float time;
 } frame;
 
-layout(set = 3, binding = 0) uniform ObjectUBO {  // block name changed
+layout(push_constant) uniform PushConstants {
     mat4 model;
     mat4 normalMatrix;
 } object;
