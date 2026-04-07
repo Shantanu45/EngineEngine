@@ -26,6 +26,7 @@ namespace Rendering
 			RenderingDeviceCommons::PipelineRasterizationState rs;
 			rs.front_face = RenderingDeviceCommons::POLYGON_FRONT_FACE_COUNTER_CLOCKWISE;
 			rs.cull_mode = RenderingDeviceCommons::POLYGON_CULL_BACK;
+			dynamic_state_flags = {};
 			rasterization_state = rs;
 		}
 

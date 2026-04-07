@@ -54,17 +54,28 @@ void add_basic_pass(
             "Basic Pass",
             [&](FrameGraph::Builder& builder, basic_pass_resource& data)
             {
-                RD::TextureFormat tf;
-                tf.texture_type = RD::TEXTURE_TYPE_2D;
-                tf.width = extent.x;
-                tf.height = extent.y;
-                tf.usage_bits = RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT
-                    | RD::TEXTURE_USAGE_SAMPLING_BIT;
-                tf.format = RD::DATA_FORMAT_R8G8B8A8_UNORM;
 
-                data.scene = builder.create<Rendering::FrameGraphTexture>(
-                    "scene texture", { tf, RD::TextureView(), "scene texture" });
-                data.scene = builder.write(data.scene, TEXTURE_WRITE_FLAGS::WRITE_COLOR);
+				RD::TextureFormat tf;
+				tf.texture_type = RD::TEXTURE_TYPE_2D;
+				tf.width = extent.x;
+				tf.height = extent.y;
+				tf.usage_bits = RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT;
+				tf.format = RD::DATA_FORMAT_R8G8B8A8_UNORM;
+
+				data.scene = builder.create<Rendering::FrameGraphTexture>("scene texture", { tf, RD::TextureView(), "scene texture" });
+
+				RD::TextureFormat tf_depth;
+				tf_depth.texture_type = RD::TEXTURE_TYPE_2D;
+				tf_depth.width = extent.x;
+				tf_depth.height = extent.y;
+				tf_depth.usage_bits = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;// | RD::TEXTURE_USAGE_SAMPLING_BIT;
+				tf_depth.format = RD::DATA_FORMAT_D32_SFLOAT;
+
+				data.depth = builder.create<Rendering::FrameGraphTexture>("depth texture", { tf_depth, RD::TextureView(), "depth texture" });
+
+
+				data.scene = builder.write(data.scene, TEXTURE_WRITE_FLAGS::WRITE_COLOR);
+				data.depth = builder.write(data.depth, TEXTURE_WRITE_FLAGS::WRITE_DEPTH);
             },
             [=, &storage](const basic_pass_resource& data,
                 FrameGraphPassResources& resources,
@@ -74,18 +85,19 @@ void add_basic_pass(
                 auto  cmd = rc.command_buffer;
 
                 auto& scene_tex = resources.get<Rendering::FrameGraphTexture>(data.scene);
+				auto& depth_tex = resources.get<Rendering::FrameGraphTexture>(data.depth);
+
 
                 uint32_t w = rc.device->screen_get_width();
                 uint32_t h = rc.device->screen_get_height();
 
-                RID frame_buffer = rc.device->framebuffer_create({ scene_tex.texture_rid });
+				RID frame_buffer = rc.device->framebuffer_create({ scene_tex.texture_rid, depth_tex.texture_rid });
 
-                GPU_SCOPE(cmd, "Basic Pass", Color(1.0, 0.0, 0.0, 1.0));
-
-                std::array<RDD::RenderPassClearValue, 2> clear_values;
-                clear_values[0].color = Color();
-                clear_values[1].depth = 1.0;
-                clear_values[1].stencil = 0.0;
+				GPU_SCOPE(cmd, "Basic Pass", Color(1.0, 0.0, 0.0, 1.0));
+				std::array<RDD::RenderPassClearValue, 2> clear_values;
+				clear_values[0].color = Color();
+				clear_values[1].depth = 1.0;
+				clear_values[1].stencil = 0.0;
 
                 rc.device->begin_render_pass_from_frame_buffer(frame_buffer, Rect2i(0, 0, w, h), clear_values);
 
@@ -134,19 +146,32 @@ struct TutorialApplication : EE::Application
         color.format = RD::DATA_FORMAT_R8G8B8A8_UNORM;
         color.usage_flags = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT;
 
-        auto framebuffer_format = RD::get_singleton()->framebuffer_format_create({ color });
+		RD::AttachmentFormat depth;
+		depth.format = RD::DATA_FORMAT_D32_SFLOAT;
+		depth.usage_flags = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+
+        auto framebuffer_format = RD::get_singleton()->framebuffer_format_create({ color, depth });
+
 
         // --- Pipelines ---
+
+		RDC::PipelineDepthStencilState depth_state;
+		depth_state.enable_depth_test = true;
+		depth_state.enable_depth_write = true;
+		depth_state.depth_compare_operator = RDC::COMPARE_OP_LESS;
+
         pipeline_color = Rendering::PipelineBuilder{}
             .set_shader({ "assets://shaders/light_map.vert",
                           "assets://shaders/light_map.frag" }, "light_map")
             .set_vertex_format(vertex_format)
+            .set_depth_stencil_state(depth_state)
             .build(framebuffer_format);
 
         pipeline_light = Rendering::PipelineBuilder{}
             .set_shader({ "assets://shaders/light_cube.vert",
                           "assets://shaders/light_cube.frag" }, "cube_shader")
             .set_vertex_format(vertex_format)
+            .set_depth_stencil_state(depth_state)
             .build(framebuffer_format);
 
         pipeline_grid = Rendering::PipelineBuilder{}
@@ -154,6 +179,7 @@ struct TutorialApplication : EE::Application
                           "assets://shaders/grid.frag" }, "grid_shader")
             .set_vertex_format(vertex_format)
             .set_render_primitive(RDC::RENDER_PRIMITIVE_LINES)
+            .set_depth_stencil_state(depth_state)
             .build(framebuffer_format);
 
         // --- UBOs ---
@@ -161,8 +187,60 @@ struct TutorialApplication : EE::Application
         material_ubo.create(device, "Material UBO");
         pointlight_ubo.create(device, "Light UBO");
 
-        // --- Textures ---
         Rendering::ImageLoader img_loader(*fs);
+        // --- Sky box ---
+
+		std::array<std::string, 6> faces = {
+	    "assets://textures/skybox/right.jpg",
+	    "assets://textures/skybox/left.jpg",
+	    "assets://textures/skybox/top.jpg",
+	    "assets://textures/skybox/bottom.jpg",
+	    "assets://textures/skybox/front.jpg",
+	    "assets://textures/skybox/back.jpg",
+		};
+
+		auto face0 = img_loader.load_from_file(faces[0]);
+
+		RDC::TextureFormat cubemap_tf;
+		cubemap_tf.width = face0.width;
+		cubemap_tf.height = face0.height;
+		cubemap_tf.array_layers = 6;                          // 6 faces
+		cubemap_tf.texture_type = RDC::TEXTURE_TYPE_CUBE;     // cubemap type
+		cubemap_tf.usage_bits = RDC::TEXTURE_USAGE_SAMPLING_BIT
+			| RDC::TEXTURE_USAGE_CAN_UPDATE_BIT;
+		cubemap_tf.format = RDC::DATA_FORMAT_R8G8B8A8_UNORM;
+
+		// load all 6 faces
+		std::vector<std::vector<uint8_t>> face_pixels;
+		for (auto& path : faces) {
+			auto img = img_loader.load_from_file(path);
+			face_pixels.push_back(img.pixels);
+		}
+
+		cubemap_uniform = device->texture_create(cubemap_tf, RD::TextureView(), face_pixels);
+		device->set_resource_name(cubemap_uniform, "Skybox cubemap");
+
+		sampler_cube = device->sampler_create(RD::SamplerState());
+
+		RDC::PipelineDepthStencilState skybox_depth;
+		skybox_depth.enable_depth_test = true;
+		skybox_depth.enable_depth_write = false;
+		skybox_depth.depth_compare_operator = RDC::COMPARE_OP_LESS_OR_EQUAL;
+        RDC::PipelineRasterizationState rs;
+        rs.cull_mode = Rendering::RenderingDeviceCommons::POLYGON_CULL_DISABLED;
+
+
+        pipeline_skybox = Rendering::PipelineBuilder{}
+            .set_shader({ "assets://shaders/skybox.vert",
+                          "assets://shaders/skybox.frag" }, "skybox_shader")
+            .set_vertex_format(vertex_format)
+            .set_depth_stencil_state(skybox_depth)
+            .set_rasterization_state(rs)
+			.build(framebuffer_format);
+
+		skybox_mesh = Rendering::Shapes::upload_cube(*wsi, *mesh_storage, "skybox_cube");
+
+        // --- Textures ---
 
         auto diffuse_image = img_loader.load_from_file("assets://textures/container2.png");
         auto specular_image = img_loader.load_from_file("assets://textures/container2_specular.png");
@@ -195,9 +273,15 @@ struct TutorialApplication : EE::Application
             .add(frame_ubo.as_uniform(0))
             .build(device, device->get_shader_rid("cube_shader"), 0);
 
+
+		uniform_set_skybox = Rendering::UniformSetBuilder{}
+			.add(frame_ubo.as_uniform(0))
+			.add_texture(1, sampler_cube, cubemap_uniform)
+			.build(device, device->get_shader_rid("skybox_shader"), 0);
+
         // --- Scene setup ---
         // object cube
-		for (int x = 0; x < 2; x++) {
+		for (int x = 0; x < 200; x++) {
 			for (int z = 0; z < 5; z++) {
 				auto entity = world.create();
 				world.emplace<TransformComponent>(entity, TransformComponent{
@@ -253,8 +337,14 @@ struct TutorialApplication : EE::Application
         // --- Build drawables ---
         std::vector<Rendering::Drawable> drawables;
 
+        // skybox
+		glm::mat4 identity = glm::mat4(1.0f);
+		drawables.push_back(
+			Rendering::Drawable::make(pipeline_skybox, skybox_mesh, "skybox_shader",
+				Rendering::PushConstantData::from(ObjectData_UBO{ identity, identity }),
+				{ { uniform_set_skybox, 0 } }));
+
         // grid — no entity, always identity
-        glm::mat4 identity = glm::mat4(1.0f);
         drawables.push_back(
             Rendering::Drawable::make(pipeline_grid, grid_mesh, "grid_shader",
                 Rendering::PushConstantData::from(
@@ -303,14 +393,17 @@ struct TutorialApplication : EE::Application
         frame_ubo.free(device);
         material_ubo.free(device);
         pointlight_ubo.free(device);
-
+		device->free_rid(cubemap_uniform);
+		device->free_rid(uniform_set_skybox);
+		device->free_rid(pipeline_skybox);
+		device->free_rid(sampler_cube);
         device->free_rid(uniform_set_0);
         device->free_rid(uniform_set_0_light);
         device->free_rid(diffuse_uniform);
         device->free_rid(specular_uniform);
-        device->free_rid(pipeline_color);
-        device->free_rid(pipeline_light);
-        device->free_rid(pipeline_grid);
+		device->free_rid(pipeline_color);
+		device->free_rid(pipeline_light);
+		device->free_rid(pipeline_grid);
         device->free_rid(sampler);
         mesh_storage->finalize();
     }
@@ -326,6 +419,12 @@ private:
     RID uniform_set_0_light;
     RID diffuse_uniform;
     RID specular_uniform;
+    RID cubemap_uniform;
+
+	RID pipeline_skybox;
+	RID uniform_set_skybox;
+	RID sampler_cube;                        // cubemaps need their own sampler
+	Rendering::MeshHandle skybox_mesh;
 
     RID pipeline_color;
     RID pipeline_light;

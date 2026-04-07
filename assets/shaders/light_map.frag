@@ -35,4 +35,5 @@ void main()
         specular_tex, TexCoords , normal, FragPos, viewDir);
 
     FragColor = vec4(color, 1.0);
+    
 }
