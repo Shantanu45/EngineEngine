@@ -197,15 +197,14 @@ struct TutorialApplication : EE::Application
 
         // --- Scene setup ---
         // object cube
-		for (int i = 0; i < 10; i++) {
-			auto entity = world.create();
-			world.emplace<TransformComponent>(entity, TransformComponent{
-				.position = glm::vec3(i * 2.0f, 0.0f, 0.0f), // space them 2 units apart
-				.scale = glm::vec3(1.0f) });
-			world.emplace<MeshComponent>(entity, MeshComponent{
-				object_mesh, pipeline_color, "light_map", uniform_set_0 });
-			world.emplace<MaterialComponent>(entity,
-				MaterialComponent{ .shininess = 32.0f });
+		for (int x = 0; x < 2; x++) {
+			for (int z = 0; z < 5; z++) {
+				auto entity = world.create();
+				world.emplace<TransformComponent>(entity, TransformComponent{
+					.position = glm::vec3(x * 2.5f, 0.0f, z * 2.5f) });
+				world.emplace<MeshComponent>(entity, MeshComponent{
+					object_mesh, pipeline_color, "light_map", uniform_set_0 });
+			}
 		}
 
         // light cube
