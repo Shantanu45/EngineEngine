@@ -33,11 +33,25 @@ struct alignas(16) Material_UBO {
 	float shininess;
 };
 
-struct Light_UBO {
-	glm::vec4 position;
-	glm::vec4 ambient;
-	glm::vec4 diffuse;
-	glm::vec4 specular;
+//struct Light_UBO {
+//	glm::vec4 position;
+//	glm::vec4 ambient;
+//	glm::vec4 diffuse;
+//	glm::vec4 specular;
+//};
+
+struct alignas(16) PointLight_UBO {
+	glm::vec3 position;
+	float     constant;
+
+	glm::vec3 ambient;
+	float     linear;
+
+	glm::vec3 diffuse;
+	float     quadratic;
+
+	glm::vec3 specular;
+	float     _pad;
 };
 
 void add_basic_pass(
@@ -124,8 +138,8 @@ struct TutorialApplication : EE::Application
 
 		// --- Meshes ---
 		light_mesh = Rendering::Shapes::upload_cube(*wsi, *mesh_storage, "light_cube");
-		//object_mesh = Rendering::Shapes::upload_cube(*wsi, *mesh_storage, "object_cube");
-		object_mesh = mesh_loader->load_gltf(*mesh_storage, "assets://gltf/cube.glb", "cube", vertex_format);
+		object_mesh = Rendering::Shapes::upload_cube(*wsi, *mesh_storage, "object_cube");
+		//object_mesh = mesh_loader->load_gltf(*mesh_storage, "assets://gltf/cube.glb", "cube", vertex_format);
 		grid_mesh = Rendering::Shapes::upload_grid(*wsi, *mesh_storage, 10, 1, "object_grid");
 
 		// --- Framebuffer format ---
@@ -158,7 +172,7 @@ struct TutorialApplication : EE::Application
 		// --- UBOs ---
 		frame_ubo.create(device, "Frame UBO");
 		material_ubo.create(device, "Material UBO");
-		light_ubo.create(device, "Light UBO");
+		pointlight_ubo.create(device, "Light UBO");
 
 		// --- Textures ---
 		Rendering::ImageLoader img_loader(*fs);
@@ -185,7 +199,7 @@ struct TutorialApplication : EE::Application
 		uniform_set_0 = Rendering::UniformSetBuilder{}
 			.add(frame_ubo.as_uniform(0))        // set 0, binding 0 — FrameData
 			.add(material_ubo.as_uniform(1))     // set 0, binding 1 — material
-			.add(light_ubo.as_uniform(2))        // set 0, binding 2 — lights
+			.add(pointlight_ubo.as_uniform(2))        // set 0, binding 2 — lights
 			.add_texture(3, sampler, diffuse_uniform)
 			.add_texture(4, sampler, specular_uniform)
 			.build(device, device->get_shader_rid("light_map"), 0);
@@ -218,20 +232,24 @@ struct TutorialApplication : EE::Application
 		glm::mat4 normalMatrix = glm::transpose(glm::inverse(model));
 
 		// light cube — positioned at light source
-		glm::vec3 lightPos = glm::vec3(1.2f, 1.0f, 2.0f);
+		glm::vec3 lightPos = glm::vec3(1.0f, 1.0f, 1.0f);
 		glm::mat4 light_model = glm::translate(glm::mat4(1.0f), lightPos);
 		light_model = glm::scale(light_model, glm::vec3(0.2f)); // small cube
 		glm::mat4 light_normal = glm::transpose(glm::inverse(light_model));
 
 		// --- Material & Light (unchanged) ---
 		material_ubo.upload(device, Material_UBO{ 32.0f });
-		// fix light position
-		light_ubo.upload(device, Light_UBO{
-			{1.2f, 1.0f, 2.0f, 0.0f},  // position — was (1,1,1) which is wrong
-			{0.1f, 0.1f, 0.1f, 0.0f},  // ambient
-			{0.5f, 0.5f, 0.5f, 0.0f},  // diffuse
-			{1.0f, 1.0f, 1.0f, 0.0f},  // specular
-			});
+
+		PointLight_UBO pl;
+		pl.position = lightPos;
+		pl.ambient = { 0.2f, 0.2f, 0.2f };
+		pl.diffuse = { 0.5f, 0.5f, 0.5f };
+		pl.specular = {1.0f, 1.0f, 1.0f	};
+		pl.constant = 1.0f;
+		pl.linear = 0.09f;
+		pl.quadratic = 0.032f;
+
+		pointlight_ubo.upload(device, pl);
 
 		std::vector<Rendering::Drawable> drawables = {
 			Rendering::Drawable::make(pipeline_grid, grid_mesh, "grid_shader",
@@ -278,7 +296,7 @@ struct TutorialApplication : EE::Application
 		// UBOs
 		frame_ubo.free(device);
 		material_ubo.free(device);
-		light_ubo.free(device);
+		pointlight_ubo.free(device);
 		device->free_rid(uniform_set_0_light);
 
 		// Textures — still bare RIDs, unchanged
@@ -292,7 +310,7 @@ struct TutorialApplication : EE::Application
 private:
 	// UBOs — typed, self-describing
 	Rendering::UniformBuffer<Material_UBO> material_ubo;
-	Rendering::UniformBuffer<Light_UBO>    light_ubo;
+	Rendering::UniformBuffer<PointLight_UBO>    pointlight_ubo;
 	Rendering::UniformBuffer<FrameData_UBO>    frame_ubo;
 	//Rendering::UniformBuffer<glm::vec4>    view_ubo;
 

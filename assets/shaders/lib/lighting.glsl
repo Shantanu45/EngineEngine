@@ -1,0 +1,45 @@
+#ifndef LIGHTING_GLSL
+#define LIGHTING_GLSL
+
+struct Material {
+    float shininess;
+}; 
+
+struct PointLight {
+    vec3  position;
+    float constant;   // 16 bytes
+
+    vec3  ambient;
+    float linear;     // 16 bytes
+
+    vec3  diffuse;
+    float quadratic;  // 16 bytes
+
+    vec3  specular;
+    float _pad;       // 16 bytes
+};
+
+// calculates the color when using a point light.
+vec3 CalcPointLight(PointLight light, Material material, sampler2D diffuse_tex,
+    sampler2D specular_tex, vec2 texCoords, vec3 normal, vec3 fragPos, vec3 viewDir)
+{
+    vec3 lightDir = normalize(light.position - fragPos);
+    // diffuse shading
+    float diff = max(dot(normal, lightDir), 0.0);
+    // specular shading
+    vec3 reflectDir = reflect(-lightDir, normal);
+    float spec = pow(max(dot(viewDir, reflectDir), 0.0), material.shininess);
+    // attenuation
+    float distance = length(light.position - fragPos);
+    float attenuation = 1.0 / (light.constant + light.linear * distance + light.quadratic * (distance * distance));    
+    // combine results
+    vec3 ambient = light.ambient * vec3(texture(diffuse_tex, texCoords));
+    vec3 diffuse = light.diffuse * diff * vec3(texture(diffuse_tex, texCoords));
+    vec3 specular = light.specular * spec * vec3(texture(specular_tex, texCoords));
+    ambient *= attenuation;
+    diffuse *= attenuation;
+    specular *= attenuation;
+    return (ambient + diffuse + specular);
+}
+
+#endif
