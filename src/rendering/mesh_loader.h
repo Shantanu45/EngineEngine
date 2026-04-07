@@ -6,11 +6,13 @@
 
 namespace Rendering
 {
+	using RD = RenderingDevice;
+	using RDC = RenderingDeviceCommons;
 	class MeshLoader
 	{
 	public:
-		explicit MeshLoader(FilesystemInterface& fs)
-			: gltf_loader(std::make_unique<GltfLoader>(fs))
+		explicit MeshLoader(FilesystemInterface& fs, RenderingDevice* device)
+			: gltf_loader(std::make_unique<GltfLoader>(fs)), device(device)
 		{
 		}
 
@@ -124,8 +126,81 @@ namespace Rendering
 			return &gltf_loader->scene();
 		}
 
+		RD::SamplerState sampler_from_gltf(const GltfScene* scene, int sampler_index)
+		{
+			RD::SamplerState ss{};  // sensible defaults
+
+			if (sampler_index < 0 || sampler_index >= (int)scene->samplers.size())
+				return ss;
+
+			auto& smp = scene->samplers[sampler_index];
+
+			// Wrap modes
+			auto wrap = [](int w) {
+				switch (w) {
+				case TINYGLTF_TEXTURE_WRAP_CLAMP_TO_EDGE:   return RD::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE;
+				case TINYGLTF_TEXTURE_WRAP_MIRRORED_REPEAT: return RD::SAMPLER_REPEAT_MODE_MIRRORED_REPEAT;
+				default:                                     return RD::SAMPLER_REPEAT_MODE_REPEAT;
+				}
+				};
+			ss.repeat_u = wrap(smp.wrap_s);
+			ss.repeat_v = wrap(smp.wrap_t);
+
+			// Filter modes
+			ss.min_filter = (smp.min_filter == TINYGLTF_TEXTURE_FILTER_NEAREST ||
+				smp.min_filter == TINYGLTF_TEXTURE_FILTER_NEAREST_MIPMAP_NEAREST)
+				? RD::SAMPLER_FILTER_NEAREST : RD::SAMPLER_FILTER_LINEAR;
+			ss.mag_filter = (smp.mag_filter == TINYGLTF_TEXTURE_FILTER_NEAREST)
+				? RD::SAMPLER_FILTER_NEAREST : RD::SAMPLER_FILTER_LINEAR;
+
+			return ss;
+		}
+
+		RID upload_cached(const GltfScene* scene, int image_index, const std::string& file_path)
+		{
+			std::string key = file_path + ":" + std::to_string(image_index);
+
+			auto it = image_cache.find(key);
+			if (it != image_cache.end())
+				return it->second;
+
+			auto& img = scene->images[image_index];
+
+			RDC::TextureFormat tf{};
+			tf.width = img.width;
+			tf.height = img.height;
+			tf.array_layers = 1;
+			tf.texture_type = RDC::TEXTURE_TYPE_2D;
+			tf.usage_bits = RDC::TEXTURE_USAGE_SAMPLING_BIT
+				| RDC::TEXTURE_USAGE_CAN_UPDATE_BIT;
+			tf.format = RDC::DATA_FORMAT_R8G8B8A8_UNORM;
+
+			RID rid = device->texture_create(tf, RD::TextureView(), { img.pixels });
+			image_cache[key] = rid;
+			return rid;
+		}
+
+		// upload_texture then just delegates to it:
+		RID upload_texture(const GltfScene* scene,
+			const std::optional<TextureInfo>& tex_info,
+			RID fallback,
+			const std::string& file_path)
+		{
+			if (!tex_info.has_value())
+				return fallback;
+			return upload_cached(scene, tex_info->image_index, file_path);
+		}
+
+		void free_owned_resources() {
+			for (auto& [key, rid] : image_cache)
+				device->free_rid(rid);
+			image_cache.clear();
+		}
+
 	private:
 		std::unique_ptr<GltfLoader> gltf_loader;
+		RenderingDevice* device;
+		std::unordered_map<std::string, RID> image_cache;
 
 		MeshHandle _build_and_upload(
 			MeshStorage& storage,

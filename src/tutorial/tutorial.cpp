@@ -133,7 +133,7 @@ struct TutorialApplication : EE::Application
             Rendering::VERTEX_FORMAT_VARIATIONS::DEFAULT);
 
         auto fs = Services::get().get<FilesystemInterface>();
-        mesh_loader = std::make_unique<Rendering::MeshLoader>(*fs);
+        mesh_loader = std::make_unique<Rendering::MeshLoader>(*fs, device);
         mesh_storage->initialize(device);
 
         // --- Meshes ---
@@ -281,7 +281,7 @@ struct TutorialApplication : EE::Application
 
         // --- Scene setup ---
         // object cube
-		for (int x = 0; x < 200; x++) {
+		for (int x = 0; x < 40; x++) {
 			for (int z = 0; z < 5; z++) {
 				auto entity = world.create();
 				world.emplace<TransformComponent>(entity, TransformComponent{

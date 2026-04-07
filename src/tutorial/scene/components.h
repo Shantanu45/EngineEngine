@@ -5,6 +5,14 @@
 #include "rendering/mesh_storage.h"
 #include "rendering/rendering_device.h"
 
+struct MaterialData {
+	RID uniform_set;
+	RID diffuse_texture;
+	RID specular_texture;   // or metallic/roughness for PBR
+	RID normal_texture;
+	// add whatever channels your shader needs
+};
+
 struct alignas(16) PointLight_UBO {
 	glm::vec3 position;
 	float     constant;
@@ -45,6 +53,7 @@ struct MeshComponent {
 	RID                   pipeline;
 	const char* shader;
 	RID                   uniform_set;
+	MaterialData          material;
 };
 
 struct LightComponent {
