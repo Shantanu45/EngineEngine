@@ -162,7 +162,7 @@ namespace Compiler
 				stage_name.erase(stage_name.find_last_not_of(" \t\r\n") + 1);
 				preprocessing_active_stage = convert_stage(stage_name);
 				//preprocessing_active_stage = convert_stage(line.substr(14));
-				preprocessed_source += std::string("#line "+ line_index + 1 + ' \"' + path + "\"\n");
+				preprocessed_source += "#line " + std::to_string(line_index + 1) + " \"" + path + "\"\n";
 			}
 			else if (line.find("#pragma ") == 0)
 			{
@@ -184,7 +184,7 @@ namespace Compiler
 					{
 						auto& word = keywords.front();
 						if (word == "endif")
-							preprocessed_source += std::string("#line " + line_index + 1 + ' \"' + path + "\"\n");
+							preprocessed_source += "#line " + std::to_string(line_index + 1) + " \"" + path + "\"\n";
 					}
 				}
 			}

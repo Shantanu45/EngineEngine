@@ -124,15 +124,14 @@ struct TutorialApplication : EE::Application
 
 		// --- Meshes ---
 		light_mesh = Rendering::Shapes::upload_cube(*wsi, *mesh_storage, "light_cube");
-		object_mesh = Rendering::Shapes::upload_cube(*wsi, *mesh_storage, "object_cube");
-		//object_mesh = mesh_loader->load_gltf(*mesh_storage, "assets://gltf/cube.glb", "cube", vertex_format);
+		//object_mesh = Rendering::Shapes::upload_cube(*wsi, *mesh_storage, "object_cube");
+		object_mesh = mesh_loader->load_gltf(*mesh_storage, "assets://gltf/cube.glb", "cube", vertex_format);
 		grid_mesh = Rendering::Shapes::upload_grid(*wsi, *mesh_storage, 10, 1, "object_grid");
 
 		// --- Framebuffer format ---
 		RD::AttachmentFormat color;
 		color.format = RD::DATA_FORMAT_R8G8B8A8_UNORM;
-		color.usage_flags = RD::TEXTURE_USAGE_SAMPLING_BIT
-			| RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT;
+		color.usage_flags = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT;
 
 		auto framebuffer_format = RD::get_singleton()->framebuffer_format_create({ color });
 
@@ -181,15 +180,6 @@ struct TutorialApplication : EE::Application
 		device->set_resource_name(specular_uniform, "Specular texture");
 
 		sampler = device->sampler_create(RD::SamplerState());
-
-		// --- Uniform set ---
-		//uniform_set = Rendering::UniformSetBuilder{}
-		//	.add(material_ubo.as_uniform(0))
-		//	.add(light_ubo.as_uniform(1))
-		//	.add(view_ubo.as_uniform(2))
-		//	.add_texture(3, sampler, diffuse_uniform)
-		//	.add_texture(4, sampler, specular_uniform)
-		//	.build(device, device->get_shader_rid("light_map"), 0);
 
 		// --- Uniform set 0: per-frame data (camera, lights, material, textures) ---
 		uniform_set_0 = Rendering::UniformSetBuilder{}

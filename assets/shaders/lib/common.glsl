@@ -1,3 +1,7 @@
+// lib/common.glsl
+#ifndef COMMON_GLSL
+#define COMMON_GLSL
+
 struct CameraData {
     mat4 view;
     mat4 proj;
@@ -7,5 +11,7 @@ struct CameraData {
 
 struct ObjectData {
     mat4 model;
-    mat4 normalMatrix; // transpose(inverse(model)), precomputed on CPU
+    mat4 normalMatrix;
 };
+
+#endif
