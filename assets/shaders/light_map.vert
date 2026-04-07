@@ -1,4 +1,5 @@
 #version 450 core
+#include "lib/common.glsl"
 
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec3 inNormal;
@@ -9,15 +10,22 @@ layout(location = 0) out vec3 FragPos;
 layout(location = 1) out vec3 Normal;
 layout(location = 2) out vec2 TexCoords;
 
-layout(push_constant) uniform PushConstants {
+layout(set = 0, binding = 0) uniform FrameUBO {
+    CameraData camera;
+    float time;
+} frame;
+
+layout(set = 3, binding = 0) uniform ObjectUBO {
     mat4 model;
-    mat4 view_projection;
-} pc;
+    mat4 normalMatrix;
+} object;
 
 void main()
 {
-    FragPos = vec3(pc.model * vec4(inPosition, 1.0));
-    Normal = mat3(transpose(inverse(pc.model))) * inNormal;  
-    TexCoords = inTexcoord;
-    gl_Position = pc.view_projection * vec4(FragPos, 1.0);
+    vec4 worldPos = object.model * vec4(inPosition, 1.0);
+    FragPos       = worldPos.xyz;
+    Normal        = mat3(object.normalMatrix) * inNormal;
+    TexCoords     = inTexcoord;
+
+    gl_Position = frame.camera.proj * frame.camera.view * worldPos;
 }

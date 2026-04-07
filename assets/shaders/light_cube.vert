@@ -1,16 +1,23 @@
-#version 450
+#version 450 core
+#include "lib/common.glsl"
 
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec3 inNormal;
 layout(location = 2) in vec2 inTexcoord;
 layout(location = 3) in vec4 inTangent;
 
-layout(push_constant) uniform PushConstants {
+layout(set = 0, binding = 0) uniform FrameUBO {
+    CameraData camera;
+    float time;
+} frame;
+
+layout(set = 3, binding = 0) uniform ObjectUBO {  // block name changed
     mat4 model;
-    mat4 view_projectoin;
-} pc;
+    mat4 normalMatrix;
+} object;
 
 void main()
 {
-	gl_Position = pc.view_projectoin * pc.model * vec4(inPosition, 1.0);
+    mat4 mvp = frame.camera.proj * frame.camera.view * object.model;
+    gl_Position = mvp * vec4(inPosition, 1.0);
 }
