@@ -12,6 +12,7 @@ spirv-reflect/1.4.313.0
 tinygltf/2.9.7
 stb/cci.20240531
 imgui/1.92.6
+entt/3.16.0
 
 [generators]
 CMakeDeps

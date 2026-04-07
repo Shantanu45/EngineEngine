@@ -3,9 +3,12 @@ set(PROJECT_NAME tutorial)
 file(GLOB SOURCES CONFIGURE_DEPENDS "*.cpp")
 file(GLOB HEADERS CONFIGURE_DEPENDS "*.h")
 
+file(GLOB Scene CONFIGURE_DEPENDS "scene/*.cpp" "scene/*.h")
+
 add_executable(${PROJECT_NAME} WIN32 
 ${SOURCES} 
 ${HEADERS}
+${Scene}
 )
 
 setup_msvc_options(${PROJECT_NAME})
@@ -18,6 +21,7 @@ find_package(spirv-reflect-static REQUIRED)
 find_package(TinyGLTF REQUIRED)
 find_package(stb REQUIRED)
 find_package(imgui REQUIRED)
+find_package(EnTT REQUIRED)
 
 set(INCLUDES 
 	"${PROJECT_SOURCE_DIR}/src"
@@ -48,6 +52,7 @@ set(ADDITIONAL_LIBRARY_DEPENDENCIES
 	TinyGLTF::TinyGLTF
 	stb::stb
 	imgui::imgui
+	EnTT::EnTT
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE ${ADDITIONAL_LIBRARY_DEPENDENCIES})

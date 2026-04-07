@@ -45,6 +45,7 @@ find_package(spirv-reflect-static REQUIRED)
 find_package(TinyGLTF REQUIRED)
 find_package(stb REQUIRED)
 find_package(imgui REQUIRED)
+find_package(EnTT REQUIRED)
 
 
 set(INCLUDES 
@@ -72,6 +73,7 @@ set(ADDITIONAL_LIBRARY_DEPENDENCIES
 	imgui::imgui
 	util
 	event
+	EnTT::EnTT
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE ${ADDITIONAL_LIBRARY_DEPENDENCIES})
