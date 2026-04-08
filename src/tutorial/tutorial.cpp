@@ -206,9 +206,8 @@ struct TutorialApplication : EE::Application
 		cubemap_tf.height = face0.height;
 		cubemap_tf.array_layers = 6;                          // 6 faces
 		cubemap_tf.texture_type = RDC::TEXTURE_TYPE_CUBE;     // cubemap type
-		cubemap_tf.usage_bits = RDC::TEXTURE_USAGE_SAMPLING_BIT
-			| RDC::TEXTURE_USAGE_CAN_UPDATE_BIT;
-		cubemap_tf.format = RDC::DATA_FORMAT_R8G8B8A8_UNORM;
+		cubemap_tf.usage_bits = RDC::TEXTURE_USAGE_SAMPLING_BIT | RDC::TEXTURE_USAGE_CAN_UPDATE_BIT;
+		cubemap_tf.format = RDC::DATA_FORMAT_R8G8B8A8_SRGB;
 
 		// load all 6 faces
 		std::vector<std::vector<uint8_t>> face_pixels;
@@ -251,7 +250,7 @@ struct TutorialApplication : EE::Application
         tf.array_layers = 1;
         tf.texture_type = RDC::TEXTURE_TYPE_2D;
         tf.usage_bits = RDC::TEXTURE_USAGE_SAMPLING_BIT | RDC::TEXTURE_USAGE_CAN_UPDATE_BIT;
-        tf.format = RDC::DATA_FORMAT_R8G8B8A8_UNORM;
+        tf.format = RDC::DATA_FORMAT_R8G8B8A8_SRGB;
 
         diffuse_uniform = device->texture_create(tf, RD::TextureView(), { diffuse_image.pixels });
         specular_uniform = device->texture_create(tf, RD::TextureView(), { specular_image.pixels });
