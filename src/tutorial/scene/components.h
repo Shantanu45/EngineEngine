@@ -4,6 +4,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include "rendering/mesh_storage.h"
 #include "rendering/rendering_device.h"
+#include "rendering/light.h"
 
 struct MaterialData {
 	RID uniform_set;
@@ -13,19 +14,19 @@ struct MaterialData {
 	// add whatever channels your shader needs
 };
 
-struct alignas(16) PointLight_UBO {
-	glm::vec3 position;
-	float     constant;
-
-	glm::vec3 ambient;
-	float     linear;
-
-	glm::vec3 diffuse;
-	float     quadratic;
-
-	glm::vec3 specular;
-	float     _pad;
-};
+//struct alignas(16) PointLight_UBO {
+//	glm::vec3 position;
+//	float     constant;
+//
+//	glm::vec3 ambient;
+//	float     linear;
+//
+//	glm::vec3 diffuse;
+//	float     quadratic;
+//
+//	glm::vec3 specular;
+//	float     _pad;
+//};
 
 
 struct TransformComponent {
@@ -57,7 +58,7 @@ struct MeshComponent {
 };
 
 struct LightComponent {
-	PointLight_UBO data;
+	Light data;
 };
 
 struct MaterialComponent {

@@ -140,6 +140,7 @@ struct TutorialApplication : EE::Application
         light_mesh = Rendering::Shapes::upload_cube(*wsi, *mesh_storage, "light_cube");
         object_mesh = Rendering::Shapes::upload_cube(*wsi, *mesh_storage, "object_cube");
         grid_mesh = Rendering::Shapes::upload_grid(*wsi, *mesh_storage, 10, 1, "object_grid");
+        plane_mesh = Rendering::Shapes::upload_plane(*wsi, *mesh_storage, 1, "object_plane");
 
         // --- Framebuffer format ---
         RD::AttachmentFormat color;
@@ -185,7 +186,7 @@ struct TutorialApplication : EE::Application
         // --- UBOs ---
         frame_ubo.create(device, "Frame UBO");
         material_ubo.create(device, "Material UBO");
-        pointlight_ubo.create(device, "Light UBO");
+        light_ubo.create(device, "Light UBO");
 
         Rendering::ImageLoader img_loader(*fs);
         // --- Sky box ---
@@ -271,7 +272,7 @@ struct TutorialApplication : EE::Application
         uniform_set_0 = Rendering::UniformSetBuilder{}
             .add(frame_ubo.as_uniform(0))
             .add(material_ubo.as_uniform(1))
-            .add(pointlight_ubo.as_uniform(2))
+            .add(light_ubo.as_uniform(2))
             .add_texture(3, sampler, diffuse_uniform)
             .add_texture(4, sampler, specular_uniform)
             .build(device, device->get_shader_rid("light_map"), 0);
@@ -288,15 +289,22 @@ struct TutorialApplication : EE::Application
 
         // --- Scene setup ---
         // object cube
-		for (int x = 0; x < 40; x++) {
-			for (int z = 0; z < 5; z++) {
+		for (int x = 0; x < 2; x++) {
+			for (int z = 0; z < 2; z++) {
 				auto entity = world.create();
 				world.emplace<TransformComponent>(entity, TransformComponent{
-					.position = glm::vec3(x * 2.5f, 0.0f, z * 2.5f) });
+					.position = glm::vec3(x * 2.5f, 0.5f, z * 2.5f) });
 				world.emplace<MeshComponent>(entity, MeshComponent{
 					object_mesh, pipeline_color, "light_map", uniform_set_0 });
 			}
 		}
+
+		auto entity_plane = world.create();
+		world.emplace<TransformComponent>(entity_plane, TransformComponent{
+			.position = glm::vec3(0.0, 0.0, 0.0),
+			.scale = glm::vec3(10.f) });
+		world.emplace<MeshComponent>(entity_plane, MeshComponent{
+            plane_mesh, pipeline_color, "light_map", uniform_set_0 });
 
         // light cube
         auto light = world.create();
@@ -305,14 +313,13 @@ struct TutorialApplication : EE::Application
             .scale = glm::vec3(0.2f) });
         world.emplace<MeshComponent>(light, MeshComponent{
             light_mesh, pipeline_light, "cube_shader", uniform_set_0_light });
-        world.emplace<LightComponent>(light, LightComponent{ .data = {
-            .constant = 1.0f,
-            .ambient = glm::vec3(0.2f),
-            .linear = 0.09f,
-            .diffuse = glm::vec3(0.5f),
-            .quadratic = 0.032f,
-            .specular = glm::vec3(1.0f),
-        } });
+		world.emplace<LightComponent>(light, LightComponent{ .data = {
+			.position = glm::vec4(1.0f, 1.0f, 1.0f, 15.0f), // w = range
+			.direction = glm::vec4(0.0f, -1.0f, 0.0f, 0.0f), // unused for point light
+			.color = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f),  // w = intensity
+			.type = static_cast<uint32_t>(LightType::Point),
+			.outer_angle = 0.0f,
+		} });
 
         wsi->submit_transfer_workers();
         return wsi->pre_frame_loop();
@@ -331,16 +338,21 @@ struct TutorialApplication : EE::Application
         frame_ubo.upload(device, frame_data);
 
         // --- Upload lights ---
-        world.view<TransformComponent, LightComponent>().each(
-            [&](auto entity, TransformComponent& t, LightComponent& l) {
-                l.data.position = t.position;
-                pointlight_ubo.upload(device, l.data);
-            });
+		LightBuffer light_buffer{};
+		world.view<TransformComponent, LightComponent>().each(
+			[&](auto entity, TransformComponent& t, LightComponent& l) {
+				if (light_buffer.count >= 16) return;
+				Light gpu_light = l.data;
+				// Override position xyz from transform, keep w (range)
+				gpu_light.position = glm::vec4(t.position, l.data.position.w);
+				light_buffer.lights[light_buffer.count++] = gpu_light;
+			});
+		light_ubo.upload(device, light_buffer);
 
         // --- Upload material ---
         // TODO: move into MaterialComponent and upload per object
         material_ubo.upload(device, Material_UBO{ 32.0f });
-
+        static_assert(sizeof(Light) == 64, "Light must be 64 bytes for std140");
         // --- Build drawables ---
         std::vector<Rendering::Drawable> drawables;
 
@@ -399,7 +411,7 @@ struct TutorialApplication : EE::Application
 
         frame_ubo.free(device);
         material_ubo.free(device);
-        pointlight_ubo.free(device);
+        light_ubo.free(device);
 		device->free_rid(cubemap_uniform);
 		device->free_rid(uniform_set_skybox);
 		device->free_rid(pipeline_skybox);
@@ -420,7 +432,7 @@ private:
 
     Rendering::UniformBuffer<FrameData_UBO>   frame_ubo;
     Rendering::UniformBuffer<Material_UBO>    material_ubo;
-    Rendering::UniformBuffer<PointLight_UBO>  pointlight_ubo;
+    Rendering::UniformBuffer<LightBuffer> light_ubo;
 
     RID uniform_set_0;
     RID uniform_set_0_light;
@@ -445,6 +457,7 @@ private:
     Rendering::MeshHandle light_mesh;
     Rendering::MeshHandle object_mesh;
     Rendering::MeshHandle grid_mesh;
+    Rendering::MeshHandle plane_mesh;
 
     Rendering::WSI* wsi;
     Rendering::RenderingDevice* device;

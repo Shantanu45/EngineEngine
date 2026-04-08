@@ -8,7 +8,6 @@ layout(location = 2) in vec2 TexCoords;
 
 layout(location = 0) out vec4 FragColor;
 
-// FrameUBO repeated here — same set/binding as vert, GPU deduplicates it
 layout(set = 0, binding = 0) uniform FrameUBO {
     CameraData camera;
     float time;
@@ -16,10 +15,14 @@ layout(set = 0, binding = 0) uniform FrameUBO {
 
 layout(set = 0, binding = 1) uniform MaterialUBO {
     Material material;
-} material;
+} mat;
 
-layout(set = 0, binding = 2) uniform LightUBO {
-    PointLight light;  
+layout(set = 0, binding = 2) uniform LightBuffer {
+    uint  lightCount;
+    float _pad;
+    float _pad1;
+    float _pad2;
+    Light lights[MAX_LIGHTS];
 } lightData;
 
 layout(set = 0, binding = 3) uniform sampler2D diffuse_tex;
@@ -30,10 +33,15 @@ void main()
     vec3 normal  = normalize(Normal);
     vec3 viewDir = normalize(frame.camera.cameraPos - FragPos);
 
-    vec3 color = CalcPointLight(
-        lightData.light, material.material,diffuse_tex , 
-        specular_tex, TexCoords , normal, FragPos, viewDir);
+    // Global ambient — one cheap sample, not multiplied per light
+    vec3 color = vec3(0.05) * vec3(texture(diffuse_tex, TexCoords));
+
+    for (uint i = 0u; i < lightData.lightCount; i++) {
+        color += CalcLight(
+            lightData.lights[i], mat.material,
+            diffuse_tex, specular_tex,
+            TexCoords, normal, FragPos, viewDir);
+    }
 
     FragColor = vec4(color, 1.0);
-    
 }
