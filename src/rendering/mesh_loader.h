@@ -21,13 +21,8 @@ namespace Rendering
 		// "<name>/mesh_0" if the mesh has no name in the file.
 		// Returns the handle of the FIRST mesh (for simple single-mesh files).
 		// Returns INVALID_MESH on any failure.
-		MeshHandle load_gltf(
-			MeshStorage& storage,
-			const std::string& path,
-			const std::string& name,
-			RenderingDevice::VertexFormatID           vertex_format,
-			RenderingDeviceCommons::IndexBufferFormat index_format
-			= RenderingDeviceCommons::INDEX_BUFFER_FORMAT_UINT32)
+		MeshHandle load_gltf( MeshStorage& storage, const std::string& path, const std::string& name,
+			RenderingDevice::VertexFormatID vertex_format, RDC::IndexBufferFormat index_format = RDC::INDEX_BUFFER_FORMAT_UINT32)
 		{
 			if (storage.has(name))
 			{
@@ -82,13 +77,8 @@ namespace Rendering
 
 		// Convenience: load and retrieve all handles produced
 		// Useful when you need to address individual meshes in a multi-mesh file
-		std::vector<MeshHandle> load_gltf_all(
-			MeshStorage& storage,
-			const std::string& path,
-			const std::string& name,
-			RenderingDevice::VertexFormatID           vertex_format,
-			RenderingDeviceCommons::IndexBufferFormat index_format
-			= RenderingDeviceCommons::INDEX_BUFFER_FORMAT_UINT32)
+		std::vector<MeshHandle> load_gltf_all( MeshStorage& storage, const std::string& path, const std::string& name,
+			RenderingDevice::VertexFormatID vertex_format, RDC::IndexBufferFormat index_format = RDC::INDEX_BUFFER_FORMAT_UINT32)
 		{
 			std::vector<MeshHandle> handles;
 
@@ -202,12 +192,8 @@ namespace Rendering
 		RenderingDevice* device;
 		std::unordered_map<std::string, RID> image_cache;
 
-		MeshHandle _build_and_upload(
-			MeshStorage& storage,
-			const std::string& name,
-			const std::vector<MeshPrimitive>& prims,
-			RenderingDevice::VertexFormatID           vertex_format,
-			RenderingDeviceCommons::IndexBufferFormat index_format)
+		MeshHandle _build_and_upload( MeshStorage& storage, const std::string& name,
+			const std::vector<MeshPrimitive>& prims, RD::VertexFormatID vertex_format, RDC::IndexBufferFormat index_format)
 		{
 			if (storage.has(name))
 			{
@@ -216,7 +202,7 @@ namespace Rendering
 			}
 
 			const uint32_t index_stride =
-				(index_format == RenderingDeviceCommons::INDEX_BUFFER_FORMAT_UINT16)
+				(index_format == RDC::INDEX_BUFFER_FORMAT_UINT16)
 				? sizeof(uint16_t)
 				: sizeof(uint32_t);
 
@@ -247,7 +233,7 @@ namespace Rendering
 				std::memcpy(vertex_data.data() + vb_off, p.vertices.data(), vb_size);
 
 				// Append index bytes — uint16 path needs conversion
-				if (index_format == RenderingDeviceCommons::INDEX_BUFFER_FORMAT_UINT16)
+				if (index_format == RDC::INDEX_BUFFER_FORMAT_UINT16)
 				{
 					const size_t ib_off = index_data.size();
 					index_data.resize(ib_off + p.indices.size() * sizeof(uint16_t));
