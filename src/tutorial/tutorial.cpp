@@ -38,12 +38,7 @@ struct alignas(16) ObjectData_UBO {
     glm::mat4 normalMatrix;
 };
 
-struct alignas(16) Material_UBO {
-	glm::vec4 base_color_factor;
-	float metallic_factor;
-	float roughness_factor;
-    float shininess;            // <-- for blinn phong
-};
+
 
 void add_basic_pass(
     FrameGraph& fg,
@@ -188,7 +183,7 @@ struct TutorialApplication : EE::Application
 
         // --- UBOs ---
         frame_ubo.create(device, "Frame UBO");
-        material_ubo.create(device, "Material UBO");
+        //material_ubo.create(device, "Material UBO");
         light_ubo.create(device, "Light UBO");
 
         Rendering::ImageLoader img_loader(*fs);
@@ -277,11 +272,11 @@ struct TutorialApplication : EE::Application
             .add(light_ubo.as_uniform(2))
             .build(device, device->get_shader_rid("light_map"), 0);
 
-        uniform_set_2 = Rendering::UniformSetBuilder{}
-			.add(material_ubo.as_uniform(0))
-			.add_texture(1, sampler, diffuse_uniform)
-			.add_texture(2, sampler, specular_uniform)
-			.build(device, device->get_shader_rid("light_map"), 2);
+   //     uniform_set_2 = Rendering::UniformSetBuilder{}
+			//.add(material_ubo.as_uniform(0))
+			//.add_texture(1, sampler, diffuse_uniform)
+			//.add_texture(2, sampler, specular_uniform)
+			//.build(device, device->get_shader_rid("light_map"), 2);
 
 
         uniform_set_0_light = Rendering::UniformSetBuilder{}
@@ -295,6 +290,13 @@ struct TutorialApplication : EE::Application
 			.build(device, device->get_shader_rid("skybox_shader"), 0);
 
         // --- Scene setup ---
+        // 
+		Rendering::Material mat;
+		mat.diffuse = diffuse_uniform;
+		mat.base_color_factor = glm::vec4(1.0f);
+		mat.shininess = 64.0f;
+
+        Rendering::MaterialHandle h = material_registry.create(device, std::move(mat), sampler, diffuse_uniform, "light_map");
         // object cube
 		for (int x = 0; x < 2; x++) {
 			for (int z = 0; z < 2; z++) {
@@ -305,8 +307,9 @@ struct TutorialApplication : EE::Application
 			   .mesh = object_mesh,
 			   .pipeline = pipeline_color,
 			   .shader = "light_map",
-			   .uniform_sets = {uniform_set_0, {}, uniform_set_2, {}}
+			   .uniform_sets = {uniform_set_0, {},  material_registry.get_uniform_set(h), {}}
 				});
+                world.emplace<MaterialComponent>(entity, MaterialComponent{ h });
 			}
 		}
 
@@ -318,8 +321,10 @@ struct TutorialApplication : EE::Application
            .mesh = plane_mesh, 
            .pipeline = pipeline_color, 
            .shader = "light_map", 
-           .uniform_sets = {uniform_set_0, {}, uniform_set_2, {}}
+           .uniform_sets = {uniform_set_0, {}, material_registry.get_uniform_set(h), {}}
             });
+		world.emplace<MaterialComponent>(entity_plane, MaterialComponent{ h });
+
 
         // light cube
         auto light = world.create();
@@ -366,38 +371,35 @@ struct TutorialApplication : EE::Application
 
         // --- Upload material ---
         // TODO: move into MaterialComponent and upload per object
-        material_ubo.upload(device, Material_UBO{.shininess = 32.0f });
+        //material_ubo.upload(device, Material_UBO{.shininess = 32.0f });
+        material_registry.upload_all(device);
         static_assert(sizeof(Light) == 64, "Light must be 64 bytes for std140");
         // --- Build drawables ---
         std::vector<Rendering::Drawable> drawables;
 
         // skybox
 		glm::mat4 identity = glm::mat4(1.0f);
-		drawables.push_back(
-			Rendering::Drawable::make(pipeline_skybox, skybox_mesh, "skybox_shader",
-				Rendering::PushConstantData::from(ObjectData_UBO{ identity, identity }),
-				{ { uniform_set_skybox, 0 } }));
+		drawables.push_back( Rendering::Drawable::make(pipeline_skybox, skybox_mesh, "skybox_shader",
+			Rendering::PushConstantData::from(ObjectData_UBO{ identity, identity }),
+			{ { uniform_set_skybox, 0 } }));
 
         // grid — no entity, always identity
-        drawables.push_back(
-            Rendering::Drawable::make(pipeline_grid, grid_mesh, "grid_shader",
-                Rendering::PushConstantData::from(
-                    ObjectData_UBO{ identity, glm::transpose(glm::inverse(identity)) }),
-                { { uniform_set_0_light, 0 } }));
+        drawables.push_back( Rendering::Drawable::make(pipeline_grid, grid_mesh, "grid_shader",
+				            Rendering::PushConstantData::from(ObjectData_UBO{ identity, glm::transpose(glm::inverse(identity)) }),
+				            { { uniform_set_0_light, 0 } }));
 
         // all mesh entities
         world.view<TransformComponent, MeshComponent>().each(
             [&](auto entity, TransformComponent& t, MeshComponent& m) {
                 auto model = t.get_model();
                 auto normal = t.get_normal_matrix();
-                drawables.push_back(
-                    Rendering::Drawable::make(m.pipeline, m.mesh, m.shader,
-                        Rendering::PushConstantData::from(ObjectData_UBO{ model, normal }),
-                        { 
-                            { m.uniform_sets[0], 0} ,
-                            { m.uniform_sets[2], 2},
-                        }
-                    ));
+                drawables.push_back( Rendering::Drawable::make(m.pipeline, m.mesh, m.shader,
+					Rendering::PushConstantData::from(ObjectData_UBO{ model, normal }),
+					{
+						{ m.uniform_sets[0], 0} ,
+						{ m.uniform_sets[2], 2},
+					}
+                ));
             });
 
         device->imgui_begin_frame();
@@ -427,9 +429,9 @@ struct TutorialApplication : EE::Application
     {
         auto wsi = get_wsi();
         auto device = wsi->get_rendering_device();
-
+        material_registry.free_all(device);
         frame_ubo.free(device);
-        material_ubo.free(device);
+        //material_ubo.free(device);
         light_ubo.free(device);
 		device->free_rid(cubemap_uniform);
 		device->free_rid(uniform_set_skybox);
@@ -450,7 +452,7 @@ private:
     entt::registry world;
 
     Rendering::UniformBuffer<FrameData_UBO>   frame_ubo;
-    Rendering::UniformBuffer<Material_UBO>    material_ubo;
+    //Rendering::UniformBuffer<Material_UBO>    material_ubo;
     Rendering::UniformBuffer<LightBuffer> light_ubo;
 
     RID uniform_set_0;
@@ -489,6 +491,8 @@ private:
 
     std::unique_ptr<Rendering::MeshStorage> mesh_storage = std::make_unique<Rendering::MeshStorage>();
     std::unique_ptr<Rendering::MeshLoader>  mesh_loader;
+
+    Rendering::MaterialRegistry material_registry;
 };
 
 namespace EE

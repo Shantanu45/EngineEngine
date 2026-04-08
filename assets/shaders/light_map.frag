@@ -26,7 +26,8 @@ layout(set = 0, binding = 2) uniform LightBuffer {
 } lightData;
 
 layout(set = 2, binding = 1) uniform sampler2D diffuse_tex;
-layout(set = 2, binding = 2) uniform sampler2D specular_tex;
+layout(set = 2, binding = 2) uniform sampler2D metallic_roughness;
+layout(set = 2, binding = 3) uniform sampler2D normal;
 
 void main()
 {
@@ -39,7 +40,7 @@ void main()
     for (uint i = 0u; i < lightData.lightCount; i++) {
         color += CalcLight(
             lightData.lights[i], mat.material,
-            diffuse_tex, specular_tex,
+            diffuse_tex, metallic_roughness,
             TexCoords, normal, FragPos, viewDir);
     }
 

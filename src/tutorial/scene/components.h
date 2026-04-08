@@ -5,6 +5,7 @@
 #include "rendering/mesh_storage.h"
 #include "rendering/rendering_device.h"
 #include "rendering/light.h"
+#include "rendering/material.h"
 
 struct MaterialTextures {
 	RID uniform_set;
@@ -62,11 +63,5 @@ struct LightComponent {
 };
 
 struct MaterialComponent {
-	RID diffuse;
-	RID metallic_roughness;
-	RID normal;
-	glm::vec4 base_color_factor;
-	float metallic_factor;
-	float roughness_factor;
-	float shininess = 32.0f;		// for blinn phong
+	Rendering::MaterialHandle material;
 };
