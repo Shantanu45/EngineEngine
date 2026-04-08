@@ -242,6 +242,7 @@ struct TutorialApplication : EE::Application
 
         auto diffuse_image = img_loader.load_from_file("assets://textures/container2.png");
         auto specular_image = img_loader.load_from_file("assets://textures/container2_specular.png");
+        auto rock_image = img_loader.load_from_file("assets://textures/stone-granite.png");
 
         RDC::TextureFormat tf;
         tf.width = diffuse_image.width;
@@ -259,10 +260,20 @@ struct TutorialApplication : EE::Application
 		tf_spec.usage_bits = RDC::TEXTURE_USAGE_SAMPLING_BIT | RDC::TEXTURE_USAGE_CAN_UPDATE_BIT;
 		tf_spec.format = RDC::DATA_FORMAT_R8G8B8A8_UNORM;
 
+		RDC::TextureFormat tf_rock;
+		tf_rock.width = rock_image.width;
+		tf_rock.height = rock_image.height;
+		tf_rock.array_layers = 1;
+		tf_rock.texture_type = RDC::TEXTURE_TYPE_2D;
+		tf_rock.usage_bits = RDC::TEXTURE_USAGE_SAMPLING_BIT | RDC::TEXTURE_USAGE_CAN_UPDATE_BIT;
+		tf_rock.format = RDC::DATA_FORMAT_R8G8B8A8_SRGB;
+
         diffuse_uniform = device->texture_create(tf, RD::TextureView(), { diffuse_image.pixels });
         specular_uniform = device->texture_create(tf_spec, RD::TextureView(), { specular_image.pixels });
+        rock_uniform = device->texture_create(tf_rock, RD::TextureView(), { rock_image.pixels });
         device->set_resource_name(diffuse_uniform, "Diffuse texture");
         device->set_resource_name(specular_uniform, "Specular texture");
+        device->set_resource_name(rock_uniform, "Rock texture");
 
         sampler = device->sampler_create(RD::SamplerState());
 
@@ -294,9 +305,18 @@ struct TutorialApplication : EE::Application
 		Rendering::Material mat;
 		mat.diffuse = diffuse_uniform;
 		mat.base_color_factor = glm::vec4(1.0f);
+        mat.metallic_roughness = specular_uniform;
 		mat.shininess = 64.0f;
 
         Rendering::MaterialHandle h = material_registry.create(device, std::move(mat), sampler, diffuse_uniform, "light_map");
+
+		Rendering::Material mat_rock;
+		mat_rock.diffuse = rock_uniform;
+		mat_rock.base_color_factor = glm::vec4(1.0f);
+		mat_rock.shininess = 32.0f;
+		Rendering::MaterialHandle h_rock = material_registry.create(device, std::move(mat_rock), sampler, diffuse_uniform, "light_map");
+
+
         // object cube
 		for (int x = 0; x < 2; x++) {
 			for (int z = 0; z < 2; z++) {
@@ -321,9 +341,9 @@ struct TutorialApplication : EE::Application
            .mesh = plane_mesh, 
            .pipeline = pipeline_color, 
            .shader = "light_map", 
-           .uniform_sets = {uniform_set_0, {}, material_registry.get_uniform_set(h), {}}
+           .uniform_sets = {uniform_set_0, {}, material_registry.get_uniform_set(h_rock), {}}
             });
-		world.emplace<MaterialComponent>(entity_plane, MaterialComponent{ h });
+		world.emplace<MaterialComponent>(entity_plane, MaterialComponent{ h_rock });
 
 
         // light cube
@@ -463,6 +483,7 @@ private:
     RID diffuse_uniform;
     RID specular_uniform;
     RID cubemap_uniform;
+    RID rock_uniform;
 
 	RID pipeline_skybox;
 	RID uniform_set_skybox;
