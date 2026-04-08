@@ -20,7 +20,11 @@ struct Light {
 };
 
 struct Material {
-    float shininess;
+    vec4  base_color_factor;
+    float metallic_factor;
+    float roughness_factor;
+    float shininess;        // <-- keeping this for Blinn-Phong
+    float _pad;
 };
 
 // ─────────────────────────────────────────────

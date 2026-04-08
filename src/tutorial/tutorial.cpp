@@ -39,7 +39,10 @@ struct alignas(16) ObjectData_UBO {
 };
 
 struct alignas(16) Material_UBO {
-    float shininess;
+	glm::vec4 base_color_factor;
+	float metallic_factor;
+	float roughness_factor;
+    float shininess;            // <-- for blinn phong
 };
 
 void add_basic_pass(
@@ -363,7 +366,7 @@ struct TutorialApplication : EE::Application
 
         // --- Upload material ---
         // TODO: move into MaterialComponent and upload per object
-        material_ubo.upload(device, Material_UBO{ 32.0f });
+        material_ubo.upload(device, Material_UBO{.shininess = 32.0f });
         static_assert(sizeof(Light) == 64, "Light must be 64 bytes for std140");
         // --- Build drawables ---
         std::vector<Rendering::Drawable> drawables;

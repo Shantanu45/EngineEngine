@@ -62,5 +62,11 @@ struct LightComponent {
 };
 
 struct MaterialComponent {
-	float shininess = 32.0f;
+	RID diffuse;
+	RID metallic_roughness;
+	RID normal;
+	glm::vec4 base_color_factor;
+	float metallic_factor;
+	float roughness_factor;
+	float shininess = 32.0f;		// for blinn phong
 };
