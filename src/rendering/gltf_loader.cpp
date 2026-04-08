@@ -29,23 +29,23 @@ namespace Rendering
 
 		// Images
 		for (auto& img : m_model.images)
-			m_scene.images.push_back(extract_image(img));
+			m_scene.images.push_back(_extract_image(img));
 
 		// Samplers
 		for (auto& smp : m_model.samplers)
-			m_scene.samplers.push_back(extract_sampler(smp));
+			m_scene.samplers.push_back(_extract_sampler(smp));
 
 		// Materials
 		for (auto& mat : m_model.materials)
-			m_scene.materials.push_back(extract_material(mat));
+			m_scene.materials.push_back(_extract_material(mat));
 
 		// Meshes
 		for (auto& mesh : m_model.meshes)
-			m_scene.meshes.push_back(extract_mesh(mesh));
+			m_scene.meshes.push_back(_extract_mesh(mesh));
 
 		// Nodes
 		for (int i = 0; i < (int)m_model.nodes.size(); ++i)
-			m_scene.nodes.push_back(extract_node(i));
+			m_scene.nodes.push_back(_extract_node(i));
 
 		// Scenes
 		for (auto& s : m_model.scenes) {
@@ -58,7 +58,7 @@ namespace Rendering
 
 		// Animations
 		for (auto& anim : m_model.animations)
-			m_scene.animations.push_back(extract_animation(anim));
+			m_scene.animations.push_back(_extract_animation(anim));
 
 		return OK;
 	}
@@ -66,16 +66,16 @@ namespace Rendering
 	// ----------------------------------------------------------------
 	// Mesh / primitive — same core logic, now sets material_index
 	// ----------------------------------------------------------------
-	Mesh GltfLoader::extract_mesh(const tinygltf::Mesh& mesh)
+	Mesh GltfLoader::_extract_mesh(const tinygltf::Mesh& mesh)
 	{
 		Mesh out;
 		out.name = mesh.name;
 		for (auto& prim : mesh.primitives)
-			out.primitives.push_back(extract_primitive(prim));
+			out.primitives.push_back(_extract_primitive(prim));
 		return out;
 	}
 
-	MeshPrimitive GltfLoader::extract_primitive(const tinygltf::Primitive& prim)
+	MeshPrimitive GltfLoader::_extract_primitive(const tinygltf::Primitive& prim)
 	{
 		MeshPrimitive out;
 		out.material_index = prim.material;
@@ -83,10 +83,10 @@ namespace Rendering
 		auto& posAcc = accessor(prim, "POSITION");
 		out.vertices.resize(posAcc.count);
 
-		copy_attrib(prim, "POSITION", out.vertices, offsetof(Vertex, position), 3);
-		copy_attrib(prim, "NORMAL", out.vertices, offsetof(Vertex, normal), 3);
-		copy_attrib(prim, "TEXCOORD_0", out.vertices, offsetof(Vertex, texcoord), 2);
-		copy_attrib(prim, "TANGENT", out.vertices, offsetof(Vertex, tangent), 4);
+		_copy_attrib(prim, "POSITION", out.vertices, offsetof(Vertex, position), 3);
+		_copy_attrib(prim, "NORMAL", out.vertices, offsetof(Vertex, normal), 3);
+		_copy_attrib(prim, "TEXCOORD_0", out.vertices, offsetof(Vertex, texcoord), 2);
+		_copy_attrib(prim, "TANGENT", out.vertices, offsetof(Vertex, tangent), 4);
 
 		if (prim.indices >= 0) {
 			auto& idxAcc = m_model.accessors[prim.indices];
@@ -120,7 +120,7 @@ namespace Rendering
 	// ----------------------------------------------------------------
 	// Materials
 	// ----------------------------------------------------------------
-	PBRMaterial GltfLoader::extract_material(const tinygltf::Material& mat)
+	PBRMaterial GltfLoader::_extract_material(const tinygltf::Material& mat)
 	{
 		PBRMaterial out;
 		out.name = mat.name;
@@ -136,11 +136,11 @@ namespace Rendering
 		out.metallic_factor = (float)pbr.metallicFactor;
 		out.roughness_factor = (float)pbr.roughnessFactor;
 
-		out.base_color_texture = extract_texture_info(pbr.baseColorTexture.index, pbr.baseColorTexture.texCoord);
-		out.metallic_roughness_texture = extract_texture_info(pbr.metallicRoughnessTexture.index, pbr.metallicRoughnessTexture.texCoord);
-		out.normal_texture = extract_texture_info(mat.normalTexture.index, mat.normalTexture.texCoord);
-		out.occlusion_texture = extract_texture_info(mat.occlusionTexture.index, mat.occlusionTexture.texCoord);
-		out.emissive_texture = extract_texture_info(mat.emissiveTexture.index, mat.emissiveTexture.texCoord);
+		out.base_color_texture = _extract_texture_info(pbr.baseColorTexture.index, pbr.baseColorTexture.texCoord);
+		out.metallic_roughness_texture = _extract_texture_info(pbr.metallicRoughnessTexture.index, pbr.metallicRoughnessTexture.texCoord);
+		out.normal_texture = _extract_texture_info(mat.normalTexture.index, mat.normalTexture.texCoord);
+		out.occlusion_texture = _extract_texture_info(mat.occlusionTexture.index, mat.occlusionTexture.texCoord);
+		out.emissive_texture = _extract_texture_info(mat.emissiveTexture.index, mat.emissiveTexture.texCoord);
 
 		out.normal_scale = (float)mat.normalTexture.scale;
 		out.occlusion_strength = (float)mat.occlusionTexture.strength;
@@ -150,7 +150,7 @@ namespace Rendering
 		return out;
 	}
 
-	std::optional<TextureInfo> GltfLoader::extract_texture_info(int texture_index, int tex_coord)
+	std::optional<TextureInfo> GltfLoader::_extract_texture_info(int texture_index, int tex_coord)
 	{
 		if (texture_index < 0)
 			return std::nullopt;
@@ -166,7 +166,7 @@ namespace Rendering
 	// ----------------------------------------------------------------
 	// Images + Samplers
 	// ----------------------------------------------------------------
-	GltfImageData GltfLoader::extract_image(const tinygltf::Image& img)
+	GltfImageData GltfLoader::_extract_image(const tinygltf::Image& img)
 	{
 		GltfImageData out;
 		out.name = img.name;
@@ -178,7 +178,7 @@ namespace Rendering
 		return out;
 	}
 
-	SamplerInfo GltfLoader::extract_sampler(const tinygltf::Sampler& smp)
+	SamplerInfo GltfLoader::_extract_sampler(const tinygltf::Sampler& smp)
 	{
 		SamplerInfo out;
 		out.mag_filter = smp.magFilter;
@@ -191,7 +191,7 @@ namespace Rendering
 	// ----------------------------------------------------------------
 	// Nodes
 	// ----------------------------------------------------------------
-	Node GltfLoader::extract_node(int node_index)
+	Node GltfLoader::_extract_node(int node_index)
 	{
 		auto& n = m_model.nodes[node_index];
 		Node out;
@@ -248,7 +248,7 @@ namespace Rendering
 	// ----------------------------------------------------------------
 	// Animations
 	// ----------------------------------------------------------------
-	Animation GltfLoader::extract_animation(const tinygltf::Animation& anim)
+	Animation GltfLoader::_extract_animation(const tinygltf::Animation& anim)
 	{
 		Animation out;
 		out.name = anim.name;
@@ -308,7 +308,7 @@ namespace Rendering
 	// ----------------------------------------------------------------
 	// Unchanged helpers
 	// ----------------------------------------------------------------
-	void GltfLoader::copy_attrib(const tinygltf::Primitive& prim, const std::string& semantic,
+	void GltfLoader::_copy_attrib(const tinygltf::Primitive& prim, const std::string& semantic,
 		std::vector<Vertex>& verts, size_t byteOffset, int numComponents)
 	{
 		auto it = prim.attributes.find(semantic);

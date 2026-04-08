@@ -174,17 +174,17 @@ namespace Rendering
 		FileSystem::FilesystemInterface& fs_iface;
 
 		// Extraction helpers
-		Mesh         extract_mesh(const tinygltf::Mesh& mesh);
-		MeshPrimitive extract_primitive(const tinygltf::Primitive& prim);
-		PBRMaterial  extract_material(const tinygltf::Material& mat);
-		GltfImageData    extract_image(const tinygltf::Image& img);
-		SamplerInfo  extract_sampler(const tinygltf::Sampler& smp);
-		Node         extract_node(int node_index);
-		Animation    extract_animation(const tinygltf::Animation& anim);
+		Mesh         _extract_mesh(const tinygltf::Mesh& mesh);
+		MeshPrimitive _extract_primitive(const tinygltf::Primitive& prim);
+		PBRMaterial  _extract_material(const tinygltf::Material& mat);
+		GltfImageData    _extract_image(const tinygltf::Image& img);
+		SamplerInfo  _extract_sampler(const tinygltf::Sampler& smp);
+		Node         _extract_node(int node_index);
+		Animation    _extract_animation(const tinygltf::Animation& anim);
 
-		std::optional<TextureInfo> extract_texture_info(int texture_index, int tex_coord = 0);
+		std::optional<TextureInfo> _extract_texture_info(int texture_index, int tex_coord = 0);
 
-		void copy_attrib(const tinygltf::Primitive& prim,
+		void _copy_attrib(const tinygltf::Primitive& prim,
 			const std::string& semantic,
 			std::vector<Vertex>& verts,
 			size_t byteOffset,

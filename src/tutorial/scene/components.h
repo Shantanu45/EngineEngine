@@ -6,7 +6,7 @@
 #include "rendering/rendering_device.h"
 #include "rendering/light.h"
 
-struct MaterialData {
+struct MaterialTextures {
 	RID uniform_set;
 	RID diffuse_texture;
 	RID specular_texture;   // or metallic/roughness for PBR
@@ -53,8 +53,8 @@ struct MeshComponent {
 	Rendering::MeshHandle mesh;
 	RID                   pipeline;
 	const char* shader;
-	RID                   uniform_set;
-	MaterialData          material;
+	std::array<RID, 4>    uniform_sets;
+	MaterialTextures          material_textures;
 };
 
 struct LightComponent {

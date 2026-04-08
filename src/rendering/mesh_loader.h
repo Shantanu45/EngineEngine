@@ -171,10 +171,7 @@ namespace Rendering
 		}
 
 		// upload_texture then just delegates to it:
-		RID upload_texture(const GltfScene* scene,
-			const std::optional<TextureInfo>& tex_info,
-			RID fallback,
-			const std::string& file_path)
+		RID upload_texture(const GltfScene* scene, const std::optional<TextureInfo>& tex_info, RID fallback, const std::string& file_path)
 		{
 			if (!tex_info.has_value())
 				return fallback;

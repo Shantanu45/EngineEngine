@@ -271,11 +271,15 @@ struct TutorialApplication : EE::Application
         // --- Uniform sets ---
         uniform_set_0 = Rendering::UniformSetBuilder{}
             .add(frame_ubo.as_uniform(0))
-            .add(material_ubo.as_uniform(1))
             .add(light_ubo.as_uniform(2))
-            .add_texture(3, sampler, diffuse_uniform)
-            .add_texture(4, sampler, specular_uniform)
             .build(device, device->get_shader_rid("light_map"), 0);
+
+        uniform_set_2 = Rendering::UniformSetBuilder{}
+			.add(material_ubo.as_uniform(0))
+			.add_texture(1, sampler, diffuse_uniform)
+			.add_texture(2, sampler, specular_uniform)
+			.build(device, device->get_shader_rid("light_map"), 2);
+
 
         uniform_set_0_light = Rendering::UniformSetBuilder{}
             .add(frame_ubo.as_uniform(0))
@@ -295,7 +299,11 @@ struct TutorialApplication : EE::Application
 				world.emplace<TransformComponent>(entity, TransformComponent{
 					.position = glm::vec3(x * 2.5f, 0.5f, z * 2.5f) });
 				world.emplace<MeshComponent>(entity, MeshComponent{
-					object_mesh, pipeline_color, "light_map", uniform_set_0 });
+			   .mesh = object_mesh,
+			   .pipeline = pipeline_color,
+			   .shader = "light_map",
+			   .uniform_sets = {uniform_set_0, {}, uniform_set_2, {}}
+				});
 			}
 		}
 
@@ -304,7 +312,11 @@ struct TutorialApplication : EE::Application
 			.position = glm::vec3(0.0, 0.0, 0.0),
 			.scale = glm::vec3(10.f) });
 		world.emplace<MeshComponent>(entity_plane, MeshComponent{
-            plane_mesh, pipeline_color, "light_map", uniform_set_0 });
+           .mesh = plane_mesh, 
+           .pipeline = pipeline_color, 
+           .shader = "light_map", 
+           .uniform_sets = {uniform_set_0, {}, uniform_set_2, {}}
+            });
 
         // light cube
         auto light = world.create();
@@ -378,7 +390,11 @@ struct TutorialApplication : EE::Application
                 drawables.push_back(
                     Rendering::Drawable::make(m.pipeline, m.mesh, m.shader,
                         Rendering::PushConstantData::from(ObjectData_UBO{ model, normal }),
-                        { { m.uniform_set, 0 } }));
+                        { 
+                            { m.uniform_sets[0], 0} ,
+                            { m.uniform_sets[2], 2},
+                        }
+                    ));
             });
 
         device->imgui_begin_frame();
@@ -436,6 +452,9 @@ private:
 
     RID uniform_set_0;
     RID uniform_set_0_light;
+    RID uniform_set_1;
+    RID uniform_set_2;
+    RID uniform_set_3;
     RID diffuse_uniform;
     RID specular_uniform;
     RID cubemap_uniform;

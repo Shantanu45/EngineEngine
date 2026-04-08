@@ -13,7 +13,7 @@ layout(set = 0, binding = 0) uniform FrameUBO {
     float time;
 } frame;
 
-layout(set = 0, binding = 1) uniform MaterialUBO {
+layout(set = 2, binding = 0) uniform MaterialUBO {
     Material material;
 } mat;
 
@@ -25,8 +25,8 @@ layout(set = 0, binding = 2) uniform LightBuffer {
     Light lights[MAX_LIGHTS];
 } lightData;
 
-layout(set = 0, binding = 3) uniform sampler2D diffuse_tex;
-layout(set = 0, binding = 4) uniform sampler2D specular_tex;
+layout(set = 2, binding = 1) uniform sampler2D diffuse_tex;
+layout(set = 2, binding = 2) uniform sampler2D specular_tex;
 
 void main()
 {
