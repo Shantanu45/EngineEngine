@@ -24,11 +24,14 @@ vec3 CalcPointLight(PointLight light, Material material, sampler2D diffuse_tex,
     sampler2D specular_tex, vec2 texCoords, vec3 normal, vec3 fragPos, vec3 viewDir)
 {
     vec3 lightDir = normalize(light.position - fragPos);
+    // halfway direction (blinn phong)
+    vec3 halfwayDir = normalize(lightDir + viewDir);
     // diffuse shading
     float diff = max(dot(normal, lightDir), 0.0);
     // specular shading
     vec3 reflectDir = reflect(-lightDir, normal);
-    float spec = pow(max(dot(viewDir, reflectDir), 0.0), material.shininess);
+    //float spec = pow(max(dot(viewDir, reflectDir), 0.0), material.shininess);     // phong shading
+    float spec = pow(max(dot(normal, halfwayDir), 0.0), material.shininess);        // blinn phong
     // attenuation
     float distance = length(light.position - fragPos);
     float attenuation = 1.0 / (light.constant + light.linear * distance + light.quadratic * (distance * distance));    
