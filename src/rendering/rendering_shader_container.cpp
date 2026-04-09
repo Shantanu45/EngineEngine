@@ -340,6 +340,7 @@ namespace Rendering
 				case RDC::SHADER_STAGE_FRAGMENT:
 				case RDC::SHADER_STAGE_TESSELATION_CONTROL:
 				case RDC::SHADER_STAGE_TESSELATION_EVALUATION:
+				case RDC::SHADER_STAGE_GEOMETRY:
 					r_shader.pipeline_type = RDC::PIPELINE_TYPE_RASTERIZATION;
 					break;
 				case RDC::SHADER_STAGE_COMPUTE:
@@ -657,7 +658,7 @@ namespace Rendering
 					}
 				}
 
-				if (stage == RDC::SHADER_STAGE_VERTEX || stage == RDC::SHADER_STAGE_FRAGMENT) {
+				if (stage == RDC::SHADER_STAGE_VERTEX || stage == RDC::SHADER_STAGE_FRAGMENT || stage == RDC::SHADER_STAGE_GEOMETRY) {
 					uint32_t iv_count = 0;
 					result = spvReflectEnumerateInputVariables(&module, &iv_count, nullptr);
 					ERR_FAIL_COND_V_MSG(result != SPV_REFLECT_RESULT_SUCCESS, FAILED,

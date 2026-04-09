@@ -400,7 +400,7 @@ struct TutorialApplication : EE::Application
 		mat_rock.diffuse = rock_uniform;
 		mat_rock.base_color_factor = glm::vec4(1.0f);
 		mat_rock.shininess = 32.0f;
-		Rendering::MaterialHandle h_rock = material_registry.create(device, std::move(mat_rock), sampler, diffuse_uniform, "light_map");
+		Rendering::MaterialHandle h_rock = material_registry.create(device, std::move(mat_rock), sampler, rock_uniform, "light_map");
 
         // object cube
 		for (int x = 0; x < 2; x++) {

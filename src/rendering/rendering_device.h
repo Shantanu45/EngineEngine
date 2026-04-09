@@ -60,6 +60,8 @@ namespace Rendering
 			return RenderingDeviceCommons::SHADER_STAGE_FRAGMENT;
 		case Compiler::Stage::Compute:
 			return RenderingDeviceCommons::SHADER_STAGE_COMPUTE;
+		case Compiler::Stage::Geometry:
+			return RenderingDeviceCommons::SHADER_STAGE_GEOMETRY;
 		case Compiler::Stage::Unknown:
 		default:
 			//TODO;

@@ -18,7 +18,7 @@ layout(set = 0, binding = 0) uniform FrameUBO {
     mat4 lightSpaceMatrix; 
 } frame;
 
-layout(set = 1, binding = 0) uniform sampler2D shadowMap;
+layout(set = 1, binding = 0) uniform sampler2DShadow shadowMap;
 
 layout(set = 2, binding = 0) uniform MaterialUBO {
     Material material;
@@ -37,23 +37,41 @@ layout(set = 2, binding = 2) uniform sampler2D metallic_roughness;
 layout(set = 2, binding = 3) uniform sampler2D normal;
 
 
+//float shadow_factor(vec4 fragPosLS, vec3 normal, vec3 lightDir) {
+//    vec3 proj = fragPosLS.xyz / fragPosLS.w;
+//    proj.xy = proj.xy * 0.5 + 0.5;
+//
+//    if (proj.z > 1.0) return 1.0;
+//
+//    // slope-scaled bias — more bias on surfaces nearly perpendicular to light
+//    float cosTheta = max(dot(normalize(normal), normalize(lightDir)), 0.0);
+//    float bias = max(0.002 * (1.0 - cosTheta), 0.0005);
+//
+//    float shadow = 0.0;
+//    vec2 texelSize = 1.0 / textureSize(shadowMap, 0);           // returns ivec2(width, height) of mip level 0
+//    for (int x = -1; x <= 1; x++)
+//    {
+//        for (int y = -1; y <= 1; y++) {
+//            float depth = texture(shadowMap, proj.xy + vec2(x, y) * texelSize).r;
+//            shadow += (proj.z - bias) > depth ? 0.0 : 1.0;
+//        }
+//    }
+//    return shadow / 9.0;
+//}
+
 float shadow_factor(vec4 fragPosLS, vec3 normal, vec3 lightDir) {
     vec3 proj = fragPosLS.xyz / fragPosLS.w;
     proj.xy = proj.xy * 0.5 + 0.5;
-
     if (proj.z > 1.0) return 1.0;
 
-    // slope-scaled bias — more bias on surfaces nearly perpendicular to light
     float cosTheta = max(dot(normalize(normal), normalize(lightDir)), 0.0);
     float bias = max(0.002 * (1.0 - cosTheta), 0.0005);
 
+    vec2 texelSize = 1.0 / textureSize(shadowMap, 0);
     float shadow = 0.0;
-    vec2 texelSize = 1.0 / textureSize(shadowMap, 0);           // returns ivec2(width, height) of mip level 0
-    for (int x = -1; x <= 1; x++)
-    {
+    for (int x = -1; x <= 1; x++) {
         for (int y = -1; y <= 1; y++) {
-            float depth = texture(shadowMap, proj.xy + vec2(x, y) * texelSize).r;
-            shadow += (proj.z - bias) > depth ? 0.0 : 1.0;
+            shadow += texture(shadowMap, vec3(proj.xy + vec2(x, y) * texelSize, proj.z - bias));
         }
     }
     return shadow / 9.0;

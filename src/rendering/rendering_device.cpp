@@ -637,6 +637,9 @@ namespace Rendering
 			case SHADER_STAGE_COMPUTE:
 				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 				break;
+			case SHADER_STAGE_GEOMETRY:
+				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_GEOMETRY_SHADER_BIT);
+				break;
 			case SHADER_STAGE_RAYGEN:
 			case SHADER_STAGE_ANY_HIT:
 			case SHADER_STAGE_CLOSEST_HIT:
