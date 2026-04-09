@@ -112,7 +112,7 @@ struct TutorialApplication : EE::Application
     bool pre_frame() override
     {
         input_system = Services::get().get<EE::InputSystemInterface>();
-        RenderUtilities::capturing_timestamps = true;
+        RenderUtilities::capturing_timestamps = false;
 
         camera.set_perspective(60.0f, 16.0f / 9.0f, 0.1f, 1000.0f);
         camera.set_reset_on_resize();
@@ -133,6 +133,8 @@ struct TutorialApplication : EE::Application
         auto fs = Services::get().get<FilesystemInterface>();
         mesh_loader = std::make_unique<Rendering::MeshLoader>(*fs, device);
         mesh_storage->initialize(device);
+
+		Rendering::ImageLoader img_loader(*fs);
 
         // --- Meshes ---
         light_mesh = Rendering::Shapes::upload_cube(*wsi, *mesh_storage, "light_cube");
@@ -185,10 +187,7 @@ struct TutorialApplication : EE::Application
 
         // --- UBOs ---
         frame_ubo.create(device, "Frame UBO");
-        //material_ubo.create(device, "Material UBO");
         light_ubo.create(device, "Light UBO");
-
-        Rendering::ImageLoader img_loader(*fs);
 
         // --- Sky box ---
 
