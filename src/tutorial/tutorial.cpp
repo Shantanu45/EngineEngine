@@ -139,6 +139,8 @@ struct TutorialApplication : EE::Application
         object_mesh = Rendering::Shapes::upload_cube(*wsi, *mesh_storage, "object_cube");
         grid_mesh = Rendering::Shapes::upload_grid(*wsi, *mesh_storage, 10, 1, "object_grid");
         plane_mesh = Rendering::Shapes::upload_plane(*wsi, *mesh_storage, 1, "object_plane");
+		skybox_mesh = Rendering::Shapes::upload_cube(*wsi, *mesh_storage, "skybox_cube");
+
 
         // --- Framebuffer format ---
         RD::AttachmentFormat color;
@@ -187,6 +189,7 @@ struct TutorialApplication : EE::Application
         light_ubo.create(device, "Light UBO");
 
         Rendering::ImageLoader img_loader(*fs);
+
         // --- Sky box ---
 
 		std::array<std::string, 6> faces = {
@@ -236,7 +239,6 @@ struct TutorialApplication : EE::Application
             .set_rasterization_state(rs)
 			.build(framebuffer_format);
 
-		skybox_mesh = Rendering::Shapes::upload_cube(*wsi, *mesh_storage, "skybox_cube");
 
         // --- Textures ---
 
@@ -283,17 +285,9 @@ struct TutorialApplication : EE::Application
             .add(light_ubo.as_uniform(2))
             .build(device, device->get_shader_rid("light_map"), 0);
 
-   //     uniform_set_2 = Rendering::UniformSetBuilder{}
-			//.add(material_ubo.as_uniform(0))
-			//.add_texture(1, sampler, diffuse_uniform)
-			//.add_texture(2, sampler, specular_uniform)
-			//.build(device, device->get_shader_rid("light_map"), 2);
-
-
         uniform_set_0_light = Rendering::UniformSetBuilder{}
             .add(frame_ubo.as_uniform(0))
             .build(device, device->get_shader_rid("cube_shader"), 0);
-
 
 		uniform_set_skybox = Rendering::UniformSetBuilder{}
 			.add(frame_ubo.as_uniform(0))
@@ -315,7 +309,6 @@ struct TutorialApplication : EE::Application
 		mat_rock.base_color_factor = glm::vec4(1.0f);
 		mat_rock.shininess = 32.0f;
 		Rendering::MaterialHandle h_rock = material_registry.create(device, std::move(mat_rock), sampler, diffuse_uniform, "light_map");
-
 
         // object cube
 		for (int x = 0; x < 2; x++) {
@@ -390,10 +383,8 @@ struct TutorialApplication : EE::Application
 		light_ubo.upload(device, light_buffer);
 
         // --- Upload material ---
-        // TODO: move into MaterialComponent and upload per object
-        //material_ubo.upload(device, Material_UBO{.shininess = 32.0f });
         material_registry.upload_all(device);
-        static_assert(sizeof(Light) == 64, "Light must be 64 bytes for std140");
+
         // --- Build drawables ---
         std::vector<Rendering::Drawable> drawables;
 
@@ -451,14 +442,12 @@ struct TutorialApplication : EE::Application
         auto device = wsi->get_rendering_device();
         material_registry.free_all(device);
         frame_ubo.free(device);
-        //material_ubo.free(device);
         light_ubo.free(device);
 		device->free_rid(cubemap_uniform);
-		device->free_rid(uniform_set_skybox);
+		device->free_rid(rock_uniform);
 		device->free_rid(pipeline_skybox);
 		device->free_rid(sampler_cube);
-        device->free_rid(uniform_set_0);
-        device->free_rid(uniform_set_0_light);
+
         device->free_rid(diffuse_uniform);
         device->free_rid(specular_uniform);
 		device->free_rid(pipeline_color);
@@ -466,20 +455,22 @@ struct TutorialApplication : EE::Application
 		device->free_rid(pipeline_grid);
         device->free_rid(sampler);
         mesh_storage->finalize();
+
+		//device->free_rid(uniform_set_0);
+        //device->free_rid(uniform_set_0_light);
+		//device->free_rid(uniform_set_skybox);
+		//material_ubo.free(device);
+
     }
 
 private:
     entt::registry world;
 
     Rendering::UniformBuffer<FrameData_UBO>   frame_ubo;
-    //Rendering::UniformBuffer<Material_UBO>    material_ubo;
     Rendering::UniformBuffer<LightBuffer> light_ubo;
 
     RID uniform_set_0;
     RID uniform_set_0_light;
-    RID uniform_set_1;
-    RID uniform_set_2;
-    RID uniform_set_3;
     RID diffuse_uniform;
     RID specular_uniform;
     RID cubemap_uniform;
@@ -488,7 +479,6 @@ private:
 	RID pipeline_skybox;
 	RID uniform_set_skybox;
 	RID sampler_cube;                        // cubemaps need their own sampler
-	Rendering::MeshHandle skybox_mesh;
 
     RID pipeline_color;
     RID pipeline_light;
@@ -503,6 +493,8 @@ private:
     Rendering::MeshHandle object_mesh;
     Rendering::MeshHandle grid_mesh;
     Rendering::MeshHandle plane_mesh;
+	Rendering::MeshHandle skybox_mesh;
+
 
     Rendering::WSI* wsi;
     Rendering::RenderingDevice* device;
