@@ -2,7 +2,7 @@
 
 layout(location = 0) in vec4 FragPos;
 
-layout(set = 0, binding = 0) uniform PointShadowUBO {
+layout(set = 0, binding = 1) uniform PointShadowUBO {
     mat4  shadowMatrices[6];
     vec4  lightPos;
     float farPlane;

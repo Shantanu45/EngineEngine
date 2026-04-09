@@ -633,6 +633,12 @@ namespace Vulkan
 				}
 			}
 
+			if (enabled_device_extension_names.contains(VK_KHR_MULTIVIEW_EXTENSION_NAME)) {
+				multiview_capabilities.is_supported = multiview_features.multiview;
+				multiview_capabilities.geometry_shader_is_supported = multiview_features.multiviewGeometryShader;
+				multiview_capabilities.tessellation_shader_is_supported = multiview_features.multiviewTessellationShader;
+			}
+
 			if (enabled_device_extension_names.contains(VK_EXT_PIPELINE_CREATION_CACHE_CONTROL_EXTENSION_NAME)) {
 				pipeline_cache_control_support = pipeline_cache_control_features.pipelineCreationCacheControl;
 			}
@@ -650,11 +656,29 @@ namespace Vulkan
 		if (vkGetPhysicalDeviceProperties2 != nullptr) {
 			void* next_properties = nullptr;
 			VkPhysicalDeviceProperties2 physical_device_properties_2 = {};
+			VkPhysicalDeviceMultiviewProperties multiview_properties = {};
 
+			if (multiview_capabilities.is_supported) {
+				multiview_properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PROPERTIES;
+				multiview_properties.pNext = next_properties;
+				next_properties = &multiview_properties;
+			}
 
 			physical_device_properties_2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
 			physical_device_properties_2.pNext = next_properties;
 			vkGetPhysicalDeviceProperties2(physical_device, &physical_device_properties_2);
+
+			if (multiview_capabilities.is_supported) {
+				multiview_capabilities.max_view_count = multiview_properties.maxMultiviewViewCount;
+				multiview_capabilities.max_instance_count = multiview_properties.maxMultiviewInstanceIndex;
+
+				LOGI("- Vulkan multiview supported:");
+				LOGI("  max view count: ", std::to_string(multiview_capabilities.max_view_count));
+				LOGI("  max instances: ", std::to_string(multiview_capabilities.max_instance_count));
+			}
+			else {
+				LOGI("- Vulkan multiview not supported");
+			}
 
 
 			// TODO: FSR, FDM, Subgroups, Raytracing support
@@ -749,9 +773,9 @@ namespace Vulkan
 			vulkan_1_1_features.uniformAndStorageBuffer16BitAccess = false/*storage_buffer_capabilities.uniform_and_storage_buffer_16_bit_access_is_supported*/;
 			vulkan_1_1_features.storagePushConstant16 = false/*storage_buffer_capabilities.storage_push_constant_16_is_supported*/;
 			vulkan_1_1_features.storageInputOutput16 = false/*storage_buffer_capabilities.storage_input_output_16*/;
-			vulkan_1_1_features.multiview = false/*multiview_capabilities.is_supported*/;
-			vulkan_1_1_features.multiviewGeometryShader = false/*multiview_capabilities.geometry_shader_is_supported*/;
-			vulkan_1_1_features.multiviewTessellationShader = false/*multiview_capabilities.tessellation_shader_is_supported*/;
+			vulkan_1_1_features.multiview = multiview_capabilities.is_supported;
+			vulkan_1_1_features.multiviewGeometryShader = multiview_capabilities.geometry_shader_is_supported;
+			vulkan_1_1_features.multiviewTessellationShader = multiview_capabilities.tessellation_shader_is_supported;
 			vulkan_1_1_features.variablePointersStorageBuffer = 0;
 			vulkan_1_1_features.variablePointers = 0;
 			vulkan_1_1_features.protectedMemory = 0;
@@ -773,9 +797,9 @@ namespace Vulkan
 			if (enable_1_1_features) {
 				multiview_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES;
 				multiview_features.pNext = create_info_next;
-				multiview_features.multiview = false/*multiview_capabilities.is_supported*/;
-				multiview_features.multiviewGeometryShader = false/*multiview_capabilities.geometry_shader_is_supported*/;
-				multiview_features.multiviewTessellationShader = false/*multiview_capabilities.tessellation_shader_is_supported*/;
+				multiview_features.multiview = multiview_capabilities.is_supported;
+				multiview_features.multiviewGeometryShader = multiview_capabilities.geometry_shader_is_supported;
+				multiview_features.multiviewTessellationShader = multiview_capabilities.tessellation_shader_is_supported;
 				create_info_next = &multiview_features;
 			}
 		}
@@ -3114,6 +3138,7 @@ namespace Vulkan
 	VK_SHADER_STAGE_FRAGMENT_BIT,
 	VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,
 	VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT,
+	VK_SHADER_STAGE_GEOMETRY_BIT,
 	VK_SHADER_STAGE_COMPUTE_BIT,
 	VK_SHADER_STAGE_RAYGEN_BIT_KHR,
 	VK_SHADER_STAGE_ANY_HIT_BIT_KHR,
@@ -5727,6 +5752,10 @@ namespace Vulkan
 			return has_comp_alpha.at((uint64_t)p_queue.id);
 		}
 		return false;
+	}
+
+	const RDD::MultiviewCapabilities& RenderingDeviceDriverVulkan::get_multiview_capabilities() {
+		return multiview_capabilities;
 	}
 
 #pragma endregion

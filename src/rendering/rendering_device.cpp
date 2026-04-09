@@ -4694,7 +4694,7 @@ namespace Rendering
 		attachment_last_pass.resize(p_attachments.size());
 
 		if (p_view_count > 1) {
-			const RDD::MultiviewCapabilities& capabilities = {};// p_driver->get_multiview_capabilities();TODO
+			const RDD::MultiviewCapabilities& capabilities = p_driver->get_multiview_capabilities();
 
 			// This only works with multiview!
 			ERR_FAIL_COND_V_MSG(!capabilities.is_supported, RDD::RenderPassID(), "Multiview not supported");

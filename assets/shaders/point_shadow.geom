@@ -4,7 +4,7 @@
 layout(triangles) in;
 layout(triangle_strip, max_vertices = 18) out;  // 6 faces × 3 vertices
 
-layout(set = 0, binding = 0) uniform PointShadowUBO {
+layout(set = 0, binding = 1) uniform PointShadowUBO {
     mat4  shadowMatrices[6];
     vec4  lightPos;
     float farPlane;

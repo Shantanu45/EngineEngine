@@ -559,6 +559,8 @@ namespace Vulkan
 		VkDevice vulkan_device_get() const {
 			return vk_device;
 		}
+
+		virtual const MultiviewCapabilities& get_multiview_capabilities() override;
 	private:
 		void _register_requested_device_extension(const std::string& p_extension_name, bool p_required);
 		Error _initialize_device_extensions();
@@ -624,6 +626,8 @@ namespace Vulkan
 		// It cannot change after creating the PSOs, since we need to skipping samplers when creating uniform sets.
 		bool immutable_samplers_enabled = true;
 		RenderingShaderContainerFormatVulkan shader_container_format;
+
+		MultiviewCapabilities multiview_capabilities;
 
 		friend class ImGuiDevice;
 
