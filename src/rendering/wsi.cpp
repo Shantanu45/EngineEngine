@@ -211,7 +211,7 @@ namespace Rendering
         const MeshGPU* mesh = mesh_storage->get(p_handle);
         if (!mesh)
         {
-            LOGE("WSI::draw_mesh — invalid handle");
+            LOGE("WSI::draw_mesh - invalid handle");
             return;
         }
 
@@ -228,7 +228,7 @@ namespace Rendering
         const MeshGPU* mesh = mesh_storage->get(p_name);
         if (!mesh)
         {
-            LOGE("WSI::draw_mesh — mesh '{}' not found", p_name);
+            LOGE("WSI::draw_mesh - mesh '{}' not found", p_name);
             return;
         }
 

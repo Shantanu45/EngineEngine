@@ -200,7 +200,7 @@ namespace EE
 
 		auto& queued_events = event_type.queued_events;
 
-		// FIX: separate find from dispatch from erase — avoids side effects inside remove_if predicate
+		// FIX: separate find from dispatch from erase - avoids side effects inside remove_if predicate
 		auto itr = std::find_if(begin(queued_events), end(queued_events),
 			[&](const std::unique_ptr<Event>& event) {
 				return event->get_cookie() == cookie;

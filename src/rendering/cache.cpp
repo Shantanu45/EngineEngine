@@ -54,7 +54,7 @@ namespace Rendering
 		for (auto& entry : cache) {
 			if (!entry.in_use && _formats_match(entry.format, p_format)) {
 				entry.in_use = true;
-				return entry.rid;  // reuse — no alloc
+				return entry.rid;  // reuse - no alloc
 			}
 		}
 

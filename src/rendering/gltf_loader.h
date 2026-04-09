@@ -14,7 +14,7 @@
 namespace Rendering
 {
 	// ----------------------------------------------------------------
-	// Geometry — same as before
+	// Geometry - same as before
 	// ----------------------------------------------------------------
 	struct Vertex {
 		glm::vec3 position;
@@ -98,7 +98,7 @@ namespace Rendering
 		int                parent_index = -1;  // -1 = root
 		std::vector<int>   children;
 
-		// Local transform — glTF gives either TRS or a matrix
+		// Local transform - glTF gives either TRS or a matrix
 		glm::vec3          translation = glm::vec3(0.0f);
 		glm::quat          rotation = glm::quat(1, 0, 0, 0);
 		glm::vec3          scale = glm::vec3(1.0f);

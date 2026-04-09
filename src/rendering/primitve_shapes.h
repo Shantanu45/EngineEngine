@@ -32,7 +32,7 @@
 #include "rendering/mesh_storage.h"
 #include "rendering/wsi.h"
 
- // Forward declaration — Vertex is defined in your rendering headers
+ // Forward declaration - Vertex is defined in your rendering headers
 namespace Rendering { struct Vertex; }
 
 namespace Rendering::Shapes
@@ -48,7 +48,7 @@ namespace Rendering::Shapes
 
     // --- Shape generators --------------------------------------------------------
 
-    // Quad — unit quad on the XY plane, facing +Z
+    // Quad - unit quad on the XY plane, facing +Z
     // 2 triangles, 4 vertices
     inline ShapeData make_quad()
     {
@@ -69,7 +69,7 @@ namespace Rendering::Shapes
         return d;
     }
 
-    // Plane — unit grid on the XZ plane, facing +Y
+    // Plane - unit grid on the XZ plane, facing +Y
     // subdivisions controls tessellation (1 = single quad)
     inline ShapeData make_plane(uint32_t subdivisions = 1)
     {
@@ -109,7 +109,7 @@ namespace Rendering::Shapes
         return d;
     }
 
-    // Cube — unit cube centered at origin, each face has its own vertices
+    // Cube - unit cube centered at origin, each face has its own vertices
     // for correct per-face normals and UVs
     inline ShapeData make_cube()
     {
@@ -161,7 +161,7 @@ namespace Rendering::Shapes
         return d;
     }
 
-    // Sphere — UV sphere, radius 0.5, centered at origin
+    // Sphere - UV sphere, radius 0.5, centered at origin
     // stacks = horizontal rings, slices = vertical segments
     inline ShapeData make_sphere(uint32_t stacks = 16, uint32_t slices = 16)
     {
@@ -233,7 +233,7 @@ namespace Rendering::Shapes
         return d;
     }
 
-    // Cylinder — radius 0.5, height 1.0, centered at origin
+    // Cylinder - radius 0.5, height 1.0, centered at origin
     // includes top and bottom caps
     inline ShapeData make_cylinder(uint32_t slices = 16, bool caps = true)
     {
@@ -243,7 +243,7 @@ namespace Rendering::Shapes
         const float radius = 0.5f;
         const float half_h = 0.5f;
 
-        // Side vertices — two rings (bottom and top), each slice gets its own
+        // Side vertices - two rings (bottom and top), each slice gets its own
         // vertex pair so normals are correct per-column
         for (uint32_t j = 0; j <= slices; ++j)
         {
@@ -274,7 +274,7 @@ namespace Rendering::Shapes
 
         if (caps)
         {
-            // Bottom cap — normal pointing down
+            // Bottom cap - normal pointing down
             uint32_t bottom_center = static_cast<uint32_t>(d.vertices.size());
             d.vertices.push_back({ { 0.0f, -half_h, 0.0f }, { 0,-1,0 }, { 0.5f, 0.5f }, { 1,0,0,1 } });
 
@@ -293,7 +293,7 @@ namespace Rendering::Shapes
                 d.indices.insert(d.indices.end(),
                     { bottom_center, bottom_ring_start + j + 1, bottom_ring_start + j });
 
-            // Top cap — normal pointing up
+            // Top cap - normal pointing up
             uint32_t top_center = static_cast<uint32_t>(d.vertices.size());
             d.vertices.push_back({ { 0.0f, half_h, 0.0f }, { 0,1,0 }, { 0.5f, 0.5f }, { 1,0,0,1 } });
 
@@ -316,7 +316,7 @@ namespace Rendering::Shapes
         return d;
     }
 
-    // Cone — base radius 0.5, height 1.0, base centered at origin, tip at +Y
+    // Cone - base radius 0.5, height 1.0, base centered at origin, tip at +Y
     inline ShapeData make_cone(uint32_t slices = 16, bool cap = true)
     {
         ShapeData d;
@@ -331,7 +331,7 @@ namespace Rendering::Shapes
         const float ny = radius / slope_len;
         const float nr = height / slope_len;
 
-        // Side — tip vertex per slice for correct normals
+        // Side - tip vertex per slice for correct normals
         for (uint32_t j = 0; j < slices; ++j)
         {
             float theta0 = tau * float(j) / float(slices);
@@ -391,7 +391,7 @@ namespace Rendering::Shapes
 
     // --- Upload helpers -----------------------------------------------------------
 
-    // Generic upload — takes any ShapeData and uploads it into MeshStorage
+    // Generic upload - takes any ShapeData and uploads it into MeshStorage
     inline MeshHandle upload(
         MeshStorage& storage,
         const std::string& name,
@@ -517,7 +517,7 @@ namespace Rendering::Shapes
 		return upload(mesh_storage, name, make_grid(half_size, spacing), wsi.get_vertex_format_by_type(fmt));
 	}
 
-	// Arrow along +Y, from origin to tip — all triangles, one pipeline
+	// Arrow along +Y, from origin to tip - all triangles, one pipeline
     // shaft_length = length of the cylinder shaft
     // head_height  = height of the cone
     // shaft_radius = radius of the cylinder
@@ -630,7 +630,7 @@ namespace Rendering::Shapes
 		return upload(mesh_storage, name, make_arrow(shaft_length, head_height, shaft_radius, head_radius, slices), wsi.get_vertex_format_by_type(fmt));
 	}
 
-	// Upload all primitives at once — useful for a debug/editor setup
+	// Upload all primitives at once - useful for a debug/editor setup
 	inline void upload_all(WSI& wsi, MeshStorage& mesh_storage, VERTEX_FORMAT_VARIATIONS fmt = VERTEX_FORMAT_VARIATIONS::DEFAULT)
 	{
 		upload_quad(wsi, mesh_storage, "primitive_quad", fmt);

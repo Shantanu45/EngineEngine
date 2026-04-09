@@ -36,7 +36,7 @@ namespace Rendering
 			device->buffer_update(rid, 0, sizeof(T), &data);
 		}
 
-		// Upload a sub-range — useful for large structs where only
+		// Upload a sub-range - useful for large structs where only
 		// one field changed (e.g. just the light position)
 		template<typename Field>
 		void upload_field(RenderingDevice* device, Field T::* member, const Field& value) {
@@ -72,7 +72,7 @@ namespace Rendering
 		// Helper to compute byte offset of a member pointer at compile time
 		template<typename Field>
 		static size_t _offsetof_member(Field T::* member) {
-			// Standard-layout types only — fine for UBO structs
+			// Standard-layout types only - fine for UBO structs
 			alignas(T) char buf[sizeof(T)] = {};
 			T* obj = reinterpret_cast<T*>(buf);
 			return reinterpret_cast<size_t>(&(obj->*member))

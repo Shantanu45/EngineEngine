@@ -14,10 +14,10 @@
 #include "scene/components.h"
 
 /**
- *  Set 0 — Per-frame global data   (camera, time, lights)
-    Set 1 — Per-pass data           (shadow maps, render targets)
-    Set 2 — Per-material data       (textures, material params)
-    Set 3 — Per-object data         (model matrix, bone data).
+ *  Set 0 - Per-frame global data   (camera, time, lights)
+    Set 1 - Per-pass data           (shadow maps, render targets)
+    Set 2 - Per-material data       (textures, material params)
+    Set 3 - Per-object data         (model matrix, bone data).
  */
 
 struct alignas(16) CameraData {
@@ -393,7 +393,7 @@ struct TutorialApplication : EE::Application
 			Rendering::PushConstantData::from(ObjectData_UBO{ identity, identity }),
 			{ { uniform_set_skybox, 0 } }));
 
-        // grid — no entity, always identity
+        // grid - no entity, always identity
         drawables.push_back( Rendering::Drawable::make(pipeline_grid, grid_mesh, "grid_shader",
 				            Rendering::PushConstantData::from(ObjectData_UBO{ identity, glm::transpose(glm::inverse(identity)) }),
 				            { { uniform_set_0_light, 0 } }));

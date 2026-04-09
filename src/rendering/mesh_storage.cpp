@@ -6,7 +6,7 @@ namespace Rendering
 
 	void MeshStorage::initialize(RenderingDevice* device)
 	{
-		DEBUG_ASSERT(device != nullptr, "MeshStorage::initialize — device is null");
+		DEBUG_ASSERT(device != nullptr, "MeshStorage::initialize - device is null");
 		rd = device;
 	}
 

@@ -64,7 +64,7 @@ namespace Rendering
 	}
 
 	// ----------------------------------------------------------------
-	// Mesh / primitive — same core logic, now sets material_index
+	// Mesh / primitive - same core logic, now sets material_index
 	// ----------------------------------------------------------------
 	Mesh GltfLoader::_extract_mesh(const tinygltf::Mesh& mesh)
 	{

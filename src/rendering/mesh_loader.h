@@ -229,7 +229,7 @@ namespace Rendering
 				vertex_data.resize(vb_off + vb_size);
 				std::memcpy(vertex_data.data() + vb_off, p.vertices.data(), vb_size);
 
-				// Append index bytes — uint16 path needs conversion
+				// Append index bytes - uint16 path needs conversion
 				if (index_format == RDC::INDEX_BUFFER_FORMAT_UINT16)
 				{
 					const size_t ib_off = index_data.size();

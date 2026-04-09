@@ -22,7 +22,7 @@ namespace Rendering
 		uint32_t vertex_count;
 	};
 
-	// GPU-resident primitive — owns vertex_array and index_array RIDs
+	// GPU-resident primitive - owns vertex_array and index_array RIDs
 	struct PrimitiveGPU
 	{
 		RID      vertex_array;
@@ -31,12 +31,12 @@ namespace Rendering
 		uint32_t vertex_count;
 	};
 
-	// GPU-resident mesh — owns the shared VB/IB and a list of primitives
+	// GPU-resident mesh - owns the shared VB/IB and a list of primitives
 	struct MeshGPU
 	{
 		std::vector<PrimitiveGPU> primitives;
 
-		// Shared buffers — all primitives in this mesh reference into these
+		// Shared buffers - all primitives in this mesh reference into these
 		RID vertex_buffer;
 		RID index_buffer;
 	};
