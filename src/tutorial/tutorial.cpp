@@ -346,10 +346,10 @@ struct TutorialApplication : EE::Application
         world.emplace<MeshComponent>(light, MeshComponent{
             light_mesh, pipeline_light, "cube_shader", uniform_set_0_light });
 		world.emplace<LightComponent>(light, LightComponent{ .data = {
-			.position = glm::vec4(1.0f, 1.0f, 1.0f, 15.0f), // w = range
-			.direction = glm::vec4(0.0f, -1.0f, 0.0f, 0.0f), // unused for point light
-			.color = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f),  // w = intensity
-			.type = static_cast<uint32_t>(LightType::Point),
+			.position = glm::vec4(1.0f, 1.0f, 1.0f, 15.0f),     // w = range
+			.direction = glm::vec4(1.0f, -1.0f, 0.0f, 0.0f),    // unused for point light
+			.color = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f),         // w = intensity
+			.type = static_cast<uint32_t>(LightType::Directional),
 			.outer_angle = 0.0f,
 		} });
 

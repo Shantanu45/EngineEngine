@@ -27,18 +27,18 @@ struct Material {
     float _pad;
 };
 
-// ─────────────────────────────────────────────
+// ---------------------------------------------
 //  Attenuation
-// ─────────────────────────────────────────────
+// ---------------------------------------------
 
 float CalcAttenuation(float distance, float range) {
     float x = clamp(1.0 - pow(distance / range, 4.0), 0.0, 1.0);
     return (x * x) / max(distance * distance, 0.01);
 }
 
-// ─────────────────────────────────────────────
+// ---------------------------------------------
 //  Per-type internals
-// ─────────────────────────────────────────────
+// ---------------------------------------------
 
 vec3 CalcDirLight(Light light, vec3 albedo, vec3 specMap,
     vec3 normal, vec3 viewDir, float shininess)
@@ -84,9 +84,9 @@ vec3 CalcSpotLight(Light light, vec3 albedo, vec3 specMap,
     return (diff * albedo + spec * specMap) * radiance;
 }
 
-// ─────────────────────────────────────────────
+// ---------------------------------------------
 //  Main dispatch — call this in your frag shader
-// ─────────────────────────────────────────────
+// ---------------------------------------------
 
 vec3 CalcLight(Light light, Material material,
     sampler2D diffuse_tex, sampler2D specular_tex,
