@@ -45,15 +45,17 @@ float shadow_factor(vec4 fragPosLS, vec3 normal, vec3 lightDir) {
 
     // slope-scaled bias — more bias on surfaces nearly perpendicular to light
     float cosTheta = max(dot(normalize(normal), normalize(lightDir)), 0.0);
-    float bias = max(0.05 * (1.0 - cosTheta), 0.005);
+    float bias = max(0.002 * (1.0 - cosTheta), 0.0005);
 
     float shadow = 0.0;
-    vec2 texelSize = 1.0 / textureSize(shadowMap, 0);
+    vec2 texelSize = 1.0 / textureSize(shadowMap, 0);           // returns ivec2(width, height) of mip level 0
     for (int x = -1; x <= 1; x++)
+    {
         for (int y = -1; y <= 1; y++) {
             float depth = texture(shadowMap, proj.xy + vec2(x, y) * texelSize).r;
             shadow += (proj.z - bias) > depth ? 0.0 : 1.0;
         }
+    }
     return shadow / 9.0;
 }
 

@@ -370,11 +370,15 @@ struct TutorialApplication : EE::Application
 		shadow_depth_state.enable_depth_write = true;
 		shadow_depth_state.depth_compare_operator = RDC::COMPARE_OP_LESS;
 
+		RDC::PipelineRasterizationState rs_shadow;
+        rs_shadow.cull_mode = Rendering::RenderingDeviceCommons::POLYGON_CULL_FRONT;
+
 		pipeline_shadow = Rendering::PipelineBuilder{}
 			.set_shader({ "assets://shaders/shadow.vert",
 						  "assets://shaders/shadow.frag" }, "shadow_shader")
 			.set_vertex_format(vertex_format)
 			.set_depth_stencil_state(shadow_depth_state)
+			.set_rasterization_state(rs_shadow)
 			.build(shadow_fb_format);
 
 		// --- Uniform set for shadow pass (frame UBO only, set 0) ---
