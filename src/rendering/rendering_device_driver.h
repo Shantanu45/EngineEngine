@@ -457,6 +457,7 @@ namespace Rendering
 			// Flag to indicate  that this is an immutable sampler so it is skipped when creating uniform
 			// sets, as it would be set previously when creating the pipeline layout.
 			bool immutable_sampler = false;
+			bool is_depth = false;
 
 			_FORCE_INLINE_ bool is_dynamic() const {
 				return type == UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC || type == UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC;

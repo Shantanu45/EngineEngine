@@ -8,6 +8,8 @@
 #include "vulkan_device.h"
 #include "libassert/assert.hpp"
 #include "util/error_macros.h"
+#include "vulkan/vk_enum_string_helper.h"
+
 //#include "vma/vk_mem_alloc.h"
 #include <array>
 
@@ -2000,24 +2002,24 @@ namespace Vulkan
 		//}
 
 #if PRINT_NATIVE_COMMANDS
-		LOGI(std::format("vkCmdPipelineBarrier MEMORY {} BUFFER {} TEXTURE {} ACCELERATION STRUCTURE {}", p_memory_barriers.size(), p_buffer_barriers.size(), p_texture_barriers.size(), p_acceleration_structure_barriers.size()));
+		LOGI(std::format("vkCmdPipelineBarrier MEMORY {} BUFFER {} TEXTURE {} ACCELERATION STRUCTURE {}", p_memory_barriers.size(), p_buffer_barriers.size(), p_texture_barriers.size(), p_acceleration_structure_barriers.size()).c_str());
 		for (uint32_t i = 0; i < p_memory_barriers.size(); i++) {
-			LOGI(std::format("  VkMemoryBarrier #{} src {} dst {}", i, vk_memory_barriers[i].srcAccessMask, vk_memory_barriers[i].dstAccessMask));
+			LOGI(std::format("  VkMemoryBarrier #{} src {} dst {}", i, vk_memory_barriers[i].srcAccessMask, vk_memory_barriers[i].dstAccessMask).c_str());
 		}
 
 		for (uint32_t i = 0; i < p_buffer_barriers.size(); i++) {
-			LOGI(std::format("  VkBufferMemoryBarrier #{} src 0x%uX dst {} buffer {}", i, vk_buffer_barriers[i].srcAccessMask, vk_buffer_barriers[i].dstAccessMask, uint64_t(vk_buffer_barriers[i].buffer)));
+			LOGI(std::format("  VkBufferMemoryBarrier #{} src {} dst {} buffer {}", i, vk_buffer_barriers[i].srcAccessMask, vk_buffer_barriers[i].dstAccessMask, uint64_t(vk_buffer_barriers[i].buffer)).c_str());
 		}
 
 		for (uint32_t i = 0; i < p_texture_barriers.size(); i++) {
 			LOGI(std::format("  VkImageMemoryBarrier #{} src {} dst {}X image {} old {} new {} ({} {} {} {})", i, vk_image_barriers[i].srcAccessMask, vk_image_barriers[i].dstAccessMask,
-				uint64_t(vk_image_barriers[i].image), vk_image_barriers[i].oldLayout, vk_image_barriers[i].newLayout, vk_image_barriers[i].subresourceRange.baseMipLevel, vk_image_barriers[i].subresourceRange.levelCount,
-				vk_image_barriers[i].subresourceRange.baseArrayLayer, vk_image_barriers[i].subresourceRange.layerCount));
+				uint64_t(vk_image_barriers[i].image), std::string(string_VkImageLayout(vk_image_barriers[i].oldLayout)), std::string(string_VkImageLayout(vk_image_barriers[i].newLayout)), vk_image_barriers[i].subresourceRange.baseMipLevel, vk_image_barriers[i].subresourceRange.levelCount,
+				vk_image_barriers[i].subresourceRange.baseArrayLayer, vk_image_barriers[i].subresourceRange.layerCount).c_str());
 		}
 
-		for (uint32_t i = 0; i < p_acceleration_structure_barriers.size(); i++) {
-			LOGI(std::format("  VkBufferMemoryBarrier #{} src 0x%uX dst {} acceleration structure buffer {}", i, vk_accel_barriers[i].srcAccessMask, vk_accel_barriers[i].dstAccessMask, uint64_t(vk_accel_barriers[i].buffer)));
-		}
+		//for (uint32_t i = 0; i < p_acceleration_structure_barriers.size(); i++) {
+		//	LOGI(std::format("  VkBufferMemoryBarrier #{} src 0x%uX dst {} acceleration structure buffer {}", i, vk_accel_barriers[i].srcAccessMask, vk_accel_barriers[i].dstAccessMask, uint64_t(vk_accel_barriers[i].buffer)).c_str());
+		//}
 #endif
 
 		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
@@ -3850,7 +3852,9 @@ namespace Vulkan
 					vk_img_infos[j] = {};
 					vk_img_infos[j].sampler = (VkSampler)uniform.ids[j * 2 + 0].id;
 					vk_img_infos[j].imageView = ((const TextureInfo*)uniform.ids[j * 2 + 1].id)->vk_view;
-					vk_img_infos[j].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+					vk_img_infos[j].imageLayout = uniform.is_depth
+						? VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
+						: VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 				}
 
 				vk_writes[writes_amount].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;

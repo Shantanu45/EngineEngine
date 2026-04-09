@@ -1692,6 +1692,7 @@ namespace Rendering
 
 					driver_uniform.ids.push_back(*sampler_driver_id);
 					driver_uniform.ids.push_back(driver_id);
+					driver_uniform.is_depth = texture->read_aspect_flags.has_flag(RDD::TEXTURE_ASPECT_DEPTH_BIT);
 					_check_transfer_worker_texture(texture);
 				}
 			} break;

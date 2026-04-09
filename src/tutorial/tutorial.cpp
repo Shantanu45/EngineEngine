@@ -31,6 +31,7 @@ struct alignas(16) FrameData_UBO {
     CameraData camera;
     float      time;
     float      _pad[3];
+    glm::mat4  light_space_matrix;
 };
 
 struct alignas(16) ObjectData_UBO {
@@ -38,14 +39,17 @@ struct alignas(16) ObjectData_UBO {
     glm::mat4 normalMatrix;
 };
 
-
+struct shadow_pass_resource {
+	FrameGraphResource shadow_map;
+};
 
 void add_basic_pass(
     FrameGraph& fg,
     FrameGraphBlackboard& bb,
     Size2i extent,
     std::vector<Rendering::Drawable> drawables,
-    Rendering::MeshStorage& storage)
+    Rendering::MeshStorage& storage,
+    RID shadow_sampler)
 {
     bb.add<basic_pass_resource>() =
         fg.add_callback_pass<basic_pass_resource>(
@@ -69,15 +73,16 @@ void add_basic_pass(
 				tf_depth.usage_bits = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;// | RD::TEXTURE_USAGE_SAMPLING_BIT;
 				tf_depth.format = RD::DATA_FORMAT_D32_SFLOAT;
 
-				data.depth = builder.create<Rendering::FrameGraphTexture>("depth texture", { tf_depth, RD::TextureView(), "depth texture" });
-
+				data.depth = builder.create<Rendering::FrameGraphTexture>("scene depth texture", { tf_depth, RD::TextureView(), "scene depth texture" });
 
 				data.scene = builder.write(data.scene, TEXTURE_WRITE_FLAGS::WRITE_COLOR);
 				data.depth = builder.write(data.depth, TEXTURE_WRITE_FLAGS::WRITE_DEPTH);
+
+				auto& shadow_res = bb.get<shadow_pass_resource>();
+				data.shadow_map_in = builder.read(shadow_res.shadow_map, TEXTURE_READ_FLAGS::READ_DEPTH);
+
             },
-            [=, &storage](const basic_pass_resource& data,
-                FrameGraphPassResources& resources,
-                void* ctx)
+            [=, &storage](const basic_pass_resource& data, FrameGraphPassResources& resources, void* ctx)
             {
                 auto& rc = *static_cast<Rendering::RenderContext*>(ctx);
                 auto  cmd = rc.command_buffer;
@@ -85,6 +90,11 @@ void add_basic_pass(
                 auto& scene_tex = resources.get<Rendering::FrameGraphTexture>(data.scene);
 				auto& depth_tex = resources.get<Rendering::FrameGraphTexture>(data.depth);
 
+				auto& shadow_tex = resources.get<Rendering::FrameGraphTexture>(data.shadow_map_in);
+
+				RID uniform_set_1 = Rendering::UniformSetBuilder{}
+					.add_texture(0, shadow_sampler, shadow_tex.texture_rid)
+					.build(rc.device, rc.device->get_shader_rid("light_map"), 1);
 
                 uint32_t w = rc.device->screen_get_width();
                 uint32_t h = rc.device->screen_get_height();
@@ -99,13 +109,68 @@ void add_basic_pass(
 
                 rc.device->begin_render_pass_from_frame_buffer(frame_buffer, Rect2i(0, 0, w, h), clear_values);
 
-                for (const auto& drawable : drawables)
+                for (auto drawable : drawables)
+                {
+                    if(drawable.shader_name == "light_map")
+                    {
+						drawable.set_uniform_set({ uniform_set_1, 1 });
+                    }
                     submit_drawable(rc, cmd, drawable, storage);
+                }
 
                 rc.wsi->end_render_pass(cmd);
             });
 }
 
+void add_shadow_pass(
+	FrameGraph& fg,
+	FrameGraphBlackboard& bb,
+	Size2i shadow_extent,
+	std::vector<Rendering::Drawable> drawables,
+	Rendering::MeshStorage& storage)
+{
+	bb.add<shadow_pass_resource>() =
+		fg.add_callback_pass<shadow_pass_resource>(
+			"Shadow Pass",
+			[&](FrameGraph::Builder& builder, shadow_pass_resource& data)
+			{
+				RD::TextureFormat tf_depth;
+				tf_depth.texture_type = RD::TEXTURE_TYPE_2D;
+				tf_depth.width = shadow_extent.x;
+				tf_depth.height = shadow_extent.y;
+				tf_depth.usage_bits =
+					RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
+					RD::TEXTURE_USAGE_SAMPLING_BIT;        // must be sampled later
+				tf_depth.format = RD::DATA_FORMAT_D32_SFLOAT;
+
+				data.shadow_map = builder.create<Rendering::FrameGraphTexture>( "shadow map", { tf_depth, RD::TextureView(), "shadow map" });
+
+				data.shadow_map = builder.write( data.shadow_map, TEXTURE_WRITE_FLAGS::WRITE_DEPTH);
+			},
+			[=, &storage](const shadow_pass_resource& data,
+				FrameGraphPassResources& resources,
+				void* ctx)
+			{
+				auto& rc = *static_cast<Rendering::RenderContext*>(ctx);
+				auto  cmd = rc.command_buffer;
+
+				auto& shadow_tex = resources.get<Rendering::FrameGraphTexture>(data.shadow_map);
+
+				RID fb = rc.device->framebuffer_create({ shadow_tex.texture_rid });
+
+				GPU_SCOPE(cmd, "Shadow Pass", Color(1.0, 0.5, 0.0, 1.0));
+				std::array<RDD::RenderPassClearValue, 1> clear_values;
+				clear_values[0].depth = 1.0f;
+				clear_values[0].stencil = 0;
+
+				rc.device->begin_render_pass_from_frame_buffer( fb, Rect2i(0, 0, shadow_extent.x, shadow_extent.y), clear_values);
+
+				for (const auto& drawable : drawables)
+					submit_drawable(rc, cmd, drawable, storage);
+
+				rc.wsi->end_render_pass(cmd);
+			});
+}
 
 struct TutorialApplication : EE::Application
 {
@@ -154,7 +219,6 @@ struct TutorialApplication : EE::Application
 		depth.usage_flags = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 
         auto framebuffer_format = RD::get_singleton()->framebuffer_format_create({ color, depth });
-
 
         // --- Pipelines ---
 
@@ -277,6 +341,7 @@ struct TutorialApplication : EE::Application
         device->set_resource_name(rock_uniform, "Rock texture");
 
         sampler = device->sampler_create(RD::SamplerState());
+		shadow_sampler = device->sampler_create(RD::SamplerState());
 
         // --- Uniform sets ---
         uniform_set_0 = Rendering::UniformSetBuilder{}
@@ -292,6 +357,30 @@ struct TutorialApplication : EE::Application
 			.add(frame_ubo.as_uniform(0))
 			.add_texture(1, sampler_cube, cubemap_uniform)
 			.build(device, device->get_shader_rid("skybox_shader"), 0);
+
+		// --- Shadow framebuffer format ---
+		RD::AttachmentFormat shadow_depth_att;
+		shadow_depth_att.format = RD::DATA_FORMAT_D32_SFLOAT;
+		shadow_depth_att.usage_flags = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT;
+		auto shadow_fb_format = RD::get_singleton()->framebuffer_format_create({ shadow_depth_att });
+
+		// --- Shadow pipeline ---
+		RDC::PipelineDepthStencilState shadow_depth_state;
+		shadow_depth_state.enable_depth_test = true;
+		shadow_depth_state.enable_depth_write = true;
+		shadow_depth_state.depth_compare_operator = RDC::COMPARE_OP_LESS;
+
+		pipeline_shadow = Rendering::PipelineBuilder{}
+			.set_shader({ "assets://shaders/shadow.vert",
+						  "assets://shaders/shadow.frag" }, "shadow_shader")
+			.set_vertex_format(vertex_format)
+			.set_depth_stencil_state(shadow_depth_state)
+			.build(shadow_fb_format);
+
+		// --- Uniform set for shadow pass (frame UBO only, set 0) ---
+		uniform_set_0_shadow = Rendering::UniformSetBuilder{}
+			.add(frame_ubo.as_uniform(0))
+			.build(device, device->get_shader_rid("shadow_shader"), 0);
 
         // --- Scene setup ---
         // 
@@ -341,13 +430,13 @@ struct TutorialApplication : EE::Application
         // light cube
         auto light = world.create();
         world.emplace<TransformComponent>(light, TransformComponent{
-            .position = glm::vec3(1.0f, 1.0f, 1.0f),
-            .scale = glm::vec3(0.2f) });
+            .position = glm::vec3(5.0f, 10.0f, 5.0f),  // high up, centered over scene
+	        .scale = glm::vec3(0.2f) });
         world.emplace<MeshComponent>(light, MeshComponent{
             light_mesh, pipeline_light, "cube_shader", uniform_set_0_light });
 		world.emplace<LightComponent>(light, LightComponent{ .data = {
-			.position = glm::vec4(1.0f, 1.0f, 1.0f, 15.0f),     // w = range
-			.direction = glm::vec4(1.0f, -1.0f, 0.0f, 0.0f),    // unused for point light
+            .position = glm::vec4(5.0f, 10.0f, 5.0f, 15.0f),
+	        .direction = glm::vec4(-0.5f, -1.0f, -0.5f, 0.0f),
 			.color = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f),         // w = intensity
 			.type = static_cast<uint32_t>(LightType::Directional),
 			.outer_angle = 0.0f,
@@ -367,7 +456,7 @@ struct TutorialApplication : EE::Application
         frame_data.camera.proj = camera.get_projection();
         frame_data.camera.cameraPos = camera.get_position();
         frame_data.time = static_cast<float>(elapsed_time);
-        frame_ubo.upload(device, frame_data);
+        //frame_ubo.upload(device, frame_data);
 
         // --- Upload lights ---
 		LightBuffer light_buffer{};
@@ -380,6 +469,34 @@ struct TutorialApplication : EE::Application
 				light_buffer.lights[light_buffer.count++] = gpu_light;
 			});
 		light_ubo.upload(device, light_buffer);
+
+		// Compute light-space matrix from the first directional/spot light
+		glm::mat4 lightSpaceMatrix = glm::mat4(1.0f);
+		world.view<TransformComponent, LightComponent>().each(
+			[&](auto, TransformComponent& t, LightComponent& l) {
+                glm::mat4 lightProj = glm::orthoRH_ZO(-8.0f, 8.0f, -8.0f, 8.0f, 1.0f, 30.0f);
+				glm::mat4 lightView = glm::lookAt(
+					t.position,
+					t.position + glm::vec3(l.data.direction),
+					glm::vec3(0, 1, 0));
+				lightSpaceMatrix = lightProj * lightView;
+			});
+
+		frame_data.light_space_matrix = lightSpaceMatrix;
+		frame_ubo.upload(device, frame_data);
+
+		std::vector<Rendering::Drawable> shadow_drawables;
+		world.view<TransformComponent, MeshComponent>().each(
+			[&](auto entity, TransformComponent& t, MeshComponent& m) {
+                if (world.all_of<LightComponent>(entity)) return; // skip light proxy
+				auto model = t.get_model();
+				auto normal = t.get_normal_matrix();
+				shadow_drawables.push_back(Rendering::Drawable::make(
+					pipeline_shadow, m.mesh, "shadow_shader",
+					Rendering::PushConstantData::from(ObjectData_UBO{ model, normal }),
+					{ { uniform_set_0_shadow, 0 } }
+				));
+			});
 
         // --- Upload material ---
         material_registry.upload_all(device);
@@ -406,7 +523,7 @@ struct TutorialApplication : EE::Application
                 drawables.push_back( Rendering::Drawable::make(m.pipeline, m.mesh, m.shader,
 					Rendering::PushConstantData::from(ObjectData_UBO{ model, normal }),
 					{
-						{ m.uniform_sets[0], 0} ,
+						{ m.uniform_sets[0], 0},
 						{ m.uniform_sets[2], 2},
 					}
                 ));
@@ -420,8 +537,9 @@ struct TutorialApplication : EE::Application
         fg.reset();
         bb.reset();
 
+        add_shadow_pass(fg, bb, { 2048, 2048 }, shadow_drawables, *mesh_storage);
         add_basic_pass(fg, bb,
-            { device->screen_get_width(), device->screen_get_height() }, drawables, *mesh_storage);
+            { device->screen_get_width(), device->screen_get_height() }, drawables, *mesh_storage, shadow_sampler);
         Rendering::add_imgui_pass(fg, bb,
             { device->screen_get_width(), device->screen_get_height() });
         Rendering::add_blit_pass(fg, bb);
@@ -446,6 +564,7 @@ struct TutorialApplication : EE::Application
 		device->free_rid(rock_uniform);
 		device->free_rid(pipeline_skybox);
 		device->free_rid(sampler_cube);
+		device->free_rid(shadow_sampler);
 
         device->free_rid(diffuse_uniform);
         device->free_rid(specular_uniform);
@@ -470,6 +589,7 @@ private:
 
     RID uniform_set_0;
     RID uniform_set_0_light;
+    RID uniform_set_0_shadow;
     RID diffuse_uniform;
     RID specular_uniform;
     RID cubemap_uniform;
@@ -478,10 +598,12 @@ private:
 	RID pipeline_skybox;
 	RID uniform_set_skybox;
 	RID sampler_cube;                        // cubemaps need their own sampler
+	RID shadow_sampler;                       
 
     RID pipeline_color;
     RID pipeline_light;
     RID pipeline_grid;
+    RID pipeline_shadow;
 
     RID sampler;
 

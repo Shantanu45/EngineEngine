@@ -190,7 +190,7 @@ private:
 
 		void _recalculate_projection() {
 			if (_projection_type == CameraProjection::Perspective) {
-				_projection = glm::perspective(_fov, _aspect, _near, _far);
+				_projection = glm::perspectiveRH_ZO(_fov, _aspect, _near, _far);
 			}
 			else {
 				_projection = glm::ortho(_ortho_left, _ortho_right, _ortho_bottom, _ortho_top, _near, _far);

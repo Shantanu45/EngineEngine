@@ -9,10 +9,15 @@ layout(location = 3) in vec4 inTangent;
 layout(location = 0) out vec3 FragPos;
 layout(location = 1) out vec3 Normal;
 layout(location = 2) out vec2 TexCoords;
+layout(location = 3) out vec4 fragPosLightSpace;
 
-layout(set = 0, binding = 0) uniform FrameUBO {
+layout(set = 0, binding = 0) uniform FrameData { 
     CameraData camera;
     float time;
+    float _pad1;
+    float _pad2;
+    float _pad3;
+    mat4 lightSpaceMatrix; 
 } frame;
 
 layout(push_constant) uniform PushConstants {
@@ -26,6 +31,7 @@ void main()
     FragPos       = worldPos.xyz;
     Normal        = mat3(object.normalMatrix) * inNormal;
     TexCoords     = inTexcoord;
+    fragPosLightSpace = frame.lightSpaceMatrix * object.model * vec4(inPosition, 1.0);
 
     gl_Position = frame.camera.proj * frame.camera.view * worldPos;
 }

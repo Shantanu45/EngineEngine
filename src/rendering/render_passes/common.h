@@ -8,6 +8,7 @@ struct basic_pass_resource
 {
 	FrameGraphResource scene;
 	FrameGraphResource depth;
+	FrameGraphResource shadow_map_in;
 };
 
 namespace Rendering

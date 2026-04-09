@@ -54,6 +54,11 @@ namespace Rendering
 			d.uniform_sets = std::move(uniform_sets);
 			return d;
 		}
+
+		void set_uniform_set(UniformSetBinding uniform_set)
+		{
+			uniform_sets.push_back(uniform_set);
+		}
 	};
 
 	// ----------------------------------------------------------------

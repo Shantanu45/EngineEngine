@@ -42,6 +42,7 @@ namespace Rendering
 		};
 
 		RID texture_rid;
+		RDD::TextureLayout       current_layout = RDD::TEXTURE_LAYOUT_UNDEFINED;
 
 		inline void create(const Desc& desc, void* ctx) {
 			auto& rc = *static_cast<Rendering::RenderContext*>(ctx);
@@ -97,6 +98,8 @@ namespace Rendering
 					RDD::PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
 					RDD::PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
 					{ &barrier, 1 });
+
+				current_layout = RDD::TEXTURE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
 			}
 			else
 			{
@@ -125,6 +128,7 @@ namespace Rendering
 			else if (flags == TEXTURE_WRITE_FLAGS::WRITE_DEPTH) {
 				barrier.dst_access = RDD::BARRIER_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
 					RDD::BARRIER_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+				barrier.prev_layout = current_layout;
 				barrier.next_layout = RDD::TEXTURE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 				barrier.subresources = { RDD::TEXTURE_ASPECT_DEPTH_BIT, 0, 1, 0, 1 };
 
@@ -133,6 +137,8 @@ namespace Rendering
 					RDD::PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
 					RDD::PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
 					{ &barrier, 1 });
+
+				current_layout = RDD::TEXTURE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 			}
 			else
 			{
