@@ -5,7 +5,8 @@ namespace Rendering
 {
 	struct FramebufferKey {
 		RDD::RenderPassID    render_pass;
-		int        width, height, layers;
+		int        width, height;
+		uint32_t layers;
 		std::vector<RID> attachments;
 
 		bool operator==(const FramebufferKey& o) const {

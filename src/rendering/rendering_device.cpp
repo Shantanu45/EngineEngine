@@ -1313,8 +1313,8 @@ namespace Rendering
 		for (int i = 0; i < p_texture_attachments.size(); i++) {
 			Texture* texture = texture_owner.get_or_null(p_texture_attachments[i]);
 
-			ERR_FAIL_COND_V_MSG(texture && texture->layers != p_view_count, RID(), "Layers of our texture doesn't match view count for this framebuffer");
-
+			//ERR_FAIL_COND_V_MSG(texture && texture->layers != p_view_count, RID(), "Layers of our texture doesn't match view count for this framebuffer");
+			ERR_FAIL_COND_V_MSG(texture && p_view_count > 1 && texture->layers != p_view_count, RID(), "Multiview: texture layers must match view count");
 			if (texture != nullptr) {
 				_check_transfer_worker_texture(texture);
 			}
@@ -1346,6 +1346,7 @@ namespace Rendering
 
 	RID RenderingDevice::framebuffer_create_multipass(const std::vector<RID>& p_texture_attachments, const std::vector<FramebufferPass>& p_passes, FramebufferFormatID p_format_check, uint32_t p_view_count) {
 		//_THREAD_SAFE_METHOD_
+		uint32_t texture_layers = 1;
 
 		std::vector<AttachmentFormat> attachments;
 		std::vector<RDD::TextureID> textures;
@@ -1362,7 +1363,15 @@ namespace Rendering
 				//trackers.push_back(nullptr);
 			}
 			else {
-				ERR_FAIL_COND_V_MSG(texture->layers != p_view_count, RID(), "Layers of our texture doesn't match view count for this framebuffer");
+				//ERR_FAIL_COND_V_MSG(texture->layers != p_view_count, RID(), "Layers of our texture doesn't match view count for this framebuffer");
+
+				if (p_view_count > 1) {
+					ERR_FAIL_COND_V_MSG(texture->layers != p_view_count, RID(), "Multiview: texture layers must match view count");
+				}
+				else {
+					texture_layers = texture->layers; // capture real layer count
+				}
+
 
 				_check_transfer_worker_texture(texture);
 
@@ -1425,7 +1434,7 @@ namespace Rendering
 		.render_pass = framebuffer_formats[format_id].render_pass,
 		.width = size.x,
 		.height = size.y,
-		.layers = 1,			// TODO: use layers properly, or some other property
+		.layers = (p_view_count > 1) ? p_view_count : texture_layers,			// TODO: use layers properly, or some other property
 		.attachments = p_texture_attachments
 		};
 
