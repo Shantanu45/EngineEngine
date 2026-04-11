@@ -341,7 +341,18 @@ struct TutorialApplication : EE::Application
         device->set_resource_name(rock_uniform, "Rock texture");
 
         sampler = device->sampler_create(RD::SamplerState());
-		shadow_sampler = device->sampler_create(RD::SamplerState());
+
+		// sampler setting to use Sampler2DShadow in glsl
+		RD::SamplerState shadow_samp;
+		shadow_samp.mag_filter = RD::SAMPLER_FILTER_LINEAR;
+		shadow_samp.min_filter = RD::SAMPLER_FILTER_LINEAR;
+		shadow_samp.mip_filter = RD::SAMPLER_FILTER_NEAREST;
+		shadow_samp.repeat_u = RD::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE;
+		shadow_samp.repeat_v = RD::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE;
+		shadow_samp.repeat_w = RD::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE;
+		shadow_samp.enable_compare = true;
+		shadow_samp.compare_op = RD::COMPARE_OP_LESS_OR_EQUAL;
+		shadow_sampler = device->sampler_create(shadow_samp);
 
         // --- Uniform sets ---
         uniform_set_0 = Rendering::UniformSetBuilder{}

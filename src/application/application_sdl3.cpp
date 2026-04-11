@@ -328,8 +328,8 @@ namespace EE
 		locator.provide<EE::EventManager>(std::make_shared<EE::EventManager>());
 		std::shared_ptr<FilesystemInterface> fs = locator.get<FilesystemInterface>();
 		const std::string exe_path = Path::get_executable_path();
-		//FileSystem::Filesystem::setup_default_filesystem(static_cast<Filesystem*>(fs.get()), Path::join(exe_path, "../../../assets").c_str());		// 		default assets directory for now`
-		FileSystem::Filesystem::setup_default_filesystem(static_cast<Filesystem*>(fs.get()), "D:/DXProjects/EngineEngine/assets");		// 		default assets directory for now`
+		FileSystem::Filesystem::setup_default_filesystem(static_cast<Filesystem*>(fs.get()), Path::join(exe_path, "../../../assets").c_str());		// 		default assets directory for now`
+		//FileSystem::Filesystem::setup_default_filesystem(static_cast<Filesystem*>(fs.get()), "D:/DXProjects/EngineEngine/assets");		// 		default assets directory for now`
 
 
 		//auto fs = Services::get().get<FilesystemInterface>();
