@@ -87,6 +87,7 @@ float samplePointShadow(vec3 fragPos, vec3 lightPos, float farPlane) {
     return texture(PointShadowMap, vec4(dir, currentDepth - bias));
 }
 
+// TODO: impl for multiple lights
 void main()
 {
     vec3 normal  = normalize(Normal);
@@ -101,7 +102,13 @@ void main()
             diffuse_tex, metallic_roughness,
             TexCoords, normal, FragPos, viewDir);
     }
-    float shadow = shadow_factor(fragPosLightSpace, normal, lightDir);
+    
+    float shadow = 0.0f;
+    if(lightData.lights[0].type == LIGHT_DIRECTIONAL)
+    {
+        shadow = shadow_factor(fragPosLightSpace, normal, lightDir);
+    }
+    
     FragColor = vec4(color * shadow, 1.0);
     //FragColor = vec4(color, 1.0);
 }
