@@ -39,6 +39,15 @@ struct alignas(16) ObjectData_UBO {
     glm::mat4 normalMatrix;
 };
 
+struct alignas(16) PointShadowUBO {
+    glm::mat4 shadowMatrices[6];
+    glm::vec4 lightPos;   // xyz = pos, w = farPlane
+};
+
+struct point_shadow_pass_resource {
+    FrameGraphResource shadow_cubemap;
+};
+
 struct shadow_pass_resource {
 	FrameGraphResource shadow_map;
 };
@@ -397,6 +406,36 @@ struct TutorialApplication : EE::Application
 			.add(frame_ubo.as_uniform(0))
 			.build(device, device->get_shader_rid("shadow_shader"), 0);
 
+		// --- Point shadow cubemap framebuffer format ---
+		// 6 layers, one per face — depth only
+		RD::AttachmentFormat point_shadow_att;
+		point_shadow_att.format = RD::DATA_FORMAT_D32_SFLOAT;
+		point_shadow_att.usage_flags = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT;
+		// The FB format itself is still 2D; the cube is in the image
+		auto point_shadow_fb_format = RD::get_singleton()->framebuffer_format_create({ point_shadow_att });
+
+		RDC::PipelineDepthStencilState ps_depth;
+		ps_depth.enable_depth_test = true;
+		ps_depth.enable_depth_write = true;
+		ps_depth.depth_compare_operator = RDC::COMPARE_OP_LESS;
+
+		pipeline_point_shadow = Rendering::PipelineBuilder{}
+			.set_shader({
+				"assets://shaders/point_shadow.vert",
+				"assets://shaders/point_shadow.geom",   // geometry shader
+				"assets://shaders/point_shadow.frag"
+				}, "point_shadow_shader")
+			.set_vertex_format(vertex_format)
+			.set_depth_stencil_state(ps_depth)
+			.build(point_shadow_fb_format);
+
+		point_shadow_ubo.create(device, "Point Shadow UBO");
+
+		uniform_set_0_point_shadow = Rendering::UniformSetBuilder{}
+			.add(frame_ubo.as_uniform(0))
+			.add(point_shadow_ubo.as_uniform(1))
+			.build(device, device->get_shader_rid("point_shadow_shader"), 0);
+
         // --- Scene setup ---
         // 
 		Rendering::Material mat;
@@ -601,6 +640,10 @@ private:
 
     Rendering::UniformBuffer<FrameData_UBO>   frame_ubo;
     Rendering::UniformBuffer<LightBuffer> light_ubo;
+
+	Rendering::UniformBuffer<PointShadowUBO> point_shadow_ubo;
+	RID pipeline_point_shadow;
+	RID uniform_set_0_point_shadow;
 
     RID uniform_set_0;
     RID uniform_set_0_light;
