@@ -673,8 +673,8 @@ namespace Vulkan
 				multiview_capabilities.max_instance_count = multiview_properties.maxMultiviewInstanceIndex;
 
 				LOGI("- Vulkan multiview supported:");
-				LOGI("  max view count: ", std::to_string(multiview_capabilities.max_view_count));
-				LOGI("  max instances: ", std::to_string(multiview_capabilities.max_instance_count));
+				LOGI(std::format("  max view count: {}", multiview_capabilities.max_view_count).c_str());
+				LOGI(std::format("  max instances: {}", multiview_capabilities.max_instance_count).c_str());
 			}
 			else {
 				LOGI("- Vulkan multiview not supported");
@@ -4660,24 +4660,40 @@ namespace Vulkan
 			}*/
 
 			// Depth resolve.
+			//if (framebuffer_depth_resolve && p_subpasses[i].depth_resolve_reference.attachment != AttachmentReference::UNUSED) {
+			//	std::vector<VkAttachmentReference2KHR> vk_subpass_depth_resolve_attachment_vec;
+			//	VkAttachmentReference2KHR* vk_subpass_depth_resolve_attachment = vk_subpass_depth_resolve_attachment_vec.data();
+			//	*vk_subpass_depth_resolve_attachment = {};
+			//	vk_subpass_depth_resolve_attachment->sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2_KHR;
+			//	vk_subpass_depth_resolve_attachment->attachment = p_subpasses[i].depth_resolve_reference.attachment;
+			//	vk_subpass_depth_resolve_attachment->layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+			//	std::vector<VkSubpassDescriptionDepthStencilResolveKHR> vk_depth_resolve_info_vec;
+			//	VkSubpassDescriptionDepthStencilResolveKHR* vk_depth_resolve_info = vk_depth_resolve_info_vec.data();
+			//	*vk_depth_resolve_info = {};
+			//	vk_depth_resolve_info->sType = VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_DEPTH_STENCIL_RESOLVE;
+			//	vk_depth_resolve_info->pNext = vk_subpasses[i].pNext;
+			//	vk_depth_resolve_info->depthResolveMode = VK_RESOLVE_MODE_MAX_BIT_KHR;
+			//	vk_depth_resolve_info->stencilResolveMode = VK_RESOLVE_MODE_NONE_KHR; // we don't resolve our stencil (for now)
+			//	vk_depth_resolve_info->pDepthStencilResolveAttachment = vk_subpass_depth_resolve_attachment;
+
+			//	vk_subpasses[i].pNext = vk_depth_resolve_info;
+			//}
+
 			if (framebuffer_depth_resolve && p_subpasses[i].depth_resolve_reference.attachment != AttachmentReference::UNUSED) {
-				std::vector<VkAttachmentReference2KHR> vk_subpass_depth_resolve_attachment_vec;
-				VkAttachmentReference2KHR* vk_subpass_depth_resolve_attachment = vk_subpass_depth_resolve_attachment_vec.data();
-				*vk_subpass_depth_resolve_attachment = {};
-				vk_subpass_depth_resolve_attachment->sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2_KHR;
-				vk_subpass_depth_resolve_attachment->attachment = p_subpasses[i].depth_resolve_reference.attachment;
-				vk_subpass_depth_resolve_attachment->layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+				VkAttachmentReference2KHR vk_subpass_depth_resolve_attachment{};
+				vk_subpass_depth_resolve_attachment.sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2_KHR;
+				vk_subpass_depth_resolve_attachment.attachment = p_subpasses[i].depth_resolve_reference.attachment;
+				vk_subpass_depth_resolve_attachment.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
-				std::vector<VkSubpassDescriptionDepthStencilResolveKHR> vk_depth_resolve_info_vec;
-				VkSubpassDescriptionDepthStencilResolveKHR* vk_depth_resolve_info = vk_depth_resolve_info_vec.data();
-				*vk_depth_resolve_info = {};
-				vk_depth_resolve_info->sType = VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_DEPTH_STENCIL_RESOLVE;
-				vk_depth_resolve_info->pNext = vk_subpasses[i].pNext;
-				vk_depth_resolve_info->depthResolveMode = VK_RESOLVE_MODE_MAX_BIT_KHR;
-				vk_depth_resolve_info->stencilResolveMode = VK_RESOLVE_MODE_NONE_KHR; // we don't resolve our stencil (for now)
-				vk_depth_resolve_info->pDepthStencilResolveAttachment = vk_subpass_depth_resolve_attachment;
+				VkSubpassDescriptionDepthStencilResolveKHR vk_depth_resolve_info{};
+				vk_depth_resolve_info.sType = VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_DEPTH_STENCIL_RESOLVE;
+				vk_depth_resolve_info.pNext = vk_subpasses[i].pNext;
+				vk_depth_resolve_info.depthResolveMode = VK_RESOLVE_MODE_MAX_BIT_KHR;
+				vk_depth_resolve_info.stencilResolveMode = VK_RESOLVE_MODE_NONE_KHR;
+				vk_depth_resolve_info.pDepthStencilResolveAttachment = &vk_subpass_depth_resolve_attachment;
 
-				vk_subpasses[i].pNext = vk_depth_resolve_info;
+				vk_subpasses[i].pNext = &vk_depth_resolve_info;
 			}
 		}
 
@@ -4705,27 +4721,22 @@ namespace Vulkan
 		create_info.correlatedViewMaskCount = p_view_count == 1 ? 0 : 1;
 		create_info.pCorrelatedViewMasks = p_view_count == 1 ? nullptr : &correlation_mask;
 
-		// Multiview.
+		std::vector<uint32_t> vk_view_masks_vec(p_subpasses.size());
+		VkRenderPassMultiviewCreateInfo multiview_create_info{}; // plain stack variable, no vector needed
+
 		if (p_view_count > 1 && vkCreateRenderPass2KHR == nullptr) {
-			// This is only required when not using vkCreateRenderPass2.
-			// We add it if vkCreateRenderPass2KHR is not supported,
-			// resulting this in being passed to our vkCreateRenderPass fallback.
-			std::vector<uint32_t> vk_view_masks_vec(p_subpasses.size());
 			uint32_t* vk_view_masks = vk_view_masks_vec.data();
 			for (uint32_t i = 0; i < p_subpasses.size(); i++) {
 				vk_view_masks[i] = view_mask;
 			}
 
-			std::vector<VkRenderPassMultiviewCreateInfo> multiview_create_info_vec;
-				VkRenderPassMultiviewCreateInfo* multiview_create_info = multiview_create_info_vec.data();
-			*multiview_create_info = {};
-			multiview_create_info->sType = VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO;
-			multiview_create_info->subpassCount = p_subpasses.size();
-			multiview_create_info->pViewMasks = vk_view_masks;
-			multiview_create_info->correlationMaskCount = 1;
-			multiview_create_info->pCorrelationMasks = &correlation_mask;
+			multiview_create_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO;
+			multiview_create_info.subpassCount = p_subpasses.size();
+			multiview_create_info.pViewMasks = vk_view_masks;
+			multiview_create_info.correlationMaskCount = 1;
+			multiview_create_info.pCorrelationMasks = &correlation_mask;
 
-			create_info.pNext = multiview_create_info;
+			create_info.pNext = &multiview_create_info;
 		}
 
 		// Fragment density map.
