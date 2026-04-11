@@ -149,7 +149,8 @@ void add_basic_pass(
 
 				auto& shadow_res = bb.get<shadow_pass_resource>();
 				data.shadow_map_in = builder.read(shadow_res.shadow_map, TEXTURE_READ_FLAGS::READ_DEPTH);
-
+				auto& point_shadow_res = bb.get<point_shadow_pass_resource>();
+				data.point_shadow_in = builder.read(point_shadow_res.shadow_cubemap, TEXTURE_READ_FLAGS::READ_DEPTH);
             },
             [=, &storage](const basic_pass_resource& data, FrameGraphPassResources& resources, void* ctx)
             {
@@ -160,9 +161,11 @@ void add_basic_pass(
 				auto& depth_tex = resources.get<Rendering::FrameGraphTexture>(data.depth);
 
 				auto& shadow_tex = resources.get<Rendering::FrameGraphTexture>(data.shadow_map_in);
+				auto& point_shadow_tex = resources.get<Rendering::FrameGraphTexture>(data.point_shadow_in);
 
 				RID uniform_set_1 = Rendering::UniformSetBuilder{}
 					.add_texture(0, shadow_sampler, shadow_tex.texture_rid)
+					.add_texture(1, shadow_sampler, point_shadow_tex.texture_rid)
 					.build(rc.device, rc.device->get_shader_rid("light_map"), 1);
 
                 uint32_t w = rc.device->screen_get_width();
@@ -612,6 +615,50 @@ struct TutorialApplication : EE::Application
 				));
 			});
 
+		// --- Point light shadow matrices ---
+		PointShadowUBO point_shadow_data{};
+		const float ps_near = 0.1f;
+		const float ps_far = 25.0f;
+
+		world.view<TransformComponent, LightComponent>().each(
+			[&](auto, TransformComponent& t, LightComponent& l) {
+				if (l.data.type != static_cast<uint32_t>(LightType::Point)) return;
+
+				glm::vec3 lp = t.position;
+				glm::mat4 proj = glm::perspectiveRH_ZO(glm::radians(90.0f), 1.0f, ps_near, ps_far);
+				proj[1][1] *= -1; // Vulkan Y flip
+
+				point_shadow_data.shadowMatrices[0] =
+					proj * glm::lookAt(lp, lp + glm::vec3(1, 0, 0), glm::vec3(0, -1, 0));
+				point_shadow_data.shadowMatrices[1] =
+					proj * glm::lookAt(lp, lp + glm::vec3(-1, 0, 0), glm::vec3(0, -1, 0));
+				point_shadow_data.shadowMatrices[2] =
+					proj * glm::lookAt(lp, lp + glm::vec3(0, 1, 0), glm::vec3(0, 0, 1));
+				point_shadow_data.shadowMatrices[3] =
+					proj * glm::lookAt(lp, lp + glm::vec3(0, -1, 0), glm::vec3(0, 0, -1));
+				point_shadow_data.shadowMatrices[4] =
+					proj * glm::lookAt(lp, lp + glm::vec3(0, 0, 1), glm::vec3(0, -1, 0));
+				point_shadow_data.shadowMatrices[5] =
+					proj * glm::lookAt(lp, lp + glm::vec3(0, 0, -1), glm::vec3(0, -1, 0));
+
+				point_shadow_data.lightPos = glm::vec4(lp, ps_far);
+			});
+		point_shadow_ubo.upload(device, point_shadow_data);
+
+		// --- Point shadow drawables (same geometry, different pipeline/uniforms) ---
+		std::vector<Rendering::Drawable> point_shadow_drawables;
+		world.view<TransformComponent, MeshComponent>().each(
+			[&](auto entity, TransformComponent& t, MeshComponent& m) {
+				if (world.all_of<LightComponent>(entity)) return;
+				auto model = t.get_model();
+				auto normal = t.get_normal_matrix();
+				point_shadow_drawables.push_back(Rendering::Drawable::make(
+					pipeline_point_shadow, m.mesh, "point_shadow_shader",
+					Rendering::PushConstantData::from(ObjectData_UBO{ model, normal }),
+					{ { uniform_set_0_point_shadow, 0 } }
+				));
+			});
+
         // --- Upload material ---
         material_registry.upload_all(device);
 
@@ -651,6 +698,7 @@ struct TutorialApplication : EE::Application
         fg.reset();
         bb.reset();
 
+		add_point_shadow_pass(fg, bb, 1024, point_shadow_drawables, *mesh_storage);
         add_shadow_pass(fg, bb, { 2048, 2048 }, shadow_drawables, *mesh_storage);
         add_basic_pass(fg, bb,
             { device->screen_get_width(), device->screen_get_height() }, drawables, *mesh_storage, shadow_sampler);

@@ -6,7 +6,7 @@ namespace Rendering
 
 	RDD::FramebufferID FramebufferCache::_create(const FramebufferKey& key)
 	{
-		auto frame_buffer = device->create_framebuffer_from_render_pass(key.render_pass, key.attachments, key.width, key.height);
+		auto frame_buffer = device->create_framebuffer_from_render_pass(key.render_pass, key.attachments, key.width, key.height, key.layers);
 		cache[key] = { frame_buffer, current_frame };
 		return frame_buffer;
 	}

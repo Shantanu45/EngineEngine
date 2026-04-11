@@ -19,6 +19,7 @@ layout(set = 0, binding = 0) uniform FrameUBO {
 } frame;
 
 layout(set = 1, binding = 0) uniform sampler2DShadow shadowMap;
+layout(set = 1, binding = 1) uniform samplerCubeShadow PointShadowMap;
 
 layout(set = 2, binding = 0) uniform MaterialUBO {
     Material material;
@@ -75,6 +76,15 @@ float shadow_factor(vec4 fragPosLS, vec3 normal, vec3 lightDir) {
         }
     }
     return shadow / 9.0;
+}
+
+float samplePointShadow(vec3 fragPos, vec3 lightPos, float farPlane) {
+    vec3  dir          = fragPos - lightPos;
+    float currentDepth = length(dir) / farPlane; // normalize same way as frag shader
+
+    // samplerCubeShadow does the compare for you (bias baked in)
+    float bias = 0.005;
+    return texture(PointShadowMap, vec4(dir, currentDepth - bias));
 }
 
 void main()

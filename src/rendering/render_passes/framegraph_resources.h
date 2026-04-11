@@ -80,7 +80,7 @@ namespace Rendering
 				barrier.dst_access = RDD::BARRIER_ACCESS_SHADER_READ_BIT;
 				barrier.prev_layout = RDD::TEXTURE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 				barrier.next_layout = RDD::TEXTURE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-				barrier.subresources = { RDD::TEXTURE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+				barrier.subresources = { RDD::TEXTURE_ASPECT_COLOR_BIT, 0, 1, 0, desc.texture_format.array_layers };
 
 				rc.device->apply_image_barrier(rc.command_buffer,
 					RDD::PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
@@ -92,7 +92,7 @@ namespace Rendering
 				barrier.dst_access = RDD::BARRIER_ACCESS_SHADER_READ_BIT;
 				barrier.prev_layout = RDD::TEXTURE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 				barrier.next_layout = RDD::TEXTURE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-				barrier.subresources = { RDD::TEXTURE_ASPECT_DEPTH_BIT, 0, 1, 0, 1 };
+				barrier.subresources = { RDD::TEXTURE_ASPECT_DEPTH_BIT, 0, 1, 0, desc.texture_format.array_layers };
 
 				rc.device->apply_image_barrier(rc.command_buffer,
 					RDD::PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
@@ -118,7 +118,7 @@ namespace Rendering
 			if (flags == TEXTURE_WRITE_FLAGS::WRITE_COLOR) {
 				barrier.dst_access = RDD::BARRIER_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 				barrier.next_layout = RDD::TEXTURE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-				barrier.subresources = { RDD::TEXTURE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+				barrier.subresources = { RDD::TEXTURE_ASPECT_COLOR_BIT, 0, 1, 0, desc.texture_format.array_layers };
 
 				rc.device->apply_image_barrier(rc.command_buffer,
 					RDD::PIPELINE_STAGE_TOP_OF_PIPE_BIT,
@@ -130,7 +130,7 @@ namespace Rendering
 					RDD::BARRIER_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 				barrier.prev_layout = current_layout;
 				barrier.next_layout = RDD::TEXTURE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-				barrier.subresources = { RDD::TEXTURE_ASPECT_DEPTH_BIT, 0, 1, 0, 1 };
+				barrier.subresources = { RDD::TEXTURE_ASPECT_DEPTH_BIT, 0, 1, 0, desc.texture_format.array_layers };
 
 				rc.device->apply_image_barrier(rc.command_buffer,
 					RDD::PIPELINE_STAGE_TOP_OF_PIPE_BIT,

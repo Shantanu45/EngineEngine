@@ -409,7 +409,7 @@ namespace Vulkan
 
 		void command_buffer_execute_secondary(CommandBufferID p_cmd_buffer, std::span<CommandBufferID> p_secondary_cmd_buffers) override;
 
-		RenderingDeviceDriverVulkan::FramebufferID framebuffer_create(RenderPassID p_render_pass, std::span<TextureID> p_attachments, uint32_t p_width, uint32_t p_height) override;
+		RenderingDeviceDriverVulkan::FramebufferID framebuffer_create(RenderPassID p_render_pass, std::span<TextureID> p_attachments, uint32_t p_width, uint32_t p_height, uint32_t p_layers = 1) override;
 
 		void framebuffer_free(FramebufferID p_framebuffer) override;
 

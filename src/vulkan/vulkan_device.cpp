@@ -3085,7 +3085,7 @@ namespace Vulkan
 
 #pragma region Framebuffer
 
-	RenderingDeviceDriverVulkan::FramebufferID RenderingDeviceDriverVulkan::framebuffer_create(RenderPassID p_render_pass, std::span<TextureID> p_attachments, uint32_t p_width, uint32_t p_height) {
+	Vulkan::RenderingDeviceDriverVulkan::RenderingDeviceDriverVulkan::FramebufferID RenderingDeviceDriverVulkan::framebuffer_create(RenderPassID p_render_pass, std::span<TextureID> p_attachments, uint32_t p_width, uint32_t p_height, uint32_t p_layers /*= 1*/) {
 		RenderPassInfo* render_pass = (RenderPassInfo*)(p_render_pass.id);
 
 		uint32_t fragment_density_map_offsets_layers = 0;
@@ -3103,7 +3103,7 @@ namespace Vulkan
 		framebuffer_create_info.pAttachments = vk_img_views;
 		framebuffer_create_info.width = p_width;
 		framebuffer_create_info.height = p_height;
-		framebuffer_create_info.layers = 1;
+		framebuffer_create_info.layers = p_layers;
 
 		VkFramebuffer vk_framebuffer = VK_NULL_HANDLE;
 		VkResult err = vkCreateFramebuffer(vk_device, &framebuffer_create_info, nullptr, &vk_framebuffer);

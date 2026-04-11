@@ -1434,7 +1434,7 @@ namespace Rendering
 		.render_pass = framebuffer_formats[format_id].render_pass,
 		.width = size.x,
 		.height = size.y,
-		.layers = (p_view_count > 1) ? p_view_count : texture_layers,			// TODO: use layers properly, or some other property
+		.layers = texture_layers,			// TODO: use layers properly, or some other property
 		.attachments = p_texture_attachments
 		};
 
@@ -3113,14 +3113,14 @@ namespace Rendering
 		return driver->framebuffer_create(framebuffer_formats[p_format_id].render_pass, attachments, p_width, p_height);
 	}
 
-	RDD::FramebufferID RenderingDevice::create_framebuffer_from_render_pass(RDD::RenderPassID p_render_pass, std::vector<RID> p_attachments, uint32_t p_width, uint32_t p_height)
+	RDD::FramebufferID RenderingDevice::create_framebuffer_from_render_pass(RDD::RenderPassID p_render_pass, std::vector<RID> p_attachments, uint32_t p_width, uint32_t p_height, uint32_t p_layers /*= 1*/)
 	{
 		std::vector<RDD::TextureID> attachments;
 		for (auto a : p_attachments)
 		{
 			attachments.push_back(texture_owner.get_or_null(a)->driver_id);
 		}
-		return driver->framebuffer_create(p_render_pass, attachments, p_width, p_height);
+		return driver->framebuffer_create(p_render_pass, attachments, p_width, p_height, p_layers);
 	}
 
 	RDD::RenderPassID RenderingDevice::render_pass_from_format_id(FramebufferFormatID p_format_id)
