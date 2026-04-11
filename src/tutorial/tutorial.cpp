@@ -48,6 +48,66 @@ struct point_shadow_pass_resource {
     FrameGraphResource shadow_cubemap;
 };
 
+void add_point_shadow_pass(
+	FrameGraph& fg,
+	FrameGraphBlackboard& bb,
+	uint32_t face_size,
+	std::vector<Rendering::Drawable> drawables,
+	Rendering::MeshStorage& storage)
+{
+	bb.add<point_shadow_pass_resource>() =
+		fg.add_callback_pass<point_shadow_pass_resource>(
+			"Point Shadow Pass",
+			[&](FrameGraph::Builder& builder, point_shadow_pass_resource& data)
+			{
+				RD::TextureFormat tf;
+				tf.texture_type = RD::TEXTURE_TYPE_CUBE;   // cubemap!
+				tf.width = face_size;
+				tf.height = face_size;
+				tf.array_layers = 6;
+				tf.usage_bits =
+					RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
+					RD::TEXTURE_USAGE_SAMPLING_BIT;
+				tf.format = RD::DATA_FORMAT_D32_SFLOAT;
+
+				data.shadow_cubemap = builder.create<Rendering::FrameGraphTexture>(
+					"point shadow cubemap",
+					{ tf, RD::TextureView(), "point shadow cubemap" });
+
+				data.shadow_cubemap = builder.write(
+					data.shadow_cubemap, TEXTURE_WRITE_FLAGS::WRITE_DEPTH);
+			},
+			[=, &storage](const point_shadow_pass_resource& data,
+				FrameGraphPassResources& resources,
+				void* ctx)
+			{
+				auto& rc = *static_cast<Rendering::RenderContext*>(ctx);
+				auto  cmd = rc.command_buffer;
+
+				auto& cube_tex = resources.get<Rendering::FrameGraphTexture>(data.shadow_cubemap);
+
+				// Render into all 6 faces at once — the geometry shader
+				// writes gl_Layer to fan triangles across each face.
+				RID fb = rc.device->framebuffer_create({ cube_tex.texture_rid });
+
+				GPU_SCOPE(cmd, "Point Shadow Pass", Color(0.8f, 0.2f, 1.0f, 1.0f));
+
+				std::array<RDD::RenderPassClearValue, 1> clear_values;
+				clear_values[0].depth = 1.0f;
+				clear_values[0].stencil = 0;
+
+				rc.device->begin_render_pass_from_frame_buffer(
+					fb,
+					Rect2i(0, 0, face_size, face_size),
+					clear_values);
+
+				for (const auto& drawable : drawables)
+					submit_drawable(rc, cmd, drawable, storage);
+
+				rc.wsi->end_render_pass(cmd);
+			});
+}
+
 struct shadow_pass_resource {
 	FrameGraphResource shadow_map;
 };
