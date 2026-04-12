@@ -103,7 +103,7 @@ void main()
             TexCoords, normal, FragPos, viewDir);
     }
     
-    float shadow = 0.0f;
+    float shadow = 1.0f;
     if(lightData.lights[0].type == LIGHT_DIRECTIONAL)
     {
         shadow = shadow_factor(fragPosLightSpace, normal, lightDir);

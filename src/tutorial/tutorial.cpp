@@ -275,6 +275,7 @@ struct TutorialApplication : EE::Application
 
         // --- Meshes ---
         light_mesh = Rendering::Shapes::upload_cube(*wsi, *mesh_storage, "light_cube");
+        point_light_mesh = Rendering::Shapes::upload_cube(*wsi, *mesh_storage, "point_light_cube");
         object_mesh = Rendering::Shapes::upload_cube(*wsi, *mesh_storage, "object_cube");
         grid_mesh = Rendering::Shapes::upload_grid(*wsi, *mesh_storage, 10, 1, "object_grid");
         plane_mesh = Rendering::Shapes::upload_plane(*wsi, *mesh_storage, 1, "object_plane");
@@ -559,6 +560,20 @@ struct TutorialApplication : EE::Application
 			.outer_angle = 0.0f,
 		} });
 
+		auto point_light = world.create();
+		world.emplace<TransformComponent>(point_light, TransformComponent{
+			.position = glm::vec3(1.0f, 1.0f, 1.0f),  // high up, centered over scene
+			.scale = glm::vec3(0.1f) });
+		world.emplace<MeshComponent>(point_light, MeshComponent{
+			point_light_mesh, pipeline_light, "cube_shader", uniform_set_0_light });
+		world.emplace<LightComponent>(point_light, LightComponent{ .data = {
+			.position = glm::vec4(5.0f, 10.0f, 5.0f, 15.0f),
+			.direction = glm::vec4(-0.5f, -1.0f, -0.5f, 0.0f),
+			.color = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f),         // w = intensity
+			.type = static_cast<uint32_t>(LightType::Point),
+			.outer_angle = 0.0f,
+		} });
+
         wsi->submit_transfer_workers();
         return wsi->pre_frame_loop();
     }
@@ -777,6 +792,7 @@ private:
     std::shared_ptr<EE::InputSystemInterface> input_system;
 
     Rendering::MeshHandle light_mesh;
+    Rendering::MeshHandle point_light_mesh;
     Rendering::MeshHandle object_mesh;
     Rendering::MeshHandle grid_mesh;
     Rendering::MeshHandle plane_mesh;
