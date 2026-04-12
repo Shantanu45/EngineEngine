@@ -546,19 +546,19 @@ struct TutorialApplication : EE::Application
 
 
         // light cube
-        auto light = world.create();
-        world.emplace<TransformComponent>(light, TransformComponent{
-            .position = glm::vec3(5.0f, 10.0f, 5.0f),  // high up, centered over scene
-	        .scale = glm::vec3(0.2f) });
-        world.emplace<MeshComponent>(light, MeshComponent{
-            light_mesh, pipeline_light, "cube_shader", uniform_set_0_light });
-		world.emplace<LightComponent>(light, LightComponent{ .data = {
-            .position = glm::vec4(5.0f, 10.0f, 5.0f, 15.0f),
-	        .direction = glm::vec4(-0.5f, -1.0f, -0.5f, 0.0f),
-			.color = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f),         // w = intensity
-			.type = static_cast<uint32_t>(LightType::Directional),
-			.outer_angle = 0.0f,
-		} });
+  //      auto light = world.create();
+  //      world.emplace<TransformComponent>(light, TransformComponent{
+  //          .position = glm::vec3(5.0f, 10.0f, 5.0f),  // high up, centered over scene
+	 //       .scale = glm::vec3(0.2f) });
+  //      world.emplace<MeshComponent>(light, MeshComponent{
+  //          light_mesh, pipeline_light, "cube_shader", uniform_set_0_light });
+		//world.emplace<LightComponent>(light, LightComponent{ .data = {
+  //          .position = glm::vec4(5.0f, 10.0f, 5.0f, 15.0f),
+	 //       .direction = glm::vec4(-0.5f, -1.0f, -0.5f, 0.0f),
+		//	.color = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f),         // w = intensity
+		//	.type = static_cast<uint32_t>(LightType::Directional),
+		//	.outer_angle = 0.0f,
+		//} });
 
 		auto point_light = world.create();
 		world.emplace<TransformComponent>(point_light, TransformComponent{
@@ -569,7 +569,7 @@ struct TutorialApplication : EE::Application
 		world.emplace<LightComponent>(point_light, LightComponent{ .data = {
 			.position = glm::vec4(5.0f, 10.0f, 5.0f, 15.0f),
 			.direction = glm::vec4(-0.5f, -1.0f, -0.5f, 0.0f),
-			.color = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f),         // w = intensity
+			.color = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f),         // w = intensity
 			.type = static_cast<uint32_t>(LightType::Point),
 			.outer_angle = 0.0f,
 		} });
@@ -636,8 +636,9 @@ struct TutorialApplication : EE::Application
 		const float ps_far = 25.0f;
 
 		world.view<TransformComponent, LightComponent>().each(
-			[&](auto, TransformComponent& t, LightComponent& l) {
+			[&](auto entity, TransformComponent& t, LightComponent& l) {
 				if (l.data.type != static_cast<uint32_t>(LightType::Point)) return;
+				if (world.all_of<LightComponent>(entity)) return;
 
 				glm::vec3 lp = t.position;
 				glm::mat4 proj = glm::perspectiveRH_ZO(glm::radians(90.0f), 1.0f, ps_near, ps_far);

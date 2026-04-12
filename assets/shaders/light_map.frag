@@ -107,6 +107,9 @@ void main()
     if(lightData.lights[0].type == LIGHT_DIRECTIONAL)
     {
         shadow = shadow_factor(fragPosLightSpace, normal, lightDir);
+    }else
+    {
+        shadow = samplePointShadow(fragPosLightSpace.xyz, lightData.lights[0].position.xyz, lightData.lights[0].position.w);
     }
     
     FragColor = vec4(color * shadow, 1.0);
