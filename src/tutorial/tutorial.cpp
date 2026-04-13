@@ -10,6 +10,7 @@
 #include "rendering/drawable.h"
 #include "rendering/uniform_buffer.h"
 #include "rendering/uniform_set_builder.h"
+#include "rendering/default_textures.h"
 #include "entt/entt.hpp"
 #include "scene/components.h"
 
@@ -405,6 +406,8 @@ struct TutorialApplication : EE::Application
 		tf_rock.usage_bits = RDC::TEXTURE_USAGE_SAMPLING_BIT | RDC::TEXTURE_USAGE_CAN_UPDATE_BIT;
 		tf_rock.format = RDC::DATA_FORMAT_R8G8B8A8_SRGB;
 
+        fallback_texture = Rendering::create_white_texture(device);
+
         diffuse_uniform = device->texture_create(tf, RD::TextureView(), { diffuse_image.pixels });
         specular_uniform = device->texture_create(tf_spec, RD::TextureView(), { specular_image.pixels });
         rock_uniform = device->texture_create(tf_rock, RD::TextureView(), { rock_image.pixels });
@@ -507,13 +510,13 @@ struct TutorialApplication : EE::Application
         mat.metallic_roughness = specular_uniform;
 		mat.shininess = 64.0f;
 
-        Rendering::MaterialHandle h = material_registry.create(device, std::move(mat), sampler, diffuse_uniform, pipeline_color.shader_rid);
+        Rendering::MaterialHandle h = material_registry.create(device, std::move(mat), sampler, fallback_texture, pipeline_color.shader_rid);
 
 		Rendering::Material mat_rock;
 		mat_rock.diffuse = rock_uniform;
 		mat_rock.base_color_factor = glm::vec4(1.0f);
 		mat_rock.shininess = 32.0f;
-		Rendering::MaterialHandle h_rock = material_registry.create(device, std::move(mat_rock), sampler, rock_uniform, pipeline_color.shader_rid);
+		Rendering::MaterialHandle h_rock = material_registry.create(device, std::move(mat_rock), sampler, fallback_texture, pipeline_color.shader_rid);
 
         // object cube
 		for (int x = 0; x < 2; x++) {
@@ -751,6 +754,7 @@ struct TutorialApplication : EE::Application
 		device->free_rid(rock_uniform);
 		device->free_rid(pipeline_skybox.pipeline_rid);
 
+        device->free_rid(fallback_texture);
         device->free_rid(diffuse_uniform);
         device->free_rid(specular_uniform);
 		device->free_rid(pipeline_color.pipeline_rid);
@@ -780,6 +784,7 @@ private:
     RID uniform_set_0;
     RID uniform_set_0_light;
     RID uniform_set_0_shadow;
+    RID fallback_texture;
     RID diffuse_uniform;
     RID specular_uniform;
     RID cubemap_uniform;
