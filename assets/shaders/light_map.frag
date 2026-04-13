@@ -19,7 +19,8 @@ layout(set = 0, binding = 0) uniform FrameUBO {
 } frame;
 
 layout(set = 1, binding = 0) uniform sampler2DShadow shadowMap;
-layout(set = 1, binding = 1) uniform samplerCubeShadow PointShadowMap;
+//layout(set = 1, binding = 1) uniform samplerCubeShadow PointShadowMap;
+layout(set = 1, binding = 1) uniform samplerCube PointShadowMap;
 
 layout(set = 2, binding = 0) uniform MaterialUBO {
     Material material;
@@ -80,12 +81,21 @@ float shadow_factor(vec4 fragPosLS, vec3 normal, vec3 lightDir) {
 
 float samplePointShadow(vec3 fragPos, vec3 lightPos, float farPlane) {
     vec3  dir          = fragPos - lightPos;
-    float currentDepth = length(dir) / farPlane; // normalize same way as frag shader
-
-    // samplerCubeShadow does the compare for you (bias baked in)
-    float bias = 0.005;
-    return texture(PointShadowMap, vec4(dir, currentDepth - bias));
+    float currentDepth = length(dir) / farPlane;
+    float bias         = 0.05;  // larger bias needed for point shadows
+    float closestDepth = texture(PointShadowMap, dir).r;
+    return currentDepth - bias < closestDepth ? 1.0 : 0.0;
 }
+
+//float samplePointShadow(vec3 fragPos, vec3 lightPos, float farPlane) {
+//    vec3  dir          = fragPos - lightPos;
+//    float currentDepth = length(dir) / farPlane; // normalize same way as frag shader
+//
+//    // samplerCubeShadow does the compare for you (bias baked in)
+//    float bias = 0.005;
+//    
+//    return texture(PointShadowMap, vec4(dir, currentDepth - bias));
+//}
 
 // TODO: impl for multiple lights
 void main()
@@ -109,7 +119,8 @@ void main()
         shadow = shadow_factor(fragPosLightSpace, normal, lightDir);
     }else
     {
-        shadow = samplePointShadow(fragPosLightSpace.xyz, lightData.lights[0].position.xyz, lightData.lights[0].position.w);
+       shadow = samplePointShadow(FragPos, lightData.lights[0].position.xyz, 
+                           lightData.lights[0].position.w);
     }
     
     FragColor = vec4(color * shadow, 1.0);

@@ -165,7 +165,7 @@ void add_basic_pass(
 
 				RID uniform_set_1 = Rendering::UniformSetBuilder{}
 					.add_texture(0, shadow_sampler, shadow_tex.texture_rid)
-					.add_texture(1, shadow_sampler, point_shadow_tex.texture_rid)
+					.add_texture(1, rc.device->sampler_create(RD::SamplerState()), point_shadow_tex.texture_rid)
 					.build(rc.device, rc.device->get_shader_rid("light_map"), 1);
 
                 uint32_t w = rc.device->screen_get_width();
@@ -567,7 +567,7 @@ struct TutorialApplication : EE::Application
 		world.emplace<MeshComponent>(point_light, MeshComponent{
 			point_light_mesh, pipeline_light, "cube_shader", uniform_set_0_light });
 		world.emplace<LightComponent>(point_light, LightComponent{ .data = {
-			.position = glm::vec4(5.0f, 10.0f, 5.0f, 15.0f),
+			.position = glm::vec4(1.0f, 1.0f, 1.0f, 15.0f),
 			.direction = glm::vec4(-0.5f, -1.0f, -0.5f, 0.0f),
 			.color = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f),         // w = intensity
 			.type = static_cast<uint32_t>(LightType::Point),
@@ -638,11 +638,11 @@ struct TutorialApplication : EE::Application
 		world.view<TransformComponent, LightComponent>().each(
 			[&](auto entity, TransformComponent& t, LightComponent& l) {
 				if (l.data.type != static_cast<uint32_t>(LightType::Point)) return;
-				if (world.all_of<LightComponent>(entity)) return;
+				//if (world.all_of<LightComponent>(entity)) return;
 
 				glm::vec3 lp = t.position;
 				glm::mat4 proj = glm::perspectiveRH_ZO(glm::radians(90.0f), 1.0f, ps_near, ps_far);
-				proj[1][1] *= -1; // Vulkan Y flip
+				//proj[1][1] *= -1; // Vulkan Y flip
 
 				point_shadow_data.shadowMatrices[0] =
 					proj * glm::lookAt(lp, lp + glm::vec3(1, 0, 0), glm::vec3(0, -1, 0));
