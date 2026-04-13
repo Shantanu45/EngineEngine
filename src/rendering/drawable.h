@@ -4,6 +4,7 @@
 #include <vector>
 #include "rendering/rendering_device.h"
 #include "rendering/mesh_storage.h"
+#include "rendering/pipeline_builder.h"
 
 namespace Rendering
 {
@@ -33,23 +34,20 @@ namespace Rendering
 	};
 
 	struct Drawable {
-		RID                            pipeline;
+		Pipeline                       pipeline;
 		MeshHandle                     mesh;
-		const char* shader_name;
 		PushConstantData               push_constants;
-		std::vector<UniformSetBinding> uniform_sets;  // replaces single set
+		std::vector<UniformSetBinding> uniform_sets;
 
 		static Drawable make(
-			RID pipeline,
+			Pipeline pipeline,
 			MeshHandle mesh,
-			const char* shader_name,
 			PushConstantData pc,
 			std::vector<UniformSetBinding> uniform_sets = {})
 		{
 			Drawable d;
 			d.pipeline = pipeline;
 			d.mesh = mesh;
-			d.shader_name = shader_name;
 			d.push_constants = pc;
 			d.uniform_sets = std::move(uniform_sets);
 			return d;
@@ -70,18 +68,18 @@ namespace Rendering
 		const Drawable& drawable,
 		MeshStorage& storage)
 	{
-		rc.device->bind_render_pipeline(cmd, drawable.pipeline);
+		rc.device->bind_render_pipeline(cmd, drawable.pipeline.pipeline_rid);
 		if (drawable.push_constants.size > 0) {
 			rc.device->set_push_constant(
 				drawable.push_constants.data.data(),
 				drawable.push_constants.size,
-				rc.device->get_shader_rid(drawable.shader_name));
+				drawable.pipeline.shader_rid);
 		}
 
 		for (const auto& binding : drawable.uniform_sets) {
 			if (binding.set.is_valid()) {
 				rc.device->bind_uniform_set(
-					rc.device->get_shader_rid(drawable.shader_name),
+					drawable.pipeline.shader_rid,
 					binding.set,
 					binding.index);
 			}

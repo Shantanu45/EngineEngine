@@ -43,14 +43,14 @@ namespace Rendering
 			RenderingDevice* device,
 			RID sampler,
 			RID fallback,
-			const std::string& shader_name)
+			RID shader_rid)
 		{
 			return Rendering::UniformSetBuilder{}
 				.add(ubo.as_uniform(0))
 				.add_texture(1, sampler, diffuse.is_valid() ? diffuse : fallback)
 				.add_texture(2, sampler, metallic_roughness.is_valid() ? metallic_roughness : fallback)
 				.add_texture(3, sampler, normal.is_valid() ? normal : fallback)
-				.build(device, device->get_shader_rid(shader_name), 2);
+				.build(device, shader_rid, 2);
 		}
 
 		void free(RenderingDevice* device) {
@@ -64,10 +64,10 @@ namespace Rendering
 	class MaterialRegistry
 	{
 	public:
-		MaterialHandle create(RenderingDevice* device, Material mat, RID sampler, RID fallback, const std::string& shader)
+		MaterialHandle create(RenderingDevice* device, Material mat, RID sampler, RID fallback, RID shader_rid)
 		{
 			mat.create(device);
-			RID us = mat.build_uniform_set(device, sampler, fallback, shader);
+			RID us = mat.build_uniform_set(device, sampler, fallback, shader_rid);
 
 			MaterialHandle h = static_cast<MaterialHandle>(materials.size());
 			materials.push_back(std::move(mat));

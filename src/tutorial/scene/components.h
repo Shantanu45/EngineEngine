@@ -4,6 +4,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include "rendering/mesh_storage.h"
 #include "rendering/rendering_device.h"
+#include "rendering/pipeline_builder.h"
 #include "rendering/light.h"
 #include "rendering/material.h"
 
@@ -51,11 +52,10 @@ struct TransformComponent {
 };
 
 struct MeshComponent {
-	Rendering::MeshHandle mesh;
-	RID                   pipeline;
-	const char* shader;
-	std::array<RID, 4>    uniform_sets;
-	MaterialTextures          material_textures;
+	Rendering::MeshHandle  mesh;
+	Rendering::Pipeline    pipeline;  // carries both pipeline_rid and shader_rid
+	std::array<RID, 4>     uniform_sets;
+	MaterialTextures       material_textures;
 };
 
 struct LightComponent {

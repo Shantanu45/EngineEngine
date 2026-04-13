@@ -12,6 +12,14 @@ namespace Rendering
 {
 	using RD = RenderingDevice;
 	using RDC = RenderingDeviceCommons;
+
+	// Bundles the pipeline RID and its shader RID together so callers never
+	// need to do a string lookup to find the shader after building a pipeline.
+	struct Pipeline {
+		RID pipeline_rid;
+		RID shader_rid;
+	};
+
 	class PipelineBuilder
 	{
 	public:
@@ -86,22 +94,24 @@ namespace Rendering
 			return *this;
 		}
 
-		RID build(RD::FramebufferFormatID p_frame_buffer_format, uint32_t p_render_subpass = 0)
+		Pipeline build(RD::FramebufferFormatID p_frame_buffer_format, uint32_t p_render_subpass = 0)
 		{
-			return device->render_pipeline_create(shader, p_frame_buffer_format,
+			RID p = device->render_pipeline_create(shader, p_frame_buffer_format,
 				vertex_format, render_primitive,
 				rasterization_state, multisample_state,
 				depth_stencil_state, blend_state, dynamic_state_flags,
 				p_render_subpass, specialization_constants);
+			return { p, shader };
 		}
 
-		RID build_from_frame_buffer(RID p_frame_buffer, uint32_t p_render_subpass = 0)
+		Pipeline build_from_frame_buffer(RID p_frame_buffer, uint32_t p_render_subpass = 0)
 		{
-			return device->render_pipeline_create_from_frame_buffer(shader, p_frame_buffer,
+			RID p = device->render_pipeline_create_from_frame_buffer(shader, p_frame_buffer,
 				vertex_format, render_primitive,
 				rasterization_state, multisample_state,
 				depth_stencil_state, blend_state, dynamic_state_flags,
 				p_render_subpass, specialization_constants);
+			return { p, shader };
 		}
 
 	private:

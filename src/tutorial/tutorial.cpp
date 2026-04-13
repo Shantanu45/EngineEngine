@@ -118,7 +118,8 @@ void add_basic_pass(
     Size2i extent,
     std::vector<Rendering::Drawable> drawables,
     Rendering::MeshStorage& storage,
-    RID shadow_sampler)
+    RID shadow_sampler,
+    Rendering::Pipeline light_map_pipeline)
 {
     bb.add<basic_pass_resource>() =
         fg.add_callback_pass<basic_pass_resource>(
@@ -166,7 +167,7 @@ void add_basic_pass(
 				RID uniform_set_1 = Rendering::UniformSetBuilder{}
 					.add_texture(0, shadow_sampler, shadow_tex.texture_rid)
 					.add_texture(1, rc.device->sampler_create(RD::SamplerState()), point_shadow_tex.texture_rid)
-					.build(rc.device, rc.device->get_shader_rid("light_map"), 1);
+					.build(rc.device, light_map_pipeline.shader_rid, 1);
 
                 uint32_t w = rc.device->screen_get_width();
                 uint32_t h = rc.device->screen_get_height();
@@ -183,10 +184,8 @@ void add_basic_pass(
 
                 for (auto drawable : drawables)
                 {
-                    if(drawable.shader_name == "light_map")
-                    {
-						drawable.set_uniform_set({ uniform_set_1, 1 });
-                    }
+                    if (drawable.pipeline.pipeline_rid == light_map_pipeline.pipeline_rid)
+                        drawable.set_uniform_set({ uniform_set_1, 1 });
                     submit_drawable(rc, cmd, drawable, storage);
                 }
 
@@ -431,16 +430,16 @@ struct TutorialApplication : EE::Application
         uniform_set_0 = Rendering::UniformSetBuilder{}
             .add(frame_ubo.as_uniform(0))
             .add(light_ubo.as_uniform(2))
-            .build(device, device->get_shader_rid("light_map"), 0);
+            .build(device, pipeline_color.shader_rid, 0);
 
         uniform_set_0_light = Rendering::UniformSetBuilder{}
             .add(frame_ubo.as_uniform(0))
-            .build(device, device->get_shader_rid("cube_shader"), 0);
+            .build(device, pipeline_light.shader_rid, 0);
 
 		uniform_set_skybox = Rendering::UniformSetBuilder{}
 			.add(frame_ubo.as_uniform(0))
 			.add_texture(1, sampler_cube, cubemap_uniform)
-			.build(device, device->get_shader_rid("skybox_shader"), 0);
+			.build(device, pipeline_skybox.shader_rid, 0);
 
 		// --- Shadow framebuffer format ---
 		RD::AttachmentFormat shadow_depth_att;
@@ -468,7 +467,7 @@ struct TutorialApplication : EE::Application
 		// --- Uniform set for shadow pass (frame UBO only, set 0) ---
 		uniform_set_0_shadow = Rendering::UniformSetBuilder{}
 			.add(frame_ubo.as_uniform(0))
-			.build(device, device->get_shader_rid("shadow_shader"), 0);
+			.build(device, pipeline_shadow.shader_rid, 0);
 
 		// --- Point shadow cubemap framebuffer format ---
 		// 6 layers, one per face � depth only
@@ -498,7 +497,7 @@ struct TutorialApplication : EE::Application
 		uniform_set_0_point_shadow = Rendering::UniformSetBuilder{}
 			.add(frame_ubo.as_uniform(0))
 			.add(point_shadow_ubo.as_uniform(1))
-			.build(device, device->get_shader_rid("point_shadow_shader"), 0);
+			.build(device, pipeline_point_shadow.shader_rid, 0);
 
         // --- Scene setup ---
         // 
@@ -508,13 +507,13 @@ struct TutorialApplication : EE::Application
         mat.metallic_roughness = specular_uniform;
 		mat.shininess = 64.0f;
 
-        Rendering::MaterialHandle h = material_registry.create(device, std::move(mat), sampler, diffuse_uniform, "light_map");
+        Rendering::MaterialHandle h = material_registry.create(device, std::move(mat), sampler, diffuse_uniform, pipeline_color.shader_rid);
 
 		Rendering::Material mat_rock;
 		mat_rock.diffuse = rock_uniform;
 		mat_rock.base_color_factor = glm::vec4(1.0f);
 		mat_rock.shininess = 32.0f;
-		Rendering::MaterialHandle h_rock = material_registry.create(device, std::move(mat_rock), sampler, rock_uniform, "light_map");
+		Rendering::MaterialHandle h_rock = material_registry.create(device, std::move(mat_rock), sampler, rock_uniform, pipeline_color.shader_rid);
 
         // object cube
 		for (int x = 0; x < 2; x++) {
@@ -523,10 +522,9 @@ struct TutorialApplication : EE::Application
 				world.emplace<TransformComponent>(entity, TransformComponent{
 					.position = glm::vec3(x * 2.5f, 0.5f, z * 2.5f) });
 				world.emplace<MeshComponent>(entity, MeshComponent{
-			   .mesh = object_mesh,
-			   .pipeline = pipeline_color,
-			   .shader = "light_map",
-			   .uniform_sets = {uniform_set_0, {},  material_registry.get_uniform_set(h), {}}
+				   .mesh = object_mesh,
+				   .pipeline = pipeline_color,
+				   .uniform_sets = {uniform_set_0, {}, material_registry.get_uniform_set(h), {}}
 				});
                 world.emplace<MaterialComponent>(entity, MaterialComponent{ h });
 			}
@@ -537,10 +535,9 @@ struct TutorialApplication : EE::Application
 			.position = glm::vec3(0.0, 0.0, 0.0),
 			.scale = glm::vec3(10.f) });
 		world.emplace<MeshComponent>(entity_plane, MeshComponent{
-           .mesh = plane_mesh, 
-           .pipeline = pipeline_color, 
-           .shader = "light_map", 
-           .uniform_sets = {uniform_set_0, {}, material_registry.get_uniform_set(h_rock), {}}
+            .mesh = plane_mesh,
+            .pipeline = pipeline_color,
+            .uniform_sets = {uniform_set_0, {}, material_registry.get_uniform_set(h_rock), {}}
             });
 		world.emplace<MaterialComponent>(entity_plane, MaterialComponent{ h_rock });
 
@@ -565,7 +562,8 @@ struct TutorialApplication : EE::Application
 			.position = glm::vec3(1.0f, 1.0f, 1.0f),  // high up, centered over scene
 			.scale = glm::vec3(0.1f) });
 		world.emplace<MeshComponent>(point_light, MeshComponent{
-			point_light_mesh, pipeline_light, "cube_shader", uniform_set_0_light });
+			.mesh = point_light_mesh, .pipeline = pipeline_light,
+			.uniform_sets = {uniform_set_0_light} });
 		world.emplace<LightComponent>(point_light, LightComponent{ .data = {
 			.position = glm::vec4(1.0f, 1.0f, 1.0f, 15.0f),
 			.direction = glm::vec4(-0.5f, -1.0f, -0.5f, 0.0f),
@@ -582,129 +580,13 @@ struct TutorialApplication : EE::Application
     {
         camera.update_from_input(input_system.get(), frame_time);
 
-        // --- Frame UBO ---
-        FrameData_UBO frame_data{};
-        frame_data.camera.view = camera.get_view();
-        frame_data.camera.proj = camera.get_projection();
-        frame_data.camera.cameraPos = camera.get_position();
-        frame_data.time = static_cast<float>(elapsed_time);
-        //frame_ubo.upload(device, frame_data);
+        upload_light_ubo();
+        upload_frame_ubo(elapsed_time);
+        upload_point_shadow_ubo();
 
-        // --- Upload lights ---
-		LightBuffer light_buffer{};
-		world.view<TransformComponent, LightComponent>().each(
-			[&](auto entity, TransformComponent& t, LightComponent& l) {
-				if (light_buffer.count >= 16) return;
-				Light gpu_light = l.data;
-				// Override position xyz from transform, keep w (range)
-				gpu_light.position = glm::vec4(t.position, l.data.position.w);
-				light_buffer.lights[light_buffer.count++] = gpu_light;
-			});
-		light_ubo.upload(device, light_buffer);
-
-		// Compute light-space matrix from the first directional/spot light
-		glm::mat4 lightSpaceMatrix = glm::mat4(1.0f);
-		world.view<TransformComponent, LightComponent>().each(
-			[&](auto, TransformComponent& t, LightComponent& l) {
-                glm::mat4 lightProj = glm::orthoRH_ZO(-8.0f, 8.0f, -8.0f, 8.0f, 1.0f, 30.0f);
-				glm::mat4 lightView = glm::lookAt(
-					t.position,
-					t.position + glm::vec3(l.data.direction),
-					glm::vec3(0, 1, 0));
-				lightSpaceMatrix = lightProj * lightView;
-			});
-
-		frame_data.light_space_matrix = lightSpaceMatrix;
-		frame_ubo.upload(device, frame_data);
-
-		std::vector<Rendering::Drawable> shadow_drawables;
-		world.view<TransformComponent, MeshComponent>().each(
-			[&](auto entity, TransformComponent& t, MeshComponent& m) {
-                if (world.all_of<LightComponent>(entity)) return; // skip light proxy
-				auto model = t.get_model();
-				auto normal = t.get_normal_matrix();
-				shadow_drawables.push_back(Rendering::Drawable::make(
-					pipeline_shadow, m.mesh, "shadow_shader",
-					Rendering::PushConstantData::from(ObjectData_UBO{ model, normal }),
-					{ { uniform_set_0_shadow, 0 } }
-				));
-			});
-
-		// --- Point light shadow matrices ---
-		PointShadowUBO point_shadow_data{};
-		const float ps_near = 0.1f;
-		const float ps_far = 25.0f;
-
-		world.view<TransformComponent, LightComponent>().each(
-			[&](auto entity, TransformComponent& t, LightComponent& l) {
-				if (l.data.type != static_cast<uint32_t>(LightType::Point)) return;
-				//if (world.all_of<LightComponent>(entity)) return;
-
-				glm::vec3 lp = t.position;
-				glm::mat4 proj = glm::perspectiveRH_ZO(glm::radians(90.0f), 1.0f, ps_near, ps_far);
-				//proj[1][1] *= -1; // Vulkan Y flip
-
-				point_shadow_data.shadowMatrices[0] =
-					proj * glm::lookAt(lp, lp + glm::vec3(1, 0, 0), glm::vec3(0, -1, 0));
-				point_shadow_data.shadowMatrices[1] =
-					proj * glm::lookAt(lp, lp + glm::vec3(-1, 0, 0), glm::vec3(0, -1, 0));
-				point_shadow_data.shadowMatrices[2] =
-					proj * glm::lookAt(lp, lp + glm::vec3(0, 1, 0), glm::vec3(0, 0, 1));
-				point_shadow_data.shadowMatrices[3] =
-					proj * glm::lookAt(lp, lp + glm::vec3(0, -1, 0), glm::vec3(0, 0, -1));
-				point_shadow_data.shadowMatrices[4] =
-					proj * glm::lookAt(lp, lp + glm::vec3(0, 0, 1), glm::vec3(0, -1, 0));
-				point_shadow_data.shadowMatrices[5] =
-					proj * glm::lookAt(lp, lp + glm::vec3(0, 0, -1), glm::vec3(0, -1, 0));
-
-				point_shadow_data.lightPos = glm::vec4(lp, ps_far);
-			});
-		point_shadow_ubo.upload(device, point_shadow_data);
-
-		// --- Point shadow drawables (same geometry, different pipeline/uniforms) ---
-		std::vector<Rendering::Drawable> point_shadow_drawables;
-		world.view<TransformComponent, MeshComponent>().each(
-			[&](auto entity, TransformComponent& t, MeshComponent& m) {
-				if (world.all_of<LightComponent>(entity)) return;
-				auto model = t.get_model();
-				auto normal = t.get_normal_matrix();
-				point_shadow_drawables.push_back(Rendering::Drawable::make(
-					pipeline_point_shadow, m.mesh, "point_shadow_shader",
-					Rendering::PushConstantData::from(ObjectData_UBO{ model, normal }),
-					{ { uniform_set_0_point_shadow, 0 } }
-				));
-			});
-
-        // --- Upload material ---
-        material_registry.upload_all(device);
-
-        // --- Build drawables ---
-        std::vector<Rendering::Drawable> drawables;
-
-        // skybox
-		glm::mat4 identity = glm::mat4(1.0f);
-		drawables.push_back( Rendering::Drawable::make(pipeline_skybox, skybox_mesh, "skybox_shader",
-			Rendering::PushConstantData::from(ObjectData_UBO{ identity, identity }),
-			{ { uniform_set_skybox, 0 } }));
-
-        // grid - no entity, always identity
-        drawables.push_back( Rendering::Drawable::make(pipeline_grid, grid_mesh, "grid_shader",
-				            Rendering::PushConstantData::from(ObjectData_UBO{ identity, glm::transpose(glm::inverse(identity)) }),
-				            { { uniform_set_0_light, 0 } }));
-
-        // all mesh entities
-        world.view<TransformComponent, MeshComponent>().each(
-            [&](auto entity, TransformComponent& t, MeshComponent& m) {
-                auto model = t.get_model();
-                auto normal = t.get_normal_matrix();
-                drawables.push_back( Rendering::Drawable::make(m.pipeline, m.mesh, m.shader,
-					Rendering::PushConstantData::from(ObjectData_UBO{ model, normal }),
-					{
-						{ m.uniform_sets[0], 0},
-						{ m.uniform_sets[2], 2},
-					}
-                ));
-            });
+        auto shadow_drawables       = build_shadow_drawables();
+        auto point_shadow_drawables = build_point_shadow_drawables();
+        auto main_drawables         = build_main_drawables();
 
         device->imgui_begin_frame();
         const auto timer = Services::get().get<Util::FrameTimer>();
@@ -714,10 +596,10 @@ struct TutorialApplication : EE::Application
         fg.reset();
         bb.reset();
 
-		add_point_shadow_pass(fg, bb, 1024, point_shadow_drawables, *mesh_storage);
+        add_point_shadow_pass(fg, bb, 1024, point_shadow_drawables, *mesh_storage);
         add_shadow_pass(fg, bb, { 2048, 2048 }, shadow_drawables, *mesh_storage);
         add_basic_pass(fg, bb,
-            { device->screen_get_width(), device->screen_get_height() }, drawables, *mesh_storage, shadow_sampler);
+            { device->screen_get_width(), device->screen_get_height() }, main_drawables, *mesh_storage, shadow_sampler, pipeline_color);
         Rendering::add_imgui_pass(fg, bb,
             { device->screen_get_width(), device->screen_get_height() });
         Rendering::add_blit_pass(fg, bb);
@@ -731,6 +613,133 @@ struct TutorialApplication : EE::Application
         fg.execute(&rc, &rc);
     }
 
+    // -----------------------------------------------------------------------
+    // Per-frame upload helpers
+    // -----------------------------------------------------------------------
+
+    void upload_light_ubo()
+    {
+        LightBuffer buf{};
+        world.view<TransformComponent, LightComponent>().each(
+            [&](auto, TransformComponent& t, LightComponent& l) {
+                if (buf.count >= MAX_LIGHTS) return;
+                Light gpu_light = l.data;
+                gpu_light.position = glm::vec4(t.position, l.data.position.w);
+                buf.lights[buf.count++] = gpu_light;
+            });
+        light_ubo.upload(device, buf);
+    }
+
+    // Returns the light-space matrix for the first directional light found,
+    // or identity if none exists.
+    glm::mat4 compute_light_space_matrix()
+    {
+        glm::mat4 result = glm::mat4(1.0f);
+        world.view<TransformComponent, LightComponent>().each(
+            [&](auto, TransformComponent& t, LightComponent& l) {
+                if (l.data.type != static_cast<uint32_t>(LightType::Directional)) return;
+                glm::mat4 proj = glm::orthoRH_ZO(-8.0f, 8.0f, -8.0f, 8.0f, 1.0f, 30.0f);
+                glm::mat4 view = glm::lookAt(
+                    t.position,
+                    t.position + glm::vec3(l.data.direction),
+                    glm::vec3(0, 1, 0));
+                result = proj * view;
+            });
+        return result;
+    }
+
+    void upload_frame_ubo(double elapsed_time)
+    {
+        FrameData_UBO data{};
+        data.camera.view        = camera.get_view();
+        data.camera.proj        = camera.get_projection();
+        data.camera.cameraPos   = camera.get_position();
+        data.time               = static_cast<float>(elapsed_time);
+        data.light_space_matrix = compute_light_space_matrix();
+        frame_ubo.upload(device, data);
+    }
+
+    void upload_point_shadow_ubo()
+    {
+        constexpr float ps_near = 0.1f;
+        constexpr float ps_far  = 25.0f;
+
+        PointShadowUBO data{};
+        world.view<TransformComponent, LightComponent>().each(
+            [&](auto, TransformComponent& t, LightComponent& l) {
+                if (l.data.type != static_cast<uint32_t>(LightType::Point)) return;
+                glm::vec3 lp   = t.position;
+                glm::mat4 proj = glm::perspectiveRH_ZO(glm::radians(90.0f), 1.0f, ps_near, ps_far);
+                data.shadowMatrices[0] = proj * glm::lookAt(lp, lp + glm::vec3( 1, 0, 0), glm::vec3(0,-1, 0));
+                data.shadowMatrices[1] = proj * glm::lookAt(lp, lp + glm::vec3(-1, 0, 0), glm::vec3(0,-1, 0));
+                data.shadowMatrices[2] = proj * glm::lookAt(lp, lp + glm::vec3( 0, 1, 0), glm::vec3(0, 0, 1));
+                data.shadowMatrices[3] = proj * glm::lookAt(lp, lp + glm::vec3( 0,-1, 0), glm::vec3(0, 0,-1));
+                data.shadowMatrices[4] = proj * glm::lookAt(lp, lp + glm::vec3( 0, 0, 1), glm::vec3(0,-1, 0));
+                data.shadowMatrices[5] = proj * glm::lookAt(lp, lp + glm::vec3( 0, 0,-1), glm::vec3(0,-1, 0));
+                data.lightPos = glm::vec4(lp, ps_far);
+            });
+        point_shadow_ubo.upload(device, data);
+    }
+
+    // -----------------------------------------------------------------------
+    // Drawable builders
+    // -----------------------------------------------------------------------
+
+    std::vector<Rendering::Drawable> build_shadow_drawables()
+    {
+        std::vector<Rendering::Drawable> out;
+        world.view<TransformComponent, MeshComponent>(entt::exclude<LightComponent>).each(
+            [&](auto, TransformComponent& t, MeshComponent& m) {
+                out.push_back(Rendering::Drawable::make(
+                    pipeline_shadow, m.mesh,
+                    Rendering::PushConstantData::from(ObjectData_UBO{ t.get_model(), t.get_normal_matrix() }),
+                    { { uniform_set_0_shadow, 0 } }
+                ));
+            });
+        return out;
+    }
+
+    std::vector<Rendering::Drawable> build_point_shadow_drawables()
+    {
+        std::vector<Rendering::Drawable> out;
+        world.view<TransformComponent, MeshComponent>(entt::exclude<LightComponent>).each(
+            [&](auto, TransformComponent& t, MeshComponent& m) {
+                out.push_back(Rendering::Drawable::make(
+                    pipeline_point_shadow, m.mesh,
+                    Rendering::PushConstantData::from(ObjectData_UBO{ t.get_model(), t.get_normal_matrix() }),
+                    { { uniform_set_0_point_shadow, 0 } }
+                ));
+            });
+        return out;
+    }
+
+    std::vector<Rendering::Drawable> build_main_drawables()
+    {
+        material_registry.upload_all(device);
+        std::vector<Rendering::Drawable> out;
+
+        glm::mat4 identity = glm::mat4(1.0f);
+
+        out.push_back(Rendering::Drawable::make(pipeline_skybox, skybox_mesh,
+            Rendering::PushConstantData::from(ObjectData_UBO{ identity, identity }),
+            { { uniform_set_skybox, 0 } }));
+
+        out.push_back(Rendering::Drawable::make(pipeline_grid, grid_mesh,
+            Rendering::PushConstantData::from(ObjectData_UBO{ identity, glm::transpose(glm::inverse(identity)) }),
+            { { uniform_set_0_light, 0 } }));
+
+        world.view<TransformComponent, MeshComponent>().each(
+            [&](auto, TransformComponent& t, MeshComponent& m) {
+                out.push_back(Rendering::Drawable::make(
+                    m.pipeline, m.mesh,
+                    Rendering::PushConstantData::from(ObjectData_UBO{ t.get_model(), t.get_normal_matrix() }),
+                    { { m.uniform_sets[0], 0 }, { m.uniform_sets[2], 2 } }
+                ));
+            });
+
+        return out;
+    }
+
     void teardown_application() override
     {
         auto wsi = get_wsi();
@@ -740,13 +749,15 @@ struct TutorialApplication : EE::Application
         light_ubo.free(device);
 		device->free_rid(cubemap_uniform);
 		device->free_rid(rock_uniform);
-		device->free_rid(pipeline_skybox);
+		device->free_rid(pipeline_skybox.pipeline_rid);
 
         device->free_rid(diffuse_uniform);
         device->free_rid(specular_uniform);
-		device->free_rid(pipeline_color);
-		device->free_rid(pipeline_light);
-		device->free_rid(pipeline_grid);
+		device->free_rid(pipeline_color.pipeline_rid);
+		device->free_rid(pipeline_light.pipeline_rid);
+		device->free_rid(pipeline_grid.pipeline_rid);
+		device->free_rid(pipeline_shadow.pipeline_rid);
+		device->free_rid(pipeline_point_shadow.pipeline_rid);
         mesh_storage->finalize();
 
 		//device->free_rid(uniform_set_0);
@@ -763,7 +774,7 @@ private:
     Rendering::UniformBuffer<LightBuffer> light_ubo;
 
 	Rendering::UniformBuffer<PointShadowUBO> point_shadow_ubo;
-	RID pipeline_point_shadow;
+	Rendering::Pipeline pipeline_point_shadow;
 	RID uniform_set_0_point_shadow;
 
     RID uniform_set_0;
@@ -774,15 +785,15 @@ private:
     RID cubemap_uniform;
     RID rock_uniform;
 
-	RID pipeline_skybox;
+	Rendering::Pipeline pipeline_skybox;
 	RID uniform_set_skybox;
-	RID sampler_cube;                        // cubemaps need their own sampler
-	RID shadow_sampler;                       
+	RID sampler_cube;
+	RID shadow_sampler;
 
-    RID pipeline_color;
-    RID pipeline_light;
-    RID pipeline_grid;
-    RID pipeline_shadow;
+    Rendering::Pipeline pipeline_color;
+    Rendering::Pipeline pipeline_light;
+    Rendering::Pipeline pipeline_grid;
+    Rendering::Pipeline pipeline_shadow;
 
     RID sampler;
 

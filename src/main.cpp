@@ -80,11 +80,9 @@ void add_basic_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
 				rc.device->begin_render_pass_from_frame_buffer(frame_buffer,
 					viewport, clear_values);
 
-				rc.device->bind_render_pipeline(cmd, pipeline);
+				rc.device->bind_render_pipeline(cmd, pipeline.pipeline_rid);
 
-				rc.device->bind_uniform_set(
-					rc.device->get_shader_rid("triangle_shader"),
-					uniform_set, 0);
+				rc.device->bind_uniform_set(pipeline.shader_rid, uniform_set, 0);
 
 				rc.wsi->draw_mesh(cmd, mesh_handle);
 
@@ -202,7 +200,7 @@ struct TriangleApplication : EE::Application
 		su.append_id(sampler);
 		uniforms.push_back(su);
 
-		uniform_set = device->uniform_set_create(uniforms, device->get_shader_rid("triangle_shader"), 0);
+		uniform_set = device->uniform_set_create(uniforms, pipeline.shader_rid, 0);
 
 		wsi->submit_transfer_workers();
 		return wsi->pre_frame_loop();
@@ -221,7 +219,7 @@ struct TriangleApplication : EE::Application
 		ubo.model = glm::mat4(1.0f); // identity for now
 		ubo.view_projection = camera.get_view_projection();
 
-		device->set_push_constant(&ubo, sizeof(Camera_UBO), device->get_shader_rid("triangle_shader"));
+		device->set_push_constant(&ubo, sizeof(Camera_UBO), pipeline.shader_rid);
 
 		device->imgui_begin_frame();
 		const auto timer = Services::get().get<Util::FrameTimer>();
@@ -263,8 +261,7 @@ struct TriangleApplication : EE::Application
 		device->free_rid(camera_ubo);
 		device->free_rid(texture_uniform);
 		device->free_rid(texture_uniform_red);
-		device->free_rid(pipeline);
-		device->free_rid(sampler);
+		device->free_rid(pipeline.pipeline_rid);
 	}
 
 private:
@@ -276,7 +273,7 @@ private:
 
 	Rendering::MeshPrimitive prim;
 
-	RID pipeline;
+	Rendering::Pipeline pipeline;
 	Camera camera;
 
 	std::shared_ptr<EE::InputSystemInterface> input_system;
