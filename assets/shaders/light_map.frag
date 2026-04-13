@@ -79,10 +79,16 @@ float shadow_factor(vec4 fragPosLS, vec3 normal, vec3 lightDir) {
     return shadow / 9.0;
 }
 
-float samplePointShadow(vec3 fragPos, vec3 lightPos, float farPlane) {
+float samplePointShadow(vec3 fragPos, vec3 lightPos, float farPlane, vec3 normal) {
     vec3  dir          = fragPos - lightPos;
     float currentDepth = length(dir) / farPlane;
-    float bias         = 0.05;  // larger bias needed for point shadows
+
+    // slope-scaled bias: surfaces facing the light get minimal bias,
+    // grazing surfaces get more to avoid acne
+    vec3  lightDir = normalize(-dir);
+    float cosTheta = max(dot(normal, lightDir), 0.0);
+    float bias     = max(0.005 * (1.0 - cosTheta), 0.0005);
+
     float closestDepth = texture(PointShadowMap, dir).r;
     return currentDepth - bias < closestDepth ? 1.0 : 0.0;
 }
@@ -102,7 +108,6 @@ void main()
 {
     vec3 normal  = normalize(Normal);
     vec3 viewDir = normalize(frame.camera.cameraPos - FragPos);
-    vec3 lightDir = normalize(-vec3(lightData.lights[0].direction)); // toward light
     // Global ambient — one cheap sample, not multiplied per light
     vec3 color = vec3(0.05) * vec3(texture(diffuse_tex, TexCoords));
 
@@ -113,16 +118,19 @@ void main()
             TexCoords, normal, FragPos, viewDir);
     }
     
-    float shadow = 1.0f;
-    if(lightData.lights[0].type == LIGHT_DIRECTIONAL)
-    {
-        shadow = shadow_factor(fragPosLightSpace, normal, lightDir);
-    }else
-    {
-       shadow = samplePointShadow(FragPos, lightData.lights[0].position.xyz, 
-                           lightData.lights[0].position.w);
+    float shadow = 1.0;
+    for (uint i = 0u; i < lightData.lightCount; i++) {
+        if (lightData.lights[i].type == LIGHT_DIRECTIONAL) {
+            vec3 ld = normalize(-vec3(lightData.lights[i].direction));
+            shadow = min(shadow, shadow_factor(fragPosLightSpace, normal, ld));
+        } else if (lightData.lights[i].type == LIGHT_POINT) {
+            shadow = min(shadow, samplePointShadow(FragPos,
+                lightData.lights[i].position.xyz,
+                lightData.lights[i].position.w,
+                normal));
+        }
     }
-    
+
     FragColor = vec4(color * shadow, 1.0);
     //FragColor = vec4(color, 1.0);
 }

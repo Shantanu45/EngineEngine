@@ -120,6 +120,7 @@ void add_basic_pass(
     std::vector<Rendering::Drawable> drawables,
     Rendering::MeshStorage& storage,
     RID shadow_sampler,
+    RID point_shadow_sampler,
     Rendering::Pipeline light_map_pipeline)
 {
     bb.add<basic_pass_resource>() =
@@ -167,7 +168,7 @@ void add_basic_pass(
 
 				RID uniform_set_1 = Rendering::UniformSetBuilder{}
 					.add_texture(0, shadow_sampler, shadow_tex.texture_rid)
-					.add_texture(1, rc.device->sampler_create(RD::SamplerState()), point_shadow_tex.texture_rid)
+					.add_texture(1, point_shadow_sampler, point_shadow_tex.texture_rid)
 					.build(rc.device, light_map_pipeline.shader_rid, 1);
 
                 uint32_t w = rc.device->screen_get_width();
@@ -429,6 +430,15 @@ struct TutorialApplication : EE::Application
 		shadow_samp.compare_op = RD::COMPARE_OP_LESS_OR_EQUAL;
 		shadow_sampler = device->sampler_create(shadow_samp);
 
+		// sampler for the point shadow cubemap — nearest, clamp, no comparison (manual in shader)
+		RD::SamplerState ps_samp;
+		ps_samp.mag_filter = RD::SAMPLER_FILTER_NEAREST;
+		ps_samp.min_filter = RD::SAMPLER_FILTER_NEAREST;
+		ps_samp.repeat_u   = RD::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE;
+		ps_samp.repeat_v   = RD::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE;
+		ps_samp.repeat_w   = RD::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE;
+		point_shadow_sampler = device->sampler_create(ps_samp);
+
         // --- Uniform sets ---
         uniform_set_0 = Rendering::UniformSetBuilder{}
             .add(frame_ubo.as_uniform(0))
@@ -602,7 +612,7 @@ struct TutorialApplication : EE::Application
         add_point_shadow_pass(fg, bb, 1024, point_shadow_drawables, *mesh_storage);
         add_shadow_pass(fg, bb, { 2048, 2048 }, shadow_drawables, *mesh_storage);
         add_basic_pass(fg, bb,
-            { device->screen_get_width(), device->screen_get_height() }, main_drawables, *mesh_storage, shadow_sampler, pipeline_color);
+            { device->screen_get_width(), device->screen_get_height() }, main_drawables, *mesh_storage, shadow_sampler, point_shadow_sampler, pipeline_color);
         Rendering::add_imgui_pass(fg, bb,
             { device->screen_get_width(), device->screen_get_height() });
         Rendering::add_blit_pass(fg, bb);
@@ -665,14 +675,14 @@ struct TutorialApplication : EE::Application
     void upload_point_shadow_ubo()
     {
         constexpr float ps_near = 0.1f;
-        constexpr float ps_far  = 25.0f;
 
         PointShadowUBO data{};
         world.view<TransformComponent, LightComponent>().each(
             [&](auto, TransformComponent& t, LightComponent& l) {
                 if (l.data.type != static_cast<uint32_t>(LightType::Point)) return;
-                glm::vec3 lp   = t.position;
-                glm::mat4 proj = glm::perspectiveRH_ZO(glm::radians(90.0f), 1.0f, ps_near, ps_far);
+                glm::vec3 lp     = t.position;
+                float     ps_far = l.data.position.w;  // match range used by light attenuation
+                glm::mat4 proj   = glm::perspectiveRH_ZO(glm::radians(90.0f), 1.0f, ps_near, ps_far);
                 data.shadowMatrices[0] = proj * glm::lookAt(lp, lp + glm::vec3( 1, 0, 0), glm::vec3(0,-1, 0));
                 data.shadowMatrices[1] = proj * glm::lookAt(lp, lp + glm::vec3(-1, 0, 0), glm::vec3(0,-1, 0));
                 data.shadowMatrices[2] = proj * glm::lookAt(lp, lp + glm::vec3( 0, 1, 0), glm::vec3(0, 0, 1));
@@ -794,6 +804,7 @@ private:
 	RID uniform_set_skybox;
 	RID sampler_cube;
 	RID shadow_sampler;
+	RID point_shadow_sampler;
 
     Rendering::Pipeline pipeline_color;
     Rendering::Pipeline pipeline_light;
