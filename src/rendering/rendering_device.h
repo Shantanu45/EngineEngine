@@ -1261,6 +1261,8 @@ namespace Rendering
 
 		std::unordered_map<uint32_t, RID> shader_cache;
 
+		std::unordered_map<SamplerState, RID, SamplerStateHasher> sampler_cache;
+
 		RID imgui_texture_rid;
 
 		RID_Owner<RDD::SamplerID, true> sampler_owner;

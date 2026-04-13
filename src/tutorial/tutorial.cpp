@@ -86,7 +86,7 @@ void add_point_shadow_pass(
 
 				auto& cube_tex = resources.get<Rendering::FrameGraphTexture>(data.shadow_cubemap);
 
-				// Render into all 6 faces at once — the geometry shader
+				// Render into all 6 faces at once ï¿½ the geometry shader
 				// writes gl_Layer to fan triangles across each face.
 				RID fb = rc.device->framebuffer_create({ cube_tex.texture_rid });
 
@@ -471,7 +471,7 @@ struct TutorialApplication : EE::Application
 			.build(device, device->get_shader_rid("shadow_shader"), 0);
 
 		// --- Point shadow cubemap framebuffer format ---
-		// 6 layers, one per face — depth only
+		// 6 layers, one per face ï¿½ depth only
 		RD::AttachmentFormat point_shadow_att;
 		point_shadow_att.format = RD::DATA_FORMAT_D32_SFLOAT;
 		point_shadow_att.usage_flags = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT;
@@ -741,15 +741,12 @@ struct TutorialApplication : EE::Application
 		device->free_rid(cubemap_uniform);
 		device->free_rid(rock_uniform);
 		device->free_rid(pipeline_skybox);
-		device->free_rid(sampler_cube);
-		device->free_rid(shadow_sampler);
 
         device->free_rid(diffuse_uniform);
         device->free_rid(specular_uniform);
 		device->free_rid(pipeline_color);
 		device->free_rid(pipeline_light);
 		device->free_rid(pipeline_grid);
-        device->free_rid(sampler);
         mesh_storage->finalize();
 
 		//device->free_rid(uniform_set_0);
