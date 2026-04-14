@@ -20,9 +20,9 @@ layout(set = 0, binding = 0) uniform FrameUBO {
     mat4 lightSpaceMatrix; 
 } frame;
 
-layout(set = 1, binding = 0) uniform sampler2DShadow shadowMap;
-//layout(set = 1, binding = 1) uniform samplerCubeShadow PointShadowMap;
-layout(set = 1, binding = 1) uniform samplerCube PointShadowMap;
+layout(set = 1, binding = 0) uniform texture2D shadowMap;
+//layout(set = 1, binding = 1) uniform textureCubeShadow PointShadowMap;
+layout(set = 1, binding = 1) uniform textureCube PointShadowMap;
 
 layout(set = 2, binding = 0) uniform MaterialUBO {
     Material material;
@@ -36,9 +36,13 @@ layout(set = 0, binding = 2) uniform LightBuffer {
     Light lights[MAX_LIGHTS];
 } lightData;
 
-layout(set = 2, binding = 1) uniform sampler2D diffuse_tex;
-layout(set = 2, binding = 2) uniform sampler2D metallic_roughness;
-layout(set = 2, binding = 3) uniform sampler2D normal_tex;
+layout(set = 0, binding = 3) uniform sampler texSampler;
+layout(set = 0, binding = 4) uniform sampler pcfSampler;
+layout(set = 0, binding = 5) uniform sampler pointShadowSampler;
+
+layout(set = 2, binding = 1) uniform texture2D diffuse_tex;
+layout(set = 2, binding = 2) uniform texture2D metallic_roughness;
+layout(set = 2, binding = 3) uniform texture2D normal_tex;
 
 
 //float shadow_factor(vec4 fragPosLS, vec3 normal, vec3 lightDir) {
@@ -71,11 +75,11 @@ float shadow_factor(vec4 fragPosLS, vec3 normal, vec3 lightDir) {
     float cosTheta = max(dot(normalize(normal), normalize(lightDir)), 0.0);
     float bias = max(0.002 * (1.0 - cosTheta), 0.0005);
 
-    vec2 texelSize = 1.0 / textureSize(shadowMap, 0);
+    vec2 texelSize = 1.0 / textureSize(sampler2DShadow(shadowMap, pcfSampler), 0);
     float shadow = 0.0;
     for (int x = -1; x <= 1; x++) {
         for (int y = -1; y <= 1; y++) {
-            shadow += texture(shadowMap, vec3(proj.xy + vec2(x, y) * texelSize, proj.z - bias));
+            shadow += texture(sampler2DShadow(shadowMap, pcfSampler), vec3(proj.xy + vec2(x, y) * texelSize, proj.z - bias));
         }
     }
     return shadow / 9.0;
@@ -91,7 +95,7 @@ float samplePointShadow(vec3 fragPos, vec3 lightPos, float farPlane, vec3 normal
     float cosTheta = max(dot(normal, lightDir), 0.0);
     float bias     = max(0.005 * (1.0 - cosTheta), 0.0005);
 
-    float closestDepth = texture(PointShadowMap, dir).r;
+    float closestDepth = texture(samplerCube(PointShadowMap, pointShadowSampler), dir).r;
     return currentDepth - bias < closestDepth ? 1.0 : 0.0;
 }
 
@@ -109,19 +113,19 @@ float samplePointShadow(vec3 fragPos, vec3 lightPos, float farPlane, vec3 normal
 void main()
 {
     // Sample normal map and unpack from [0,1] to [-1,1] (tangent space)
-    vec3 tangentNormal = texture(normal_tex, TexCoords).rgb * 2.0 - 1.0;
+    vec3 tangentNormal = texture(sampler2D(normal_tex, texSampler), TexCoords).rgb * 2.0 - 1.0;
 
     // Build TBN to rotate from tangent space -> world space
     mat3 TBN   = mat3(normalize(Tangent), normalize(Bitangent), normalize(Normal));
     vec3 normal = normalize(TBN * tangentNormal);
     vec3 viewDir = normalize(frame.camera.cameraPos - FragPos);
     // Global ambient — one cheap sample, not multiplied per light
-    vec3 color = vec3(0.05) * vec3(texture(diffuse_tex, TexCoords));
+    vec3 color = vec3(0.05) * vec3(texture(sampler2D(diffuse_tex, texSampler), TexCoords));
 
     for (uint i = 0u; i < lightData.lightCount; i++) {
         color += CalcLight(
             lightData.lights[i], mat.material,
-            diffuse_tex, metallic_roughness,
+            diffuse_tex, metallic_roughness, texSampler,
             TexCoords, normal, FragPos, viewDir);
     }
     

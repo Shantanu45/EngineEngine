@@ -120,8 +120,6 @@ void add_basic_pass(
     Size2i extent,
     std::vector<Rendering::Drawable> drawables,
     Rendering::MeshStorage& storage,
-    RID shadow_sampler,
-    RID point_shadow_sampler,
     Rendering::Pipeline light_map_pipeline)
 {
     bb.add<basic_pass_resource>() =
@@ -168,8 +166,8 @@ void add_basic_pass(
 				auto& point_shadow_tex = resources.get<Rendering::FrameGraphTexture>(data.point_shadow_in);
 
 				RID uniform_set_1 = Rendering::UniformSetBuilder{}
-					.add_texture(0, shadow_sampler, shadow_tex.texture_rid)
-					.add_texture(1, point_shadow_sampler, point_shadow_tex.texture_rid)
+					.add_texture_only(0, shadow_tex.texture_rid)
+					.add_texture_only(1, point_shadow_tex.texture_rid)
 					.build(rc.device, light_map_pipeline.shader_rid, 1);
 
                 uint32_t w = rc.device->screen_get_width();
@@ -400,6 +398,9 @@ struct TutorialApplication : EE::Application
         uniform_set_0 = Rendering::UniformSetBuilder{}
             .add(frame_ubo.as_uniform(0))
             .add(light_ubo.as_uniform(2))
+            .add_sampler(3, sampler)
+            .add_sampler(4, shadow_sampler)
+            .add_sampler(5, point_shadow_sampler)
             .build(device, pipeline_color.shader_rid, 0);
 
         uniform_set_0_light = Rendering::UniformSetBuilder{}
@@ -477,14 +478,14 @@ struct TutorialApplication : EE::Application
         mat.metallic_roughness = specular_uniform;
 		mat.shininess = 64.0f;
 
-        Rendering::MaterialHandle h = material_registry.create(device, std::move(mat), sampler, fallback_texture, pipeline_color.shader_rid);
+        Rendering::MaterialHandle h = material_registry.create(device, std::move(mat), fallback_texture, pipeline_color.shader_rid);
 
 		Rendering::Material mat_rock;
 		mat_rock.diffuse = rock_uniform;
         mat_rock.normal = rock_normal_uniform;
 		mat_rock.base_color_factor = glm::vec4(1.0f);
 		mat_rock.shininess = 32.0f;
-		Rendering::MaterialHandle h_rock = material_registry.create(device, std::move(mat_rock), sampler, fallback_texture, pipeline_color.shader_rid);
+		Rendering::MaterialHandle h_rock = material_registry.create(device, std::move(mat_rock), fallback_texture, pipeline_color.shader_rid);
 
         // object cube
 		for (int x = 0; x < 2; x++) {
@@ -570,7 +571,7 @@ struct TutorialApplication : EE::Application
         add_point_shadow_pass(fg, bb, 1024, point_shadow_drawables, *mesh_storage);
         add_shadow_pass(fg, bb, { 2048, 2048 }, shadow_drawables, *mesh_storage);
         add_basic_pass(fg, bb,
-            { device->screen_get_width(), device->screen_get_height() }, main_drawables, *mesh_storage, shadow_sampler, point_shadow_sampler, pipeline_color);
+            { device->screen_get_width(), device->screen_get_height() }, main_drawables, *mesh_storage, pipeline_color);
         Rendering::add_imgui_pass(fg, bb,
             { device->screen_get_width(), device->screen_get_height() });
         Rendering::add_blit_pass(fg, bb);

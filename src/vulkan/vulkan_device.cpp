@@ -3846,7 +3846,7 @@ namespace Vulkan
 
 		// Single flat allocation per descriptor struct type.
 		// Pointers into these arrays remain stable (no reallocation) because
-		// we pre-sized them exactly — safe to hand to vkUpdateDescriptorSets.
+		// we pre-sized them exactly ï¿½ safe to hand to vkUpdateDescriptorSets.
 		std::vector<VkDescriptorImageInfo>  img_infos(total_image_infos);
 		std::vector<VkDescriptorBufferInfo> buf_infos(total_buffer_infos);
 		std::vector<VkBufferView>           buf_views(total_buffer_views);
@@ -3921,7 +3921,9 @@ namespace Vulkan
 #endif
 					dst[j] = {};
 					dst[j].imageView = ((const TextureInfo*)uniform.ids[j].id)->vk_view;
-					dst[j].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+					dst[j].imageLayout = uniform.is_depth
+						? VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
+						: VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 				}
 				vk_writes[writes_amount].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
 				vk_writes[writes_amount].pImageInfo = dst;

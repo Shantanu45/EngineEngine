@@ -89,11 +89,11 @@ vec3 CalcSpotLight(Light light, vec3 albedo, vec3 specMap,
 // ---------------------------------------------
 
 vec3 CalcLight(Light light, Material material,
-    sampler2D diffuse_tex, sampler2D specular_tex,
+    texture2D diffuse_tex, texture2D specular_tex, sampler texSampler,
     vec2 texCoords, vec3 normal, vec3 fragPos, vec3 viewDir)
 {
-    vec3 albedo  = vec3(texture(diffuse_tex,  texCoords));
-    vec3 specMap = vec3(texture(specular_tex, texCoords));
+    vec3 albedo  = vec3(texture(sampler2D(diffuse_tex,  texSampler), texCoords));
+    vec3 specMap = vec3(texture(sampler2D(specular_tex, texSampler), texCoords));
 
     if (light.type == LIGHT_DIRECTIONAL)
         return CalcDirLight(light, albedo, specMap, normal, viewDir, material.shininess);

@@ -18,12 +18,32 @@ namespace Rendering {
 			return *this;
 		}
 
-		// Add a sampler + texture pair
+		// Add a sampler + texture pair (combined descriptor)
 		UniformSetBuilder& add_texture(uint32_t binding, RID sampler, RID texture) {
 			RD::Uniform u;
 			u.uniform_type = RDC::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
 			u.binding = binding;
 			u.append_id(sampler);
+			u.append_id(texture);
+			uniforms.push_back(u);
+			return *this;
+		}
+
+		// Add a standalone sampler (no texture)
+		UniformSetBuilder& add_sampler(uint32_t binding, RID sampler) {
+			RD::Uniform u;
+			u.uniform_type = RDC::UNIFORM_TYPE_SAMPLER;
+			u.binding = binding;
+			u.append_id(sampler);
+			uniforms.push_back(u);
+			return *this;
+		}
+
+		// Add a texture without a sampler (pair with a standalone sampler in the shader)
+		UniformSetBuilder& add_texture_only(uint32_t binding, RID texture) {
+			RD::Uniform u;
+			u.uniform_type = RDC::UNIFORM_TYPE_TEXTURE;
+			u.binding = binding;
 			u.append_id(texture);
 			uniforms.push_back(u);
 			return *this;
