@@ -11,6 +11,7 @@
 #include "rendering/uniform_buffer.h"
 #include "rendering/uniform_set_builder.h"
 #include "rendering/default_textures.h"
+#include "tutorial/default_samplers.h"
 #include "entt/entt.hpp"
 #include "scene/components.h"
 
@@ -358,7 +359,7 @@ struct TutorialApplication : EE::Application
 		cubemap_uniform = device->texture_create(cubemap_tf, RD::TextureView(), face_pixels);
 		device->set_resource_name(cubemap_uniform, "Skybox cubemap");
 
-		sampler_cube = device->sampler_create(RD::SamplerState());
+		sampler_cube = Rendering::create_sampler_nearest_clamp(device);
 
 		RDC::PipelineDepthStencilState skybox_depth;
 		skybox_depth.enable_depth_test = true;
@@ -391,28 +392,9 @@ struct TutorialApplication : EE::Application
         rock_normal_uniform = Rendering::upload_texture_2d(device, rock_n_image,   RDC::DATA_FORMAT_R8G8B8A8_UNORM, "Rock normal texture");
         rock_uniform        = Rendering::upload_texture_2d(device, rock_image,     RDC::DATA_FORMAT_R8G8B8A8_SRGB,  "Rock texture");
 
-        sampler = device->sampler_create(RD::SamplerState());
-
-		// sampler setting to use Sampler2DShadow in glsl
-		RD::SamplerState shadow_samp;
-		shadow_samp.mag_filter = RD::SAMPLER_FILTER_LINEAR;
-		shadow_samp.min_filter = RD::SAMPLER_FILTER_LINEAR;
-		shadow_samp.mip_filter = RD::SAMPLER_FILTER_NEAREST;
-		shadow_samp.repeat_u = RD::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE;
-		shadow_samp.repeat_v = RD::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE;
-		shadow_samp.repeat_w = RD::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE;
-		shadow_samp.enable_compare = true;
-		shadow_samp.compare_op = RD::COMPARE_OP_LESS_OR_EQUAL;
-		shadow_sampler = device->sampler_create(shadow_samp);
-
-		// sampler for the point shadow cubemap — nearest, clamp, no comparison (manual in shader)
-		RD::SamplerState ps_samp;
-		ps_samp.mag_filter = RD::SAMPLER_FILTER_NEAREST;
-		ps_samp.min_filter = RD::SAMPLER_FILTER_NEAREST;
-		ps_samp.repeat_u   = RD::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE;
-		ps_samp.repeat_v   = RD::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE;
-		ps_samp.repeat_w   = RD::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE;
-		point_shadow_sampler = device->sampler_create(ps_samp);
+        sampler              = Rendering::create_sampler_nearest_clamp(device);
+		shadow_sampler       = Rendering::create_sampler_pcf_shadow(device);
+		point_shadow_sampler = Rendering::create_sampler_point_shadow(device);
 
         // --- Uniform sets ---
         uniform_set_0 = Rendering::UniformSetBuilder{}
