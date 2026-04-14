@@ -6,6 +6,8 @@ layout(location = 0) in vec3 FragPos;
 layout(location = 1) in vec3 Normal;
 layout(location = 2) in vec2 TexCoords;
 layout(location = 3) in vec4 fragPosLightSpace;
+layout(location = 4) in vec3 Tangent;
+layout(location = 5) in vec3 Bitangent;
 
 layout(location = 0) out vec4 FragColor;
 
@@ -106,11 +108,12 @@ float samplePointShadow(vec3 fragPos, vec3 lightPos, float farPlane, vec3 normal
 // TODO: impl for multiple lights
 void main()
 {
-    // obtain normal from normal map in range [0,1]
-    vec3 normal = texture(normal_tex, TexCoords).rgb;
-    // transform normal vector to range [-1,1]
-    normal = normalize(normal * 2.0 - 1.0);   
-    //vec3 normal  = normalize(Normal);
+    // Sample normal map and unpack from [0,1] to [-1,1] (tangent space)
+    vec3 tangentNormal = texture(normal_tex, TexCoords).rgb * 2.0 - 1.0;
+
+    // Build TBN to rotate from tangent space -> world space
+    mat3 TBN   = mat3(normalize(Tangent), normalize(Bitangent), normalize(Normal));
+    vec3 normal = normalize(TBN * tangentNormal);
     vec3 viewDir = normalize(frame.camera.cameraPos - FragPos);
     // Global ambient — one cheap sample, not multiplied per light
     vec3 color = vec3(0.05) * vec3(texture(diffuse_tex, TexCoords));
