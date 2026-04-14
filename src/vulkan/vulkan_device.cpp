@@ -3802,31 +3802,63 @@ namespace Vulkan
 		}
 		DescriptorSetPoolKey pool_key;
 
-		// We first gather dynamic arrays in a local array because TightLocalVector's
-		// growth is not efficient when the number of elements is unknown.
 		const BufferInfo* dynamic_buffers[MAX_DYNAMIC_BUFFERS];
 		uint32_t num_dynamic_buffers = 0u;
 
-		// Immutable samplers will be skipped so we need to track the number of vk_writes used.
+		// Pre-count how many of each descriptor info struct we need,
+		// so we can do a single allocation per type.
+		uint32_t total_image_infos = 0;
+		uint32_t total_buffer_infos = 0;
+		uint32_t total_buffer_views = 0;
+
+		for (const BoundUniform& u : p_uniforms) {
+			switch (u.type) {
+			case UNIFORM_TYPE_SAMPLER:
+				total_image_infos += u.ids.size();
+				break;
+			case UNIFORM_TYPE_SAMPLER_WITH_TEXTURE:
+				total_image_infos += u.ids.size() / 2;
+				break;
+			case UNIFORM_TYPE_TEXTURE:
+			case UNIFORM_TYPE_IMAGE:
+			case UNIFORM_TYPE_INPUT_ATTACHMENT:
+				total_image_infos += u.ids.size();
+				break;
+			case UNIFORM_TYPE_TEXTURE_BUFFER:
+				total_buffer_infos += u.ids.size();
+				total_buffer_views += u.ids.size();
+				break;
+			case UNIFORM_TYPE_SAMPLER_WITH_TEXTURE_BUFFER:
+				total_image_infos += u.ids.size() / 2; // sampler part
+				total_buffer_infos += u.ids.size() / 2;
+				total_buffer_views += u.ids.size() / 2;
+				break;
+			case UNIFORM_TYPE_UNIFORM_BUFFER:
+			case UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC:
+			case UNIFORM_TYPE_STORAGE_BUFFER:
+			case UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC:
+				total_buffer_infos += 1;
+				break;
+			default:
+				break;
+			}
+		}
+
+		// Single flat allocation per descriptor struct type.
+		// Pointers into these arrays remain stable (no reallocation) because
+		// we pre-sized them exactly — safe to hand to vkUpdateDescriptorSets.
+		std::vector<VkDescriptorImageInfo>  img_infos(total_image_infos);
+		std::vector<VkDescriptorBufferInfo> buf_infos(total_buffer_infos);
+		std::vector<VkBufferView>           buf_views(total_buffer_views);
+
+		uint32_t img_offset = 0;
+		uint32_t buf_offset = 0;
+		uint32_t view_offset = 0;
+
 		std::vector<VkWriteDescriptorSet> vk_writes_vec(p_uniforms.size());
 		VkWriteDescriptorSet* vk_writes = vk_writes_vec.data();
 		uint32_t writes_amount = 0;
 
-		// TODO: i think we can get away with one vector of each type. 
-		std::vector<std::unique_ptr<VkDescriptorBufferInfo>> vk_buf_info_vec;
-		std::vector<std::unique_ptr<VkDescriptorBufferInfo>> vk_buf_info_vec_dynamic;
-		std::vector<std::unique_ptr<VkDescriptorBufferInfo>> vk_buf_info_vec_storage;
-		std::vector<std::unique_ptr<VkDescriptorBufferInfo>> vk_buf_info_vec_storage_dynamic;
-		std::vector<std::unique_ptr<VkDescriptorImageInfo>> vk_img_infos_vec_sampler;
-		std::vector<std::unique_ptr<VkDescriptorImageInfo>> vk_img_infos_vec_texture;
-		std::vector<std::unique_ptr<VkDescriptorImageInfo>> vk_img_infos_vec;
-		std::vector<std::unique_ptr<VkDescriptorImageInfo>> vk_img_infos_vec_input_attachment;
-		std::vector<std::unique_ptr<VkDescriptorImageInfo>> vk_img_infos_vec_texture_buffer;
-		std::vector<std::unique_ptr<VkDescriptorImageInfo>> vk_img_infos_vec_texture_sampler;
-		std::vector<std::unique_ptr<VkDescriptorBufferInfo>> vk_texbuf_infos_vec;
-		std::vector<std::unique_ptr<VkDescriptorBufferInfo>> vk_texbuf_infos_vec_sampler;
-		std::vector<std::unique_ptr<VkBufferView>> vk_texbuf_views_vec;
-		std::vector<std::unique_ptr<VkBufferView>> vk_texbuf_views_vec_sampler;
 		for (uint32_t i = 0; i < p_uniforms.size(); i++) {
 			const BoundUniform& uniform = p_uniforms[i];
 
@@ -3844,228 +3876,197 @@ namespace Vulkan
 					add_write = false;
 				}
 				else {
-
+					VkDescriptorImageInfo* dst = &img_infos[img_offset];
 					for (uint32_t j = 0; j < num_descriptors; j++) {
-						vk_img_infos_vec_sampler.emplace_back(std::make_unique<VkDescriptorImageInfo>());
-						VkDescriptorImageInfo* vk_img_infos = vk_img_infos_vec_sampler.back().get();
-
-
-						vk_img_infos[j] = {};
-						vk_img_infos[j].sampler = (VkSampler)uniform.ids[j].id;
-						vk_img_infos[j].imageView = VK_NULL_HANDLE;
-						vk_img_infos[j].imageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+						dst[j] = {};
+						dst[j].sampler = (VkSampler)uniform.ids[j].id;
+						dst[j].imageView = VK_NULL_HANDLE;
+						dst[j].imageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 					}
-
 					vk_writes[writes_amount].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
-					vk_writes[writes_amount].pImageInfo = (vk_img_infos_vec_sampler.end() - num_descriptors)->get();
+					vk_writes[writes_amount].pImageInfo = dst;
+					img_offset += num_descriptors;
 				}
 			} break;
+
 			case UNIFORM_TYPE_SAMPLER_WITH_TEXTURE: {
 				num_descriptors = uniform.ids.size() / 2;
-
+				VkDescriptorImageInfo* dst = &img_infos[img_offset];
 				for (uint32_t j = 0; j < num_descriptors; j++) {
-
-				vk_img_infos_vec_texture_sampler.emplace_back(std::make_unique<VkDescriptorImageInfo>());
-				VkDescriptorImageInfo* vk_img_infos = vk_img_infos_vec_texture_sampler.back().get();
-
-
 #ifdef DEBUG_ENABLED
 					if (((const TextureInfo*)uniform.ids[j * 2 + 1].id)->transient) {
 						ERR_PRINT("TEXTURE_USAGE_TRANSIENT_BIT texture must not be used for sampling in a shader.");
 					}
 #endif
-					vk_img_infos[j] = {};
-					vk_img_infos[j].sampler = (VkSampler)uniform.ids[j * 2 + 0].id;
-					vk_img_infos[j].imageView = ((const TextureInfo*)uniform.ids[j * 2 + 1].id)->vk_view;
-					vk_img_infos[j].imageLayout = uniform.is_depth
+					dst[j] = {};
+					dst[j].sampler = (VkSampler)uniform.ids[j * 2 + 0].id;
+					dst[j].imageView = ((const TextureInfo*)uniform.ids[j * 2 + 1].id)->vk_view;
+					dst[j].imageLayout = uniform.is_depth
 						? VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
 						: VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 				}
-
 				vk_writes[writes_amount].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-				vk_writes[writes_amount].pImageInfo = (vk_img_infos_vec_texture_sampler.end() - num_descriptors)->get();;
+				vk_writes[writes_amount].pImageInfo = dst;
+				img_offset += num_descriptors;
 			} break;
+
 			case UNIFORM_TYPE_TEXTURE: {
 				num_descriptors = uniform.ids.size();
-
+				VkDescriptorImageInfo* dst = &img_infos[img_offset];
 				for (uint32_t j = 0; j < num_descriptors; j++) {
-				vk_img_infos_vec_texture.emplace_back(std::make_unique<VkDescriptorImageInfo>());
-				VkDescriptorImageInfo* vk_img_infos = vk_img_infos_vec_texture.back().get();
-
 #ifdef DEBUG_ENABLED
 					if (((const TextureInfo*)uniform.ids[j].id)->transient) {
 						ERR_PRINT("TEXTURE_USAGE_TRANSIENT_BIT texture must not be used for sampling in a shader.");
 					}
 #endif
-					//vk_img_infos[j] = {};
-					vk_img_infos->imageView = ((const TextureInfo*)uniform.ids[j].id)->vk_view;
-					vk_img_infos->imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+					dst[j] = {};
+					dst[j].imageView = ((const TextureInfo*)uniform.ids[j].id)->vk_view;
+					dst[j].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 				}
-
 				vk_writes[writes_amount].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-				DEBUG_ASSERT(vk_img_infos_vec_texture.size() >= num_descriptors);
-				vk_writes[writes_amount].pImageInfo = (vk_img_infos_vec_texture.end() - num_descriptors)->get();
+				vk_writes[writes_amount].pImageInfo = dst;
+				img_offset += num_descriptors;
 			} break;
+
 			case UNIFORM_TYPE_IMAGE: {
 				num_descriptors = uniform.ids.size();
-
+				VkDescriptorImageInfo* dst = &img_infos[img_offset];
 				for (uint32_t j = 0; j < num_descriptors; j++) {
-
-				vk_img_infos_vec.emplace_back(std::make_unique<VkDescriptorImageInfo>()); ;
-
-				VkDescriptorImageInfo* vk_img_infos = vk_img_infos_vec.back().get();
 #ifdef DEBUG_ENABLED
 					if (((const TextureInfo*)uniform.ids[j].id)->transient) {
 						ERR_PRINT("TEXTURE_USAGE_TRANSIENT_BIT texture must not be used for sampling in a shader.");
 					}
 #endif
-					vk_img_infos[j] = {};
-					vk_img_infos[j].imageView = ((const TextureInfo*)uniform.ids[j].id)->vk_view;
-					vk_img_infos[j].imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+					dst[j] = {};
+					dst[j].imageView = ((const TextureInfo*)uniform.ids[j].id)->vk_view;
+					dst[j].imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 				}
-
 				vk_writes[writes_amount].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-				vk_writes[writes_amount].pImageInfo = (vk_img_infos_vec.end() - num_descriptors)->get();
+				vk_writes[writes_amount].pImageInfo = dst;
+				img_offset += num_descriptors;
 			} break;
+
 			case UNIFORM_TYPE_TEXTURE_BUFFER: {
 				num_descriptors = uniform.ids.size();
-
+				VkDescriptorBufferInfo* bdst = &buf_infos[buf_offset];
+				VkBufferView* vdst = &buf_views[view_offset];
 				for (uint32_t j = 0; j < num_descriptors; j++) {
-					vk_texbuf_infos_vec.emplace_back(std::make_unique<VkDescriptorBufferInfo>());
-					VkDescriptorBufferInfo* vk_buf_infos = vk_texbuf_infos_vec.back().get();
-
-					vk_texbuf_views_vec.emplace_back(std::make_unique<VkBufferView>());
-					VkBufferView* vk_buf_views = vk_texbuf_views_vec.back().get();
-
-					const BufferInfo* buf_info = (const BufferInfo*)uniform.ids[j].id;
-					vk_buf_infos[j] = {};
-					vk_buf_infos[j].buffer = buf_info->vk_buffer;
-					vk_buf_infos[j].range = buf_info->size;
-
-					vk_buf_views[j] = buf_info->vk_view;
+					const BufferInfo* bi = (const BufferInfo*)uniform.ids[j].id;
+					bdst[j] = {};
+					bdst[j].buffer = bi->vk_buffer;
+					bdst[j].range = bi->size;
+					vdst[j] = bi->vk_view;
 				}
-
 				vk_writes[writes_amount].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
-				vk_writes[writes_amount].pBufferInfo = (vk_texbuf_infos_vec.end() - num_descriptors)->get();
-				vk_writes[writes_amount].pTexelBufferView = (vk_texbuf_views_vec.end() - num_descriptors)->get();
+				vk_writes[writes_amount].pBufferInfo = bdst;
+				vk_writes[writes_amount].pTexelBufferView = vdst;
+				buf_offset += num_descriptors;
+				view_offset += num_descriptors;
 			} break;
+
 			case UNIFORM_TYPE_SAMPLER_WITH_TEXTURE_BUFFER: {
 				num_descriptors = uniform.ids.size() / 2;
+				VkDescriptorImageInfo* idst = &img_infos[img_offset];
+				VkDescriptorBufferInfo* bdst = &buf_infos[buf_offset];
+				VkBufferView* vdst = &buf_views[view_offset];
 				for (uint32_t j = 0; j < num_descriptors; j++) {
-					vk_texbuf_infos_vec_sampler.emplace_back(std::make_unique<VkDescriptorBufferInfo>());
-					VkDescriptorBufferInfo* vk_buf_infos = vk_texbuf_infos_vec_sampler.back().get();
+					idst[j] = {};
+					idst[j].sampler = (VkSampler)uniform.ids[j * 2 + 0].id;
 
-					vk_texbuf_views_vec_sampler.emplace_back(std::make_unique<VkBufferView>());
-					VkBufferView* vk_buf_views = vk_texbuf_views_vec_sampler.back().get();
-
-					vk_img_infos_vec_texture_buffer.emplace_back(std::make_unique<VkDescriptorImageInfo>());
-					VkDescriptorImageInfo* vk_img_infos = vk_img_infos_vec_texture_buffer.back().get();
-
-					vk_img_infos[j] = {};
-					vk_img_infos[j].sampler = (VkSampler)uniform.ids[j * 2 + 0].id;
-
-					const BufferInfo* buf_info = (const BufferInfo*)uniform.ids[j * 2 + 1].id;
-					vk_buf_infos[j] = {};
-					vk_buf_infos[j].buffer = buf_info->vk_buffer;
-					vk_buf_infos[j].range = buf_info->size;
-
-					vk_buf_views[j] = buf_info->vk_view;
+					const BufferInfo* bi = (const BufferInfo*)uniform.ids[j * 2 + 1].id;
+					bdst[j] = {};
+					bdst[j].buffer = bi->vk_buffer;
+					bdst[j].range = bi->size;
+					vdst[j] = bi->vk_view;
 				}
-
 				vk_writes[writes_amount].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
-				vk_writes[writes_amount].pImageInfo = (vk_img_infos_vec_texture_buffer.end() - num_descriptors)->get();
-				vk_writes[writes_amount].pBufferInfo = (vk_texbuf_infos_vec_sampler.end() - num_descriptors)->get();
-				vk_writes[writes_amount].pTexelBufferView = (vk_texbuf_views_vec_sampler.end() - num_descriptors)->get();
+				vk_writes[writes_amount].pImageInfo = idst;
+				vk_writes[writes_amount].pBufferInfo = bdst;
+				vk_writes[writes_amount].pTexelBufferView = vdst;
+				img_offset += num_descriptors;
+				buf_offset += num_descriptors;
+				view_offset += num_descriptors;
 			} break;
+
 			case UNIFORM_TYPE_IMAGE_BUFFER: {
 				CRASH_NOW_MSG("Unimplemented!"); // TODO.
 			} break;
+
 			case UNIFORM_TYPE_UNIFORM_BUFFER: {
-				const BufferInfo* buf_info = (const BufferInfo*)uniform.ids[0].id;
-				vk_buf_info_vec.emplace_back(std::make_unique<VkDescriptorBufferInfo>());
-				VkDescriptorBufferInfo* vk_buf_info = vk_buf_info_vec.back().get();
+				const BufferInfo* bi = (const BufferInfo*)uniform.ids[0].id;
+				VkDescriptorBufferInfo* dst = &buf_infos[buf_offset++];
+				dst->buffer = bi->vk_buffer;
+				dst->range = bi->size;
 
-				vk_buf_info->buffer = buf_info->vk_buffer;
-				vk_buf_info->range = buf_info->size;
-
-				ERR_FAIL_COND_V_MSG(buf_info->is_dynamic(), UniformSetID(),
-					std::format("Sent a buffer with BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT but binding ( {} ), set ( {} ) is UNIFORM_TYPE_UNIFORM_BUFFER instead of UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC.", std::to_string(uniform.binding), std::to_string(p_set_index)));
+				ERR_FAIL_COND_V_MSG(bi->is_dynamic(), UniformSetID(),
+					std::format("Sent a buffer with BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT but binding ( {} ), set ( {} ) is UNIFORM_TYPE_UNIFORM_BUFFER instead of UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC.",
+						std::to_string(uniform.binding), std::to_string(p_set_index)));
 
 				vk_writes[writes_amount].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-				vk_writes[writes_amount].pBufferInfo = vk_buf_info;
+				vk_writes[writes_amount].pBufferInfo = dst;
 			} break;
-			case UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC: {
-				const BufferInfo* buf_info = (const BufferInfo*)uniform.ids[0].id;
-				vk_buf_info_vec_dynamic.emplace_back(std::make_unique<VkDescriptorBufferInfo>());
-				VkDescriptorBufferInfo* vk_buf_info = vk_buf_info_vec_dynamic.back().get();
-				vk_buf_info->buffer = buf_info->vk_buffer;
-				vk_buf_info->range = buf_info->size;
 
-				ERR_FAIL_COND_V_MSG(!buf_info->is_dynamic(), UniformSetID(),
-					std::format("Sent a buffer without BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT but binding ( {} ), set ( {} ) is UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC instead of UNIFORM_TYPE_UNIFORM_BUFFER.", std::to_string(uniform.binding), std::to_string(p_set_index) ));
+			case UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC: {
+				const BufferInfo* bi = (const BufferInfo*)uniform.ids[0].id;
+				VkDescriptorBufferInfo* dst = &buf_infos[buf_offset++];
+				dst->buffer = bi->vk_buffer;
+				dst->range = bi->size;
+
+				ERR_FAIL_COND_V_MSG(!bi->is_dynamic(), UniformSetID(),
+					std::format("Sent a buffer without BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT but binding ( {} ), set ( {} ) is UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC instead of UNIFORM_TYPE_UNIFORM_BUFFER.",
+						std::to_string(uniform.binding), std::to_string(p_set_index)));
 				ERR_FAIL_COND_V_MSG(num_dynamic_buffers >= MAX_DYNAMIC_BUFFERS, UniformSetID(),
 					std::format("Uniform set exceeded the limit of dynamic/persistent buffers. ( {} ).", std::to_string(MAX_DYNAMIC_BUFFERS)));
 
-				dynamic_buffers[num_dynamic_buffers++] = buf_info;
+				dynamic_buffers[num_dynamic_buffers++] = bi;
 				vk_writes[writes_amount].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-				vk_writes[writes_amount].pBufferInfo = vk_buf_info;
+				vk_writes[writes_amount].pBufferInfo = dst;
 			} break;
-			case UNIFORM_TYPE_STORAGE_BUFFER: {
-				const BufferInfo* buf_info = (const BufferInfo*)uniform.ids[0].id;
-				vk_buf_info_vec_storage.emplace_back(std::make_unique<VkDescriptorBufferInfo>());
-				VkDescriptorBufferInfo* vk_buf_info = vk_buf_info_vec_storage.back().get();
-				vk_buf_info->buffer = buf_info->vk_buffer;
-				vk_buf_info->range = buf_info->size;
 
-				ERR_FAIL_COND_V_MSG(buf_info->is_dynamic(), UniformSetID(),
-					std::format("Sent a buffer with BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT but binding ( {} ), set ( {} ) is UNIFORM_TYPE_STORAGE_BUFFER instead of UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC.", std::to_string(uniform.binding), std::to_string(p_set_index)));
+			case UNIFORM_TYPE_STORAGE_BUFFER: {
+				const BufferInfo* bi = (const BufferInfo*)uniform.ids[0].id;
+				VkDescriptorBufferInfo* dst = &buf_infos[buf_offset++];
+				dst->buffer = bi->vk_buffer;
+				dst->range = bi->size;
+
+				ERR_FAIL_COND_V_MSG(bi->is_dynamic(), UniformSetID(),
+					std::format("Sent a buffer with BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT but binding ( {} ), set ( {} ) is UNIFORM_TYPE_STORAGE_BUFFER instead of UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC.",
+						std::to_string(uniform.binding), std::to_string(p_set_index)));
 
 				vk_writes[writes_amount].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-				vk_writes[writes_amount].pBufferInfo = vk_buf_info;
+				vk_writes[writes_amount].pBufferInfo = dst;
 			} break;
+
 			case UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC: {
-				const BufferInfo* buf_info = (const BufferInfo*)uniform.ids[0].id;
-				vk_buf_info_vec_storage_dynamic.emplace_back(std::make_unique<VkDescriptorBufferInfo>());
-				VkDescriptorBufferInfo* vk_buf_info = vk_buf_info_vec_storage_dynamic.back().get();
+				const BufferInfo* bi = (const BufferInfo*)uniform.ids[0].id;
+				VkDescriptorBufferInfo* dst = &buf_infos[buf_offset++];
+				dst->buffer = bi->vk_buffer;
+				dst->range = bi->size;
 
-				vk_buf_info->buffer = buf_info->vk_buffer;
-				vk_buf_info->range = buf_info->size;
-
-				ERR_FAIL_COND_V_MSG(!buf_info->is_dynamic(), UniformSetID(),
-					std::format("Sent a buffer without BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT but binding ( {} ), set ( {} ) is UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC instead of UNIFORM_TYPE_STORAGE_BUFFER.", std::to_string(uniform.binding), std::to_string(p_set_index)));
+				ERR_FAIL_COND_V_MSG(!bi->is_dynamic(), UniformSetID(),
+					std::format("Sent a buffer without BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT but binding ( {} ), set ( {} ) is UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC instead of UNIFORM_TYPE_STORAGE_BUFFER.",
+						std::to_string(uniform.binding), std::to_string(p_set_index)));
 				ERR_FAIL_COND_V_MSG(num_dynamic_buffers >= MAX_DYNAMIC_BUFFERS, UniformSetID(),
 					std::format("Uniform set exceeded the limit of dynamic/persistent buffers. ( {} )", std::to_string(MAX_DYNAMIC_BUFFERS)));
 
-				dynamic_buffers[num_dynamic_buffers++] = buf_info;
+				dynamic_buffers[num_dynamic_buffers++] = bi;
 				vk_writes[writes_amount].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
-				vk_writes[writes_amount].pBufferInfo = vk_buf_info;
+				vk_writes[writes_amount].pBufferInfo = dst;
 			} break;
+
 			case UNIFORM_TYPE_INPUT_ATTACHMENT: {
 				num_descriptors = uniform.ids.size();
-				
-				for (uint32_t j = 0; j < uniform.ids.size(); j++) {
-				vk_img_infos_vec_input_attachment.emplace_back(std::make_unique<VkDescriptorImageInfo>());
-
-					VkDescriptorImageInfo* vk_img_infos = vk_img_infos_vec_input_attachment.back().get();
-					vk_img_infos[j] = {};
-					vk_img_infos[j].imageView = ((const TextureInfo*)uniform.ids[j].id)->vk_view;
-					vk_img_infos[j].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+				VkDescriptorImageInfo* dst = &img_infos[img_offset];
+				for (uint32_t j = 0; j < num_descriptors; j++) {
+					dst[j] = {};
+					dst[j].imageView = ((const TextureInfo*)uniform.ids[j].id)->vk_view;
+					dst[j].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 				}
-
 				vk_writes[writes_amount].descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
-				vk_writes[writes_amount].pImageInfo = (vk_img_infos_vec_input_attachment.end() - num_descriptors)->get();
+				vk_writes[writes_amount].pImageInfo = dst;
+				img_offset += num_descriptors;
 			} break;
-			//case UNIFORM_TYPE_ACCELERATION_STRUCTURE: {
-			//	const AccelerationStructureInfo* accel_info = (const AccelerationStructureInfo*)uniform.ids[0].id;
-			//	VkWriteDescriptorSetAccelerationStructureKHR* acceleration_structure_write = ALLOCA_SINGLE(VkWriteDescriptorSetAccelerationStructureKHR);
-			//	*acceleration_structure_write = {};
-			//	acceleration_structure_write->sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
-			//	acceleration_structure_write->accelerationStructureCount = 1;
-			//	acceleration_structure_write->pAccelerationStructures = &accel_info->vk_acceleration_structure;
 
-			//	vk_writes[i].descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
-			//	vk_writes[i].pNext = acceleration_structure_write;
-			//} break;
 			default: {
 				DEV_ASSERT(false);
 			}
@@ -4077,7 +4078,8 @@ namespace Vulkan
 				writes_amount++;
 			}
 
-			ERR_FAIL_COND_V_MSG(pool_key.uniform_type[uniform.type] == MAX_UNIFORM_POOL_ELEMENT, UniformSetID(), std::format("Uniform set reached the limit of bindings for the same type ( {} )", std::to_string(MAX_UNIFORM_POOL_ELEMENT)));
+			ERR_FAIL_COND_V_MSG(pool_key.uniform_type[uniform.type] == MAX_UNIFORM_POOL_ELEMENT, UniformSetID(),
+				std::format("Uniform set reached the limit of bindings for the same type ( {} )", std::to_string(MAX_UNIFORM_POOL_ELEMENT)));
 			pool_key.uniform_type[uniform.type] += num_descriptors;
 		}
 
@@ -4109,27 +4111,23 @@ namespace Vulkan
 				descriptor_set_allocate_info.descriptorPool = E.first;
 				VkResult res = vkAllocateDescriptorSets(vk_device, &descriptor_set_allocate_info, &vk_descriptor_set);
 
-				// Break early on success.
 				if (res == VK_SUCCESS) {
 					break;
 				}
 
-				// "Fragmented pool" and "out of memory pool" errors are handled by creating more pools. Any other error is unexpected.
 				if (res != VK_ERROR_FRAGMENTED_POOL && res != VK_ERROR_OUT_OF_POOL_MEMORY) {
 					ERR_FAIL_V_MSG(UniformSetID(), std::format("Cannot allocate descriptor sets, error {} .", std::to_string(res)));
 				}
 			}
 		}
 
-		// Create a new pool when no allocations could be made from the existing pools.
 		if (vk_descriptor_set == VK_NULL_HANDLE) {
 			descriptor_set_allocate_info.descriptorPool = _descriptor_set_pool_create(pool_key, linear_pool);
 			VkResult res = vkAllocateDescriptorSets(vk_device, &descriptor_set_allocate_info, &vk_descriptor_set);
 
-			// All errors are unexpected at this stage.
 			if (res) {
 				vkDestroyDescriptorPool(vk_device, descriptor_set_allocate_info.descriptorPool, nullptr);
-				ERR_FAIL_V_MSG(UniformSetID(),std::format("Cannot allocate descriptor sets, error {} .", std::to_string(res)));
+				ERR_FAIL_V_MSG(UniformSetID(), std::format("Cannot allocate descriptor sets, error {} .", std::to_string(res)));
 			}
 		}
 
@@ -4142,7 +4140,6 @@ namespace Vulkan
 		vkUpdateDescriptorSets(vk_device, writes_amount, vk_writes, 0, nullptr);
 
 		// Bookkeep.
-
 		UniformSetInfo* usi = new UniformSetInfo();
 		usi->vk_descriptor_set = vk_descriptor_set;
 		if (p_linear_pool_index >= 0) {
