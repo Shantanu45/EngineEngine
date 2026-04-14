@@ -36,7 +36,7 @@ layout(set = 0, binding = 2) uniform LightBuffer {
 
 layout(set = 2, binding = 1) uniform sampler2D diffuse_tex;
 layout(set = 2, binding = 2) uniform sampler2D metallic_roughness;
-layout(set = 2, binding = 3) uniform sampler2D normal;
+layout(set = 2, binding = 3) uniform sampler2D normal_tex;
 
 
 //float shadow_factor(vec4 fragPosLS, vec3 normal, vec3 lightDir) {
@@ -106,7 +106,11 @@ float samplePointShadow(vec3 fragPos, vec3 lightPos, float farPlane, vec3 normal
 // TODO: impl for multiple lights
 void main()
 {
-    vec3 normal  = normalize(Normal);
+    // obtain normal from normal map in range [0,1]
+    vec3 normal = texture(normal_tex, TexCoords).rgb;
+    // transform normal vector to range [-1,1]
+    normal = normalize(normal * 2.0 - 1.0);   
+    //vec3 normal  = normalize(Normal);
     vec3 viewDir = normalize(frame.camera.cameraPos - FragPos);
     // Global ambient — one cheap sample, not multiplied per light
     vec3 color = vec3(0.05) * vec3(texture(diffuse_tex, TexCoords));

@@ -381,7 +381,8 @@ struct TutorialApplication : EE::Application
 
         auto diffuse_image = img_loader.load_from_file("assets://textures/container2.png");
         auto specular_image = img_loader.load_from_file("assets://textures/container2_specular.png");
-        auto rock_image = img_loader.load_from_file("assets://textures/stone-granite.png");
+        auto rock_image = img_loader.load_from_file("assets://textures/brickwall.jpg");
+        auto rock_n_image = img_loader.load_from_file("assets://textures/brickwall_normal.jpg");
 
         RDC::TextureFormat tf;
         tf.width = diffuse_image.width;
@@ -391,13 +392,21 @@ struct TutorialApplication : EE::Application
         tf.usage_bits = RDC::TEXTURE_USAGE_SAMPLING_BIT | RDC::TEXTURE_USAGE_CAN_UPDATE_BIT;
         tf.format = RDC::DATA_FORMAT_R8G8B8A8_SRGB;
 
-		RDC::TextureFormat tf_spec;
-		tf_spec.width = diffuse_image.width;
-		tf_spec.height = diffuse_image.height;
-		tf_spec.array_layers = 1;
-		tf_spec.texture_type = RDC::TEXTURE_TYPE_2D;
-		tf_spec.usage_bits = RDC::TEXTURE_USAGE_SAMPLING_BIT | RDC::TEXTURE_USAGE_CAN_UPDATE_BIT;
-		tf_spec.format = RDC::DATA_FORMAT_R8G8B8A8_UNORM;
+		RDC::TextureFormat tf_unorm;
+		tf_unorm.width = diffuse_image.width;
+		tf_unorm.height = diffuse_image.height;
+		tf_unorm.array_layers = 1;
+		tf_unorm.texture_type = RDC::TEXTURE_TYPE_2D;
+		tf_unorm.usage_bits = RDC::TEXTURE_USAGE_SAMPLING_BIT | RDC::TEXTURE_USAGE_CAN_UPDATE_BIT;
+		tf_unorm.format = RDC::DATA_FORMAT_R8G8B8A8_UNORM;
+
+		RDC::TextureFormat tf_unorm_rock;
+		tf_unorm_rock.width = rock_n_image.width;
+		tf_unorm_rock.height = rock_n_image.height;
+		tf_unorm_rock.array_layers = 1;
+		tf_unorm_rock.texture_type = RDC::TEXTURE_TYPE_2D;
+		tf_unorm_rock.usage_bits = RDC::TEXTURE_USAGE_SAMPLING_BIT | RDC::TEXTURE_USAGE_CAN_UPDATE_BIT;
+		tf_unorm_rock.format = RDC::DATA_FORMAT_R8G8B8A8_UNORM;
 
 		RDC::TextureFormat tf_rock;
 		tf_rock.width = rock_image.width;
@@ -410,9 +419,11 @@ struct TutorialApplication : EE::Application
         fallback_texture = Rendering::create_white_texture(device);
 
         diffuse_uniform = device->texture_create(tf, RD::TextureView(), { diffuse_image.pixels });
-        specular_uniform = device->texture_create(tf_spec, RD::TextureView(), { specular_image.pixels });
+        specular_uniform = device->texture_create(tf_unorm, RD::TextureView(), { specular_image.pixels });
+        rock_normal_uniform = device->texture_create(tf_unorm_rock, RD::TextureView(), { rock_n_image.pixels });
         rock_uniform = device->texture_create(tf_rock, RD::TextureView(), { rock_image.pixels });
         device->set_resource_name(diffuse_uniform, "Diffuse texture");
+        device->set_resource_name(rock_normal_uniform, "Rock normal texture");
         device->set_resource_name(specular_uniform, "Specular texture");
         device->set_resource_name(rock_uniform, "Rock texture");
 
@@ -524,6 +535,7 @@ struct TutorialApplication : EE::Application
 
 		Rendering::Material mat_rock;
 		mat_rock.diffuse = rock_uniform;
+        mat_rock.normal = rock_normal_uniform;
 		mat_rock.base_color_factor = glm::vec4(1.0f);
 		mat_rock.shininess = 32.0f;
 		Rendering::MaterialHandle h_rock = material_registry.create(device, std::move(mat_rock), sampler, fallback_texture, pipeline_color.shader_rid);
@@ -762,6 +774,7 @@ struct TutorialApplication : EE::Application
         light_ubo.free(device);
 		device->free_rid(cubemap_uniform);
 		device->free_rid(rock_uniform);
+		device->free_rid(rock_normal_uniform);
 		device->free_rid(pipeline_skybox.pipeline_rid);
 
         device->free_rid(fallback_texture);
@@ -799,6 +812,7 @@ private:
     RID specular_uniform;
     RID cubemap_uniform;
     RID rock_uniform;
+    RID rock_normal_uniform;
 
 	Rendering::Pipeline pipeline_skybox;
 	RID uniform_set_skybox;
