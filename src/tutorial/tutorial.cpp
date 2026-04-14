@@ -384,48 +384,12 @@ struct TutorialApplication : EE::Application
         auto rock_image = img_loader.load_from_file("assets://textures/brickwall.jpg");
         auto rock_n_image = img_loader.load_from_file("assets://textures/brickwall_normal.jpg");
 
-        RDC::TextureFormat tf;
-        tf.width = diffuse_image.width;
-        tf.height = diffuse_image.height;
-        tf.array_layers = 1;
-        tf.texture_type = RDC::TEXTURE_TYPE_2D;
-        tf.usage_bits = RDC::TEXTURE_USAGE_SAMPLING_BIT | RDC::TEXTURE_USAGE_CAN_UPDATE_BIT;
-        tf.format = RDC::DATA_FORMAT_R8G8B8A8_SRGB;
-
-		RDC::TextureFormat tf_unorm;
-		tf_unorm.width = diffuse_image.width;
-		tf_unorm.height = diffuse_image.height;
-		tf_unorm.array_layers = 1;
-		tf_unorm.texture_type = RDC::TEXTURE_TYPE_2D;
-		tf_unorm.usage_bits = RDC::TEXTURE_USAGE_SAMPLING_BIT | RDC::TEXTURE_USAGE_CAN_UPDATE_BIT;
-		tf_unorm.format = RDC::DATA_FORMAT_R8G8B8A8_UNORM;
-
-		RDC::TextureFormat tf_unorm_rock;
-		tf_unorm_rock.width = rock_n_image.width;
-		tf_unorm_rock.height = rock_n_image.height;
-		tf_unorm_rock.array_layers = 1;
-		tf_unorm_rock.texture_type = RDC::TEXTURE_TYPE_2D;
-		tf_unorm_rock.usage_bits = RDC::TEXTURE_USAGE_SAMPLING_BIT | RDC::TEXTURE_USAGE_CAN_UPDATE_BIT;
-		tf_unorm_rock.format = RDC::DATA_FORMAT_R8G8B8A8_UNORM;
-
-		RDC::TextureFormat tf_rock;
-		tf_rock.width = rock_image.width;
-		tf_rock.height = rock_image.height;
-		tf_rock.array_layers = 1;
-		tf_rock.texture_type = RDC::TEXTURE_TYPE_2D;
-		tf_rock.usage_bits = RDC::TEXTURE_USAGE_SAMPLING_BIT | RDC::TEXTURE_USAGE_CAN_UPDATE_BIT;
-		tf_rock.format = RDC::DATA_FORMAT_R8G8B8A8_SRGB;
-
         fallback_texture = Rendering::create_white_texture(device);
 
-        diffuse_uniform = device->texture_create(tf, RD::TextureView(), { diffuse_image.pixels });
-        specular_uniform = device->texture_create(tf_unorm, RD::TextureView(), { specular_image.pixels });
-        rock_normal_uniform = device->texture_create(tf_unorm_rock, RD::TextureView(), { rock_n_image.pixels });
-        rock_uniform = device->texture_create(tf_rock, RD::TextureView(), { rock_image.pixels });
-        device->set_resource_name(diffuse_uniform, "Diffuse texture");
-        device->set_resource_name(rock_normal_uniform, "Rock normal texture");
-        device->set_resource_name(specular_uniform, "Specular texture");
-        device->set_resource_name(rock_uniform, "Rock texture");
+        diffuse_uniform     = Rendering::upload_texture_2d(device, diffuse_image,  RDC::DATA_FORMAT_R8G8B8A8_SRGB,  "Diffuse texture");
+        specular_uniform    = Rendering::upload_texture_2d(device, specular_image, RDC::DATA_FORMAT_R8G8B8A8_UNORM, "Specular texture");
+        rock_normal_uniform = Rendering::upload_texture_2d(device, rock_n_image,   RDC::DATA_FORMAT_R8G8B8A8_UNORM, "Rock normal texture");
+        rock_uniform        = Rendering::upload_texture_2d(device, rock_image,     RDC::DATA_FORMAT_R8G8B8A8_SRGB,  "Rock texture");
 
         sampler = device->sampler_create(RD::SamplerState());
 
