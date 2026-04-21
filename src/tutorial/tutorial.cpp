@@ -269,7 +269,6 @@ struct TutorialApplication : EE::Application
             Rendering::VERTEX_FORMAT_VARIATIONS::DEFAULT);
 
         auto fs = Services::get().get<FilesystemInterface>();
-        mesh_loader = std::make_unique<Rendering::MeshLoader>(*fs, device);
         mesh_storage->initialize(device);
 
         tex_cache.init(device, *fs);
@@ -491,7 +490,6 @@ struct TutorialApplication : EE::Application
 				   .pipeline = pipeline_color,
 				   .uniform_sets = {uniform_set_0, {}, material_registry.get_uniform_set(h), {}}
 				});
-                world.emplace<MaterialComponent>(entity, MaterialComponent{ h });
 			}
 		}
 
@@ -504,7 +502,6 @@ struct TutorialApplication : EE::Application
             .pipeline = pipeline_color,
             .uniform_sets = {uniform_set_0, {}, material_registry.get_uniform_set(h_rock), {}}
             });
-		world.emplace<MaterialComponent>(entity_plane, MaterialComponent{ h_rock });
 
 
         // directional light
@@ -713,6 +710,7 @@ struct TutorialApplication : EE::Application
         material_registry.free_all(device);
         frame_ubo.free(device);
         light_ubo.free(device);
+        point_shadow_ubo.free(device);
 		device->free_rid(cubemap_uniform);
 		device->free_rid(pipeline_skybox.pipeline_rid);
 
@@ -780,7 +778,6 @@ private:
     FrameGraphBlackboard bb;
 
     std::unique_ptr<Rendering::MeshStorage> mesh_storage = std::make_unique<Rendering::MeshStorage>();
-    std::unique_ptr<Rendering::MeshLoader>  mesh_loader;
 
     Rendering::MaterialRegistry material_registry;
 };

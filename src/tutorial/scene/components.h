@@ -8,29 +8,6 @@
 #include "rendering/light.h"
 #include "rendering/material.h"
 
-struct MaterialTextures {
-	RID uniform_set;
-	RID diffuse_texture;
-	RID specular_texture;   // or metallic/roughness for PBR
-	RID normal_texture;
-	// add whatever channels your shader needs
-};
-
-//struct alignas(16) PointLight_UBO {
-//	glm::vec3 position;
-//	float     constant;
-//
-//	glm::vec3 ambient;
-//	float     linear;
-//
-//	glm::vec3 diffuse;
-//	float     quadratic;
-//
-//	glm::vec3 specular;
-//	float     _pad;
-//};
-
-
 struct TransformComponent {
 	glm::vec3 position = glm::vec3(0.0f);
 	glm::vec3 rotation = glm::vec3(0.0f); // euler angles in degrees
@@ -55,13 +32,8 @@ struct MeshComponent {
 	Rendering::MeshHandle  mesh;
 	Rendering::Pipeline    pipeline;  // carries both pipeline_rid and shader_rid
 	std::array<RID, 4>     uniform_sets;
-	MaterialTextures       material_textures;
 };
 
 struct LightComponent {
 	Light data;
-};
-
-struct MaterialComponent {
-	Rendering::MaterialHandle material;
 };
