@@ -1,4 +1,5 @@
 #include "renderer_compositor.h"
+#include <unordered_set>
 
 namespace Rendering
 {
@@ -113,13 +114,15 @@ namespace Rendering
 
 	void RendererCompositor::finalize()
 	{
-		//blit.shader.version_free(blit.shader_version);
-		rendering_device->free_rid(blit.index_buffer);
-		for (auto uniform: render_target_descriptors)
-		{
-			//rendering_device->free_rid(uniform.second);
-			//rendering_device->free_rid(uniform.first);
+		std::unordered_set<RID> freed_uniform_sets;
+		for (auto& [key, uniform_set] : render_target_descriptors) {
+			if (freed_uniform_sets.insert(uniform_set).second)
+				rendering_device->free_rid(uniform_set);
 		}
+		render_target_descriptors.clear();
+
+		rendering_device->free_rid(blit.array);
+		rendering_device->free_rid(blit.index_buffer);
 		rendering_device->free_rid(blit.sampler);
 		rendering_device->free_rid(blit_pipeline);
 	}

@@ -327,7 +327,8 @@ namespace Rendering
 
 	void RenderingDevice::on_poll(void* e)
 	{
-		imgui_device->poll_event(e);
+		if (imgui_device)
+			imgui_device->poll_event(e);
 	}
 
 	void RenderingDevice::finalize() {
@@ -339,7 +340,8 @@ namespace Rendering
 		_submit_transfer_workers();
 		_wait_for_transfer_workers();
 
-		imgui_device->finalize();
+		if (imgui_device)
+			imgui_device->finalize();
 		// Delete all shader modules in cache;
 		for (auto s: shader_cache)
 		{
