@@ -708,26 +708,10 @@ struct TutorialApplication : EE::Application
         auto wsi = get_wsi();
         auto device = wsi->get_rendering_device();
         material_registry.free_all(device);
-        frame_ubo.free(device);
-        light_ubo.free(device);
-        point_shadow_ubo.free(device);
-		device->free_rid(cubemap_uniform);
-		device->free_rid(pipeline_skybox.pipeline_rid);
-
-        device->free_rid(fallback_texture);
         tex_cache.free_all();
-		device->free_rid(pipeline_color.pipeline_rid);
-		device->free_rid(pipeline_light.pipeline_rid);
-		device->free_rid(pipeline_grid.pipeline_rid);
-		device->free_rid(pipeline_shadow.pipeline_rid);
-		device->free_rid(pipeline_point_shadow.pipeline_rid);
         mesh_storage->finalize();
-
-		//device->free_rid(uniform_set_0);
-        //device->free_rid(uniform_set_0_light);
-		//device->free_rid(uniform_set_skybox);
-		//material_ubo.free(device);
-
+        // Pipeline RIDs are owned by RenderingDevice and freed by its finalize()
+        // via _free_rids(render_pipeline_owner) — no manual cleanup needed here.
     }
 
 private:
@@ -738,27 +722,27 @@ private:
 
 	Rendering::UniformBuffer<PointShadowUBO> point_shadow_ubo;
 	Rendering::Pipeline pipeline_point_shadow;
-	RID uniform_set_0_point_shadow;
+	RIDHandle uniform_set_0_point_shadow;
 
-    RID uniform_set_0;
-    RID uniform_set_0_light;
-    RID uniform_set_0_shadow;
-    RID fallback_texture;
-    RID cubemap_uniform;
+    RIDHandle uniform_set_0;
+    RIDHandle uniform_set_0_light;
+    RIDHandle uniform_set_0_shadow;
+    RIDHandle fallback_texture;
+    RIDHandle cubemap_uniform;
     Rendering::TextureCache tex_cache;
 
 	Rendering::Pipeline pipeline_skybox;
-	RID uniform_set_skybox;
-	RID sampler_cube;
-	RID shadow_sampler;
-	RID point_shadow_sampler;
+	RIDHandle uniform_set_skybox;
+	RIDHandle sampler_cube;
+	RIDHandle shadow_sampler;
+	RIDHandle point_shadow_sampler;
 
     Rendering::Pipeline pipeline_color;
     Rendering::Pipeline pipeline_light;
     Rendering::Pipeline pipeline_grid;
     Rendering::Pipeline pipeline_shadow;
 
-    RID sampler;
+    RIDHandle sampler;
 
     Camera camera;
     std::shared_ptr<EE::InputSystemInterface> input_system;

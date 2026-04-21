@@ -299,7 +299,9 @@ namespace Rendering
 
     void WSI::teardown()
     {
-        rd->finalize();
+        // Destroy compositor first — its RIDHandle members call free_rid in their destructors,
+        // which must happen before the device is finalized.
+        rd.reset();
 
         // MeshStorage handles all GPU resource cleanup
         //mesh_storage->finalize();

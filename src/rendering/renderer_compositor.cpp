@@ -1,5 +1,4 @@
 #include "renderer_compositor.h"
-#include <unordered_set>
 
 namespace Rendering
 {
@@ -7,11 +6,6 @@ namespace Rendering
 	RendererCompositor::RendererCompositor()
 	{
 		rendering_device = RenderingDevice::get_singleton();
-	}
-
-
-	RendererCompositor::~RendererCompositor()
-	{
 	}
 
 	void RendererCompositor::blit_render_targets_to_screen(const BlitToScreen* p_render_targets)
@@ -23,7 +17,7 @@ namespace Rendering
 		RID rd_texture_ui = p_render_targets[0].ui;		// 0 for now
 		// #come back, textures are created every frame now, new id every time. fix this
 		RID uniform_set;
-		if (!render_target_descriptors.contains(rd_texture) || render_target_descriptors.contains(rd_texture_ui)) {
+		if (!render_target_descriptors.contains(rd_texture)) {
 			std::vector<RenderingDevice::Uniform> uniforms;
 			RenderingDevice::Uniform u;
 			u.uniform_type = RenderingDevice::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
@@ -33,18 +27,19 @@ namespace Rendering
 			uniforms.push_back(u);
 
 			RenderingDevice::Uniform u_ui;
-
 			u_ui.uniform_type = RenderingDevice::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
 			u_ui.binding = 1;
 			u_ui.append_id(blit.sampler);
 			u_ui.append_id(rd_texture_ui);
 			uniforms.push_back(u_ui);
 
-
 			uniform_set = rendering_device->uniform_set_create(uniforms, blit.shader, 0);
 
-			render_target_descriptors.insert({ rd_texture, uniform_set });
+			uniform_set_handles.emplace_back(uniform_set);
+			render_target_descriptors.insert({ rd_texture,    uniform_set });
 			render_target_descriptors.insert({ rd_texture_ui, uniform_set });
+		} else {
+			uniform_set = render_target_descriptors.at(rd_texture);
 		}
 
 		Size2 screen_size(rendering_device->screen_get_width(screen), rendering_device->screen_get_height(screen));
@@ -84,11 +79,11 @@ namespace Rendering
 
 		auto blend_state = RenderingDeviceCommons::PipelineColorBlendState::create_blend();
 
-		blit_pipeline = rendering_device->create_swapchain_pipeline(screen, blit.shader,
+		blit_pipeline = RIDHandle(rendering_device->create_swapchain_pipeline(screen, blit.shader,
 			-1, RenderingDeviceCommons::RENDER_PRIMITIVE_TRIANGLES,
 			rs, RenderingDeviceCommons::PipelineMultisampleState(),
 			RenderingDeviceCommons::PipelineDepthStencilState(), blend_state,
-			0);
+			0));
 
 		std::vector<uint8_t> pv;
 		pv.resize(6 * 4);
@@ -102,29 +97,14 @@ namespace Rendering
 			p32[4] = 2;
 			p32[5] = 3;
 		}
-		blit.index_buffer = rendering_device->index_buffer_create(6, RenderingDevice::INDEX_BUFFER_FORMAT_UINT32, pv);
-		blit.array = rendering_device->index_array_create(blit.index_buffer, 0, 6);
-
-		blit.sampler = rendering_device->sampler_create(RenderingDevice::SamplerState());
+		blit.index_buffer = RIDHandle(rendering_device->index_buffer_create(6, RenderingDevice::INDEX_BUFFER_FORMAT_UINT32, pv));
+		blit.array        = RIDHandle(rendering_device->index_array_create(blit.index_buffer, 0, 6));
+		blit.sampler      = RIDHandle(rendering_device->sampler_create(RenderingDevice::SamplerState()));
 
 		rendering_device->_submit_transfer_workers();
 		initialized = true;
 	}
 
 
-	void RendererCompositor::finalize()
-	{
-		std::unordered_set<RID> freed_uniform_sets;
-		for (auto& [key, uniform_set] : render_target_descriptors) {
-			if (freed_uniform_sets.insert(uniform_set).second)
-				rendering_device->free_rid(uniform_set);
-		}
-		render_target_descriptors.clear();
-
-		rendering_device->free_rid(blit.array);
-		rendering_device->free_rid(blit.index_buffer);
-		rendering_device->free_rid(blit.sampler);
-		rendering_device->free_rid(blit_pipeline);
-	}
 
 }

@@ -16,6 +16,11 @@ public:
         if (this != &o) { reset(); _rid = o._rid; o._rid = RID(); }
         return *this;
     }
+    // Assign from a raw RID — frees any currently held resource first.
+    RIDHandle& operator=(RID r) noexcept {
+        if (_rid != r) { reset(); _rid = r; }
+        return *this;
+    }
     RIDHandle(const RIDHandle&) = delete;
     RIDHandle& operator=(const RIDHandle&) = delete;
 

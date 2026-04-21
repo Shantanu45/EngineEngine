@@ -2,30 +2,25 @@
 
 #pragma once
 #include "rendering/rendering_device.h"
+#include "rendering/rid_handle.h"
 
 namespace Rendering
 {
 	template<typename T>
 	struct UniformBuffer {
 
-		RID rid;
-
 		// -------------------------------------------------------
 		// Lifetime
 		// -------------------------------------------------------
 
 		void create(RenderingDevice* device, const char* debug_name = nullptr) {
-			rid = device->uniform_buffer_create(sizeof(T));
+			rid = RIDHandle(device->uniform_buffer_create(sizeof(T)));
 			if (debug_name)
 				device->set_resource_name(rid, debug_name);
 		}
 
-		void free(RenderingDevice* device) {
-			if (rid.is_valid()) {
-				device->free_rid(rid);
-				rid = RID();
-			}
-		}
+		// Explicit early release. Destructor handles it automatically if not called.
+		void free(RenderingDevice* = nullptr) { rid.reset(); }
 
 		// -------------------------------------------------------
 		// Upload
@@ -67,8 +62,11 @@ namespace Rendering
 		}
 
 		bool is_valid() const { return rid.is_valid(); }
+		RID  get()      const { return rid.get(); }
 
 	private:
+		RIDHandle rid;
+
 		// Helper to compute byte offset of a member pointer at compile time
 		template<typename Field>
 		static size_t _offsetof_member(Field T::* member) {

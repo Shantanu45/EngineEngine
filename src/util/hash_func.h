@@ -1,6 +1,8 @@
 #pragma once
 
 #include "xxhash.h"
+#include <vector>
+#include <string>
 #include <cstdint>
 
 inline uint32_t hash_xxhash_one_32(uint32_t value, uint32_t seed = 0)
