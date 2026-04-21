@@ -3064,8 +3064,6 @@ namespace Rendering
 		end_frame();
 
 		execute_frame(p_present);
-		_stall_for_frame(frame);
-
 
 		frame = (frame + 1) % frames.size();
 		begin_frame();
@@ -3448,7 +3446,6 @@ namespace Rendering
 		_submit_transfer_workers(command_buffer);
 		_submit_transfer_barriers(command_buffer);
 		//driver->command_end_render_pass(command_buffer);
-		frames_drawn++;
 		driver->command_buffer_end(command_buffer);
 
 		fb_cache->tick();

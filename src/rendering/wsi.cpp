@@ -189,8 +189,7 @@ namespace Rendering
 
     bool WSI::end_frame(bool p_present)
     {
-        if (rd->is_blit_pass_active())
-            rd->end_frame(true);
+        rd->end_frame(p_present);
         return true;
     }
 
