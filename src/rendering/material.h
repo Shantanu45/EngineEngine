@@ -25,6 +25,7 @@ namespace Rendering
 		RID diffuse;
 		RID metallic_roughness;
 		RID normal;
+		RID displacement;
 
 		void create(RenderingDevice* device, const std::string& name = "Material UBO") {
 			ubo.create(device, name.c_str());
@@ -49,6 +50,7 @@ namespace Rendering
 				.add_texture_only(1, diffuse.is_valid() ? diffuse : fallback)
 				.add_texture_only(2, metallic_roughness.is_valid() ? metallic_roughness : fallback)
 				.add_texture_only(3, normal.is_valid() ? normal : fallback)
+				.add_texture_only(4, displacement.is_valid() ? displacement : fallback)
 				.build(device, shader_rid, 2);
 		}
 

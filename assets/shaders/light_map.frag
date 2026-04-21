@@ -42,6 +42,42 @@ layout(set = 0, binding = 5) uniform sampler pointShadowSampler;
 layout(set = 2, binding = 1) uniform texture2D diffuse_tex;
 layout(set = 2, binding = 2) uniform texture2D metallic_roughness;
 layout(set = 2, binding = 3) uniform texture2D normal_tex;
+layout(set = 2, binding = 4) uniform texture2D displacement_tex;
+
+// Parallax Occlusion Mapping: ray-marches the height map in tangent space and
+// returns UV coordinates offset to the intersection point on the surface.
+// tangentViewDir must be in tangent space (TBN^T * viewDir).
+vec2 ParallaxMapping(vec2 texCoords, vec3 tangentViewDir) {
+    const float heightScale = 0.05;
+    const int   maxLayers   = 32;
+
+    // More layers at grazing angles for quality, fewer when looking straight down
+    float numLayers  = mix(float(maxLayers), 8.0, abs(tangentViewDir.z));
+    float layerDepth = 1.0 / numLayers;
+
+    // UV shift per layer: project view ray onto surface plane, scale by height
+    vec2 deltaUV = (tangentViewDir.xy / max(tangentViewDir.z, 0.01)) * heightScale / numLayers;
+
+    vec2  uv           = texCoords;
+    float currentDepth = 0.0;
+    // height map: white = raised, black = deep  =>  depth = 1 - height
+    float surfaceDepth = 1.0 - texture(sampler2D(displacement_tex, texSampler), uv).r;
+
+    for (int i = 0; i < maxLayers; i++) {
+        if (currentDepth >= surfaceDepth) break;
+        uv           -= deltaUV;
+        surfaceDepth  = 1.0 - texture(sampler2D(displacement_tex, texSampler), uv).r;
+        currentDepth += layerDepth;
+    }
+
+    // Parallax occlusion: linearly interpolate between the last two layers
+    vec2  prevUV      = uv + deltaUV;
+    float afterDepth  = surfaceDepth - currentDepth;
+    float beforeDepth = (1.0 - texture(sampler2D(displacement_tex, texSampler), prevUV).r)
+                        - currentDepth + layerDepth;
+    float weight      = afterDepth / (afterDepth - beforeDepth);
+    return mix(uv, prevUV, weight);
+}
 
 float shadow_factor(vec4 fragPosLS, vec3 normal, vec3 lightDir) {
     vec3 proj = fragPosLS.xyz / fragPosLS.w;
@@ -93,13 +129,17 @@ float samplePointShadow(vec3 fragPos, vec3 lightPos, float farPlane, vec3 normal
 
 void main()
 {
-    vec3 tangentNormal = texture(sampler2D(normal_tex, texSampler), TexCoords).rgb * 2.0 - 1.0;
-
-    mat3 TBN = mat3(normalize(Tangent), normalize(Bitangent), normalize(Normal));
-    vec3 normal = normalize(TBN * tangentNormal);
+    mat3 TBN    = mat3(normalize(Tangent), normalize(Bitangent), normalize(Normal));
     vec3 viewDir = normalize(frame.camera.cameraPos - FragPos);
 
-    vec3 color = vec3(0.05) * vec3(texture(sampler2D(diffuse_tex, texSampler), TexCoords));
+    // Transform view direction to tangent space for parallax mapping
+    vec3 tangentViewDir = normalize(transpose(TBN) * viewDir);
+    vec2 uv = ParallaxMapping(TexCoords, tangentViewDir);
+
+    vec3 tangentNormal = texture(sampler2D(normal_tex, texSampler), uv).rgb * 2.0 - 1.0;
+    vec3 normal = normalize(TBN * tangentNormal);
+
+    vec3 color = vec3(0.05) * vec3(texture(sampler2D(diffuse_tex, texSampler), uv));
 
     for (uint i = 0u; i < lightData.lightCount; i++) {
         float shadow = 1.0;
@@ -117,7 +157,7 @@ void main()
         color += shadow * CalcLight(
             lightData.lights[i], mat.material,
             diffuse_tex, metallic_roughness, texSampler,
-            TexCoords, normal, FragPos, viewDir);
+            uv, normal, FragPos, viewDir);
     }
 
     FragColor = vec4(color, 1.0);

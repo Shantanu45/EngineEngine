@@ -378,17 +378,19 @@ struct TutorialApplication : EE::Application
 
         // --- Textures ---
 
-        auto diffuse_image = img_loader.load_from_file("assets://textures/container2.png");
+        auto diffuse_image  = img_loader.load_from_file("assets://textures/container2.png");
         auto specular_image = img_loader.load_from_file("assets://textures/container2_specular.png");
-        auto rock_image = img_loader.load_from_file("assets://textures/brickwall.jpg");
-        auto rock_n_image = img_loader.load_from_file("assets://textures/brickwall_normal.jpg");
+        auto bricks_diff    = img_loader.load_from_file("assets://textures/bricks2.jpg");
+        auto bricks_norm    = img_loader.load_from_file("assets://textures/bricks2_normal.jpg");
+        auto bricks_disp    = img_loader.load_from_file("assets://textures/bricks2_disp.jpg");
 
         fallback_texture = Rendering::create_white_texture(device);
 
-        diffuse_uniform     = Rendering::upload_texture_2d(device, diffuse_image,  RDC::DATA_FORMAT_R8G8B8A8_SRGB,  "Diffuse texture");
-        specular_uniform    = Rendering::upload_texture_2d(device, specular_image, RDC::DATA_FORMAT_R8G8B8A8_UNORM, "Specular texture");
-        rock_normal_uniform = Rendering::upload_texture_2d(device, rock_n_image,   RDC::DATA_FORMAT_R8G8B8A8_UNORM, "Rock normal texture");
-        rock_uniform        = Rendering::upload_texture_2d(device, rock_image,     RDC::DATA_FORMAT_R8G8B8A8_SRGB,  "Rock texture");
+        diffuse_uniform          = Rendering::upload_texture_2d(device, diffuse_image,  RDC::DATA_FORMAT_R8G8B8A8_SRGB,  "Diffuse texture");
+        specular_uniform         = Rendering::upload_texture_2d(device, specular_image, RDC::DATA_FORMAT_R8G8B8A8_UNORM, "Specular texture");
+        rock_uniform             = Rendering::upload_texture_2d(device, bricks_diff,    RDC::DATA_FORMAT_R8G8B8A8_SRGB,  "Bricks diffuse");
+        rock_normal_uniform      = Rendering::upload_texture_2d(device, bricks_norm,    RDC::DATA_FORMAT_R8G8B8A8_UNORM, "Bricks normal");
+        rock_displacement_uniform = Rendering::upload_texture_2d(device, bricks_disp,   RDC::DATA_FORMAT_R8G8B8A8_UNORM, "Bricks displacement");
 
         sampler              = Rendering::create_sampler_nearest_clamp(device);
 		shadow_sampler       = Rendering::create_sampler_pcf_shadow(device);
@@ -481,8 +483,9 @@ struct TutorialApplication : EE::Application
         Rendering::MaterialHandle h = material_registry.create(device, std::move(mat), fallback_texture, pipeline_color.shader_rid);
 
 		Rendering::Material mat_rock;
-		mat_rock.diffuse = rock_uniform;
-        mat_rock.normal = rock_normal_uniform;
+		mat_rock.diffuse       = rock_uniform;
+		mat_rock.normal        = rock_normal_uniform;
+		mat_rock.displacement  = rock_displacement_uniform;
 		mat_rock.base_color_factor = glm::vec4(1.0f);
 		mat_rock.shininess = 32.0f;
 		Rendering::MaterialHandle h_rock = material_registry.create(device, std::move(mat_rock), fallback_texture, pipeline_color.shader_rid);
@@ -723,6 +726,7 @@ struct TutorialApplication : EE::Application
 		device->free_rid(cubemap_uniform);
 		device->free_rid(rock_uniform);
 		device->free_rid(rock_normal_uniform);
+		device->free_rid(rock_displacement_uniform);
 		device->free_rid(pipeline_skybox.pipeline_rid);
 
         device->free_rid(fallback_texture);
@@ -761,6 +765,7 @@ private:
     RID cubemap_uniform;
     RID rock_uniform;
     RID rock_normal_uniform;
+    RID rock_displacement_uniform;
 
 	Rendering::Pipeline pipeline_skybox;
 	RID uniform_set_skybox;
