@@ -1,6 +1,7 @@
 #include "application/common.h"
 
 #include "rendering/image_loader.h"
+#include "rendering/texture_cache.h"
 #include "rendering/pipeline_builder.h"
 #include "rendering/render_passes/common.h"
 #include "rendering/camera.h"
@@ -271,7 +272,7 @@ struct TutorialApplication : EE::Application
         mesh_loader = std::make_unique<Rendering::MeshLoader>(*fs, device);
         mesh_storage->initialize(device);
 
-		Rendering::ImageLoader img_loader(*fs);
+        tex_cache.init(device, *fs);
 
         // --- Meshes ---
         light_mesh = Rendering::Shapes::upload_cube(*wsi, *mesh_storage, "light_cube");
@@ -337,6 +338,7 @@ struct TutorialApplication : EE::Application
 	        "assets://textures/skybox/back.jpg",
 		};
 
+		Rendering::ImageLoader img_loader(*fs);
 		auto face0 = img_loader.load_from_file(faces[0]);
 
 		RDC::TextureFormat cubemap_tf;
@@ -349,9 +351,9 @@ struct TutorialApplication : EE::Application
 
 		// load all 6 faces
 		std::vector<std::vector<uint8_t>> face_pixels;
-		for (auto& path : faces) {
-			auto img = img_loader.load_from_file(path);
-			face_pixels.push_back(img.pixels);
+		face_pixels.push_back(face0.pixels);
+		for (int i = 1; i < 6; i++) {
+			face_pixels.push_back(img_loader.load_from_file(faces[i]).pixels);
 		}
 
 		cubemap_uniform = device->texture_create(cubemap_tf, RD::TextureView(), face_pixels);
@@ -378,19 +380,7 @@ struct TutorialApplication : EE::Application
 
         // --- Textures ---
 
-        auto diffuse_image  = img_loader.load_from_file("assets://textures/container2.png");
-        auto specular_image = img_loader.load_from_file("assets://textures/container2_specular.png");
-        auto bricks_diff    = img_loader.load_from_file("assets://textures/bricks2.jpg");
-        auto bricks_norm    = img_loader.load_from_file("assets://textures/bricks2_normal.jpg");
-        auto bricks_disp    = img_loader.load_from_file("assets://textures/bricks2_disp.jpg");
-
         fallback_texture = Rendering::create_white_texture(device);
-
-        diffuse_uniform          = Rendering::upload_texture_2d(device, diffuse_image,  RDC::DATA_FORMAT_R8G8B8A8_SRGB,  "Diffuse texture");
-        specular_uniform         = Rendering::upload_texture_2d(device, specular_image, RDC::DATA_FORMAT_R8G8B8A8_UNORM, "Specular texture");
-        rock_uniform             = Rendering::upload_texture_2d(device, bricks_diff,    RDC::DATA_FORMAT_R8G8B8A8_SRGB,  "Bricks diffuse");
-        rock_normal_uniform      = Rendering::upload_texture_2d(device, bricks_norm,    RDC::DATA_FORMAT_R8G8B8A8_UNORM, "Bricks normal");
-        rock_displacement_uniform = Rendering::upload_texture_2d(device, bricks_disp,   RDC::DATA_FORMAT_R8G8B8A8_UNORM, "Bricks displacement");
 
         sampler              = Rendering::create_sampler_nearest_clamp(device);
 		shadow_sampler       = Rendering::create_sampler_pcf_shadow(device);
@@ -475,19 +465,19 @@ struct TutorialApplication : EE::Application
         // --- Scene setup ---
         // 
 		Rendering::Material mat;
-		mat.diffuse = diffuse_uniform;
-		mat.base_color_factor = glm::vec4(1.0f);
-        mat.metallic_roughness = specular_uniform;
-		mat.shininess = 64.0f;
+		mat.diffuse            = tex_cache.color("assets://textures/container2.png");
+		mat.metallic_roughness = tex_cache.linear("assets://textures/container2_specular.png");
+		mat.base_color_factor  = glm::vec4(1.0f);
+		mat.shininess          = 64.0f;
 
         Rendering::MaterialHandle h = material_registry.create(device, std::move(mat), fallback_texture, pipeline_color.shader_rid);
 
 		Rendering::Material mat_rock;
-		mat_rock.diffuse       = rock_uniform;
-		mat_rock.normal        = rock_normal_uniform;
-		mat_rock.displacement  = rock_displacement_uniform;
+		mat_rock.diffuse       = tex_cache.color("assets://textures/bricks2.jpg");
+		mat_rock.normal        = tex_cache.linear("assets://textures/bricks2_normal.jpg");
+		mat_rock.displacement  = tex_cache.linear("assets://textures/bricks2_disp.jpg");
 		mat_rock.base_color_factor = glm::vec4(1.0f);
-		mat_rock.shininess = 32.0f;
+		mat_rock.shininess     = 32.0f;
 		Rendering::MaterialHandle h_rock = material_registry.create(device, std::move(mat_rock), fallback_texture, pipeline_color.shader_rid);
 
         // object cube
@@ -724,14 +714,10 @@ struct TutorialApplication : EE::Application
         frame_ubo.free(device);
         light_ubo.free(device);
 		device->free_rid(cubemap_uniform);
-		device->free_rid(rock_uniform);
-		device->free_rid(rock_normal_uniform);
-		device->free_rid(rock_displacement_uniform);
 		device->free_rid(pipeline_skybox.pipeline_rid);
 
         device->free_rid(fallback_texture);
-        device->free_rid(diffuse_uniform);
-        device->free_rid(specular_uniform);
+        tex_cache.free_all();
 		device->free_rid(pipeline_color.pipeline_rid);
 		device->free_rid(pipeline_light.pipeline_rid);
 		device->free_rid(pipeline_grid.pipeline_rid);
@@ -760,12 +746,8 @@ private:
     RID uniform_set_0_light;
     RID uniform_set_0_shadow;
     RID fallback_texture;
-    RID diffuse_uniform;
-    RID specular_uniform;
     RID cubemap_uniform;
-    RID rock_uniform;
-    RID rock_normal_uniform;
-    RID rock_displacement_uniform;
+    Rendering::TextureCache tex_cache;
 
 	Rendering::Pipeline pipeline_skybox;
 	RID uniform_set_skybox;
