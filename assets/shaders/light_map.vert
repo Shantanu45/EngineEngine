@@ -32,13 +32,13 @@ void main()
     vec4 worldPos = object.model * vec4(inPosition, 1.0);
     FragPos       = worldPos.xyz;
     TexCoords     = inTexcoord;
-    fragPosLightSpace = frame.lightSpaceMatrix * object.model * vec4(inPosition, 1.0);
+    fragPosLightSpace = frame.lightSpaceMatrix * worldPos;
 
     mat3 nm  = mat3(object.normalMatrix);
     vec3 N   = normalize(nm * inNormal);
     vec3 T   = normalize(nm * inTangent.xyz);
     T        = normalize(T - dot(T, N) * N);          // re-orthogonalize
-    vec3 B   = cross(N, T) * inTangent.w;             // w encodes handedness
+    vec3 B = normalize(cross(N, T)) * inTangent.w;            // w encodes handedness
 
     Normal    = N;
     Tangent   = T;

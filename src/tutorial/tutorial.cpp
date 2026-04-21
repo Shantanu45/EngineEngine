@@ -514,20 +514,21 @@ struct TutorialApplication : EE::Application
 		world.emplace<MaterialComponent>(entity_plane, MaterialComponent{ h_rock });
 
 
-        // light cube
-  //      auto light = world.create();
-  //      world.emplace<TransformComponent>(light, TransformComponent{
-  //          .position = glm::vec3(5.0f, 10.0f, 5.0f),  // high up, centered over scene
-	 //       .scale = glm::vec3(0.2f) });
-  //      world.emplace<MeshComponent>(light, MeshComponent{
-  //          light_mesh, pipeline_light, "cube_shader", uniform_set_0_light });
-		//world.emplace<LightComponent>(light, LightComponent{ .data = {
-  //          .position = glm::vec4(5.0f, 10.0f, 5.0f, 15.0f),
-	 //       .direction = glm::vec4(-0.5f, -1.0f, -0.5f, 0.0f),
-		//	.color = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f),         // w = intensity
-		//	.type = static_cast<uint32_t>(LightType::Directional),
-		//	.outer_angle = 0.0f,
-		//} });
+        // directional light
+		auto light = world.create();
+		world.emplace<TransformComponent>(light, TransformComponent{
+			.position = glm::vec3(5.0f, 10.0f, 5.0f),
+			.scale = glm::vec3(0.2f) });
+		world.emplace<MeshComponent>(light, MeshComponent{
+			.mesh = light_mesh, .pipeline = pipeline_light,
+			.uniform_sets = {uniform_set_0_light} });
+		world.emplace<LightComponent>(light, LightComponent{ .data = {
+			.position = glm::vec4(5.0f, 10.0f, 5.0f, 15.0f),
+			.direction = glm::vec4(-0.0f, -1.0f, -0.5f, 0.0f),
+			.color = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f),
+			.type = static_cast<uint32_t>(LightType::Directional),
+			.outer_angle = 0.0f,
+		} });
 
 		auto point_light = world.create();
 		world.emplace<TransformComponent>(point_light, TransformComponent{
@@ -539,7 +540,7 @@ struct TutorialApplication : EE::Application
 		world.emplace<LightComponent>(point_light, LightComponent{ .data = {
 			.position = glm::vec4(1.0f, 1.0f, 1.0f, 15.0f),
 			.direction = glm::vec4(-0.5f, -1.0f, -0.5f, 0.0f),
-			.color = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f),         // w = intensity
+			.color = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f),         // w = intensity
 			.type = static_cast<uint32_t>(LightType::Point),
 			.outer_angle = 0.0f,
 		} });
