@@ -1133,6 +1133,7 @@ namespace Rendering
 		// Store the framebuffer that will be used next to draw to this screen.
 		screen_framebuffers[p_screen] = framebuffer;
 		frames[frame].swap_chains_to_present.push_back(it->second);
+		return OK;
 	}
 
 	int RenderingDevice::screen_get_width(DisplayServerEnums::WindowID p_screen /*= DisplayServerEnums::MAIN_WINDOW_ID*/) const
@@ -3481,10 +3482,11 @@ namespace Rendering
 		frames[frame].fence_signaled = true;
 		std::vector<RenderingDeviceDriver::SemaphoreID> frame_semaphores{ frames[frame].semaphore };
 		if (frame_can_present) {
-			auto command_buffer = get_current_command_buffer();
 			if (separate_present_queue) {
 				// Issue the presentation separately if the presentation queue is different from the main queue.
-			driver->command_queue_execute_and_present(present_queue, frame_semaphores, { &command_buffer, 1}, {}, frames[frame].fence, frames[frame].swap_chains_to_present);
+				// Only wait on the semaphore signaled by the main queue and present — no command buffer or fence,
+				// since the command buffer was already submitted and the fence already signaled by execute_chained_cmds.
+				driver->command_queue_execute_and_present(present_queue, frame_semaphores, {}, {}, RDD::FenceID(), frames[frame].swap_chains_to_present);
 			}
 
 			frames[frame].swap_chains_to_present.clear();
