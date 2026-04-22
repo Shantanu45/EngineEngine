@@ -489,7 +489,7 @@ struct TutorialApplication : EE::Application
 				   .mesh = object_mesh,
 				   .pipeline = pipeline_color,
 				   .uniform_set_0 = uniform_set_0,
-				   .material = h,
+				   .materials = { h },
 				});
 			}
 		}
@@ -502,7 +502,7 @@ struct TutorialApplication : EE::Application
             .mesh = plane_mesh,
             .pipeline = pipeline_color,
             .uniform_set_0 = uniform_set_0,
-            .material = h_rock,
+            .materials = { h_rock },
             });
 
 
@@ -695,13 +695,17 @@ struct TutorialApplication : EE::Application
 
         world.view<TransformComponent, MeshComponent>().each(
             [&](auto, TransformComponent& t, MeshComponent& m) {
-                std::vector<Rendering::UniformSetBinding> sets = { { m.uniform_set_0, 0 } };
-                if (m.material != Rendering::INVALID_MATERIAL)
-                    sets.push_back({ material_registry.get_uniform_set(m.material), 2 });
+                std::vector<RID> mat_sets;
+                for (auto h : m.materials) {
+                    mat_sets.push_back(h != Rendering::INVALID_MATERIAL
+                        ? material_registry.get_uniform_set(h)
+                        : RID());
+                }
                 out.push_back(Rendering::Drawable::make(
                     m.pipeline, m.mesh,
                     Rendering::PushConstantData::from(ObjectData_UBO{ t.get_model(), t.get_normal_matrix() }),
-                    std::move(sets)
+                    { { m.uniform_set_0, 0 } },
+                    std::move(mat_sets)
                 ));
             });
 

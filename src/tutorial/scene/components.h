@@ -29,10 +29,10 @@ struct TransformComponent {
 };
 
 struct MeshComponent {
-	Rendering::MeshHandle     mesh;
-	Rendering::Pipeline       pipeline;
-	RID                       uniform_set_0 = {};
-	Rendering::MaterialHandle material = Rendering::INVALID_MATERIAL;
+	Rendering::MeshHandle                  mesh;
+	Rendering::Pipeline                    pipeline;
+	RID                                    uniform_set_0 = {};
+	std::vector<Rendering::MaterialHandle> materials; // one per primitive slot
 };
 
 struct LightComponent {

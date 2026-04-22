@@ -38,18 +38,21 @@ namespace Rendering
 		MeshHandle                     mesh;
 		PushConstantData               push_constants;
 		std::vector<UniformSetBinding> uniform_sets;
+		std::vector<RID>               material_sets; // per-primitive Set 2, indexed by primitive slot
 
 		static Drawable make(
 			Pipeline pipeline,
 			MeshHandle mesh,
 			PushConstantData pc,
-			std::vector<UniformSetBinding> uniform_sets = {})
+			std::vector<UniformSetBinding> uniform_sets = {},
+			std::vector<RID> material_sets = {})
 		{
 			Drawable d;
 			d.pipeline = pipeline;
 			d.mesh = mesh;
 			d.push_constants = pc;
 			d.uniform_sets = std::move(uniform_sets);
+			d.material_sets = std::move(material_sets);
 			return d;
 		}
 
@@ -90,7 +93,10 @@ namespace Rendering
 			LOGE("submit_drawable: mesh handle {} not found in storage", drawable.mesh);
 			return;
 		}
-		for (auto& prim : mesh->primitives) {
+		for (size_t i = 0; i < mesh->primitives.size(); ++i) {
+			const auto& prim = mesh->primitives[i];
+			if (i < drawable.material_sets.size() && drawable.material_sets[i].is_valid())
+				rc.device->bind_uniform_set(drawable.pipeline.shader_rid, drawable.material_sets[i], 2);
 			rc.device->bind_vertex_array(prim.vertex_array);
 			rc.device->bind_index_array(prim.index_array);
 			rc.device->render_draw_indexed(cmd, prim.index_count, 1, 0, 0, 0);
