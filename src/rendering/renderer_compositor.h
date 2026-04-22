@@ -39,9 +39,12 @@ namespace Rendering
 		bool is_blit_pass_active() const { return initialized; }
 
 	private:
-		// Lookup map — raw RIDs, ownership tracked in uniform_set_handles below.
+		// Transient blit uniform sets: keyed by frame-graph texture RID.
+		// These uniform sets depend on the transient textures, so the device's
+		// dependency cascade frees them automatically when the texture is freed
+		// at end-of-frame. We must NOT own them (no RIDHandle) — just clear
+		// this map each frame so stale entries don't accumulate.
 		std::unordered_map<RID, RID> render_target_descriptors;
-		std::vector<RIDHandle>       uniform_set_handles;
 
 		RIDHandle blit_pipeline;
 

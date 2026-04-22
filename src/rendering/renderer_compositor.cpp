@@ -35,7 +35,6 @@ namespace Rendering
 
 			uniform_set = rendering_device->uniform_set_create(uniforms, blit.shader, 0);
 
-			uniform_set_handles.emplace_back(uniform_set);
 			render_target_descriptors.insert({ rd_texture,    uniform_set });
 			render_target_descriptors.insert({ rd_texture_ui, uniform_set });
 		} else {
@@ -56,7 +55,9 @@ namespace Rendering
 
 	void RendererCompositor::begin_frame()
 	{
-
+		// Transient frame-graph textures (and their dependent uniform sets) were
+		// cascade-freed by the device at end of last frame. Clear stale entries.
+		render_target_descriptors.clear();
 	}
 
 
@@ -99,7 +100,7 @@ namespace Rendering
 		}
 		blit.index_buffer = RIDHandle(rendering_device->index_buffer_create(6, RenderingDevice::INDEX_BUFFER_FORMAT_UINT32, pv));
 		blit.array        = RIDHandle(rendering_device->index_array_create(blit.index_buffer, 0, 6));
-		blit.sampler      = RIDHandle(rendering_device->sampler_create(RenderingDevice::SamplerState()));
+		blit.sampler      = rendering_device->sampler_create(RenderingDevice::SamplerState());
 
 		rendering_device->_submit_transfer_workers();
 		initialized = true;

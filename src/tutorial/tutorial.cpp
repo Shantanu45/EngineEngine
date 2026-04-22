@@ -717,32 +717,39 @@ struct TutorialApplication : EE::Application
 private:
     entt::registry world;
 
-    Rendering::UniformBuffer<FrameData_UBO>   frame_ubo;
-    Rendering::UniformBuffer<LightBuffer> light_ubo;
+    // --- Resources (declared first = destroyed last) ---
+    // Uniform sets depend on these; destroying resources first would cascade-free
+    // the uniform sets via dependency_map, causing double-deletion when the
+    // RIDHandle destructors fire. Resources must outlive all uniform sets.
+    Rendering::UniformBuffer<FrameData_UBO>  frame_ubo;
+    Rendering::UniformBuffer<LightBuffer>    light_ubo;
+    Rendering::UniformBuffer<PointShadowUBO> point_shadow_ubo;
 
-	Rendering::UniformBuffer<PointShadowUBO> point_shadow_ubo;
-	Rendering::Pipeline pipeline_point_shadow;
-	RIDHandle uniform_set_0_point_shadow;
-
-    RIDHandle uniform_set_0;
-    RIDHandle uniform_set_0_light;
-    RIDHandle uniform_set_0_shadow;
     RIDHandle fallback_texture;
     RIDHandle cubemap_uniform;
     Rendering::TextureCache tex_cache;
 
-	Rendering::Pipeline pipeline_skybox;
-	RIDHandle uniform_set_skybox;
-	RIDHandle sampler_cube;
-	RIDHandle shadow_sampler;
-	RIDHandle point_shadow_sampler;
+    RIDHandle sampler;
+    RIDHandle sampler_cube;
+    RIDHandle shadow_sampler;
+    RIDHandle point_shadow_sampler;
 
+    // --- Pipelines ---
     Rendering::Pipeline pipeline_color;
     Rendering::Pipeline pipeline_light;
     Rendering::Pipeline pipeline_grid;
     Rendering::Pipeline pipeline_shadow;
+    Rendering::Pipeline pipeline_point_shadow;
+    Rendering::Pipeline pipeline_skybox;
 
-    RIDHandle sampler;
+    // --- Uniform sets (declared last = destroyed first) ---
+    // Must be destroyed before any resource they reference, otherwise freeing
+    // the resource triggers _free_dependencies which double-frees the set.
+    RIDHandle uniform_set_0;
+    RIDHandle uniform_set_0_light;
+    RIDHandle uniform_set_0_shadow;
+    RIDHandle uniform_set_0_point_shadow;
+    RIDHandle uniform_set_skybox;
 
     Camera camera;
     std::shared_ptr<EE::InputSystemInterface> input_system;

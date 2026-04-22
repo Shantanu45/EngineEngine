@@ -349,10 +349,6 @@ namespace Rendering
 		}
 		shader_cache.clear();
 
-		for (auto& [state, rid] : sampler_cache)
-			free_rid(rid);
-		sampler_cache.clear();
-
 		tex_cache->flush(this);
 		fb_cache->clear();
 
@@ -2955,10 +2951,6 @@ namespace Rendering
 		ERR_FAIL_INDEX_V(p_state.compare_op, COMPARE_OP_MAX, RID());
 		ERR_FAIL_INDEX_V(p_state.border_color, SAMPLER_BORDER_COLOR_MAX, RID());
 
-		auto it = sampler_cache.find(p_state);
-		if (it != sampler_cache.end())
-			return it->second;
-
 		RDD::SamplerID sampler = driver->sampler_create(p_state);
 		ERR_FAIL_COND_V(!sampler, RID());
 
@@ -2966,7 +2958,6 @@ namespace Rendering
 #ifdef DEV_ENABLED
 		set_resource_name(id, std::format("RID {}", id.get_id()));
 #endif
-		sampler_cache.emplace(p_state, id);
 		return id;
 	}
 
@@ -3983,6 +3974,7 @@ namespace Rendering
 		_free_dependencies(p_rid); // Recursively erase dependencies first, to avoid potential API problems.
 		_free_internal(p_rid);
 	}
+
 
 	bool RenderingDevice::_buffer_make_mutable(Buffer* p_buffer, RID p_buffer_id) {
 		//TODO:
