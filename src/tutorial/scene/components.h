@@ -29,9 +29,10 @@ struct TransformComponent {
 };
 
 struct MeshComponent {
-	Rendering::MeshHandle  mesh;
-	Rendering::Pipeline    pipeline;  // carries both pipeline_rid and shader_rid
-	std::array<RID, 4>     uniform_sets;
+	Rendering::MeshHandle     mesh;
+	Rendering::Pipeline       pipeline;
+	RID                       uniform_set_0 = {};
+	Rendering::MaterialHandle material = Rendering::INVALID_MATERIAL;
 };
 
 struct LightComponent {

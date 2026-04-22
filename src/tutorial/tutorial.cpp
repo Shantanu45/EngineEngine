@@ -488,7 +488,8 @@ struct TutorialApplication : EE::Application
 				world.emplace<MeshComponent>(entity, MeshComponent{
 				   .mesh = object_mesh,
 				   .pipeline = pipeline_color,
-				   .uniform_sets = {uniform_set_0, {}, material_registry.get_uniform_set(h), {}}
+				   .uniform_set_0 = uniform_set_0,
+				   .material = h,
 				});
 			}
 		}
@@ -500,7 +501,8 @@ struct TutorialApplication : EE::Application
 		world.emplace<MeshComponent>(entity_plane, MeshComponent{
             .mesh = plane_mesh,
             .pipeline = pipeline_color,
-            .uniform_sets = {uniform_set_0, {}, material_registry.get_uniform_set(h_rock), {}}
+            .uniform_set_0 = uniform_set_0,
+            .material = h_rock,
             });
 
 
@@ -511,7 +513,7 @@ struct TutorialApplication : EE::Application
 			.scale = glm::vec3(0.2f) });
 		world.emplace<MeshComponent>(light, MeshComponent{
 			.mesh = light_mesh, .pipeline = pipeline_light,
-			.uniform_sets = {uniform_set_0_light} });
+			.uniform_set_0 = uniform_set_0_light });
 		world.emplace<LightComponent>(light, LightComponent{ .data = {
 			.position = glm::vec4(5.0f, 10.0f, 5.0f, 15.0f),
 			.direction = glm::vec4(-0.0f, -1.0f, -0.5f, 0.0f),
@@ -526,7 +528,7 @@ struct TutorialApplication : EE::Application
 			.scale = glm::vec3(0.1f) });
 		world.emplace<MeshComponent>(point_light, MeshComponent{
 			.mesh = point_light_mesh, .pipeline = pipeline_light,
-			.uniform_sets = {uniform_set_0_light} });
+			.uniform_set_0 = uniform_set_0_light });
 		world.emplace<LightComponent>(point_light, LightComponent{ .data = {
 			.position = glm::vec4(1.0f, 1.0f, 1.0f, 15.0f),
 			.direction = glm::vec4(-0.5f, -1.0f, -0.5f, 0.0f),
@@ -678,7 +680,7 @@ struct TutorialApplication : EE::Application
 
     std::vector<Rendering::Drawable> build_main_drawables()
     {
-        material_registry.upload_all(device);
+        material_registry.upload_dirty(device);
         std::vector<Rendering::Drawable> out;
 
         glm::mat4 identity = glm::mat4(1.0f);
@@ -693,10 +695,13 @@ struct TutorialApplication : EE::Application
 
         world.view<TransformComponent, MeshComponent>().each(
             [&](auto, TransformComponent& t, MeshComponent& m) {
+                std::vector<Rendering::UniformSetBinding> sets = { { m.uniform_set_0, 0 } };
+                if (m.material != Rendering::INVALID_MATERIAL)
+                    sets.push_back({ material_registry.get_uniform_set(m.material), 2 });
                 out.push_back(Rendering::Drawable::make(
                     m.pipeline, m.mesh,
                     Rendering::PushConstantData::from(ObjectData_UBO{ t.get_model(), t.get_normal_matrix() }),
-                    { { m.uniform_sets[0], 0 }, { m.uniform_sets[2], 2 } }
+                    std::move(sets)
                 ));
             });
 

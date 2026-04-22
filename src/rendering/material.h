@@ -1,6 +1,7 @@
 #pragma once
 #include "rendering_device.h"
 #include "uniform_set_builder.h"
+#include "rid_handle.h"
 
 struct alignas(16) Material_UBO {
 	glm::vec4 base_color_factor;
@@ -27,6 +28,8 @@ namespace Rendering
 		RID normal;
 		RID displacement;
 
+		bool dirty = true;  // set to true after mutating any field
+
 		void create(RenderingDevice* device, const std::string& name = "Material UBO") {
 			ubo.create(device, name.c_str());
 		}
@@ -38,6 +41,11 @@ namespace Rendering
 				.roughness_factor = roughness_factor,
 				.shininess = shininess,
 				});
+			dirty = false;
+		}
+
+		void upload_if_dirty(RenderingDevice* device) {
+			if (dirty) upload(device);
 		}
 
 		RID build_uniform_set(
@@ -68,11 +76,11 @@ namespace Rendering
 		MaterialHandle create(RenderingDevice* device, Material mat, RID fallback, RID shader_rid)
 		{
 			mat.create(device);
-			RID us = mat.build_uniform_set(device, fallback, shader_rid);
+			RIDHandle us(mat.build_uniform_set(device, fallback, shader_rid));
 
 			MaterialHandle h = static_cast<MaterialHandle>(materials.size());
 			materials.push_back(std::move(mat));
-			uniform_sets.push_back(us);
+			uniform_sets.push_back(std::move(us));
 			return h;
 		}
 
@@ -84,14 +92,25 @@ namespace Rendering
 				mat.upload(device);
 		}
 
+		void upload_dirty(RenderingDevice* device) {
+			for (auto& mat : materials)
+				mat.upload_if_dirty(device);
+		}
+
 		void free_all(RenderingDevice* device) {
+			// Uniform sets must be freed before their dependency UBOs.
+			// Destroy in reverse order: uniform_sets first, then materials (which own the UBOs).
+			for (int i = (int)uniform_sets.size() - 1; i >= 0; --i)
+				uniform_sets[i].reset();
 			for (auto& mat : materials)
 				mat.free(device);
 		}
 
 	private:
-		std::vector<Material> materials;
-		std::vector<RID>      uniform_sets;
+		// materials (owns UBOs) must be declared before uniform_sets so that
+		// uniform_sets are destroyed first — preventing cascade double-free.
+		std::vector<Material>   materials;
+		std::vector<RIDHandle>  uniform_sets;
 	};
 }
 
