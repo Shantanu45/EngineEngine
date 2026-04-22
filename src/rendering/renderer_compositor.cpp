@@ -15,7 +15,6 @@ namespace Rendering
 
 		RID rd_texture = p_render_targets[0].render_target;		// 0 for now
 		RID rd_texture_ui = p_render_targets[0].ui;		// 0 for now
-		// #come back, textures are created every frame now, new id every time. fix this
 		RID uniform_set;
 		if (!render_target_descriptors.contains(rd_texture)) {
 			std::vector<RenderingDevice::Uniform> uniforms;
