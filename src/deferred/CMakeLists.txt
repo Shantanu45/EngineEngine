@@ -1,31 +1,12 @@
-set(PROJECT_NAME Main)
+set(PROJECT_NAME deferred)
 
-set(UNGROUPED_FILES
-	main.cpp
+file(GLOB SOURCES CONFIGURE_DEPENDS "*.cpp")
+file(GLOB HEADERS CONFIGURE_DEPENDS "*.h")
+
+add_executable(${PROJECT_NAME} WIN32 
+${SOURCES} 
+${HEADERS}
 )
-
-source_group("" FILES ${UNGROUPED_FILES})
-
-set(ALL_FILES
-	${UNGROUPED_FILES}
-)
-
-add_executable(${PROJECT_NAME} WIN32
-	${ALL_FILES}
-)
-
-add_subdirectory(util)
-add_subdirectory(application)
-add_subdirectory(event)
-add_subdirectory(input)
-add_subdirectory(vulkan)
-add_subdirectory(math)
-add_subdirectory(filesystem)
-add_subdirectory(compiler)
-add_subdirectory(rendering)
-add_subdirectory(tutorial)
-add_subdirectory(shader_playground)
-add_subdirectory(deferred)
 
 setup_msvc_options(${PROJECT_NAME})
 
@@ -37,7 +18,7 @@ find_package(spirv-reflect-static REQUIRED)
 find_package(TinyGLTF REQUIRED)
 find_package(stb REQUIRED)
 find_package(imgui REQUIRED)
-
+find_package(EnTT REQUIRED)
 
 set(INCLUDES 
 	"${PROJECT_SOURCE_DIR}/src"
@@ -46,7 +27,6 @@ set(INCLUDES
 	"${PROJECT_SOURCE_DIR}/third_party/volk"
 	"$ENV{VULKAN_SDK}/Include"
 )
-
 target_include_directories(${PROJECT_NAME} PRIVATE ${INCLUDES})
 
 set(ADDITIONAL_LIBRARY_DEPENDENCIES
@@ -69,6 +49,7 @@ set(ADDITIONAL_LIBRARY_DEPENDENCIES
 	TinyGLTF::TinyGLTF
 	stb::stb
 	imgui::imgui
+	EnTT::EnTT
 )
 
-target_link_libraries(${PROJECT_NAME} PRIVATE "${ADDITIONAL_LIBRARY_DEPENDENCIES}")
+target_link_libraries(${PROJECT_NAME} PRIVATE ${ADDITIONAL_LIBRARY_DEPENDENCIES})
