@@ -3,10 +3,18 @@
 #include "rendering/render_passes/common.h"
 #include "rendering/primitve_shapes.h"
 #include "rendering/drawable.h"
+#include "rendering/uniform_buffer.h"
+#include "rendering/uniform_set_builder.h"
 
 using RD = Rendering::RenderingDevice;
 using RDC = Rendering::RenderingDeviceCommons;
 using RDD = Rendering::RenderingDeviceDriver;
+
+struct PlaygroundUBO {
+    glm::vec2 resolution;
+    float     time;
+    float     _pad = 0.0f;
+};
 
 void add_playground_pass(
 	FrameGraph& fg,
@@ -109,6 +117,12 @@ struct ShaderPlayground : EE::Application
 			.set_rasterization_state(rs)
 			.build(framebuffer_format);
 
+		playground_ubo.create(device, "Playground UBO");
+
+		uniform_set_0 = Rendering::UniformSetBuilder{}
+			.add(playground_ubo.as_uniform(0))
+			.build(device, pipeline.shader_rid, 0);
+
 		wsi->submit_transfer_workers();
 		return wsi->pre_frame_loop();
 	}
@@ -117,8 +131,13 @@ struct ShaderPlayground : EE::Application
 	{
 		device->imgui_begin_frame();
 
+		PlaygroundUBO ubo_data{};
+		ubo_data.resolution = { device->screen_get_width(), device->screen_get_height() };
+		ubo_data.time       = static_cast<float>(elapsed_time);
+		playground_ubo.upload(device, ubo_data);
+
 		auto quad_drawable = Rendering::Drawable::make(
-			pipeline, quad_mesh, Rendering::PushConstantData{}, {});
+			pipeline, quad_mesh, Rendering::PushConstantData{}, { { uniform_set_0, 0 } });
 
 		fg.reset();
 		bb.reset();
@@ -148,8 +167,12 @@ private:
 	Rendering::WSI*             wsi    = nullptr;
 	Rendering::RenderingDevice* device = nullptr;
 
+	Rendering::UniformBuffer<PlaygroundUBO> playground_ubo;
+
 	Rendering::Pipeline   pipeline;
 	Rendering::MeshHandle quad_mesh;
+
+	RIDHandle uniform_set_0;
 
 	std::unique_ptr<Rendering::MeshStorage> mesh_storage = std::make_unique<Rendering::MeshStorage>();
 
