@@ -19,12 +19,18 @@ struct Light {
     float _pad1; 
 };
 
+// Must match Material_UBO in material.h (std140 layout).
 struct Material {
-    vec4  base_color_factor;
-    float metallic_factor;
-    float roughness_factor;
-    float shininess;        // <-- keeping this for Blinn-Phong
-    float _pad;
+    vec4  base_color_factor;    // offset  0
+    float metallic_factor;      // offset 16
+    float roughness_factor;     // offset 20
+    float shininess;            // offset 24  (Blinn-Phong)
+    float alpha_cutoff;         // offset 28
+    vec4  emissive_and_normal;  // offset 32  xyz=emissive_factor, w=normal_scale
+    float occlusion_strength;   // offset 48
+    float _pad0;                // offset 52
+    float _pad1;                // offset 56
+    float _pad2;                // offset 60
 };
 
 // ---------------------------------------------

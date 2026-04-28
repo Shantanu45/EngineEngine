@@ -43,6 +43,8 @@ layout(set = 2, binding = 1) uniform texture2D diffuse_tex;
 layout(set = 2, binding = 2) uniform texture2D metallic_roughness;
 layout(set = 2, binding = 3) uniform texture2D normal_tex;
 layout(set = 2, binding = 4) uniform texture2D displacement_tex;
+layout(set = 2, binding = 5) uniform texture2D emissive_tex;
+layout(set = 2, binding = 6) uniform texture2D occlusion_tex;
 
 // Parallax Occlusion Mapping: ray-marches the height map in tangent space and
 // returns UV coordinates offset to the intersection point on the surface.
@@ -137,9 +139,12 @@ void main()
     vec2 uv = ParallaxMapping(TexCoords, tangentViewDir);
 
     vec3 tangentNormal = texture(sampler2D(normal_tex, texSampler), uv).rgb * 2.0 - 1.0;
+    tangentNormal.xy  *= mat.material.emissive_and_normal.w;  // normal_scale
     vec3 normal = normalize(TBN * tangentNormal);
 
-    vec3 color = vec3(0.05) * vec3(texture(sampler2D(diffuse_tex, texSampler), uv));
+    float ao    = texture(sampler2D(occlusion_tex, texSampler), uv).r;
+    vec3 color  = vec3(0.05) * vec3(texture(sampler2D(diffuse_tex, texSampler), uv))
+                  * mix(1.0, ao, mat.material.occlusion_strength);
 
     for (uint i = 0u; i < lightData.lightCount; i++) {
         float shadow = 1.0;
@@ -160,5 +165,7 @@ void main()
             uv, normal, FragPos, viewDir);
     }
 
-    FragColor = vec4(color, 1.0);
+    vec3 emissive = mat.material.emissive_and_normal.xyz
+                    * vec3(texture(sampler2D(emissive_tex, texSampler), uv));
+    FragColor = vec4(color + emissive, 1.0);
 }

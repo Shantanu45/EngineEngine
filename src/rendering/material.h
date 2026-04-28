@@ -3,11 +3,16 @@
 #include "uniform_set_builder.h"
 #include "rid_handle.h"
 
+// Must match the GLSL Material struct in lib/lighting.glsl (std140 layout).
 struct alignas(16) Material_UBO {
-	glm::vec4 base_color_factor;
-	float metallic_factor;
-	float roughness_factor;
-	float shininess;            // <-- for blinn phong
+	glm::vec4 base_color_factor;     // offset  0
+	float     metallic_factor;       // offset 16
+	float     roughness_factor;      // offset 20
+	float     shininess;             // offset 24  (Blinn-Phong)
+	float     alpha_cutoff;          // offset 28
+	glm::vec4 emissive_and_normal;   // offset 32  xyz=emissive_factor, w=normal_scale
+	float     occlusion_strength;    // offset 48
+	float     _pad0, _pad1, _pad2;   // offset 52-60  (pad to 64 bytes)
 };
 
 namespace Rendering
@@ -15,18 +20,28 @@ namespace Rendering
 	using MaterialHandle = uint32_t;
 	constexpr MaterialHandle INVALID_MATERIAL = ~0u;
 
+	enum class AlphaMode { Opaque, Mask, Blend };
+
 	class Material
 	{
 	public:
-		glm::vec4 base_color_factor = glm::vec4(1.0f);
-		float     metallic_factor = 0.0f;
-		float     roughness_factor = 0.5f;
-		float     shininess = 32.0f;
+		glm::vec4  base_color_factor  = glm::vec4(1.0f);
+		float      metallic_factor    = 0.0f;
+		float      roughness_factor   = 0.5f;
+		float      shininess          = 32.0f;
+		glm::vec3  emissive_factor    = glm::vec3(0.0f);
+		float      normal_scale       = 1.0f;
+		float      occlusion_strength = 1.0f;
+		float      alpha_cutoff       = 0.5f;
+		AlphaMode  alpha_mode         = AlphaMode::Opaque;
+		bool       double_sided       = false;
 
 		RID diffuse;
 		RID metallic_roughness;
 		RID normal;
 		RID displacement;
+		RID emissive;
+		RID occlusion;
 
 		bool dirty = true;  // set to true after mutating any field
 
@@ -36,10 +51,13 @@ namespace Rendering
 
 		void upload(RenderingDevice* device) {
 			ubo.upload(device, Material_UBO{
-				.base_color_factor = base_color_factor,
-				.metallic_factor = metallic_factor,
-				.roughness_factor = roughness_factor,
-				.shininess = shininess,
+				.base_color_factor   = base_color_factor,
+				.metallic_factor     = metallic_factor,
+				.roughness_factor    = roughness_factor,
+				.shininess           = shininess,
+				.alpha_cutoff        = alpha_cutoff,
+				.emissive_and_normal = glm::vec4(emissive_factor, normal_scale),
+				.occlusion_strength  = occlusion_strength,
 				});
 			dirty = false;
 		}
@@ -55,10 +73,12 @@ namespace Rendering
 		{
 			return Rendering::UniformSetBuilder{}
 				.add(ubo.as_uniform(0))
-				.add_texture_only(1, diffuse.is_valid() ? diffuse : fallback)
+				.add_texture_only(1, diffuse.is_valid()            ? diffuse            : fallback)
 				.add_texture_only(2, metallic_roughness.is_valid() ? metallic_roughness : fallback)
-				.add_texture_only(3, normal.is_valid() ? normal : fallback)
-				.add_texture_only(4, displacement.is_valid() ? displacement : fallback)
+				.add_texture_only(3, normal.is_valid()             ? normal             : fallback)
+				.add_texture_only(4, displacement.is_valid()       ? displacement       : fallback)
+				.add_texture_only(5, emissive.is_valid()           ? emissive           : fallback)
+				.add_texture_only(6, occlusion.is_valid()          ? occlusion          : fallback)
 				.build(device, shader_rid, 2);
 		}
 
