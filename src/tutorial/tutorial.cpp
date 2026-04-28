@@ -1,9 +1,11 @@
 #include "application/common.h"
 
-#include "rendering/image_loader.h"
+#include "rendering/frame_data.h"
+#include "rendering/skybox.h"
 #include "rendering/texture_cache.h"
 #include "rendering/pipeline_builder.h"
 #include "rendering/render_passes/common.h"
+#include "rendering/render_passes/shadow_passes.h"
 #include "rendering/camera.h"
 #include "input/input.h"
 #include "util/timer.h"
@@ -22,98 +24,6 @@
     Set 2 - Per-material data       (textures, material params)
     Set 3 - Per-object data         (model matrix, bone data).
  */
-
-struct alignas(16) CameraData {
-    glm::mat4 view;
-    glm::mat4 proj;
-    glm::vec3 cameraPos;
-    float     _pad;
-};
-
-struct alignas(16) FrameData_UBO {
-    CameraData camera;
-    float      time;
-    float      _pad[3];
-    glm::mat4  light_space_matrix;
-};
-
-struct alignas(16) ObjectData_UBO {
-    glm::mat4 model;
-    glm::mat4 normalMatrix;
-};
-
-struct alignas(16) PointShadowUBO {
-    glm::mat4 shadowMatrices[6];
-    glm::vec4 lightPos;   // xyz = pos, w = farPlane
-};
-
-struct point_shadow_pass_resource {
-    FrameGraphResource shadow_cubemap;
-};
-
-void add_point_shadow_pass(
-	FrameGraph& fg,
-	FrameGraphBlackboard& bb,
-	uint32_t face_size,
-	std::vector<Rendering::Drawable> drawables,
-	Rendering::MeshStorage& storage)
-{
-	bb.add<point_shadow_pass_resource>() =
-		fg.add_callback_pass<point_shadow_pass_resource>(
-			"Point Shadow Pass",
-			[&](FrameGraph::Builder& builder, point_shadow_pass_resource& data)
-			{
-				RD::TextureFormat tf;
-				tf.texture_type = RD::TEXTURE_TYPE_CUBE;   // cubemap!
-				tf.width = face_size;
-				tf.height = face_size;
-				tf.array_layers = 6;
-				tf.usage_bits =
-					RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
-					RD::TEXTURE_USAGE_SAMPLING_BIT;
-				tf.format = RD::DATA_FORMAT_D32_SFLOAT;
-
-				data.shadow_cubemap = builder.create<Rendering::FrameGraphTexture>(
-					"point shadow cubemap",
-					{ tf, RD::TextureView(), "point shadow cubemap" });
-
-				data.shadow_cubemap = builder.write(
-					data.shadow_cubemap, TEXTURE_WRITE_FLAGS::WRITE_DEPTH);
-			},
-			[=, &storage](const point_shadow_pass_resource& data,
-				FrameGraphPassResources& resources,
-				void* ctx)
-			{
-				auto& rc = *static_cast<Rendering::RenderContext*>(ctx);
-				auto  cmd = rc.command_buffer;
-
-				auto& cube_tex = resources.get<Rendering::FrameGraphTexture>(data.shadow_cubemap);
-
-				// Render into all 6 faces at once � the geometry shader
-				// writes gl_Layer to fan triangles across each face.
-				RID fb = rc.device->framebuffer_create({ cube_tex.texture_rid });
-
-				GPU_SCOPE(cmd, "Point Shadow Pass", Color(0.8f, 0.2f, 1.0f, 1.0f));
-
-				std::array<RDD::RenderPassClearValue, 1> clear_values;
-				clear_values[0].depth = 1.0f;
-				clear_values[0].stencil = 0;
-
-				rc.device->begin_render_pass_from_frame_buffer(
-					fb,
-					Rect2i(0, 0, face_size, face_size),
-					clear_values);
-
-				for (const auto& drawable : drawables)
-					submit_drawable(rc, cmd, drawable, storage);
-
-				rc.wsi->end_render_pass(cmd);
-			});
-}
-
-struct shadow_pass_resource {
-	FrameGraphResource shadow_map;
-};
 
 void add_basic_pass(
     FrameGraph& fg,
@@ -195,55 +105,6 @@ void add_basic_pass(
             });
 }
 
-void add_shadow_pass(
-	FrameGraph& fg,
-	FrameGraphBlackboard& bb,
-	Size2i shadow_extent,
-	std::vector<Rendering::Drawable> drawables,
-	Rendering::MeshStorage& storage)
-{
-	bb.add<shadow_pass_resource>() =
-		fg.add_callback_pass<shadow_pass_resource>(
-			"Shadow Pass",
-			[&](FrameGraph::Builder& builder, shadow_pass_resource& data)
-			{
-				RD::TextureFormat tf_depth;
-				tf_depth.texture_type = RD::TEXTURE_TYPE_2D;
-				tf_depth.width = shadow_extent.x;
-				tf_depth.height = shadow_extent.y;
-				tf_depth.usage_bits =
-					RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
-					RD::TEXTURE_USAGE_SAMPLING_BIT;        // must be sampled later
-				tf_depth.format = RD::DATA_FORMAT_D32_SFLOAT;
-
-				data.shadow_map = builder.create<Rendering::FrameGraphTexture>( "shadow map", { tf_depth, RD::TextureView(), "shadow map" });
-
-				data.shadow_map = builder.write( data.shadow_map, TEXTURE_WRITE_FLAGS::WRITE_DEPTH);
-			},
-			[=, &storage](const shadow_pass_resource& data,
-				FrameGraphPassResources& resources,
-				void* ctx)
-			{
-				auto& rc = *static_cast<Rendering::RenderContext*>(ctx);
-				auto  cmd = rc.command_buffer;
-
-				auto& shadow_tex = resources.get<Rendering::FrameGraphTexture>(data.shadow_map);
-
-				RID fb = rc.device->framebuffer_create({ shadow_tex.texture_rid });
-
-				GPU_SCOPE(cmd, "Shadow Pass", Color(1.0, 0.5, 0.0, 1.0));
-				std::array<RDD::RenderPassClearValue, 1> clear_values;
-				clear_values[0].depth = 1.0f;
-				clear_values[0].stencil = 0;
-
-				rc.device->begin_render_pass_from_frame_buffer( fb, Rect2i(0, 0, shadow_extent.x, shadow_extent.y), clear_values);
-
-				for (const auto& drawable : drawables)
-					submit_drawable(rc, cmd, drawable, storage);
-
-				rc.wsi->end_render_pass(cmd);
-			});
-}
 
 struct TutorialApplication : EE::Application
 {
@@ -337,26 +198,7 @@ struct TutorialApplication : EE::Application
 	        "assets://textures/skybox/back.jpg",
 		};
 
-		Rendering::ImageLoader img_loader(*fs);
-		auto face0 = img_loader.load_from_file(faces[0]);
-
-		RDC::TextureFormat cubemap_tf;
-		cubemap_tf.width = face0.width;
-		cubemap_tf.height = face0.height;
-		cubemap_tf.array_layers = 6;                          // 6 faces
-		cubemap_tf.texture_type = RDC::TEXTURE_TYPE_CUBE;     // cubemap type
-		cubemap_tf.usage_bits = RDC::TEXTURE_USAGE_SAMPLING_BIT | RDC::TEXTURE_USAGE_CAN_UPDATE_BIT;
-		cubemap_tf.format = RDC::DATA_FORMAT_R8G8B8A8_SRGB;
-
-		// load all 6 faces
-		std::vector<std::vector<uint8_t>> face_pixels;
-		face_pixels.push_back(face0.pixels);
-		for (int i = 1; i < 6; i++) {
-			face_pixels.push_back(img_loader.load_from_file(faces[i]).pixels);
-		}
-
-		cubemap_uniform = device->texture_create(cubemap_tf, RD::TextureView(), face_pixels);
-		device->set_resource_name(cubemap_uniform, "Skybox cubemap");
+		cubemap_uniform = Rendering::load_skybox_cubemap(device, *fs, faces);
 
 		sampler_cube = Rendering::create_sampler_nearest_clamp(device);
 
@@ -561,8 +403,8 @@ struct TutorialApplication : EE::Application
         fg.reset();
         bb.reset();
 
-        add_point_shadow_pass(fg, bb, 1024, point_shadow_drawables, *mesh_storage);
-        add_shadow_pass(fg, bb, { 2048, 2048 }, shadow_drawables, *mesh_storage);
+        Rendering::add_point_shadow_pass(fg, bb, 1024, point_shadow_drawables, *mesh_storage);
+        Rendering::add_shadow_pass(fg, bb, { 2048, 2048 }, shadow_drawables, *mesh_storage);
         add_basic_pass(fg, bb,
             { device->screen_get_width(), device->screen_get_height() }, main_drawables, *mesh_storage, pipeline_color);
         Rendering::add_imgui_pass(fg, bb,
