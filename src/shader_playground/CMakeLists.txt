@@ -2,10 +2,15 @@ set(PROJECT_NAME shader_playground)
 
 file(GLOB SOURCES CONFIGURE_DEPENDS "*.cpp")
 file(GLOB HEADERS CONFIGURE_DEPENDS "*.h")
+file(GLOB SHADERS CONFIGURE_DEPENDS
+    "${PROJECT_SOURCE_DIR}/assets/shaders/shader_playground/*.vert"
+    "${PROJECT_SOURCE_DIR}/assets/shaders/shader_playground/*.frag"
+)
 
-add_executable(${PROJECT_NAME} WIN32 
-${SOURCES} 
+add_executable(${PROJECT_NAME} WIN32
+${SOURCES}
 ${HEADERS}
+${SHADERS}
 )
 
 setup_msvc_options(${PROJECT_NAME})
