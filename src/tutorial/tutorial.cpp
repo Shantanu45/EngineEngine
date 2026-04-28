@@ -162,8 +162,8 @@ struct TutorialApplication : EE::Application
 		depth_state.depth_compare_operator = RDC::COMPARE_OP_LESS;
 
         pipeline_color = Rendering::PipelineBuilder{}
-            .set_shader({ "assets://shaders/light_map.vert",
-                          "assets://shaders/light_map.frag" }, "light_map")
+            .set_shader({ "assets://shaders/tutorial/light_map.vert",
+                          "assets://shaders/tutorial/light_map.frag" }, "light_map")
             .set_vertex_format(vertex_format)
             .set_depth_stencil_state(depth_state)
             .build(framebuffer_format);

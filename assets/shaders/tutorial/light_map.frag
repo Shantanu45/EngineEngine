@@ -1,6 +1,6 @@
 #version 450 core
-#include "lib/common.glsl"
-#include "lib/lighting.glsl"
+#include "../lib/common.glsl"
+#include "../lib/lighting.glsl"
 
 layout(location = 0) in vec3 FragPos;
 layout(location = 1) in vec3 Normal;

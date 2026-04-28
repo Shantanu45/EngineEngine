@@ -1,5 +1,5 @@
 #version 450 core
-#include "lib/common.glsl"
+#include "../lib/common.glsl"
 
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec3 inNormal;
