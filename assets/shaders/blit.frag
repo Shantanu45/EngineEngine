@@ -28,6 +28,11 @@ void main()
     // 1. composite in linear space
     vec4 composite = ui + scene * (1.0 - ui.a);
 
-    // 2. gamma correct the final result
+    // 2. ACES filmic tone mapping (Narkowicz 2015 approximation)
+    const float a = 2.51, b = 0.03, c = 2.43, d = 0.59, e = 0.14;
+    vec3 rgb = composite.rgb;
+    composite.rgb = clamp((rgb * (a * rgb + b)) / (rgb * (c * rgb + d) + e), 0.0, 1.0);
+
+    // 3. gamma correct the final result
     color = linearToSRGB(composite);
 }
