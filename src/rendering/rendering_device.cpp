@@ -1445,6 +1445,38 @@ namespace Rendering
 		return id;
 	}
 
+	namespace {
+		struct FbRidCacheEvictData {
+			RenderingDevice* device;
+			std::vector<RID> key;
+		};
+	}
+
+	void RenderingDevice::_on_framebuffer_rid_cache_evict(void* userdata) {
+		auto* data = static_cast<FbRidCacheEvictData*>(userdata);
+		data->device->fb_rid_cache.erase(data->key);
+		delete data;
+	}
+
+	RID RenderingDevice::framebuffer_get_or_create(const std::vector<RID>& p_texture_attachments) {
+		auto it = fb_rid_cache.find(p_texture_attachments);
+		if (it != fb_rid_cache.end()) {
+			fb_cache->touch(rid_to_frame_buffer_id.at(it->second));
+			return it->second;
+		}
+
+		RID id = framebuffer_create(p_texture_attachments);
+		if (!id.is_valid()) return id;
+
+		fb_rid_cache[p_texture_attachments] = id;
+
+		Framebuffer* fb = framebuffer_owner.get_or_null(id);
+		fb->invalidated_callback = &RenderingDevice::_on_framebuffer_rid_cache_evict;
+		fb->invalidated_callback_userdata = new FbRidCacheEvictData{ this, p_texture_attachments };
+
+		return id;
+	}
+
 	Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_format_create_empty(TextureSamples p_samples /*= TEXTURE_SAMPLES_1*/)
 	{
 		FramebufferFormatKey key;

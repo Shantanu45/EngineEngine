@@ -13,6 +13,8 @@ ${HEADERS}
 ${SHADERS}
 )
 
+set_source_files_properties(${SHADERS} PROPERTIES VS_TOOL_OVERRIDE "None")
+
 setup_msvc_options(${PROJECT_NAME})
 
 find_package(SDL3 REQUIRED)

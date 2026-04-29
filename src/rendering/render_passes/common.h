@@ -91,7 +91,7 @@ namespace Rendering
 
 					GPU_SCOPE(cmd, "Imgui Pass", Color(0.0, 0.0, 1.0, 1.0));
 					auto& imgui_tex = resources.get<Rendering::FrameGraphTexture>(data.ui);
-					RID frame_buffer = rc.device->framebuffer_create({ imgui_tex.texture_rid});
+					RID frame_buffer = rc.device->framebuffer_get_or_create({ imgui_tex.texture_rid});
 					//imgui_tex.texture_rid = rc.device->get_imgui_texture();
 					//auto& scene = resources.get<Rendering::FrameGraphTexture>(data.ui);
 

@@ -46,7 +46,7 @@ namespace Rendering
                     auto  cmd = rc.command_buffer;
                     auto& shadow_tex = resources.get<FrameGraphTexture>(data.shadow_map);
 
-                    RID fb = rc.device->framebuffer_create({ shadow_tex.texture_rid });
+                    RID fb = rc.device->framebuffer_get_or_create({ shadow_tex.texture_rid });
 
                     GPU_SCOPE(cmd, "Shadow Pass", Color(1.0f, 0.5f, 0.0f, 1.0f));
                     std::array<RDD::RenderPassClearValue, 1> clear_values;
@@ -98,7 +98,7 @@ namespace Rendering
                     auto  cmd = rc.command_buffer;
                     auto& cube_tex = resources.get<FrameGraphTexture>(data.shadow_cubemap);
 
-                    RID fb = rc.device->framebuffer_create({ cube_tex.texture_rid });
+                    RID fb = rc.device->framebuffer_get_or_create({ cube_tex.texture_rid });
 
                     GPU_SCOPE(cmd, "Point Shadow Pass", Color(0.8f, 0.2f, 1.0f, 1.0f));
                     std::array<RDD::RenderPassClearValue, 1> clear_values;

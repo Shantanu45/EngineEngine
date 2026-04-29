@@ -49,6 +49,7 @@ namespace Rendering
 		~FramebufferCache();
 
 		RDD::FramebufferID get(const FramebufferKey& key);
+		void touch(RDD::FramebufferID p_fb);
 
 		void tick(uint32_t p_max_age = 8);
 

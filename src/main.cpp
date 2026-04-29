@@ -69,7 +69,7 @@ void add_basic_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
 
 				Rect2i viewport(0, 0, w, h);
 
-				RID frame_buffer = rc.device->framebuffer_create({scene_tex.texture_rid, depth_tex.texture_rid});
+				RID frame_buffer = rc.device->framebuffer_get_or_create({scene_tex.texture_rid, depth_tex.texture_rid});
 
 				GPU_SCOPE(cmd, "Basic Pass", Color(1.0, 0.0, 0.0, 1.0));
 				std::array<RDD::RenderPassClearValue, 2> clear_values;

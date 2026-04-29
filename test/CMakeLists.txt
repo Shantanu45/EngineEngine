@@ -19,6 +19,7 @@ find_package(xxHash REQUIRED)
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 
 setup_msvc_options(${TEST_PROJECT_NAME})
+add_definitions(-DNOMINMAX)
 
 set(TEST_INCLUDE 
 	"${PROJECT_SOURCE_DIR}/src"

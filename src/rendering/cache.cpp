@@ -29,6 +29,16 @@ namespace Rendering
 	}
 
 
+	void FramebufferCache::touch(RDD::FramebufferID p_fb)
+	{
+		for (auto& [key, entry] : cache) {
+			if (entry.framebuffer == p_fb) {
+				entry.last_used_frame = current_frame;
+				return;
+			}
+		}
+	}
+
 	void FramebufferCache::tick(uint32_t p_max_age /*= 8*/)
 	{
 		for (auto it = cache.begin(); it != cache.end(); ) {

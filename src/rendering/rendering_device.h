@@ -933,6 +933,7 @@ namespace Rendering
 		RID framebuffer_create_empty(const Size2i& p_size, TextureSamples p_samples, FramebufferFormatID p_format_check);
 		RID framebuffer_create(const std::vector<RID>& p_texture_attachments, FramebufferFormatID p_format_check = INVALID_ID, uint32_t p_view_count = 1);
 		RID framebuffer_create_multipass(const std::vector<RID>& p_texture_attachments, const std::vector<FramebufferPass>& p_passes, FramebufferFormatID p_format_check, uint32_t p_view_count);
+		RID framebuffer_get_or_create(const std::vector<RID>& p_texture_attachments);
 		FramebufferFormatID framebuffer_format_create_empty(TextureSamples p_samples = TEXTURE_SAMPLES_1);
 
 #pragma endregion
@@ -1210,6 +1211,9 @@ namespace Rendering
 
 		std::unique_ptr<FramebufferCache> fb_cache;
 		std::unique_ptr<TransientTextureCache> tex_cache;
+		std::map<std::vector<RID>, RID> fb_rid_cache;
+
+		static void _on_framebuffer_rid_cache_evict(void* userdata);
 
 		std::vector<TransferWorker*> transfer_worker_pool;
 		uint32_t transfer_worker_pool_size = 0;

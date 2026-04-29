@@ -84,7 +84,7 @@ void add_basic_pass(
                 uint32_t w = rc.device->screen_get_width();
                 uint32_t h = rc.device->screen_get_height();
 
-				RID frame_buffer = rc.device->framebuffer_create({ scene_tex.texture_rid, depth_tex.texture_rid });
+				RID frame_buffer = rc.device->framebuffer_get_or_create({ scene_tex.texture_rid, depth_tex.texture_rid });
 
 				GPU_SCOPE(cmd, "Basic Pass", Color(1.0, 0.0, 0.0, 1.0));
 				std::array<RDD::RenderPassClearValue, 2> clear_values;
