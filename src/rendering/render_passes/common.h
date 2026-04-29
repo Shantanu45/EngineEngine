@@ -11,6 +11,7 @@ struct basic_pass_resource
 	FrameGraphResource shadow_map_in;
 	FrameGraphResource point_shadow_in;
 	FrameGraphResource shadow_uniform_set;
+	FrameGraphResource framebuffer_resource;
 };
 
 namespace Rendering
@@ -19,6 +20,7 @@ namespace Rendering
 	struct imgui_pass_resource
 	{
 		FrameGraphResource ui;
+		FrameGraphResource framebuffer_resource;
 	};
 
 	struct blit_pass_resource
@@ -77,6 +79,17 @@ namespace Rendering
 					data.ui = builder.create<Rendering::FrameGraphTexture>("imgui texture", { tf, RD::TextureView(), "imgui texture" });
 
 					data.ui = builder.write(data.ui, TEXTURE_WRITE_FLAGS::WRITE_COLOR);
+
+					data.framebuffer_resource = builder.create<Rendering::FrameGraphFramebuffer>(
+						"imgui framebuffer",
+						{
+							.build = [&fg, ui_id = data.ui](Rendering::RenderContext& rc) -> RID {
+								auto& ui_tex = fg.get_resource<Rendering::FrameGraphTexture>(ui_id);
+								return rc.device->framebuffer_create({ ui_tex.texture_rid });
+							},
+							.name = "imgui framebuffer"
+						});
+					data.framebuffer_resource = builder.write(data.framebuffer_resource, FrameGraph::kFlagsIgnored);
 				},
 
 				[=](const imgui_pass_resource& data,
@@ -87,14 +100,10 @@ namespace Rendering
 					auto cmd = rc.command_buffer;
 					auto wsi = rc.wsi;
 
-					// TODO: find alternative, not sure if its good to do it in a loop.
 					DEBUG_ASSERT(wsi->imgui_active, "Trying to add imgui pass when imgui_active if false, NOT ALLOWED!");
 
 					GPU_SCOPE(cmd, "Imgui Pass", Color(0.0, 0.0, 1.0, 1.0));
-					auto& imgui_tex = resources.get<Rendering::FrameGraphTexture>(data.ui);
-					RID frame_buffer = rc.device->framebuffer_get_or_create({ imgui_tex.texture_rid});
-					//imgui_tex.texture_rid = rc.device->get_imgui_texture();
-					//auto& scene = resources.get<Rendering::FrameGraphTexture>(data.ui);
+					RID frame_buffer = resources.get<Rendering::FrameGraphFramebuffer>(data.framebuffer_resource).framebuffer_rid;
 
 					ImGui::Render();
 					rc.device->imgui_execute(ImGui::GetDrawData(), cmd, frame_buffer);

@@ -83,21 +83,29 @@ void add_basic_pass(
 						.name = "shadow uniform set"
 					});
 				data.shadow_uniform_set = builder.write(data.shadow_uniform_set, FrameGraph::kFlagsIgnored);
+
+				data.framebuffer_resource = builder.create<Rendering::FrameGraphFramebuffer>(
+					"basic framebuffer",
+					{
+						.build = [&fg, scene_id = data.scene, depth_id = data.depth](Rendering::RenderContext& rc) -> RID {
+							auto& scene_tex = fg.get_resource<Rendering::FrameGraphTexture>(scene_id);
+							auto& depth_tex = fg.get_resource<Rendering::FrameGraphTexture>(depth_id);
+							return rc.device->framebuffer_create({ scene_tex.texture_rid, depth_tex.texture_rid });
+						},
+						.name = "basic framebuffer"
+					});
+				data.framebuffer_resource = builder.write(data.framebuffer_resource, FrameGraph::kFlagsIgnored);
             },
             [=, &storage](const basic_pass_resource& data, FrameGraphPassResources& resources, void* ctx)
             {
                 auto& rc = *static_cast<Rendering::RenderContext*>(ctx);
                 auto  cmd = rc.command_buffer;
 
-                auto& scene_tex = resources.get<Rendering::FrameGraphTexture>(data.scene);
-				auto& depth_tex = resources.get<Rendering::FrameGraphTexture>(data.depth);
-
 				RID uniform_set_1 = resources.get<Rendering::FrameGraphUniformSet>(data.shadow_uniform_set).uniform_set_rid;
+				RID frame_buffer  = resources.get<Rendering::FrameGraphFramebuffer>(data.framebuffer_resource).framebuffer_rid;
 
                 uint32_t w = rc.device->screen_get_width();
                 uint32_t h = rc.device->screen_get_height();
-
-				RID frame_buffer = rc.device->framebuffer_get_or_create({ scene_tex.texture_rid, depth_tex.texture_rid });
 
 				GPU_SCOPE(cmd, "Basic Pass", Color(1.0, 0.0, 0.0, 1.0));
 				std::array<RDD::RenderPassClearValue, 2> clear_values;

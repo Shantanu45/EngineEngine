@@ -5,10 +5,12 @@
 
 struct shadow_pass_resource {
     FrameGraphResource shadow_map;
+    FrameGraphResource framebuffer_resource;
 };
 
 struct point_shadow_pass_resource {
     FrameGraphResource shadow_cubemap;
+    FrameGraphResource framebuffer_resource;
 };
 
 namespace Rendering
@@ -37,6 +39,18 @@ namespace Rendering
                         "shadow map", { tf, RD::TextureView(), "shadow map" });
                     data.shadow_map = builder.write(
                         data.shadow_map, TEXTURE_WRITE_FLAGS::WRITE_DEPTH);
+
+                    data.framebuffer_resource = builder.create<FrameGraphFramebuffer>(
+                        "shadow framebuffer",
+                        {
+                            .build = [&fg, shadow_id = data.shadow_map](RenderContext& rc) -> RID {
+                                auto& shadow_tex = fg.get_resource<FrameGraphTexture>(shadow_id);
+                                return rc.device->framebuffer_create({ shadow_tex.texture_rid });
+                            },
+                            .name = "shadow framebuffer"
+                        });
+                    data.framebuffer_resource = builder.write(
+                        data.framebuffer_resource, FrameGraph::kFlagsIgnored);
                 },
                 [=, &storage](const shadow_pass_resource& data,
                     FrameGraphPassResources& resources,
@@ -44,9 +58,8 @@ namespace Rendering
                 {
                     auto& rc  = *static_cast<RenderContext*>(ctx);
                     auto  cmd = rc.command_buffer;
-                    auto& shadow_tex = resources.get<FrameGraphTexture>(data.shadow_map);
 
-                    RID fb = rc.device->framebuffer_get_or_create({ shadow_tex.texture_rid });
+                    RID fb = resources.get<FrameGraphFramebuffer>(data.framebuffer_resource).framebuffer_rid;
 
                     GPU_SCOPE(cmd, "Shadow Pass", Color(1.0f, 0.5f, 0.0f, 1.0f));
                     std::array<RDD::RenderPassClearValue, 1> clear_values;
@@ -89,6 +102,18 @@ namespace Rendering
                         { tf, RD::TextureView(), "point shadow cubemap" });
                     data.shadow_cubemap = builder.write(
                         data.shadow_cubemap, TEXTURE_WRITE_FLAGS::WRITE_DEPTH);
+
+                    data.framebuffer_resource = builder.create<FrameGraphFramebuffer>(
+                        "point shadow framebuffer",
+                        {
+                            .build = [&fg, cube_id = data.shadow_cubemap](RenderContext& rc) -> RID {
+                                auto& cube_tex = fg.get_resource<FrameGraphTexture>(cube_id);
+                                return rc.device->framebuffer_create({ cube_tex.texture_rid });
+                            },
+                            .name = "point shadow framebuffer"
+                        });
+                    data.framebuffer_resource = builder.write(
+                        data.framebuffer_resource, FrameGraph::kFlagsIgnored);
                 },
                 [=, &storage](const point_shadow_pass_resource& data,
                     FrameGraphPassResources& resources,
@@ -96,9 +121,8 @@ namespace Rendering
                 {
                     auto& rc  = *static_cast<RenderContext*>(ctx);
                     auto  cmd = rc.command_buffer;
-                    auto& cube_tex = resources.get<FrameGraphTexture>(data.shadow_cubemap);
 
-                    RID fb = rc.device->framebuffer_get_or_create({ cube_tex.texture_rid });
+                    RID fb = resources.get<FrameGraphFramebuffer>(data.framebuffer_resource).framebuffer_rid;
 
                     GPU_SCOPE(cmd, "Point Shadow Pass", Color(0.8f, 0.2f, 1.0f, 1.0f));
                     std::array<RDD::RenderPassClearValue, 1> clear_values;
