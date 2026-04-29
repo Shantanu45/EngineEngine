@@ -102,6 +102,7 @@ void add_basic_pass(
                 }
 
                 rc.wsi->end_render_pass(cmd);
+                rc.device->free_rid(uniform_set_1);
             });
 }
 
