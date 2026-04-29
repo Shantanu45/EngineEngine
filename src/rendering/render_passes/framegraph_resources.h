@@ -150,4 +150,28 @@ namespace Rendering
 			return d.texture_name;
 		}
 	};
+
+	struct FrameGraphUniformSet {
+		struct Desc {
+			std::function<RID(RenderContext&)> build;
+			std::string name;
+		};
+
+		RID uniform_set_rid;
+
+		void create(const Desc& desc, void* ctx) {
+			auto& rc = *static_cast<RenderContext*>(ctx);
+			uniform_set_rid = desc.build(rc);
+		}
+
+		void destroy(const Desc& desc, void* ctx) {
+			auto& rc = *static_cast<RenderContext*>(ctx);
+			if (uniform_set_rid.is_valid()) {
+				rc.device->free_rid(uniform_set_rid);
+				uniform_set_rid = RID();
+			}
+		}
+
+		static std::string to_string(const Desc& d) { return d.name; }
+	};
 }

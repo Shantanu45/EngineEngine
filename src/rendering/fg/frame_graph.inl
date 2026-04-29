@@ -29,6 +29,11 @@ FrameGraph::get_descriptor(FrameGraphResource id) const {
 }
 
 template <_VIRTUALIZABLE_CONCEPT_IMPL(T)>
+inline T &FrameGraph::get_resource(FrameGraphResource id) {
+  return _get_resource_entry(id).get<T>();
+}
+
+template <_VIRTUALIZABLE_CONCEPT_IMPL(T)>
 inline FrameGraphResource FrameGraph::import(const std::string_view name,
                                              const typename T::Desc &desc,
                                              T &&resource) {

@@ -10,6 +10,7 @@ struct basic_pass_resource
 	FrameGraphResource depth;
 	FrameGraphResource shadow_map_in;
 	FrameGraphResource point_shadow_in;
+	FrameGraphResource shadow_uniform_set;
 };
 
 namespace Rendering

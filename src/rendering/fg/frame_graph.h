@@ -77,6 +77,9 @@ public:
   get_descriptor(FrameGraphResource id) const;
 
   template <_VIRTUALIZABLE_CONCEPT(T)>
+  [[nodiscard]] T &get_resource(FrameGraphResource id);
+
+  template <_VIRTUALIZABLE_CONCEPT(T)>
   /** Imports the given resource T into FrameGraph. */
   [[nodiscard]] FrameGraphResource import(const std::string_view name,
                                           const typename T::Desc &, T &&);

@@ -64,6 +64,25 @@ void add_basic_pass(
 				data.shadow_map_in = builder.read(shadow_res.shadow_map, TEXTURE_READ_FLAGS::READ_DEPTH);
 				auto& point_shadow_res = bb.get<point_shadow_pass_resource>();
 				data.point_shadow_in = builder.read(point_shadow_res.shadow_cubemap, TEXTURE_READ_FLAGS::READ_DEPTH);
+
+				data.shadow_uniform_set = builder.create<Rendering::FrameGraphUniformSet>(
+					"shadow uniform set",
+					{
+						.build = [&fg,
+								  shader_rid   = light_map_pipeline.shader_rid,
+								  shadow_id    = shadow_res.shadow_map,
+								  point_id     = point_shadow_res.shadow_cubemap]
+								 (Rendering::RenderContext& rc) -> RID {
+							auto& shadow_tex      = fg.get_resource<Rendering::FrameGraphTexture>(shadow_id);
+							auto& point_shadow_tex = fg.get_resource<Rendering::FrameGraphTexture>(point_id);
+							return Rendering::UniformSetBuilder{}
+								.add_texture_only(0, shadow_tex.texture_rid)
+								.add_texture_only(1, point_shadow_tex.texture_rid)
+								.build(rc.device, shader_rid, 1);
+						},
+						.name = "shadow uniform set"
+					});
+				data.shadow_uniform_set = builder.write(data.shadow_uniform_set, FrameGraph::kFlagsIgnored);
             },
             [=, &storage](const basic_pass_resource& data, FrameGraphPassResources& resources, void* ctx)
             {
@@ -73,13 +92,7 @@ void add_basic_pass(
                 auto& scene_tex = resources.get<Rendering::FrameGraphTexture>(data.scene);
 				auto& depth_tex = resources.get<Rendering::FrameGraphTexture>(data.depth);
 
-				auto& shadow_tex = resources.get<Rendering::FrameGraphTexture>(data.shadow_map_in);
-				auto& point_shadow_tex = resources.get<Rendering::FrameGraphTexture>(data.point_shadow_in);
-
-				RID uniform_set_1 = Rendering::UniformSetBuilder{}
-					.add_texture_only(0, shadow_tex.texture_rid)
-					.add_texture_only(1, point_shadow_tex.texture_rid)
-					.build(rc.device, light_map_pipeline.shader_rid, 1);
+				RID uniform_set_1 = resources.get<Rendering::FrameGraphUniformSet>(data.shadow_uniform_set).uniform_set_rid;
 
                 uint32_t w = rc.device->screen_get_width();
                 uint32_t h = rc.device->screen_get_height();
@@ -102,7 +115,6 @@ void add_basic_pass(
                 }
 
                 rc.wsi->end_render_pass(cmd);
-                rc.device->free_rid(uniform_set_1);
             });
 }
 
