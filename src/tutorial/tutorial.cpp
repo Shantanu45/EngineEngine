@@ -3,20 +3,16 @@
 #include "rendering/frame_data.h"
 #include "rendering/skybox.h"
 #include "rendering/texture_cache.h"
-#include "rendering/pipeline_builder.h"
 #include "rendering/render_passes/common.h"
-#include "rendering/render_passes/shadow_passes.h"
 #include "rendering/camera.h"
-#include "input/input.h"
-#include "util/timer.h"
+#include "rendering/renderers/forward_renderer.h"
 #include "rendering/primitve_shapes.h"
 #include "rendering/drawable.h"
-#include "rendering/uniform_buffer.h"
-#include "rendering/uniform_set_builder.h"
 #include "rendering/default_textures.h"
-#include "tutorial/default_samplers.h"
+#include "input/input.h"
+#include "util/timer.h"
+#include "tutorial/scene/components.h"
 #include "entt/entt.hpp"
-#include "scene/components.h"
 
 /**
  *  Set 0 - Per-frame global data   (camera, time, lights)
@@ -24,108 +20,6 @@
     Set 2 - Per-material data       (textures, material params)
     Set 3 - Per-object data         (model matrix, bone data).
  */
-
-void add_basic_pass(
-    FrameGraph& fg,
-    FrameGraphBlackboard& bb,
-    Size2i extent,
-    std::vector<Rendering::Drawable> drawables,
-    Rendering::MeshStorage& storage,
-    Rendering::Pipeline light_map_pipeline)
-{
-    bb.add<basic_pass_resource>() =
-        fg.add_callback_pass<basic_pass_resource>(
-            "Basic Pass",
-            [&](FrameGraph::Builder& builder, basic_pass_resource& data)
-            {
-
-				RD::TextureFormat tf;
-				tf.texture_type = RD::TEXTURE_TYPE_2D;
-				tf.width = extent.x;
-				tf.height = extent.y;
-				tf.usage_bits = RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT;
-				tf.format = RD::DATA_FORMAT_R8G8B8A8_UNORM;
-
-				data.scene = builder.create<Rendering::FrameGraphTexture>("scene texture", { tf, RD::TextureView(), "scene texture" });
-
-				RD::TextureFormat tf_depth;
-				tf_depth.texture_type = RD::TEXTURE_TYPE_2D;
-				tf_depth.width = extent.x;
-				tf_depth.height = extent.y;
-				tf_depth.usage_bits = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;// | RD::TEXTURE_USAGE_SAMPLING_BIT;
-				tf_depth.format = RD::DATA_FORMAT_D32_SFLOAT;
-
-				data.depth = builder.create<Rendering::FrameGraphTexture>("scene depth texture", { tf_depth, RD::TextureView(), "scene depth texture" });
-
-				data.scene = builder.write(data.scene, TEXTURE_WRITE_FLAGS::WRITE_COLOR);
-				data.depth = builder.write(data.depth, TEXTURE_WRITE_FLAGS::WRITE_DEPTH);
-
-				auto& shadow_res = bb.get<shadow_pass_resource>();
-				data.shadow_map_in = builder.read(shadow_res.shadow_map, TEXTURE_READ_FLAGS::READ_DEPTH);
-				auto& point_shadow_res = bb.get<point_shadow_pass_resource>();
-				data.point_shadow_in = builder.read(point_shadow_res.shadow_cubemap, TEXTURE_READ_FLAGS::READ_DEPTH);
-
-				data.shadow_uniform_set = builder.create<Rendering::FrameGraphUniformSet>(
-					"shadow uniform set",
-					{
-						.build = [&fg,
-								  shader_rid   = light_map_pipeline.shader_rid,
-								  shadow_id    = shadow_res.shadow_map,
-								  point_id     = point_shadow_res.shadow_cubemap]
-								 (Rendering::RenderContext& rc) -> RID {
-							auto& shadow_tex      = fg.get_resource<Rendering::FrameGraphTexture>(shadow_id);
-							auto& point_shadow_tex = fg.get_resource<Rendering::FrameGraphTexture>(point_id);
-							return Rendering::UniformSetBuilder{}
-								.add_texture_only(0, shadow_tex.texture_rid)
-								.add_texture_only(1, point_shadow_tex.texture_rid)
-								.build(rc.device, shader_rid, 1);
-						},
-						.name = "shadow uniform set"
-					});
-				data.shadow_uniform_set = builder.write(data.shadow_uniform_set, FrameGraph::kFlagsIgnored);
-
-				data.framebuffer_resource = builder.create<Rendering::FrameGraphFramebuffer>(
-					"basic framebuffer",
-					{
-						.build = [&fg, scene_id = data.scene, depth_id = data.depth](Rendering::RenderContext& rc) -> RID {
-							auto& scene_tex = fg.get_resource<Rendering::FrameGraphTexture>(scene_id);
-							auto& depth_tex = fg.get_resource<Rendering::FrameGraphTexture>(depth_id);
-							return rc.device->framebuffer_create({ scene_tex.texture_rid, depth_tex.texture_rid });
-						},
-						.name = "basic framebuffer"
-					});
-				data.framebuffer_resource = builder.write(data.framebuffer_resource, FrameGraph::kFlagsIgnored);
-            },
-            [=, &storage](const basic_pass_resource& data, FrameGraphPassResources& resources, void* ctx)
-            {
-                auto& rc = *static_cast<Rendering::RenderContext*>(ctx);
-                auto  cmd = rc.command_buffer;
-
-				RID uniform_set_1 = resources.get<Rendering::FrameGraphUniformSet>(data.shadow_uniform_set).uniform_set_rid;
-				RID frame_buffer  = resources.get<Rendering::FrameGraphFramebuffer>(data.framebuffer_resource).framebuffer_rid;
-
-                uint32_t w = rc.device->screen_get_width();
-                uint32_t h = rc.device->screen_get_height();
-
-				GPU_SCOPE(cmd, "Basic Pass", Color(1.0, 0.0, 0.0, 1.0));
-				std::array<RDD::RenderPassClearValue, 2> clear_values;
-				clear_values[0].color = Color();
-				clear_values[1].depth = 1.0;
-				clear_values[1].stencil = 0.0;
-
-                rc.device->begin_render_pass_from_frame_buffer(frame_buffer, Rect2i(0, 0, w, h), clear_values);
-
-                for (auto drawable : drawables)
-                {
-                    if (drawable.pipeline.pipeline_rid == light_map_pipeline.pipeline_rid)
-                        drawable.set_uniform_set({ uniform_set_1, 1 });
-                    submit_drawable(rc, cmd, drawable, storage);
-                }
-
-                rc.wsi->end_render_pass(cmd);
-            });
-}
-
 
 struct TutorialApplication : EE::Application
 {
@@ -143,262 +37,115 @@ struct TutorialApplication : EE::Application
 
         wsi->set_vertex_data_mode(Rendering::WSI::VERTEX_DATA_MODE::INTERLEVED_DATA);
         wsi->set_index_buffer_format(RDC::IndexBufferFormat::INDEX_BUFFER_FORMAT_UINT32);
-
         wsi->create_new_vertex_format(
             wsi->get_default_vertex_attribute(),
-            Rendering::VERTEX_FORMAT_VARIATIONS::DEFAULT);
-        auto vertex_format = wsi->get_vertex_format_by_type(
             Rendering::VERTEX_FORMAT_VARIATIONS::DEFAULT);
 
         auto fs = Services::get().get<FilesystemInterface>();
         mesh_storage->initialize(device);
-
         tex_cache.init(device, *fs);
 
         // --- Meshes ---
-        light_mesh = Rendering::Shapes::upload_cube(*wsi, *mesh_storage, "light_cube");
+        light_mesh       = Rendering::Shapes::upload_cube(*wsi, *mesh_storage, "light_cube");
         point_light_mesh = Rendering::Shapes::upload_cube(*wsi, *mesh_storage, "point_light_cube");
-        object_mesh = Rendering::Shapes::upload_cube(*wsi, *mesh_storage, "object_cube");
-        grid_mesh = Rendering::Shapes::upload_grid(*wsi, *mesh_storage, 10, 1, "object_grid");
-        plane_mesh = Rendering::Shapes::upload_plane(*wsi, *mesh_storage, 1, "object_plane");
-		skybox_mesh = Rendering::Shapes::upload_cube(*wsi, *mesh_storage, "skybox_cube");
-
-
-        // --- Framebuffer format ---
-        RD::AttachmentFormat color;
-        color.format = RD::DATA_FORMAT_R8G8B8A8_UNORM;
-        color.usage_flags = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT;
-
-		RD::AttachmentFormat depth;
-		depth.format = RD::DATA_FORMAT_D32_SFLOAT;
-		depth.usage_flags = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-
-        auto framebuffer_format = RD::get_singleton()->framebuffer_format_create({ color, depth });
-
-        // --- Pipelines ---
-
-		RDC::PipelineDepthStencilState depth_state;
-		depth_state.enable_depth_test = true;
-		depth_state.enable_depth_write = true;
-		depth_state.depth_compare_operator = RDC::COMPARE_OP_LESS;
-
-        pipeline_color = Rendering::PipelineBuilder{}
-            .set_shader({ "assets://shaders/tutorial/light_map.vert",
-                          "assets://shaders/tutorial/light_map.frag" }, "light_map")
-            .set_vertex_format(vertex_format)
-            .set_depth_stencil_state(depth_state)
-            .build(framebuffer_format);
-
-        pipeline_light = Rendering::PipelineBuilder{}
-            .set_shader({ "assets://shaders/light_cube.vert",
-                          "assets://shaders/light_cube.frag" }, "cube_shader")
-            .set_vertex_format(vertex_format)
-            .set_depth_stencil_state(depth_state)
-            .build(framebuffer_format);
-
-        pipeline_grid = Rendering::PipelineBuilder{}
-            .set_shader({ "assets://shaders/grid.vert",
-                          "assets://shaders/grid.frag" }, "grid_shader")
-            .set_vertex_format(vertex_format)
-            .set_render_primitive(RDC::RENDER_PRIMITIVE_LINES)
-            .set_depth_stencil_state(depth_state)
-            .build(framebuffer_format);
-
-        // --- UBOs ---
-        frame_ubo.create(device, "Frame UBO");
-        light_ubo.create(device, "Light UBO");
-
-        // --- Sky box ---
-
-		std::array<std::string, 6> faces = {
-	        "assets://textures/skybox/right.jpg",
-	        "assets://textures/skybox/left.jpg",
-	        "assets://textures/skybox/top.jpg",
-	        "assets://textures/skybox/bottom.jpg",
-	        "assets://textures/skybox/front.jpg",
-	        "assets://textures/skybox/back.jpg",
-		};
-
-		cubemap_uniform = Rendering::load_skybox_cubemap(device, *fs, faces);
-
-		sampler_cube = Rendering::create_sampler_nearest_clamp(device);
-
-		RDC::PipelineDepthStencilState skybox_depth;
-		skybox_depth.enable_depth_test = true;
-		skybox_depth.enable_depth_write = false;
-		skybox_depth.depth_compare_operator = RDC::COMPARE_OP_LESS_OR_EQUAL;
-        RDC::PipelineRasterizationState rs;
-        rs.cull_mode = Rendering::RenderingDeviceCommons::POLYGON_CULL_DISABLED;
-
-
-        pipeline_skybox = Rendering::PipelineBuilder{}
-            .set_shader({ "assets://shaders/skybox.vert",
-                          "assets://shaders/skybox.frag" }, "skybox_shader")
-            .set_vertex_format(vertex_format)
-            .set_depth_stencil_state(skybox_depth)
-            .set_rasterization_state(rs)
-			.build(framebuffer_format);
-
+        object_mesh      = Rendering::Shapes::upload_cube(*wsi, *mesh_storage, "object_cube");
+        grid_mesh        = Rendering::Shapes::upload_grid(*wsi, *mesh_storage, 10, 1, "object_grid");
+        plane_mesh       = Rendering::Shapes::upload_plane(*wsi, *mesh_storage, 1, "object_plane");
+        skybox_mesh      = Rendering::Shapes::upload_cube(*wsi, *mesh_storage, "skybox_cube");
 
         // --- Textures ---
-
         fallback_texture = Rendering::create_white_texture(device);
 
-        sampler              = Rendering::create_sampler_nearest_clamp(device);
-		shadow_sampler       = Rendering::create_sampler_pcf_shadow(device);
-		point_shadow_sampler = Rendering::create_sampler_point_shadow(device);
+        std::array<std::string, 6> faces = {
+            "assets://textures/skybox/right.jpg",
+            "assets://textures/skybox/left.jpg",
+            "assets://textures/skybox/top.jpg",
+            "assets://textures/skybox/bottom.jpg",
+            "assets://textures/skybox/front.jpg",
+            "assets://textures/skybox/back.jpg",
+        };
+        cubemap_uniform = Rendering::load_skybox_cubemap(device, *fs, faces);
 
-        // --- Uniform sets ---
-        uniform_set_0 = Rendering::UniformSetBuilder{}
-            .add(frame_ubo.as_uniform(0))
-            .add(light_ubo.as_uniform(2))
-            .add_sampler(3, sampler)
-            .add_sampler(4, shadow_sampler)
-            .add_sampler(5, point_shadow_sampler)
-            .build(device, pipeline_color.shader_rid, 0);
+        // --- Renderer ---
+        renderer.initialize(wsi, device, cubemap_uniform.get());
 
-        uniform_set_0_light = Rendering::UniformSetBuilder{}
-            .add(frame_ubo.as_uniform(0))
-            .build(device, pipeline_light.shader_rid, 0);
+        // --- Materials ---
+        Rendering::Material mat;
+        mat.diffuse            = tex_cache.color("assets://textures/container2.png");
+        mat.metallic_roughness = tex_cache.linear("assets://textures/container2_specular.png");
+        mat.base_color_factor  = glm::vec4(1.0f);
+        mat.shininess          = 64.0f;
+        Rendering::MaterialHandle h = material_registry.create(
+            device, std::move(mat), fallback_texture, renderer.color_pipeline().shader_rid);
 
-		uniform_set_skybox = Rendering::UniformSetBuilder{}
-			.add(frame_ubo.as_uniform(0))
-			.add_texture(1, sampler_cube, cubemap_uniform)
-			.build(device, pipeline_skybox.shader_rid, 0);
+        Rendering::Material mat_rock;
+        mat_rock.diffuse           = tex_cache.color("assets://textures/bricks2.jpg");
+        mat_rock.normal            = tex_cache.linear("assets://textures/bricks2_normal.jpg");
+        mat_rock.displacement      = tex_cache.linear("assets://textures/bricks2_disp.jpg");
+        mat_rock.base_color_factor = glm::vec4(1.0f);
+        mat_rock.shininess         = 32.0f;
+        Rendering::MaterialHandle h_rock = material_registry.create(
+            device, std::move(mat_rock), fallback_texture, renderer.color_pipeline().shader_rid);
 
-		// --- Shadow framebuffer format ---
-		RD::AttachmentFormat shadow_depth_att;
-		shadow_depth_att.format = RD::DATA_FORMAT_D32_SFLOAT;
-		shadow_depth_att.usage_flags = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT;
-		auto shadow_fb_format = RD::get_singleton()->framebuffer_format_create({ shadow_depth_att });
+        // --- Scene entities ---
+        for (int x = 0; x < 2; x++) {
+            for (int z = 0; z < 2; z++) {
+                auto entity = world.create();
+                world.emplace<TransformComponent>(entity, TransformComponent{
+                    .position = glm::vec3(x * 2.5f, 0.5f, z * 2.5f) });
+                world.emplace<MeshComponent>(entity, MeshComponent{
+                    .mesh        = object_mesh,
+                    .pipeline    = renderer.color_pipeline(),
+                    .uniform_set_0 = renderer.color_set0(),
+                    .materials   = { h },
+                });
+            }
+        }
 
-		// --- Shadow pipeline ---
-		RDC::PipelineDepthStencilState shadow_depth_state;
-		shadow_depth_state.enable_depth_test = true;
-		shadow_depth_state.enable_depth_write = true;
-		shadow_depth_state.depth_compare_operator = RDC::COMPARE_OP_LESS;
+        auto entity_plane = world.create();
+        world.emplace<TransformComponent>(entity_plane, TransformComponent{
+            .position = glm::vec3(0.0f, 0.0f, 0.0f),
+            .scale    = glm::vec3(10.0f) });
+        world.emplace<MeshComponent>(entity_plane, MeshComponent{
+            .mesh        = plane_mesh,
+            .pipeline    = renderer.color_pipeline(),
+            .uniform_set_0 = renderer.color_set0(),
+            .materials   = { h_rock },
+        });
 
-		RDC::PipelineRasterizationState rs_shadow;
-        rs_shadow.cull_mode = Rendering::RenderingDeviceCommons::POLYGON_CULL_FRONT;
+        // Directional light
+        auto light = world.create();
+        world.emplace<TransformComponent>(light, TransformComponent{
+            .position = glm::vec3(5.0f, 10.0f, 5.0f),
+            .scale    = glm::vec3(0.2f) });
+        world.emplace<MeshComponent>(light, MeshComponent{
+            .mesh        = light_mesh,
+            .pipeline    = renderer.light_pipeline(),
+            .uniform_set_0 = renderer.light_set0() });
+        world.emplace<LightComponent>(light, LightComponent{ .data = {
+            .position    = glm::vec4(5.0f, 10.0f, 5.0f, 15.0f),
+            .direction   = glm::vec4(-0.0f, -1.0f, -0.5f, 0.0f),
+            .color       = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f),
+            .type        = static_cast<uint32_t>(LightType::Directional),
+            .outer_angle = 0.0f,
+        } });
 
-		pipeline_shadow = Rendering::PipelineBuilder{}
-			.set_shader({ "assets://shaders/shadow.vert",
-						  "assets://shaders/shadow.frag" }, "shadow_shader")
-			.set_vertex_format(vertex_format)
-			.set_depth_stencil_state(shadow_depth_state)
-			.set_rasterization_state(rs_shadow)
-			.build(shadow_fb_format);
-
-		// --- Uniform set for shadow pass (frame UBO only, set 0) ---
-		uniform_set_0_shadow = Rendering::UniformSetBuilder{}
-			.add(frame_ubo.as_uniform(0))
-			.build(device, pipeline_shadow.shader_rid, 0);
-
-		// --- Point shadow cubemap framebuffer format ---
-		// 6 layers, one per face � depth only
-		RD::AttachmentFormat point_shadow_att;
-		point_shadow_att.format = RD::DATA_FORMAT_D32_SFLOAT;
-		point_shadow_att.usage_flags = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT;
-		// The FB format itself is still 2D; the cube is in the image
-		auto point_shadow_fb_format = RD::get_singleton()->framebuffer_format_create({ point_shadow_att });
-
-		RDC::PipelineDepthStencilState ps_depth;
-		ps_depth.enable_depth_test = true;
-		ps_depth.enable_depth_write = true;
-		ps_depth.depth_compare_operator = RDC::COMPARE_OP_LESS;
-
-		pipeline_point_shadow = Rendering::PipelineBuilder{}
-			.set_shader({
-				"assets://shaders/point_shadow.vert",
-				"assets://shaders/point_shadow.geom",   // geometry shader
-				"assets://shaders/point_shadow.frag"
-				}, "point_shadow_shader")
-			.set_vertex_format(vertex_format)
-			.set_depth_stencil_state(ps_depth)
-			.build(point_shadow_fb_format);
-
-		point_shadow_ubo.create(device, "Point Shadow UBO");
-
-		uniform_set_0_point_shadow = Rendering::UniformSetBuilder{}
-			.add(frame_ubo.as_uniform(0))
-			.add(point_shadow_ubo.as_uniform(1))
-			.build(device, pipeline_point_shadow.shader_rid, 0);
-
-        // --- Scene setup ---
-        // 
-		Rendering::Material mat;
-		mat.diffuse            = tex_cache.color("assets://textures/container2.png");
-		mat.metallic_roughness = tex_cache.linear("assets://textures/container2_specular.png");
-		mat.base_color_factor  = glm::vec4(1.0f);
-		mat.shininess          = 64.0f;
-
-        Rendering::MaterialHandle h = material_registry.create(device, std::move(mat), fallback_texture, pipeline_color.shader_rid);
-
-		Rendering::Material mat_rock;
-		mat_rock.diffuse       = tex_cache.color("assets://textures/bricks2.jpg");
-		mat_rock.normal        = tex_cache.linear("assets://textures/bricks2_normal.jpg");
-		mat_rock.displacement  = tex_cache.linear("assets://textures/bricks2_disp.jpg");
-		mat_rock.base_color_factor = glm::vec4(1.0f);
-		mat_rock.shininess     = 32.0f;
-		Rendering::MaterialHandle h_rock = material_registry.create(device, std::move(mat_rock), fallback_texture, pipeline_color.shader_rid);
-
-        // object cube
-		for (int x = 0; x < 2; x++) {
-			for (int z = 0; z < 2; z++) {
-				auto entity = world.create();
-				world.emplace<TransformComponent>(entity, TransformComponent{
-					.position = glm::vec3(x * 2.5f, 0.5f, z * 2.5f) });
-				world.emplace<MeshComponent>(entity, MeshComponent{
-				   .mesh = object_mesh,
-				   .pipeline = pipeline_color,
-				   .uniform_set_0 = uniform_set_0,
-				   .materials = { h },
-				});
-			}
-		}
-
-		auto entity_plane = world.create();
-		world.emplace<TransformComponent>(entity_plane, TransformComponent{
-			.position = glm::vec3(0.0, 0.0, 0.0),
-			.scale = glm::vec3(10.f) });
-		world.emplace<MeshComponent>(entity_plane, MeshComponent{
-            .mesh = plane_mesh,
-            .pipeline = pipeline_color,
-            .uniform_set_0 = uniform_set_0,
-            .materials = { h_rock },
-            });
-
-
-        // directional light
-		auto light = world.create();
-		world.emplace<TransformComponent>(light, TransformComponent{
-			.position = glm::vec3(5.0f, 10.0f, 5.0f),
-			.scale = glm::vec3(0.2f) });
-		world.emplace<MeshComponent>(light, MeshComponent{
-			.mesh = light_mesh, .pipeline = pipeline_light,
-			.uniform_set_0 = uniform_set_0_light });
-		world.emplace<LightComponent>(light, LightComponent{ .data = {
-			.position = glm::vec4(5.0f, 10.0f, 5.0f, 15.0f),
-			.direction = glm::vec4(-0.0f, -1.0f, -0.5f, 0.0f),
-			.color = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f),
-			.type = static_cast<uint32_t>(LightType::Directional),
-			.outer_angle = 0.0f,
-		} });
-
-		auto point_light = world.create();
-		world.emplace<TransformComponent>(point_light, TransformComponent{
-			.position = glm::vec3(1.0f, 1.0f, 1.0f),  // high up, centered over scene
-			.scale = glm::vec3(0.1f) });
-		world.emplace<MeshComponent>(point_light, MeshComponent{
-			.mesh = point_light_mesh, .pipeline = pipeline_light,
-			.uniform_set_0 = uniform_set_0_light });
-		world.emplace<LightComponent>(point_light, LightComponent{ .data = {
-			.position = glm::vec4(1.0f, 1.0f, 1.0f, 15.0f),
-			.direction = glm::vec4(-0.5f, -1.0f, -0.5f, 0.0f),
-			.color = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f),         // w = intensity
-			.type = static_cast<uint32_t>(LightType::Point),
-			.outer_angle = 0.0f,
-		} });
+        // Point light
+        auto point_light = world.create();
+        world.emplace<TransformComponent>(point_light, TransformComponent{
+            .position = glm::vec3(1.0f, 1.0f, 1.0f),
+            .scale    = glm::vec3(0.1f) });
+        world.emplace<MeshComponent>(point_light, MeshComponent{
+            .mesh        = point_light_mesh,
+            .pipeline    = renderer.light_pipeline(),
+            .uniform_set_0 = renderer.light_set0() });
+        world.emplace<LightComponent>(point_light, LightComponent{ .data = {
+            .position    = glm::vec4(1.0f, 1.0f, 1.0f, 15.0f),
+            .direction   = glm::vec4(-0.5f, -1.0f, -0.5f, 0.0f),
+            .color       = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f),
+            .type        = static_cast<uint32_t>(LightType::Point),
+            .outer_angle = 0.0f,
+        } });
 
         wsi->submit_transfer_workers();
         return wsi->pre_frame_loop();
@@ -408,28 +155,26 @@ struct TutorialApplication : EE::Application
     {
         camera.update_from_input(input_system.get(), frame_time);
 
-        upload_light_ubo();
-        upload_frame_ubo(elapsed_time);
-        upload_point_shadow_ubo();
-
-        auto shadow_drawables       = build_shadow_drawables();
-        auto point_shadow_drawables = build_point_shadow_drawables();
-        auto main_drawables         = build_main_drawables();
+        renderer.upload_light_data(device, build_light_buffer());
+        renderer.upload_point_shadow_data(device, build_point_shadow_ubo());
+        renderer.upload_frame_data(device, camera, elapsed_time, compute_light_space_matrix());
 
         device->imgui_begin_frame();
         const auto timer = Services::get().get<Util::FrameTimer>();
         ImGui::Text("FPS: %.1f", timer->get_fps());
         ImGui::Text("Frame Time: %.3f ms", timer->get_frame_time() * 1000.0);
 
+        Rendering::SceneView view;
+        view.extent                  = { device->screen_get_width(), device->screen_get_height() };
+        view.shadow_drawables        = build_shadow_drawables();
+        view.point_shadow_drawables  = build_point_shadow_drawables();
+        view.main_drawables          = build_main_drawables();
+
         fg.reset();
         bb.reset();
 
-        Rendering::add_point_shadow_pass(fg, bb, 1024, point_shadow_drawables, *mesh_storage);
-        Rendering::add_shadow_pass(fg, bb, { 2048, 2048 }, shadow_drawables, *mesh_storage);
-        add_basic_pass(fg, bb,
-            { device->screen_get_width(), device->screen_get_height() }, main_drawables, *mesh_storage, pipeline_color);
-        Rendering::add_imgui_pass(fg, bb,
-            { device->screen_get_width(), device->screen_get_height() });
+        renderer.setup_passes(fg, bb, view, *mesh_storage);
+        Rendering::add_imgui_pass(fg, bb, view.extent);
         Rendering::add_blit_pass(fg, bb);
 
         fg.compile();
@@ -441,11 +186,19 @@ struct TutorialApplication : EE::Application
         fg.execute(&rc, &rc);
     }
 
+    void teardown_application() override
+    {
+        material_registry.free_all(device);
+        tex_cache.free_all();
+        mesh_storage->finalize();
+    }
+
+private:
     // -----------------------------------------------------------------------
-    // Per-frame upload helpers
+    // Per-frame data builders
     // -----------------------------------------------------------------------
 
-    void upload_light_ubo()
+    LightBuffer build_light_buffer()
     {
         LightBuffer buf{};
         world.view<TransformComponent, LightComponent>().each(
@@ -455,11 +208,9 @@ struct TutorialApplication : EE::Application
                 gpu_light.position = glm::vec4(t.position, l.data.position.w);
                 buf.lights[buf.count++] = gpu_light;
             });
-        light_ubo.upload(device, buf);
+        return buf;
     }
 
-    // Returns the light-space matrix for the first directional light found,
-    // or identity if none exists.
     glm::mat4 compute_light_space_matrix()
     {
         glm::mat4 result = glm::mat4(1.0f);
@@ -476,27 +227,15 @@ struct TutorialApplication : EE::Application
         return result;
     }
 
-    void upload_frame_ubo(double elapsed_time)
-    {
-        FrameData_UBO data{};
-        data.camera.view        = camera.get_view();
-        data.camera.proj        = camera.get_projection();
-        data.camera.cameraPos   = camera.get_position();
-        data.time               = static_cast<float>(elapsed_time);
-        data.light_space_matrix = compute_light_space_matrix();
-        frame_ubo.upload(device, data);
-    }
-
-    void upload_point_shadow_ubo()
+    PointShadowUBO build_point_shadow_ubo()
     {
         constexpr float ps_near = 0.1f;
-
         PointShadowUBO data{};
         world.view<TransformComponent, LightComponent>().each(
             [&](auto, TransformComponent& t, LightComponent& l) {
                 if (l.data.type != static_cast<uint32_t>(LightType::Point)) return;
                 glm::vec3 lp     = t.position;
-                float     ps_far = l.data.position.w;  // match range used by light attenuation
+                float     ps_far = l.data.position.w;
                 glm::mat4 proj   = glm::perspectiveRH_ZO(glm::radians(90.0f), 1.0f, ps_near, ps_far);
                 data.shadowMatrices[0] = proj * glm::lookAt(lp, lp + glm::vec3( 1, 0, 0), glm::vec3(0,-1, 0));
                 data.shadowMatrices[1] = proj * glm::lookAt(lp, lp + glm::vec3(-1, 0, 0), glm::vec3(0,-1, 0));
@@ -506,7 +245,7 @@ struct TutorialApplication : EE::Application
                 data.shadowMatrices[5] = proj * glm::lookAt(lp, lp + glm::vec3( 0, 0,-1), glm::vec3(0,-1, 0));
                 data.lightPos = glm::vec4(lp, ps_far);
             });
-        point_shadow_ubo.upload(device, data);
+        return data;
     }
 
     // -----------------------------------------------------------------------
@@ -519,9 +258,9 @@ struct TutorialApplication : EE::Application
         world.view<TransformComponent, MeshComponent>(entt::exclude<LightComponent>).each(
             [&](auto, TransformComponent& t, MeshComponent& m) {
                 out.push_back(Rendering::Drawable::make(
-                    pipeline_shadow, m.mesh,
+                    renderer.shadow_pipeline(), m.mesh,
                     Rendering::PushConstantData::from(ObjectData_UBO{ t.get_model(), t.get_normal_matrix() }),
-                    { { uniform_set_0_shadow, 0 } }
+                    { { renderer.shadow_set0(), 0 } }
                 ));
             });
         return out;
@@ -533,9 +272,9 @@ struct TutorialApplication : EE::Application
         world.view<TransformComponent, MeshComponent>(entt::exclude<LightComponent>).each(
             [&](auto, TransformComponent& t, MeshComponent& m) {
                 out.push_back(Rendering::Drawable::make(
-                    pipeline_point_shadow, m.mesh,
+                    renderer.point_shadow_pipeline(), m.mesh,
                     Rendering::PushConstantData::from(ObjectData_UBO{ t.get_model(), t.get_normal_matrix() }),
-                    { { uniform_set_0_point_shadow, 0 } }
+                    { { renderer.point_shadow_set0(), 0 } }
                 ));
             });
         return out;
@@ -545,16 +284,15 @@ struct TutorialApplication : EE::Application
     {
         material_registry.upload_dirty(device);
         std::vector<Rendering::Drawable> out;
-
         glm::mat4 identity = glm::mat4(1.0f);
 
-        out.push_back(Rendering::Drawable::make(pipeline_skybox, skybox_mesh,
+        out.push_back(Rendering::Drawable::make(renderer.skybox_pipeline(), skybox_mesh,
             Rendering::PushConstantData::from(ObjectData_UBO{ identity, identity }),
-            { { uniform_set_skybox, 0 } }));
+            { { renderer.skybox_set0(), 0 } }));
 
-        out.push_back(Rendering::Drawable::make(pipeline_grid, grid_mesh,
+        out.push_back(Rendering::Drawable::make(renderer.grid_pipeline(), grid_mesh,
             Rendering::PushConstantData::from(ObjectData_UBO{ identity, glm::transpose(glm::inverse(identity)) }),
-            { { uniform_set_0_light, 0 } }));
+            { { renderer.light_set0(), 0 } }));
 
         world.view<TransformComponent, MeshComponent>().each(
             [&](auto, TransformComponent& t, MeshComponent& m) {
@@ -575,74 +313,41 @@ struct TutorialApplication : EE::Application
         return out;
     }
 
-    void teardown_application() override
-    {
-        auto wsi = get_wsi();
-        auto device = wsi->get_rendering_device();
-        material_registry.free_all(device);
-        tex_cache.free_all();
-        mesh_storage->finalize();
-        // Pipeline RIDs are owned by RenderingDevice and freed by its finalize()
-        // via _free_rids(render_pipeline_owner) — no manual cleanup needed here.
-    }
+    // -----------------------------------------------------------------------
+    // Members
+    // -----------------------------------------------------------------------
 
-private:
-    entt::registry world;
-
-    // --- Resources (declared first = destroyed last) ---
-    // Uniform sets depend on these; destroying resources first would cascade-free
-    // the uniform sets via dependency_map, causing double-deletion when the
-    // RIDHandle destructors fire. Resources must outlive all uniform sets.
-    Rendering::UniformBuffer<FrameData_UBO>  frame_ubo;
-    Rendering::UniformBuffer<LightBuffer>    light_ubo;
-    Rendering::UniformBuffer<PointShadowUBO> point_shadow_ubo;
-
+    // Textures — declared first so they outlive the renderer's uniform sets that reference them.
     RIDHandle fallback_texture;
     RIDHandle cubemap_uniform;
     Rendering::TextureCache tex_cache;
 
-    RIDHandle sampler;
-    RIDHandle sampler_cube;
-    RIDHandle shadow_sampler;
-    RIDHandle point_shadow_sampler;
+    // Material registry — uniform sets reference tex_cache textures, so must be
+    // destroyed before tex_cache (declared after it, destroyed before it).
+    Rendering::MaterialRegistry material_registry;
 
-    // --- Pipelines ---
-    Rendering::Pipeline pipeline_color;
-    Rendering::Pipeline pipeline_light;
-    Rendering::Pipeline pipeline_grid;
-    Rendering::Pipeline pipeline_shadow;
-    Rendering::Pipeline pipeline_point_shadow;
-    Rendering::Pipeline pipeline_skybox;
-
-    // --- Uniform sets (declared last = destroyed first) ---
-    // Must be destroyed before any resource they reference, otherwise freeing
-    // the resource triggers _free_dependencies which double-frees the set.
-    RIDHandle uniform_set_0;
-    RIDHandle uniform_set_0_light;
-    RIDHandle uniform_set_0_shadow;
-    RIDHandle uniform_set_0_point_shadow;
-    RIDHandle uniform_set_skybox;
-
-    Camera camera;
-    std::shared_ptr<EE::InputSystemInterface> input_system;
-
+    // Scene data
+    entt::registry world;
+    std::unique_ptr<Rendering::MeshStorage> mesh_storage = std::make_unique<Rendering::MeshStorage>();
     Rendering::MeshHandle light_mesh;
     Rendering::MeshHandle point_light_mesh;
     Rendering::MeshHandle object_mesh;
     Rendering::MeshHandle grid_mesh;
     Rendering::MeshHandle plane_mesh;
-	Rendering::MeshHandle skybox_mesh;
+    Rendering::MeshHandle skybox_mesh;
 
+    Camera camera;
+    std::shared_ptr<EE::InputSystemInterface> input_system;
 
-    Rendering::WSI* wsi;
-    Rendering::RenderingDevice* device;
+    Rendering::WSI*             wsi    = nullptr;
+    Rendering::RenderingDevice* device = nullptr;
 
     FrameGraph           fg;
     FrameGraphBlackboard bb;
 
-    std::unique_ptr<Rendering::MeshStorage> mesh_storage = std::make_unique<Rendering::MeshStorage>();
-
-    Rendering::MaterialRegistry material_registry;
+    // Renderer — declared last so it is destroyed first, before cubemap_uniform
+    // and fallback_texture which its uniform sets reference.
+    Rendering::ForwardRenderer renderer;
 };
 
 namespace EE
@@ -652,8 +357,7 @@ namespace EE
         EE_APPLICATION_SETUP;
 
         try {
-            auto* app = new TutorialApplication();
-            return app;
+            return new TutorialApplication();
         }
         catch (const std::exception& e) {
             LOGE("application_create() threw exception: %s\n", e.what());

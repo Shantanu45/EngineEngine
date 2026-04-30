@@ -29,7 +29,7 @@ namespace Rendering
 		FrameGraphResource ui;
 	};
 
-	void add_blit_pass(FrameGraph& fg, FrameGraphBlackboard& bb)
+	inline void add_blit_pass(FrameGraph& fg, FrameGraphBlackboard& bb)
 	{
 		auto& scene_handle = bb.get<basic_pass_resource>();
 		auto& ui_handle = bb.get<imgui_pass_resource>();
@@ -61,7 +61,7 @@ namespace Rendering
 		);
 	}
 
-	void add_imgui_pass(FrameGraph& fg, FrameGraphBlackboard& bb, Size2i extent)
+	inline void add_imgui_pass(FrameGraph& fg, FrameGraphBlackboard& bb, Size2i extent)
 	{
 		bb.add<imgui_pass_resource>() =
 			fg.add_callback_pass<imgui_pass_resource>(

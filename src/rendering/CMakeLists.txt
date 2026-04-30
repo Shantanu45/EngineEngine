@@ -25,11 +25,22 @@ set(RP
 
 source_group("render_passes" FILES ${RP})
 
-add_library(${PROJECT_NAME} STATIC 
-${SOURCES} 
+file(GLOB RenderersCpp CONFIGURE_DEPENDS "renderers/*.cpp")
+file(GLOB RenderersHeader CONFIGURE_DEPENDS "renderers/*.h")
+
+set(RENDERERS
+    ${RenderersCpp}
+    ${RenderersHeader}
+)
+
+source_group("renderers" FILES ${RENDERERS})
+
+add_library(${PROJECT_NAME} STATIC
+${SOURCES}
 ${HEADERS}
 ${FG}
 ${RP}
+${RENDERERS}
 )
 
 setup_msvc_options(${PROJECT_NAME})
