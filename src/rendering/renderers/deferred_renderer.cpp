@@ -7,6 +7,7 @@ namespace Rendering
 	void DeferredRenderer::initialize(WSI* wsi, RenderingDevice* device, RID cubemap)
 	{
 		create_offscreen_pipeline(wsi, device);
+		create_deferred_pipeline(wsi, device);
 	}
 
 	void DeferredRenderer::upload_frame_data(RenderingDevice* device, const Camera& camera,
@@ -57,6 +58,7 @@ namespace Rendering
 					tf_color.usage_bits = RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT;
 					tf_color.format = RD::DATA_FORMAT_R8G8B8A8_UNORM;
 					data.albedo_resource = builder.create<FrameGraphTexture>("albedo texture", { tf_color, RD::TextureView(), "albedo texture" });
+					data.albedo_resource = builder.write(data.albedo_resource, TEXTURE_WRITE_FLAGS::WRITE_COLOR);
 
 					RD::TextureFormat tf_data;
 					tf_data.texture_type = RD::TEXTURE_TYPE_2D;
@@ -65,7 +67,9 @@ namespace Rendering
 					tf_data.usage_bits = RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT;
 					tf_data.format = RD::DATA_FORMAT_R16G16B16A16_UNORM;
 					data.normal_resource = builder.create<FrameGraphTexture>("normal texture", { tf_data, RD::TextureView(), "normal texture" });
+					data.normal_resource = builder.write(data.normal_resource, TEXTURE_WRITE_FLAGS::WRITE_COLOR);
 					data.position_resource = builder.create<FrameGraphTexture>("position texture", { tf_data, RD::TextureView(), "position texture" });
+					data.position_resource = builder.write(data.position_resource, TEXTURE_WRITE_FLAGS::WRITE_COLOR);
 
 					// framebuffer setup
 					data.framebuffer_resource = builder.create<FrameGraphFramebuffer>(
@@ -93,10 +97,12 @@ namespace Rendering
 					uint32_t h = rc.device->screen_get_height();
 
 					GPU_SCOPE(cmd, "Offscreen Pass", Color(1.0f, 0.0f, 0.0f, 1.0f));
-					std::array<RDD::RenderPassClearValue, 2> clear_values;
-					clear_values[0].color = Color();
-					clear_values[1].depth = 1.0f;
-					clear_values[1].stencil = 0;
+					std::array<RDD::RenderPassClearValue, 4> clear_values;
+					clear_values[0].color = Color(); // position
+					clear_values[1].color = Color(); // normal
+					clear_values[2].color = Color(); // albedo
+					clear_values[3].depth = 1.0f;
+					clear_values[3].stencil = 0;
 
 					RID frame_buffer = resources.get<FrameGraphFramebuffer>(data.framebuffer_resource).framebuffer_rid;
 
@@ -116,7 +122,7 @@ namespace Rendering
 
 		bb.add<deferred_pass_resource>() =
 			fg.add_callback_pass<deferred_pass_resource>(
-				"Differed Pass",
+				"Deferred Pass",
 				[&](FrameGraph::Builder& builder, deferred_pass_resource& data)
 				{
 					auto& offscreen_resource = bb.get<offscreen_pass_resource>();
@@ -173,7 +179,9 @@ namespace Rendering
 						});
 					data.framebuffer_resource = builder.write(data.framebuffer_resource, FrameGraph::kFlagsIgnored);
 				},
-				[drawables = view.main_drawables, &storage, pipeline_rid](
+				[pipeline_rid,
+				 shader_rid = deferred_pipeline.shader_rid,
+				 uniform_set_0_rid = (RID)uniform_set_0_deferred](
 					const deferred_pass_resource& data, FrameGraphPassResources& resources, void* ctx)
 				{
 					auto& rc = *static_cast<RenderContext*>(ctx);
@@ -185,7 +193,7 @@ namespace Rendering
 					RID uniform_set_1 = resources.get<FrameGraphUniformSet>(data.offscreen_tex_resources).uniform_set_rid;
 					RID frame_buffer = resources.get<FrameGraphFramebuffer>(data.framebuffer_resource).framebuffer_rid;
 
-					GPU_SCOPE(cmd, "Basic Pass", Color(1.0f, 0.0f, 0.0f, 1.0f));
+					GPU_SCOPE(cmd, "Deferred Pass", Color(1.0f, 0.0f, 0.0f, 1.0f));
 					std::array<RDD::RenderPassClearValue, 2> clear_values;
 					clear_values[0].color = Color();
 					clear_values[1].depth = 1.0f;
@@ -193,11 +201,10 @@ namespace Rendering
 
 					rc.device->begin_render_pass_from_frame_buffer(frame_buffer, Rect2i(0, 0, w, h), clear_values);
 
-					for (auto drawable : drawables) {
-						if (drawable.pipeline.pipeline_rid == pipeline_rid)
-							drawable.set_uniform_set({ uniform_set_1, 1 });
-						submit_drawable(rc, cmd, drawable, storage);
-					}
+					rc.device->bind_render_pipeline(cmd, pipeline_rid);
+					rc.device->bind_uniform_set(shader_rid, uniform_set_0_rid, 0);
+					rc.device->bind_uniform_set(shader_rid, uniform_set_1, 1);
+					rc.device->render_draw(cmd, 3, 1);
 
 					rc.wsi->end_render_pass(cmd);
 				});
@@ -229,7 +236,7 @@ namespace Rendering
 		depth_att.usage_flags = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 
 		auto main_fb_format = RD::get_singleton()->framebuffer_format_create({ position_att,
-			albedo_att, normal_att, depth_att });
+			normal_att, albedo_att, depth_att });
 
 		RD::PipelineDepthStencilState depth_state;
 		depth_state.enable_depth_test = true;
@@ -241,6 +248,7 @@ namespace Rendering
 				"offscreen_shader")
 			.set_vertex_format(vertex_format)
 			.set_depth_stencil_state(depth_state)
+			.set_blend_state(RDC::PipelineColorBlendState::create_disabled(3))
 			.build(main_fb_format);
 
 		sampler = RIDHandle(device->sampler_create({})); // nearest + clamp (default)
@@ -257,31 +265,41 @@ namespace Rendering
 
 	void DeferredRenderer::create_deferred_pipeline(WSI* wsi, RenderingDevice* device)
 	{
-		auto vertex_format = wsi->get_vertex_format_by_type(VERTEX_FORMAT_VARIATIONS::DEFAULT);
-
 		// --- Framebuffer formats ---
 
 		RD::AttachmentFormat color_att;
 		color_att.format = RD::DATA_FORMAT_R8G8B8A8_UNORM;
 		color_att.usage_flags = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT;
 
+		RD::AttachmentFormat depth_att;
+		depth_att.format = RD::DATA_FORMAT_D32_SFLOAT;
+		depth_att.usage_flags = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+
 		auto main_fb_format = RD::get_singleton()->framebuffer_format_create({ color_att, depth_att });
 
 		// --- Pipelines ---
 
 		RDC::PipelineDepthStencilState ds_standard;
-		ds_standard.enable_depth_test = true;
-		ds_standard.enable_depth_write = true;
+		ds_standard.enable_depth_test = false;
+		ds_standard.enable_depth_write = false;
 		ds_standard.depth_compare_operator = RDC::COMPARE_OP_LESS;
 
 		deferred_pipeline = PipelineBuilder{}
-			.set_shader({ "assets://shaders/tutorial/deferred/deferred.vert",
-						  "assets://shaders/tutorial/deferred/deferred.frag" }, "deferred")
-			.set_vertex_format(vertex_format)
-			.set_depth_stencil_state(ds_standard)
+			.set_shader({ "assets://shaders/deferred/deferred.vert",
+						  "assets://shaders/deferred/deferred.frag" }, "deferred")
+			.set_blend_state(RDC::PipelineColorBlendState::create_disabled())
 			.build(main_fb_format);
 
+		// --- UBOs ---
+		light_ubo.create(device, "Light UBO");
+		point_shadow_ubo.create(device, "Point Shadow UBO");
 
+		// --- Uniform sets (set 0) ---
+		uniform_set_0_deferred = UniformSetBuilder{}
+			.add(frame_ubo.as_uniform(0))
+			.add(light_ubo.as_uniform(2))
+			.add_sampler(3, sampler)
+			.build(device, deferred_pipeline.shader_rid, 0);
 	}
 
 }

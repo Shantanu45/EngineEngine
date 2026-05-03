@@ -30,11 +30,11 @@ void main()
     outUV = inTexcoord;
 
     // Vertex position in world space
-    outWorldPos = vec3(object.model * inPosition);
+    outWorldPos = worldPos4.xyz;
 
     // Normal in world space
     mat3 mNormal = transpose(inverse(mat3(object.model)));
     outNormal = mNormal * normalize(inNormal);
-    outTangent = mNormal * normalize(inTangent);
+    outTangent = mNormal * normalize(inTangent.xyz);
 
 }

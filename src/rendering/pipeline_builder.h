@@ -117,7 +117,7 @@ namespace Rendering
 	private:
 		RenderingDevice* device;
 		RID shader;
-		RD::VertexFormatID vertex_format;
+		RD::VertexFormatID vertex_format = RDC::INVALID_ID;
 		RDC::PipelineRasterizationState rasterization_state;
 		RDC::RenderPrimitive render_primitive;
 		RDC::PipelineColorBlendState blend_state;
