@@ -11,7 +11,7 @@
 
 #include <glm/glm.hpp>
 
-struct deferred_pass_resource : public blit_scene_input_resource
+struct offscreen_pass_resource : public blit_scene_input_resource
 {
 	FrameGraphResource framebuffer_resource;
 	FrameGraphResource position_resource;
@@ -34,6 +34,9 @@ namespace Rendering {
 		void setup_passes(FrameGraph& fg, FrameGraphBlackboard& bb, const SceneView& view, MeshStorage& storage) override;
 
 	private:
+		void setup_offscreen_pass(FrameGraph& fg, FrameGraphBlackboard& bb, const SceneView& view, MeshStorage& storage);
+		void setup_deferred_pass(FrameGraph& fg, FrameGraphBlackboard& bb, const SceneView& view, MeshStorage& storage);
+
 		Pipeline deferred_pipeline;
 
 		// UBOs — declared first so they outlive the uniform sets that reference them.

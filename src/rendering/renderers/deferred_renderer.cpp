@@ -67,15 +67,22 @@ namespace Rendering
 		frame_ubo.upload(device, data);
 	}
 
-	void Rendering::DeferredRenderer::setup_passes(FrameGraph& fg, FrameGraphBlackboard& bb, 
+	void DeferredRenderer::setup_passes(FrameGraph& fg, FrameGraphBlackboard& bb, 
 		const SceneView& view, MeshStorage& storage)
+	{
+		setup_offscreen_pass(fg, bb, view, storage);
+		setup_deferred_pass(fg, bb, view, storage);
+		return;
+	}
+
+	void DeferredRenderer::setup_offscreen_pass(FrameGraph& fg, FrameGraphBlackboard& bb, const SceneView& view, MeshStorage& storage)
 	{
 		auto pipeline_rid = deferred_pipeline.pipeline_rid;
 
-		bb.add<deferred_pass_resource>() =
-			fg.add_callback_pass<deferred_pass_resource>(
+		bb.add<offscreen_pass_resource>() =
+			fg.add_callback_pass<offscreen_pass_resource>(
 				"Offscreen Pass",
-				[&](FrameGraph::Builder& builder, deferred_pass_resource& data)
+				[&](FrameGraph::Builder& builder, offscreen_pass_resource& data)
 				{
 					// needed by blit pass---
 					RD::TextureFormat tf;
@@ -132,14 +139,35 @@ namespace Rendering
 					data.framebuffer_resource = builder.write(data.framebuffer_resource, FrameGraph::kFlagsIgnored);
 				},
 				[drawables = view.main_drawables, &storage, pipeline_rid](
-					const deferred_pass_resource& data, FrameGraphPassResources& resources, void* ctx)
+					const offscreen_pass_resource& data, FrameGraphPassResources& resources, void* ctx)
 				{
 					auto& rc = *static_cast<RenderContext*>(ctx);
 					auto  cmd = rc.command_buffer;
+
+					uint32_t w = rc.device->screen_get_width();
+					uint32_t h = rc.device->screen_get_height();
+
+					GPU_SCOPE(cmd, "Basic Pass", Color(1.0f, 0.0f, 0.0f, 1.0f));
+					std::array<RDD::RenderPassClearValue, 2> clear_values;
+					clear_values[0].color = Color();
+					clear_values[1].depth = 1.0f;
+					clear_values[1].stencil = 0;
+
+					RID frame_buffer = resources.get<FrameGraphFramebuffer>(data.framebuffer_resource).framebuffer_rid;
+
+					rc.device->begin_render_pass_from_frame_buffer(frame_buffer, Rect2i(0, 0, w, h), clear_values);
+
+					for (auto drawable : drawables) {
+						submit_drawable(rc, cmd, drawable, storage);
+					}
+
+					rc.wsi->end_render_pass(cmd);
 				});
 	}
 
+	void DeferredRenderer::setup_deferred_pass(FrameGraph& fg, FrameGraphBlackboard& bb, const SceneView& view, MeshStorage& storage)
+	{
+		throw std::logic_error("The method or operation is not implemented.");
+	}
+
 }
-
-
-
