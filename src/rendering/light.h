@@ -21,9 +21,9 @@ struct alignas(16) Light {
 };
 
 
-struct alignas(16) LightBuffer {
+struct alignas(16) LightBuffer_UBO {
 	uint32_t count;
 	float    _pad[3];
 	Light    lights[MAX_LIGHTS];
 };
-static_assert(sizeof(LightBuffer) == 16 + 64 * MAX_LIGHTS, "LightBuffer size mismatch");
+static_assert(sizeof(LightBuffer_UBO) == 16 + 64 * MAX_LIGHTS, "LightBuffer size mismatch");

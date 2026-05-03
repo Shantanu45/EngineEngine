@@ -20,7 +20,7 @@ struct alignas(16) ObjectData_UBO {
     glm::mat4 normalMatrix;
 };
 
-struct alignas(16) PointShadowUBO {
+struct alignas(16) PointShadow_UBO {
     glm::mat4 shadowMatrices[6];
     glm::vec4 lightPos;  // xyz = pos, w = farPlane
 };

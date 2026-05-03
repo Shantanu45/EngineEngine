@@ -198,9 +198,9 @@ private:
     // Per-frame data builders
     // -----------------------------------------------------------------------
 
-    LightBuffer build_light_buffer()
+    LightBuffer_UBO build_light_buffer()
     {
-        LightBuffer buf{};
+        LightBuffer_UBO buf{};
         world.view<TransformComponent, LightComponent>().each(
             [&](auto, TransformComponent& t, LightComponent& l) {
                 if (buf.count >= MAX_LIGHTS) return;
@@ -227,10 +227,10 @@ private:
         return result;
     }
 
-    PointShadowUBO build_point_shadow_ubo()
+    PointShadow_UBO build_point_shadow_ubo()
     {
         constexpr float ps_near = 0.1f;
-        PointShadowUBO data{};
+        PointShadow_UBO data{};
         world.view<TransformComponent, LightComponent>().each(
             [&](auto, TransformComponent& t, LightComponent& l) {
                 if (l.data.type != static_cast<uint32_t>(LightType::Point)) return;

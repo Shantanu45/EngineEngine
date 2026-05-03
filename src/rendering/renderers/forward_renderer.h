@@ -30,8 +30,8 @@ namespace Rendering {
         // Per-frame UBO uploads — call before setup_passes each frame.
         void upload_frame_data(RenderingDevice* device, const Camera& camera,
                                double elapsed, const glm::mat4& light_space_matrix);
-        void upload_light_data(RenderingDevice* device, const LightBuffer& lights);
-        void upload_point_shadow_data(RenderingDevice* device, const PointShadowUBO& data);
+        void upload_light_data(RenderingDevice* device, const LightBuffer_UBO& lights);
+        void upload_point_shadow_data(RenderingDevice* device, const PointShadow_UBO& data);
 
         // IRenderer
         void setup_passes(FrameGraph& fg, FrameGraphBlackboard& bb,
@@ -55,8 +55,8 @@ namespace Rendering {
     private:
         // UBOs — declared first so they outlive the uniform sets that reference them.
         UniformBuffer<FrameData_UBO>  frame_ubo;
-        UniformBuffer<LightBuffer>    light_ubo;
-        UniformBuffer<PointShadowUBO> point_shadow_ubo;
+        UniformBuffer<LightBuffer_UBO>    light_ubo;
+        UniformBuffer<PointShadow_UBO> point_shadow_ubo;
 
         // Samplers
         RIDHandle sampler;

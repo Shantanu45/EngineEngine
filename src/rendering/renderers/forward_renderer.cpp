@@ -153,11 +153,11 @@ void ForwardRenderer::upload_frame_data(RenderingDevice* device, const Camera& c
     frame_ubo.upload(device, data);
 }
 
-void ForwardRenderer::upload_light_data(RenderingDevice* device, const LightBuffer& lights) {
+void ForwardRenderer::upload_light_data(RenderingDevice* device, const LightBuffer_UBO& lights) {
     light_ubo.upload(device, lights);
 }
 
-void ForwardRenderer::upload_point_shadow_data(RenderingDevice* device, const PointShadowUBO& data) {
+void ForwardRenderer::upload_point_shadow_data(RenderingDevice* device, const PointShadow_UBO& data) {
     point_shadow_ubo.upload(device, data);
 }
 
