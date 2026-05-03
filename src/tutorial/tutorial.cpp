@@ -3,7 +3,6 @@
 #include "rendering/frame_data.h"
 #include "rendering/skybox.h"
 #include "rendering/texture_cache.h"
-#include "rendering/render_passes/common.h"
 #include "rendering/camera.h"
 #include "rendering/renderers/forward_renderer.h"
 #include "rendering/primitve_shapes.h"
@@ -175,7 +174,7 @@ struct TutorialApplication : EE::Application
 
         renderer.setup_passes(fg, bb, view, *mesh_storage);
         Rendering::add_imgui_pass(fg, bb, view.extent);
-        Rendering::add_blit_pass(fg, bb);
+        Rendering::add_blit_pass(fg, bb, bb.get<forward_pass_resource>());
 
         fg.compile();
 

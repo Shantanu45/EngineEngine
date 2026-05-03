@@ -169,10 +169,10 @@ void ForwardRenderer::setup_passes(FrameGraph& fg, FrameGraphBlackboard& bb,
     // Cache the pipeline RID so the execute lambda can compare without capturing `this`.
     auto color_pipeline_rid = pipeline_color.pipeline_rid;
 
-    bb.add<basic_pass_resource>() =
-        fg.add_callback_pass<basic_pass_resource>(
+    bb.add<forward_pass_resource>() =
+        fg.add_callback_pass<forward_pass_resource>(
             "Basic Pass",
-            [&](FrameGraph::Builder& builder, basic_pass_resource& data)
+            [&](FrameGraph::Builder& builder, forward_pass_resource& data)
             {
                 RD::TextureFormat tf;
                 tf.texture_type = RD::TEXTURE_TYPE_2D;
@@ -230,7 +230,7 @@ void ForwardRenderer::setup_passes(FrameGraph& fg, FrameGraphBlackboard& bb,
                 data.framebuffer_resource = builder.write(data.framebuffer_resource, FrameGraph::kFlagsIgnored);
             },
             [drawables = view.main_drawables, &storage, color_pipeline_rid](
-                const basic_pass_resource& data, FrameGraphPassResources& resources, void* ctx)
+                const forward_pass_resource& data, FrameGraphPassResources& resources, void* ctx)
             {
                 auto& rc  = *static_cast<RenderContext*>(ctx);
                 auto  cmd = rc.command_buffer;

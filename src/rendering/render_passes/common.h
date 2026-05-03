@@ -4,14 +4,10 @@
 #include "imgui.h"
 #include "../utils.h"
 
-struct basic_pass_resource
+struct blit_scene_input_resource
 {
 	FrameGraphResource scene;
 	FrameGraphResource depth;
-	FrameGraphResource shadow_map_in;
-	FrameGraphResource point_shadow_in;
-	FrameGraphResource shadow_uniform_set;
-	FrameGraphResource framebuffer_resource;
 };
 
 namespace Rendering
@@ -29,9 +25,8 @@ namespace Rendering
 		FrameGraphResource ui;
 	};
 
-	inline void add_blit_pass(FrameGraph& fg, FrameGraphBlackboard& bb)
+	inline void add_blit_pass(FrameGraph& fg, FrameGraphBlackboard& bb, const blit_scene_input_resource& scene_resource)
 	{
-		auto& scene_handle = bb.get<basic_pass_resource>();
 		auto& ui_handle = bb.get<imgui_pass_resource>();
 
 		fg.add_callback_pass<blit_pass_resource>(
@@ -39,9 +34,9 @@ namespace Rendering
 
 			[&](FrameGraph::Builder& builder, blit_pass_resource& data)
 			{
-				data.scene = builder.read(scene_handle.scene, TEXTURE_READ_FLAGS::READ_COLOR);
+				data.scene = builder.read(scene_resource.scene, TEXTURE_READ_FLAGS::READ_COLOR);
 				data.ui = builder.read(ui_handle.ui, TEXTURE_READ_FLAGS::READ_COLOR);
-				builder.read(scene_handle.depth, TEXTURE_READ_FLAGS::READ_COUNT);
+				builder.read(scene_resource.depth, TEXTURE_READ_FLAGS::READ_COUNT);
 				builder.set_side_effect();		// mark as non cull able
 			},
 

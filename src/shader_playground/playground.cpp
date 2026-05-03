@@ -16,6 +16,11 @@ struct PlaygroundUBO {
     float     _pad = 0.0f;
 };
 
+struct playground_pass_resource : public blit_scene_input_resource
+{
+	FrameGraphResource framebuffer_resource;
+};
+
 void add_playground_pass(
 	FrameGraph& fg,
 	FrameGraphBlackboard& bb,
@@ -23,10 +28,10 @@ void add_playground_pass(
 	Rendering::Drawable quad_drawable,
 	Rendering::MeshStorage& storage)
 {
-	bb.add<basic_pass_resource>() =
-		fg.add_callback_pass<basic_pass_resource>(
+	bb.add<playground_pass_resource>() =
+		fg.add_callback_pass<playground_pass_resource>(
 			"Playground Pass",
-			[&](FrameGraph::Builder& builder, basic_pass_resource& data)
+			[&](FrameGraph::Builder& builder, playground_pass_resource& data)
 			{
 				RD::TextureFormat tf;
 				tf.texture_type = RD::TEXTURE_TYPE_2D;
@@ -59,7 +64,7 @@ void add_playground_pass(
 					});
 				data.framebuffer_resource = builder.write(data.framebuffer_resource, FrameGraph::kFlagsIgnored);
 			},
-			[=, &storage](const basic_pass_resource& data, FrameGraphPassResources& resources, void* ctx)
+			[=, &storage](const playground_pass_resource& data, FrameGraphPassResources& resources, void* ctx)
 			{
 				auto& rc  = *static_cast<Rendering::RenderContext*>(ctx);
 				auto  cmd = rc.command_buffer;
@@ -156,7 +161,7 @@ struct ShaderPlayground : EE::Application
 			quad_drawable, *mesh_storage);
 		Rendering::add_imgui_pass(fg, bb,
 			{ device->screen_get_width(), device->screen_get_height() });
-		Rendering::add_blit_pass(fg, bb);
+		Rendering::add_blit_pass(fg, bb, bb.get<playground_pass_resource>());
 
 		fg.compile();
 

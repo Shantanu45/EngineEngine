@@ -7,8 +7,17 @@
 #include "rendering/frame_data.h"
 #include "rendering/light.h"
 #include "rendering/camera.h"
+#include "rendering/render_passes/common.h"
 
 #include <glm/glm.hpp>
+
+struct forward_pass_resource : public blit_scene_input_resource
+{
+	FrameGraphResource shadow_map_in;
+	FrameGraphResource point_shadow_in;
+	FrameGraphResource shadow_uniform_set;
+	FrameGraphResource framebuffer_resource;
+};
 
 namespace Rendering {
 

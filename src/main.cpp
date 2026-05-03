@@ -27,10 +27,10 @@ void add_basic_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
 	RID uniform_set, 
 	Rendering::MeshHandle mesh_handle)
 {
-	bb.add<basic_pass_resource>() =
-		fg.add_callback_pass<basic_pass_resource>(
+	bb.add<forward_pass_resource>() =
+		fg.add_callback_pass<forward_pass_resource>(
 			"Basic Pass",
-			[&](FrameGraph::Builder& builder, basic_pass_resource& data)
+			[&](FrameGraph::Builder& builder, forward_pass_resource& data)
 			{
 				RD::TextureFormat tf;
 				tf.texture_type = RD::TEXTURE_TYPE_2D;
@@ -66,7 +66,7 @@ void add_basic_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
 					});
 				data.framebuffer_resource = builder.write(data.framebuffer_resource, FrameGraph::kFlagsIgnored);
 			},
-			[=](const basic_pass_resource& data,
+			[=](const forward_pass_resource& data,
 				FrameGraphPassResources& resources,
 				void* ctx)
 			{
@@ -247,7 +247,7 @@ struct TriangleApplication : EE::Application
 
 		add_basic_pass(fg, bb, { device->screen_get_width(), device->screen_get_height() }, pipeline, uniform_set, mesh_handle);
 		Rendering::add_imgui_pass(fg, bb, { device->screen_get_width(), device->screen_get_height() });
-		Rendering::add_blit_pass(fg, bb);
+		Rendering::add_blit_pass(fg, bb, bb.get<forward_pass_resource>());
 
 		fg.compile();
 
