@@ -2093,31 +2093,38 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 			uint32_t block_write_amount;
 			StagingRequiredAction required_action;
 
+			// Request an allocation. 
+			// If this needs a stall, block_write_amount will be 0.
 			Error err = _staging_buffer_allocate(upload_staging_buffers, MIN(to_submit, upload_staging_buffers.block_size), required_align, block_write_offset, block_write_amount, required_action);
-			if (err) {
-				return err;
-			}
 
-			if (!command_buffer_copies_vector.empty() && required_action == STAGING_REQUIRED_ACTION_FLUSH_AND_STALL_ALL) {
-				//if (_buffer_make_mutable(buffer, p_buffer)) {
-				//	// The buffer must be mutable to be used as a copy destination.
-				//	draw_graph.add_synchronization();
-				//}
+			if (err) return err;
 
-				//draw_graph.add_buffer_update(buffer->driver_id, buffer->draw_tracker, command_buffer_copies_vector);
-				for (uint32_t j = 0; j < command_buffer_copies_vector.size(); j++)
-				{
-					driver->command_copy_buffer(transfer_worker_pool[buffer->transfer_worker_index]->command_buffer, command_buffer_copies_vector[j].source, buffer->driver_id, { &command_buffer_copies_vector[j].region, 1 });
+			// 1. Handle Synchronization Actions First
+			if (required_action != STAGING_REQUIRED_ACTION_NONE) {
+				// If we have pending copies, we might want to flush them before stalling
+				if (!command_buffer_copies_vector.empty() && required_action == STAGING_REQUIRED_ACTION_FLUSH_AND_STALL_ALL) {
+					for (const auto& copy : command_buffer_copies_vector) {
+						RDD::BufferCopyRegion regions[] = { copy.region };
+						driver->command_copy_buffer(get_current_command_buffer(), copy.source, buffer->driver_id, regions);
+					}
+					command_buffer_copies_vector.clear();
 				}
-				command_buffer_copies_vector.clear();
+
+				_staging_buffer_execute_required_action(upload_staging_buffers, required_action);
+
+				// IMPORTANT: Skip the rest of the loop and retry the allocation 
+				// now that the action has been performed.
+				continue;
 			}
 
-			_staging_buffer_execute_required_action(upload_staging_buffers, required_action);
+			// 2. Safety Check: Only proceed if we actually have bytes to copy
+			if (block_write_amount == 0) {
+				continue;
+			}
 
-			// Copy to staging buffer.
+			// 3. Perform the Copy (Now guaranteed to be > 0 bytes)
 			memcpy(upload_staging_buffers.blocks[upload_staging_buffers.current].data_ptr + block_write_offset, src_data + submit_from, block_write_amount);
 
-			// Insert a command to copy this.
 			RDD::BufferCopyRegion region;
 			region.src_offset = block_write_offset;
 			region.dst_offset = submit_from + p_offset;
@@ -2128,8 +2135,8 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 			buffer_copy.region = region;
 			command_buffer_copies_vector.push_back(buffer_copy);
 
+			// Update fill amount and progress
 			upload_staging_buffers.blocks[upload_staging_buffers.current].fill_amount = block_write_offset + block_write_amount;
-
 			to_submit -= block_write_amount;
 			submit_from += block_write_amount;
 		}
@@ -4492,107 +4499,88 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 
 	Error RenderingDevice::_staging_buffer_allocate(StagingBuffers& p_staging_buffers, uint32_t p_amount, uint32_t p_required_align, uint32_t& r_alloc_offset, uint32_t& r_alloc_size, StagingRequiredAction& r_required_action, bool p_can_segment /*= true*/)
 	{
-		r_alloc_size = p_amount;
+		// Initialize defaults. 
+		// If we return early for a STALL/FLUSH, size 0 ensures the caller's memcpy is safe.
+		r_alloc_size = 0;
+		r_alloc_offset = 0;
 		r_required_action = STAGING_REQUIRED_ACTION_NONE;
 
-		//LOGI(std::format("[Staging] Request: {} bytes  | Current block fill: {} / {}  | Total blocks: {}  | Max size: {}",
-		//	p_amount, p_staging_buffers.blocks[p_staging_buffers.current].fill_amount, p_staging_buffers.block_size,
-		//	p_staging_buffers.blocks.size(), p_staging_buffers.max_size).c_str());
+		// Optimization: Use bitwise alignment (requires p_required_align to be power of 2)
+		auto align_up = [](uint32_t val, uint32_t align) {
+			return (val + align - 1) & ~(align - 1);
+			};
 
-		while (true) {
-			r_alloc_offset = 0;
+		// 1. Check the current block
+		auto block = &p_staging_buffers.blocks[p_staging_buffers.current];
 
-			// See if we can use current block.
-			if (p_staging_buffers.blocks[p_staging_buffers.current].frame_used == frames_drawn) {
-				// We used this block this frame, let's see if there is still room.
+		if (block->frame_used == frames_drawn) {
+			// Block is active for this frame, check remaining space
+			uint32_t write_from = align_up(block->fill_amount, p_required_align);
 
-				uint32_t write_from = p_staging_buffers.blocks[p_staging_buffers.current].fill_amount;
+			if (write_from < p_staging_buffers.block_size) {
+				uint32_t available_bytes = p_staging_buffers.block_size - write_from;
 
-				{
-					uint32_t align_remainder = write_from % p_required_align;
-					if (align_remainder != 0) {
-						write_from += p_required_align - align_remainder;
-					}
-				}
-
-				int32_t available_bytes = int32_t(p_staging_buffers.block_size) - int32_t(write_from);
-
-				if ((int32_t)p_amount < available_bytes) {
-					// All is good, we should be ok, all will fit.
+				if (p_amount <= available_bytes) {
+					// Entire request fits
 					r_alloc_offset = write_from;
+					r_alloc_size = p_amount;
+					p_staging_buffers.used = true;
+					return OK;
 				}
-				else if (p_can_segment && available_bytes >= (int32_t)p_required_align) {
-					// Ok all won't fit but at least we can fit a chunkie.
-					// All is good, update what needs to be written to.
+				else if (p_can_segment && available_bytes >= p_required_align) {
+					// Partial fit (chunking)
 					r_alloc_offset = write_from;
 					r_alloc_size = available_bytes - (available_bytes % p_required_align);
-
+					p_staging_buffers.used = true;
+					return OK;
 				}
-				else {
-					// Can't fit it into this buffer.
-					// Will need to try next buffer.
-
-					p_staging_buffers.current = (p_staging_buffers.current + 1) % p_staging_buffers.blocks.size();
-
-					// Before doing anything, though, let's check that we didn't manage to fill all blocks.
-					// Possible in a single frame.
-					if (p_staging_buffers.blocks[p_staging_buffers.current].frame_used == frames_drawn) {
-						// Guess we did.. ok, let's see if we can insert a new block.
-						if ((uint64_t)p_staging_buffers.blocks.size() * p_staging_buffers.block_size < p_staging_buffers.max_size) {
-							// We can, so we are safe.
-							Error err = _insert_staging_block(p_staging_buffers);
-							if (err) {
-								return err;
-							}
-							// Claim for this frame.
-							p_staging_buffers.blocks[p_staging_buffers.current].frame_used = frames_drawn;
-						}
-						else {
-							// Ok, worst case scenario, all the staging buffers belong to this frame
-							// and this frame is not even done.
-							// If this is the main thread, it means the user is likely loading a lot of resources at once,.
-							// Otherwise, the thread should just be blocked until the next frame (currently unimplemented).
-							r_required_action = STAGING_REQUIRED_ACTION_FLUSH_AND_STALL_ALL;
-						}
-
-					}
-					else {
-						// Not from current frame, so continue and try again.
-						continue;
-					}
-				}
-
 			}
-			else if (p_staging_buffers.blocks[p_staging_buffers.current].frame_used <= frames_drawn - frames.size()) {
-				// This is an old block, which was already processed, let's reuse.
-				p_staging_buffers.blocks[p_staging_buffers.current].frame_used = frames_drawn;
-				p_staging_buffers.blocks[p_staging_buffers.current].fill_amount = 0;
-			}
-			else {
-				// This block may still be in use, let's not touch it unless we have to, so.. can we create a new one?
+
+			// Current block is full. Move to the next one in the ring.
+			p_staging_buffers.current = (p_staging_buffers.current + 1) % p_staging_buffers.blocks.size();
+			block = &p_staging_buffers.blocks[p_staging_buffers.current];
+
+			// If the NEXT block is also used in this frame, we've looped the ring.
+			if (block->frame_used == frames_drawn) {
 				if ((uint64_t)p_staging_buffers.blocks.size() * p_staging_buffers.block_size < p_staging_buffers.max_size) {
-					// We are still allowed to create a new block, so let's do that and insert it for current pos.
 					Error err = _insert_staging_block(p_staging_buffers);
-					if (err) {
-						return err;
-					}
-					// Claim for this frame.
-					p_staging_buffers.blocks[p_staging_buffers.current].frame_used = frames_drawn;
+					if (err) return err;
+
+					// New block created, caller should retry allocation in this new block
+					r_required_action = STAGING_REQUIRED_ACTION_NONE;
+					return OK;
 				}
 				else {
-					// Oops, we are out of room and we can't create more.
-					// Let's flush older frames.
-					// The logic here is that if a game is loading a lot of data from the main thread, it will need to be stalled anyway.
-					// If loading from a separate thread, we can block that thread until next frame when more room is made (not currently implemented, though).
-					r_required_action = STAGING_REQUIRED_ACTION_STALL_PREVIOUS;
+					// Ring is full and cannot grow.
+					r_required_action = STAGING_REQUIRED_ACTION_FLUSH_AND_STALL_ALL;
+					return OK;
 				}
 			}
-
-			// All was good, break.
-			break;
 		}
 
-		p_staging_buffers.used = true;
+		// 2. Handle block reuse (Old blocks or newly moved-to blocks)
+		// Check if block is old enough to be safe (finished by GPU)
+		if (block->frame_used <= frames_drawn - frames.size()) {
+			block->frame_used = frames_drawn;
+			block->fill_amount = 0;
+
+			// Now that it's reset, the caller loop will call us again and hit the "current block" logic.
+			// We return NONE so the caller's MIN(to_submit, block_size) logic triggers a fresh attempt.
+			return OK;
+		}
+		else {
+			// This block is still "in-flight" on the GPU.
+			if ((uint64_t)p_staging_buffers.blocks.size() * p_staging_buffers.block_size < p_staging_buffers.max_size) {
+				Error err = _insert_staging_block(p_staging_buffers);
+				if (err) return err;
+				return OK;
+			}
+			else {
+				// Cannot grow, must wait for the GPU to finish older frames.
+				r_required_action = STAGING_REQUIRED_ACTION_STALL_PREVIOUS;
+				return OK;
+			}
+		}
 
 		return OK;
 	}
