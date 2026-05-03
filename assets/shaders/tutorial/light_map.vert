@@ -1,6 +1,5 @@
 #version 450 core
 #include "../lib/common.glsl"
-#include "../lib/lighting.glsl"
 
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec3 inNormal;
@@ -14,19 +13,14 @@ layout(location = 3) out vec4 fragPosLightSpace;
 layout(location = 4) out vec3 Tangent;
 layout(location = 5) out vec3 Bitangent;
 
-layout(set = 0, binding = 0) uniform FrameData {
+layout(set = 0, binding = 0) uniform FrameData { 
     CameraData camera;
     float time;
-    uint dirShadowIdx;
-    uint ptShadowIdx;
-    float _pad;
+    float _pad1;
+    float _pad2;
+    float _pad3;
+    mat4 lightSpaceMatrix; 
 } frame;
-
-layout(set = 0, binding = 1) uniform ShadowBuffer {
-    uint count;
-    float _pad0, _pad1, _pad2;
-    ShadowData shadows[MAX_LIGHTS];
-} shadowBuf;
 
 layout(push_constant) uniform PushConstants {
     mat4 model;
@@ -38,13 +32,13 @@ void main()
     vec4 worldPos = object.model * vec4(inPosition, 1.0);
     FragPos       = worldPos.xyz;
     TexCoords     = inTexcoord;
-    fragPosLightSpace = shadowBuf.shadows[frame.dirShadowIdx].matrices[0] * worldPos;
+    fragPosLightSpace = frame.lightSpaceMatrix * worldPos;
 
     mat3 nm  = mat3(object.normalMatrix);
     vec3 N   = normalize(nm * inNormal);
     vec3 T   = normalize(nm * inTangent.xyz);
-    T        = normalize(T - dot(T, N) * N);
-    vec3 B   = normalize(cross(N, T)) * inTangent.w;
+    T        = normalize(T - dot(T, N) * N);          // re-orthogonalize
+    vec3 B = normalize(cross(N, T)) * inTangent.w;            // w encodes handedness
 
     Normal    = N;
     Tangent   = T;

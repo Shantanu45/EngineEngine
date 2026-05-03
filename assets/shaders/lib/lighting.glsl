@@ -4,17 +4,6 @@
 #define MAX_LIGHTS 16
 
 
-// Must match ShadowData in frame_data.h (std140 layout).
-// matrices[0]    = directional/spot light-space matrix
-// matrices[0..5] = point light cubemap face matrices
-// light_pos.xyz  = world pos, light_pos.w = far plane (point lights)
-struct ShadowData {
-    mat4  matrices[6];
-    vec4  light_pos;
-    uint  light_index;
-    float _pad0, _pad1, _pad2;
-};
-
 // Must match CPU enum LightType : uint32_t
 #define LIGHT_DIRECTIONAL 0u
 #define LIGHT_POINT       1u

@@ -100,9 +100,9 @@ void ForwardRenderer::initialize(WSI* wsi, RenderingDevice* dev, RID cubemap) {
         .build(shadow_fb_format);
 
     // --- UBOs ---
-    frame_ubo.create(device,  "Frame UBO");
-    light_ubo.create(device,  "Light UBO");
-    shadow_ubo.create(device, "Shadow UBO");
+    frame_ubo.create(device,        "Frame UBO");
+    light_ubo.create(device,        "Light UBO");
+    point_shadow_ubo.create(device, "Point Shadow UBO");
 
     // --- Samplers ---
     sampler              = RIDHandle(device->sampler_create({}));
@@ -119,10 +119,8 @@ void ForwardRenderer::initialize(WSI* wsi, RenderingDevice* dev, RID cubemap) {
     }
 
     // --- Uniform sets (set 0) ---
-    // Color pass: frame + shadow buffer + lights + samplers
     uniform_set_0 = UniformSetBuilder{}
         .add(frame_ubo.as_uniform(0))
-        .add(shadow_ubo.as_uniform(1))
         .add(light_ubo.as_uniform(2))
         .add_sampler(3, sampler)
         .add_sampler(4, shadow_sampler)
@@ -133,16 +131,13 @@ void ForwardRenderer::initialize(WSI* wsi, RenderingDevice* dev, RID cubemap) {
         .add(frame_ubo.as_uniform(0))
         .build(device, pipeline_light.shader_rid, 0);
 
-    // Shadow pass: frame + shadow buffer (shadow.vert reads matrices from shadow buffer)
     uniform_set_0_shadow = UniformSetBuilder{}
         .add(frame_ubo.as_uniform(0))
-        .add(shadow_ubo.as_uniform(1))
         .build(device, pipeline_shadow.shader_rid, 0);
 
-    // Point shadow pass: frame + shadow buffer (geom shader reads cubemap matrices from shadow buffer)
     uniform_set_0_point_shadow = UniformSetBuilder{}
         .add(frame_ubo.as_uniform(0))
-        .add(shadow_ubo.as_uniform(1))
+        .add(point_shadow_ubo.as_uniform(1))
         .build(device, pipeline_point_shadow.shader_rid, 0);
 
     uniform_set_skybox = UniformSetBuilder{}
@@ -155,43 +150,35 @@ void ForwardRenderer::initialize(WSI* wsi, RenderingDevice* dev, RID cubemap) {
 // Private — per-frame helpers
 // ---------------------------------------------------------------------------
 
-ShadowBuffer_UBO ForwardRenderer::build_shadow_buffer(const std::vector<Light>& lights,
-                                                       uint32_t& out_dir_idx,
-                                                       uint32_t& out_pt_idx) const {
-    constexpr float ps_near = 0.1f;
-    ShadowBuffer_UBO buf{};
-    out_dir_idx = 0;
-    out_pt_idx  = 0;
-
+glm::mat4 ForwardRenderer::compute_light_space_matrix(const std::vector<Light>& lights) const {
+    glm::mat4 result = glm::mat4(1.0f);
     for (const auto& l : lights) {
-        if (buf.count >= MAX_LIGHTS) break;
-        ShadowData& sd = buf.shadows[buf.count];
-        sd.light_index = buf.count;
-
-        if (l.type == static_cast<uint32_t>(LightType::Directional)) {
-            out_dir_idx    = buf.count;
-            glm::vec3 pos  = glm::vec3(l.position);
-            glm::mat4 proj = glm::orthoRH_ZO(-8.0f, 8.0f, -8.0f, 8.0f, 1.0f, 30.0f);
-            glm::mat4 v    = glm::lookAt(pos, pos + glm::vec3(l.direction), glm::vec3(0, 1, 0));
-            sd.matrices[0] = proj * v;
-        } else if (l.type == static_cast<uint32_t>(LightType::Point)) {
-            out_pt_idx     = buf.count;
-            glm::vec3 lp   = glm::vec3(l.position);
-            float ps_far   = l.position.w;
-            glm::mat4 proj = glm::perspectiveRH_ZO(glm::radians(90.0f), 1.0f, ps_near, ps_far);
-            sd.matrices[0] = proj * glm::lookAt(lp, lp + glm::vec3( 1, 0, 0), glm::vec3(0,-1, 0));
-            sd.matrices[1] = proj * glm::lookAt(lp, lp + glm::vec3(-1, 0, 0), glm::vec3(0,-1, 0));
-            sd.matrices[2] = proj * glm::lookAt(lp, lp + glm::vec3( 0, 1, 0), glm::vec3(0, 0, 1));
-            sd.matrices[3] = proj * glm::lookAt(lp, lp + glm::vec3( 0,-1, 0), glm::vec3(0, 0,-1));
-            sd.matrices[4] = proj * glm::lookAt(lp, lp + glm::vec3( 0, 0, 1), glm::vec3(0,-1, 0));
-            sd.matrices[5] = proj * glm::lookAt(lp, lp + glm::vec3( 0, 0,-1), glm::vec3(0,-1, 0));
-            sd.light_pos   = glm::vec4(lp, ps_far);
-        }
-
-        buf.count++;
+        if (l.type != static_cast<uint32_t>(LightType::Directional)) continue;
+        glm::vec3 pos  = glm::vec3(l.position);
+        glm::mat4 proj = glm::orthoRH_ZO(-8.0f, 8.0f, -8.0f, 8.0f, 1.0f, 30.0f);
+        glm::mat4 v    = glm::lookAt(pos, pos + glm::vec3(l.direction), glm::vec3(0, 1, 0));
+        result = proj * v;
     }
+    return result;
+}
 
-    return buf;
+PointShadow_UBO ForwardRenderer::build_point_shadow_ubo(const std::vector<Light>& lights) const {
+    constexpr float ps_near = 0.1f;
+    PointShadow_UBO data{};
+    for (const auto& l : lights) {
+        if (l.type != static_cast<uint32_t>(LightType::Point)) continue;
+        glm::vec3 lp     = glm::vec3(l.position);
+        float     ps_far = l.position.w;
+        glm::mat4 proj   = glm::perspectiveRH_ZO(glm::radians(90.0f), 1.0f, ps_near, ps_far);
+        data.shadowMatrices[0] = proj * glm::lookAt(lp, lp + glm::vec3( 1, 0, 0), glm::vec3(0,-1, 0));
+        data.shadowMatrices[1] = proj * glm::lookAt(lp, lp + glm::vec3(-1, 0, 0), glm::vec3(0,-1, 0));
+        data.shadowMatrices[2] = proj * glm::lookAt(lp, lp + glm::vec3( 0, 1, 0), glm::vec3(0, 0, 1));
+        data.shadowMatrices[3] = proj * glm::lookAt(lp, lp + glm::vec3( 0,-1, 0), glm::vec3(0, 0,-1));
+        data.shadowMatrices[4] = proj * glm::lookAt(lp, lp + glm::vec3( 0, 0, 1), glm::vec3(0,-1, 0));
+        data.shadowMatrices[5] = proj * glm::lookAt(lp, lp + glm::vec3( 0, 0,-1), glm::vec3(0,-1, 0));
+        data.lightPos = glm::vec4(lp, ps_far);
+    }
+    return data;
 }
 
 std::vector<Drawable> ForwardRenderer::build_shadow_drawables(const SceneView& view) const {
@@ -201,7 +188,7 @@ std::vector<Drawable> ForwardRenderer::build_shadow_drawables(const SceneView& v
         out.push_back(Drawable::make(
             pipeline_shadow, inst.mesh,
             PushConstantData::from(ObjectData_UBO{ inst.model, inst.normal_matrix }),
-            { { (RID)uniform_set_0_shadow, 0 } }
+            { { uniform_set_0_shadow, 0 } }
         ));
     }
     return out;
@@ -214,7 +201,7 @@ std::vector<Drawable> ForwardRenderer::build_point_shadow_drawables(const SceneV
         out.push_back(Drawable::make(
             pipeline_point_shadow, inst.mesh,
             PushConstantData::from(ObjectData_UBO{ inst.model, inst.normal_matrix }),
-            { { (RID)uniform_set_0_point_shadow, 0 } }
+            { { uniform_set_0_point_shadow, 0 } }
         ));
     }
     return out;
@@ -253,23 +240,16 @@ std::vector<Drawable> ForwardRenderer::build_main_drawables(const SceneView& vie
 
 void ForwardRenderer::setup_passes(FrameGraph& fg, FrameGraphBlackboard& bb,
                                    const SceneView& view, MeshStorage& storage) {
-    // Upload shadow buffer first — frame UBO references shadow indices from it.
-    uint32_t dir_idx = 0, pt_idx = 0;
-    shadow_ubo.upload(device, build_shadow_buffer(view.lights, dir_idx, pt_idx));
-
-    // Upload frame UBO
+    // Upload per-frame UBOs
     {
         FrameData_UBO frame{};
-        frame.camera.view              = view.camera->get_view();
-        frame.camera.proj              = view.camera->get_projection();
-        frame.camera.cameraPos         = view.camera->get_position();
-        frame.time                     = static_cast<float>(view.elapsed);
-        frame.directional_shadow_index = dir_idx;
-        frame.point_shadow_index       = pt_idx;
+        frame.camera.view        = view.camera->get_view();
+        frame.camera.proj        = view.camera->get_projection();
+        frame.camera.cameraPos   = view.camera->get_position();
+        frame.time               = static_cast<float>(view.elapsed);
+        frame.light_space_matrix = compute_light_space_matrix(view.lights);
         frame_ubo.upload(device, frame);
     }
-
-    // Upload light buffer
     {
         LightBuffer_UBO buf{};
         for (const auto& l : view.lights) {
@@ -278,6 +258,7 @@ void ForwardRenderer::setup_passes(FrameGraph& fg, FrameGraphBlackboard& bb,
         }
         light_ubo.upload(device, buf);
     }
+    point_shadow_ubo.upload(device, build_point_shadow_ubo(view.lights));
 
     // Build drawable lists
     auto shadow_draws       = build_shadow_drawables(view);

@@ -58,9 +58,9 @@ namespace Rendering {
 		Pipeline deferred_pipeline;
 
 		// UBOs — declared first so they outlive the uniform sets that reference them.
-		UniformBuffer<FrameData_UBO>    frame_ubo;
-		UniformBuffer<LightBuffer_UBO>  light_ubo;
-		UniformBuffer<ShadowBuffer_UBO> shadow_ubo;
+		UniformBuffer<FrameData_UBO>   frame_ubo;
+		UniformBuffer<LightBuffer_UBO> light_ubo;
+		UniformBuffer<PointShadow_UBO> point_shadow_ubo;
 
 		RIDHandle sampler;
 

@@ -23,9 +23,8 @@ namespace Rendering
 			frame.camera.view      = view.camera->get_view();
 			frame.camera.proj      = view.camera->get_projection();
 			frame.camera.cameraPos = view.camera->get_position();
-			frame.time                     = static_cast<float>(view.elapsed);
-			frame.directional_shadow_index = 0;
-			frame.point_shadow_index       = 0;
+			frame.time             = static_cast<float>(view.elapsed);
+			frame.light_space_matrix = glm::mat4(1.0f); // deferred handles lighting in the lighting pass
 			frame_ubo.upload(device, frame);
 		}
 		{
@@ -315,7 +314,7 @@ namespace Rendering
 
 		// --- UBOs ---
 		light_ubo.create(dev, "Light UBO");
-		shadow_ubo.create(dev, "Shadow UBO");
+		point_shadow_ubo.create(dev, "Point Shadow UBO");
 
 		// --- Uniform sets (set 0) ---
 		uniform_set_0_deferred = UniformSetBuilder{}

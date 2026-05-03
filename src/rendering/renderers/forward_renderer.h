@@ -49,16 +49,15 @@ namespace Rendering {
         std::vector<Drawable> build_point_shadow_drawables(const SceneView& view) const;
         std::vector<Drawable> build_main_drawables(const SceneView& view) const;
 
-        ShadowBuffer_UBO build_shadow_buffer(const std::vector<Light>& lights,
-                                             uint32_t& out_dir_idx,
-                                             uint32_t& out_pt_idx) const;
+        glm::mat4        compute_light_space_matrix(const std::vector<Light>& lights) const;
+        PointShadow_UBO  build_point_shadow_ubo(const std::vector<Light>& lights) const;
 
         RenderingDevice* device = nullptr;
 
         // UBOs — declared first so they outlive the uniform sets that reference them.
         UniformBuffer<FrameData_UBO>   frame_ubo;
         UniformBuffer<LightBuffer_UBO> light_ubo;
-        UniformBuffer<ShadowBuffer_UBO> shadow_ubo;
+        UniformBuffer<PointShadow_UBO> point_shadow_ubo;
 
         // Samplers
         RIDHandle sampler;

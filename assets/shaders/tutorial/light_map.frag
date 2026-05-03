@@ -14,9 +14,10 @@ layout(location = 0) out vec4 FragColor;
 layout(set = 0, binding = 0) uniform FrameUBO {
     CameraData camera;
     float time;
-    uint dirShadowIdx;
-    uint ptShadowIdx;
-    float _pad;
+    float _pad1;
+    float _pad2;
+    float _pad3;
+    mat4 lightSpaceMatrix; 
 } frame;
 
 layout(set = 1, binding = 0) uniform texture2D shadowMap;
