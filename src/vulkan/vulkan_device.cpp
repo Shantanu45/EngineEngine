@@ -1125,8 +1125,8 @@ namespace Vulkan
 			ERR_FAIL_COND_V_MSG(err, BufferID(), std::format( "Can't create buffer of size: {} , error {}", std::to_string(p_size), std::to_string(err)));
 		}
 		else {
-			/*static uint32_t num = 1;
-			LOGI("buffer alloc: %d", num++);*/
+			static uint32_t num = 1;
+			LOGI("buffer alloc: %d", num++);		// DEBUG
 			VkResult err = vkCreateBuffer(vk_device, &create_info, nullptr, &vk_buffer);
 			ERR_FAIL_COND_V_MSG(err, BufferID(), std::format("Can't create buffer of size: {} , error {}", std::to_string(p_size), std::to_string(err)));
 			err = vmaAllocateMemoryForBuffer(allocator, vk_buffer, &alloc_create_info, &allocation, &alloc_info);
@@ -1175,8 +1175,8 @@ namespace Vulkan
 			vmaDestroyBuffer(allocator, buf_info->vk_buffer, buf_info->allocation.handle);
 		}
 		else {
-			/*static uint32_t de_num = 1;
-			LOGI("buffer de alloc: %d", de_num++);*/
+			static uint32_t de_num = 1;
+			LOGI("buffer de alloc: %d", de_num++);			// DEBUG
 			vkDestroyBuffer(vk_device, buf_info->vk_buffer, nullptr);
 			vmaFreeMemory(allocator, buf_info->allocation.handle);
 		}
@@ -1464,7 +1464,7 @@ namespace Vulkan
 		}
 		else {
 			//static uint32_t num = 1;
-			//LOGI("buffer alloc: %d", num++);
+			//LOGI("buffer alloc: %d", num++);  // DEBUG
 			VkResult err = vkCreateImage(vk_device, &create_info, nullptr, &vk_image);
 			ERR_FAIL_COND_V_MSG(err, TextureID(), std::format("vkCreateImage failed with error {}", std::to_string(err)));
 			err = vmaAllocateMemoryForImage(allocator, vk_image, &alloc_create_info, &allocation, &alloc_info);
@@ -1511,7 +1511,7 @@ namespace Vulkan
 			}
 			else {
 				//static uint32_t de_num = 1;
-				//LOGI("de_num buffer alloc: %d", de_num++);
+				//LOGI("de_num buffer alloc: %d", de_num++);		// DEBUG
 				vkDestroyImage(vk_device, vk_image, nullptr);
 				vmaFreeMemory(allocator, allocation);
 			}
@@ -1696,7 +1696,7 @@ namespace Vulkan
 			}
 			else {
 				//static uint32_t de_num_tex = 1;
-				//LOGI("de_num_tex buffer alloc: %d", de_num_tex++);
+				//LOGI("de_num_tex buffer alloc: %d", de_num_tex++);			// DEBUG
 				vkDestroyImage(vk_device, tex_info->vk_image, nullptr);
 				vmaFreeMemory(allocator, tex_info->allocation.handle);
 			}
