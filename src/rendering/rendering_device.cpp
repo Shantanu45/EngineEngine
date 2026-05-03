@@ -278,7 +278,7 @@ namespace Rendering
 
 		// Convert block size from KB.
 		//upload_staging_buffers.block_size = GLOBAL_GET("rendering/rendering_device/staging_buffer/block_size_kb");
-		upload_staging_buffers.block_size = MAX(4u, upload_staging_buffers.block_size);
+		upload_staging_buffers.block_size = MAX(8u, upload_staging_buffers.block_size);			// SHAN: revisit to configure block size.
 		upload_staging_buffers.block_size *= 1024;
 
 		// Convert staging buffer size from MB.
@@ -4504,6 +4504,10 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 		r_alloc_size = 0;
 		r_alloc_offset = 0;
 		r_required_action = STAGING_REQUIRED_ACTION_NONE;
+
+		//LOGI(std::format("[Staging] Request: {} bytes  | Current block fill: {} / {}  | Total blocks: {}  | Max size: {}",
+		//	p_amount, p_staging_buffers.blocks[p_staging_buffers.current].fill_amount, p_staging_buffers.block_size,
+		//	p_staging_buffers.blocks.size(), p_staging_buffers.max_size).c_str());
 
 		// Optimization: Use bitwise alignment (requires p_required_align to be power of 2)
 		auto align_up = [](uint32_t val, uint32_t align) {
