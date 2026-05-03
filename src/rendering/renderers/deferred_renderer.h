@@ -7,8 +7,18 @@
 #include "rendering/frame_data.h"
 #include "rendering/light.h"
 #include "rendering/camera.h"
+#include "rendering/render_passes/common.h"
 
 #include <glm/glm.hpp>
+
+struct deferred_pass_resource : public blit_scene_input_resource
+{
+	FrameGraphResource framebuffer_resource;
+	FrameGraphResource position_resource;
+	FrameGraphResource albedo_resource;
+	FrameGraphResource normal_resource;
+};
+
 
 namespace Rendering {
 
