@@ -23,8 +23,8 @@ struct offscreen_pass_resource
 struct deferred_pass_resource : public blit_scene_input_resource
 {
 	FrameGraphResource framebuffer_resource;
-}
-
+	FrameGraphResource offscreen_tex_resources;
+};
 
 namespace Rendering {
 
@@ -35,7 +35,7 @@ namespace Rendering {
 	{
 
 	public:
-		void initialize(WSI* wsi, RenderingDevice* debive, RID cubemap);
+		void initialize(WSI* wsi, RenderingDevice* device, RID cubemap);
 		void upload_frame_data(RenderingDevice* device, const Camera& camera, double elapsed, const glm::mat4& light_space_matrix);
 		void setup_passes(FrameGraph& fg, FrameGraphBlackboard& bb, const SceneView& view, MeshStorage& storage) override;
 
@@ -43,6 +43,10 @@ namespace Rendering {
 		void setup_offscreen_pass(FrameGraph& fg, FrameGraphBlackboard& bb, const SceneView& view, MeshStorage& storage);
 		void setup_deferred_pass(FrameGraph& fg, FrameGraphBlackboard& bb, const SceneView& view, MeshStorage& storage);
 
+		void create_offscreen_pipeline(WSI* wsi, RenderingDevice* device);
+		void create_deferred_pipeline(WSI* wsi, RenderingDevice* device);
+
+		Pipeline offscreen_pipeline;
 		Pipeline deferred_pipeline;
 
 		// UBOs — declared first so they outlive the uniform sets that reference them.

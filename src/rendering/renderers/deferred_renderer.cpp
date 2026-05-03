@@ -6,54 +6,7 @@ namespace Rendering
 {
 	void DeferredRenderer::initialize(WSI* wsi, RenderingDevice* device, RID cubemap)
 	{
-		auto vertex_format = wsi->get_vertex_format_by_type(VERTEX_FORMAT_VARIATIONS::DEFAULT);
-		
-		// Framebuffers -----------------------
-		// Position (World space)
-		RD::AttachmentFormat position_att;
-		position_att.format = RDC::DATA_FORMAT_R16G16B16A16_UNORM;
-		position_att.usage_flags = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT;
-
-		// Albedo 8
-		RD::AttachmentFormat albedo_att;
-		albedo_att.format = RDC::DATA_FORMAT_R8G8B8A8_UNORM;
-		albedo_att.usage_flags = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT;
-
-		// Normal 16 (World space)
-		RD::AttachmentFormat normal_att;
-		normal_att.format = RDC::DATA_FORMAT_R16G16B16A16_UNORM;
-		normal_att.usage_flags = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT;
-
-		// Depth
-		RD::AttachmentFormat depth_att;
-		depth_att.format = RDC::DATA_FORMAT_D32_SFLOAT;
-		depth_att.usage_flags = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-
-		auto main_fb_format = RD::get_singleton()->framebuffer_format_create({position_att, 
-			albedo_att, normal_att, depth_att});
-
-		RD::PipelineDepthStencilState depth_state;
-		depth_state.enable_depth_test = true;
-		depth_state.enable_depth_write = true;
-		depth_state.depth_compare_operator = RDC::COMPARE_OP_LESS;
-
-		deferred_pipeline = PipelineBuilder{}
-			.set_shader({ "assets://shaders/deferred/mrt.vert", "assets://shaders/deferred/mrt.frag"}, 
-				"deferred_shader")
-			.set_vertex_format(vertex_format)
-			.set_depth_stencil_state(depth_state)
-			.build(main_fb_format);
-
-		sampler = RIDHandle(device->sampler_create({})); // nearest + clamp (default)
-
-		// --- UBOs ---
-		frame_ubo.create(device, "Frame UBO");
-
-		// --- Uniform sets (set 0) ---
-		uniform_set_0 = UniformSetBuilder{}
-			.add(frame_ubo.as_uniform(0))
-			.add_sampler(3, sampler)
-			.build(device, deferred_pipeline.shader_rid, 0);
+		create_offscreen_pipeline(wsi, device);
 	}
 
 	void DeferredRenderer::upload_frame_data(RenderingDevice* device, const Camera& camera,
@@ -77,7 +30,7 @@ namespace Rendering
 
 	void DeferredRenderer::setup_offscreen_pass(FrameGraph& fg, FrameGraphBlackboard& bb, const SceneView& view, MeshStorage& storage)
 	{
-		auto pipeline_rid = deferred_pipeline.pipeline_rid;
+		auto pipeline_rid = offscreen_pipeline.pipeline_rid;
 
 		bb.add<offscreen_pass_resource>() =
 			fg.add_callback_pass<offscreen_pass_resource>(
@@ -166,6 +119,59 @@ namespace Rendering
 				"Differed Pass",
 				[&](FrameGraph::Builder& builder, deferred_pass_resource& data)
 				{
+					auto& offscreen_resource = bb.get<offscreen_pass_resource>();
+
+					RD::TextureFormat tf;
+					tf.texture_type = RD::TEXTURE_TYPE_2D;
+					tf.width = view.extent.x;
+					tf.height = view.extent.y;
+					tf.usage_bits = RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT;
+					tf.format = RD::DATA_FORMAT_R8G8B8A8_UNORM;
+					data.scene = builder.create<FrameGraphTexture>("scene texture", { tf, RD::TextureView(), "scene texture" });
+					
+					// read from offscreen pass.
+					data.depth = builder.read(offscreen_resource.depth_resource, TEXTURE_READ_FLAGS::READ_DEPTH);
+					builder.read(offscreen_resource.position_resource, TEXTURE_READ_FLAGS::READ_COLOR);
+					builder.read(offscreen_resource.normal_resource, TEXTURE_READ_FLAGS::READ_COLOR);
+					builder.read(offscreen_resource.albedo_resource, TEXTURE_READ_FLAGS::READ_COLOR);
+
+					data.scene = builder.write(data.scene, TEXTURE_WRITE_FLAGS::WRITE_COLOR);
+					data.depth = builder.write(data.depth, TEXTURE_WRITE_FLAGS::WRITE_DEPTH);
+
+					data.offscreen_tex_resources = builder.create<FrameGraphUniformSet>(
+						"shadow uniform set",
+						{
+							.build = [&fg,
+										shader_rid = deferred_pipeline.shader_rid,
+										albedo = offscreen_resource.albedo_resource,
+										position = offscreen_resource.position_resource,
+										normal = offscreen_resource.normal_resource]
+									 (RenderContext& rc) -> RID {
+								auto& albedo_tex = fg.get_resource<FrameGraphTexture>(albedo);
+								auto& position_tex = fg.get_resource<FrameGraphTexture>(position);
+								auto& normal_tex = fg.get_resource<FrameGraphTexture>(normal);
+
+								return UniformSetBuilder{}
+									.add_texture_only(0, albedo_tex.texture_rid)
+									.add_texture_only(1, position_tex.texture_rid)
+									.add_texture_only(2, normal_tex.texture_rid)
+									.build(rc.device, shader_rid, 1);
+							},
+							.name = "offscreen uniform set"
+						});
+					data.offscreen_tex_resources = builder.write(data.offscreen_tex_resources, FrameGraph::kFlagsIgnored);
+
+					data.framebuffer_resource = builder.create<FrameGraphFramebuffer>(
+						"deferred framebuffer",
+						{
+							.build = [&fg, scene_id = data.scene, depth_id = data.depth](RenderContext& rc) -> RID {
+								auto& scene_tex = fg.get_resource<FrameGraphTexture>(scene_id);
+								auto& depth_tex = fg.get_resource<FrameGraphTexture>(depth_id);
+								return rc.device->framebuffer_create({ scene_tex.texture_rid, depth_tex.texture_rid });
+							},
+							.name = "deferred framebuffer"
+						});
+					data.framebuffer_resource = builder.write(data.framebuffer_resource, FrameGraph::kFlagsIgnored);
 				},
 				[drawables = view.main_drawables, &storage, pipeline_rid](
 					const deferred_pass_resource& data, FrameGraphPassResources& resources, void* ctx)
@@ -176,6 +182,63 @@ namespace Rendering
 					uint32_t w = rc.device->screen_get_width();
 					uint32_t h = rc.device->screen_get_height();
 				});
+	}
+
+	void DeferredRenderer::create_offscreen_pipeline(WSI* wsi, RenderingDevice* device)
+	{
+		auto vertex_format = wsi->get_vertex_format_by_type(VERTEX_FORMAT_VARIATIONS::DEFAULT);
+
+		// Framebuffers -----------------------
+		// Position (World space)
+		RD::AttachmentFormat position_att;
+		position_att.format = RDC::DATA_FORMAT_R16G16B16A16_UNORM;
+		position_att.usage_flags = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT;
+
+		// Albedo 8
+		RD::AttachmentFormat albedo_att;
+		albedo_att.format = RDC::DATA_FORMAT_R8G8B8A8_UNORM;
+		albedo_att.usage_flags = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT;
+
+		// Normal 16 (World space)
+		RD::AttachmentFormat normal_att;
+		normal_att.format = RDC::DATA_FORMAT_R16G16B16A16_UNORM;
+		normal_att.usage_flags = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT;
+
+		// Depth
+		RD::AttachmentFormat depth_att;
+		depth_att.format = RDC::DATA_FORMAT_D32_SFLOAT;
+		depth_att.usage_flags = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+
+		auto main_fb_format = RD::get_singleton()->framebuffer_format_create({ position_att,
+			albedo_att, normal_att, depth_att });
+
+		RD::PipelineDepthStencilState depth_state;
+		depth_state.enable_depth_test = true;
+		depth_state.enable_depth_write = true;
+		depth_state.depth_compare_operator = RDC::COMPARE_OP_LESS;
+
+		offscreen_pipeline = PipelineBuilder{}
+			.set_shader({ "assets://shaders/deferred/mrt.vert", "assets://shaders/deferred/mrt.frag" },
+				"deferred_shader")
+			.set_vertex_format(vertex_format)
+			.set_depth_stencil_state(depth_state)
+			.build(main_fb_format);
+
+		sampler = RIDHandle(device->sampler_create({})); // nearest + clamp (default)
+
+		// --- UBOs ---
+		frame_ubo.create(device, "Frame UBO");
+
+		// --- Uniform sets (set 0) ---
+		uniform_set_0 = UniformSetBuilder{}
+			.add(frame_ubo.as_uniform(0))
+			.add_sampler(3, sampler)
+			.build(device, offscreen_pipeline.shader_rid, 0);
+	}
+
+	void DeferredRenderer::create_deferred_pipeline(WSI* wsi, RenderingDevice* device)
+	{
+
 	}
 
 }
