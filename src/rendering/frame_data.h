@@ -1,5 +1,7 @@
 #pragma once
 #include <glm/glm.hpp>
+#include <cstdint>
+#include "rendering/light.h"
 
 struct alignas(16) CameraData {
     glm::mat4 view;
@@ -11,8 +13,9 @@ struct alignas(16) CameraData {
 struct alignas(16) FrameData_UBO {
     CameraData camera;
     float      time;
-    float      _pad[3];
-    glm::mat4  light_space_matrix;
+    uint32_t   directional_shadow_index; // index into ShadowBuffer_UBO
+    uint32_t   point_shadow_index;       // index into ShadowBuffer_UBO
+    float      _pad;
 };
 
 struct alignas(16) ObjectData_UBO {
@@ -20,7 +23,22 @@ struct alignas(16) ObjectData_UBO {
     glm::mat4 normalMatrix;
 };
 
-struct alignas(16) PointShadow_UBO {
-    glm::mat4 shadowMatrices[6];
-    glm::vec4 lightPos;  // xyz = pos, w = farPlane
+// One entry per shadow-casting light, regardless of type.
+// matrices[0]     = directional / spot light-space matrix
+// matrices[0..5]  = point light cubemap face matrices
+// light_pos.xyz   = world position, light_pos.w = far plane (point lights)
+struct alignas(16) ShadowData {
+    glm::mat4 matrices[6];
+    glm::vec4 light_pos;
+    uint32_t  light_index;
+    float     _pad[3];
 };
+
+struct alignas(16) ShadowBuffer_UBO {
+    uint32_t   count;
+    float      _pad[3];
+    ShadowData shadows[MAX_LIGHTS];
+};
+
+static_assert(sizeof(ShadowData) == 416,                         "ShadowData size mismatch");
+static_assert(sizeof(ShadowBuffer_UBO) == 16 + 416 * MAX_LIGHTS, "ShadowBuffer_UBO size mismatch");

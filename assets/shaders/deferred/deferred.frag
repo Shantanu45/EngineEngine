@@ -9,10 +9,9 @@ layout(location = 0) out vec4 outColor;
 layout(set = 0, binding = 0) uniform FrameUBO {
     CameraData camera;
     float time;
-    float _pad1;
-    float _pad2;
-    float _pad3;
-    mat4 lightSpaceMatrix;
+    uint dirShadowIdx;
+    uint ptShadowIdx;
+    float _pad;
 } frame;
 
 layout(set = 0, binding = 2) uniform LightBuffer {
