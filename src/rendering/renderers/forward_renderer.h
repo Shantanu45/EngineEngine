@@ -1,6 +1,7 @@
 #pragma once
 
 #include "rendering/renderers/renderer.h"
+#include "rendering/drawable.h"
 #include "rendering/pipeline_builder.h"
 #include "rendering/uniform_buffer.h"
 #include "rendering/rid_handle.h"
@@ -10,6 +11,7 @@
 #include "rendering/render_passes/common.h"
 
 #include <glm/glm.hpp>
+#include <vector>
 
 struct forward_pass_resource : public blit_scene_input_resource
 {
@@ -27,44 +29,34 @@ namespace Rendering {
     // Forward rendering technique: shadow pass -> point-shadow pass -> lit scene pass.
     //
     // Lifetime:
-    //   initialize()       — call once after WSI vertex/index formats are configured.
-    //   upload_*()         — call every frame before setup_passes().
-    //   setup_passes()     — adds passes to the frame graph each frame.
+    //   initialize()   — call once after WSI vertex/index formats are configured.
+    //   setup_passes() — uploads UBOs and adds passes to the frame graph each frame.
     //
     // The cubemap RID passed to initialize() must outlive this renderer.
     class ForwardRenderer : public IRenderer {
     public:
         void initialize(WSI* wsi, RenderingDevice* device, RID cubemap);
 
-        // Per-frame UBO uploads — call before setup_passes each frame.
-        void upload_frame_data(RenderingDevice* device, const Camera& camera,
-                               double elapsed, const glm::mat4& light_space_matrix);
-        void upload_light_data(RenderingDevice* device, const LightBuffer_UBO& lights);
-        void upload_point_shadow_data(RenderingDevice* device, const PointShadow_UBO& data);
-
-        // IRenderer
+        // IRenderer — uploads per-frame UBOs and schedules all passes.
         void setup_passes(FrameGraph& fg, FrameGraphBlackboard& bb,
                           const SceneView& view, MeshStorage& storage) override;
 
-        // Pipeline accessors — used by the application to build Drawables.
-        Pipeline color_pipeline()        const { return pipeline_color; }
-        Pipeline light_pipeline()        const { return pipeline_light; }
-        Pipeline grid_pipeline()         const { return pipeline_grid; }
-        Pipeline shadow_pipeline()       const { return pipeline_shadow; }
-        Pipeline point_shadow_pipeline() const { return pipeline_point_shadow; }
-        Pipeline skybox_pipeline()       const { return pipeline_skybox; }
-
-        // Set-0 uniform set accessors — used by the application to build Drawables.
-        RID color_set0()        const { return uniform_set_0; }
-        RID light_set0()        const { return uniform_set_0_light; }
-        RID shadow_set0()       const { return uniform_set_0_shadow; }
-        RID point_shadow_set0() const { return uniform_set_0_point_shadow; }
-        RID skybox_set0()       const { return uniform_set_skybox; }
+        // Expose the color pipeline so callers can obtain shader_rid for material creation.
+        Pipeline color_pipeline() const { return pipeline_color; }
 
     private:
+        std::vector<Drawable> build_shadow_drawables(const SceneView& view) const;
+        std::vector<Drawable> build_point_shadow_drawables(const SceneView& view) const;
+        std::vector<Drawable> build_main_drawables(const SceneView& view) const;
+
+        glm::mat4        compute_light_space_matrix(const std::vector<Light>& lights) const;
+        PointShadow_UBO  build_point_shadow_ubo(const std::vector<Light>& lights) const;
+
+        RenderingDevice* device = nullptr;
+
         // UBOs — declared first so they outlive the uniform sets that reference them.
-        UniformBuffer<FrameData_UBO>  frame_ubo;
-        UniformBuffer<LightBuffer_UBO>    light_ubo;
+        UniformBuffer<FrameData_UBO>   frame_ubo;
+        UniformBuffer<LightBuffer_UBO> light_ubo;
         UniformBuffer<PointShadow_UBO> point_shadow_ubo;
 
         // Samplers

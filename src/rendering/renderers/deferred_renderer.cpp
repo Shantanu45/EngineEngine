@@ -1,36 +1,59 @@
 
 #include "deferred_renderer.h"
 #include <rendering/uniform_set_builder.h>
+#include <rendering/drawable.h>
+#include <rendering/wsi.h>
+#include "math/rect2.h"
 
 namespace Rendering
 {
-	void DeferredRenderer::initialize(WSI* wsi, RenderingDevice* device, RID cubemap)
+	void DeferredRenderer::initialize(WSI* wsi, RenderingDevice* dev, RID cubemap)
 	{
-		create_offscreen_pipeline(wsi, device);
-		create_deferred_pipeline(wsi, device);
+		device = dev;
+		create_offscreen_pipeline(wsi, dev);
+		create_deferred_pipeline(wsi, dev);
 	}
 
-	void DeferredRenderer::upload_frame_data(RenderingDevice* device, const Camera& camera,
-		double elapsed, const glm::mat4& light_space_matrix) {
-		FrameData_UBO data{};
-		data.camera.view = camera.get_view();
-		data.camera.proj = camera.get_projection();
-		data.camera.cameraPos = camera.get_position();
-		data.time = static_cast<float>(elapsed);
-		data.light_space_matrix = light_space_matrix;
-		frame_ubo.upload(device, data);
-	}
-
-	void DeferredRenderer::setup_passes(FrameGraph& fg, FrameGraphBlackboard& bb, 
+	void DeferredRenderer::setup_passes(FrameGraph& fg, FrameGraphBlackboard& bb,
 		const SceneView& view, MeshStorage& storage)
 	{
+		// Upload per-frame UBOs
+		{
+			FrameData_UBO frame{};
+			frame.camera.view      = view.camera->get_view();
+			frame.camera.proj      = view.camera->get_projection();
+			frame.camera.cameraPos = view.camera->get_position();
+			frame.time             = static_cast<float>(view.elapsed);
+			frame.light_space_matrix = glm::mat4(1.0f); // deferred handles lighting in the lighting pass
+			frame_ubo.upload(device, frame);
+		}
+		{
+			LightBuffer_UBO buf{};
+			for (const auto& l : view.lights) {
+				if (buf.count >= MAX_LIGHTS) break;
+				buf.lights[buf.count++] = l;
+			}
+			light_ubo.upload(device, buf);
+		}
+
 		setup_offscreen_pass(fg, bb, view, storage);
 		setup_deferred_pass(fg, bb, view, storage);
-		return;
 	}
 
 	void DeferredRenderer::setup_offscreen_pass(FrameGraph& fg, FrameGraphBlackboard& bb, const SceneView& view, MeshStorage& storage)
 	{
+		// Build drawables from instances — only opaque geometry goes into the G-buffer.
+		std::vector<Drawable> drawables;
+		for (const auto& inst : view.instances) {
+			if (inst.category != MeshCategory::Opaque) continue;
+			drawables.push_back(Drawable::make(
+				offscreen_pipeline, inst.mesh,
+				PushConstantData::from(ObjectData_UBO{ inst.model, inst.normal_matrix }),
+				{ { (RID)uniform_set_0, 0 } },
+				inst.material_sets
+			));
+		}
+
 		auto pipeline_rid = offscreen_pipeline.pipeline_rid;
 
 		bb.add<offscreen_pass_resource>() =
@@ -47,7 +70,6 @@ namespace Rendering
 					tf_depth.format = RD::DATA_FORMAT_D32_SFLOAT;
 					data.depth_resource = builder.create<FrameGraphTexture>("scene depth texture", { tf_depth, RD::TextureView(), "scene depth texture" });
 
-					//data.scene = builder.write(data.scene, TEXTURE_WRITE_FLAGS::WRITE_COLOR);
 					data.depth_resource = builder.write(data.depth_resource, TEXTURE_WRITE_FLAGS::WRITE_DEPTH);
 					// ----
 
@@ -87,7 +109,7 @@ namespace Rendering
 
 					data.framebuffer_resource = builder.write(data.framebuffer_resource, FrameGraph::kFlagsIgnored);
 				},
-				[drawables = view.main_drawables, &storage, pipeline_rid](
+				[drawables = std::move(drawables), &storage, pipeline_rid](
 					const offscreen_pass_resource& data, FrameGraphPassResources& resources, void* ctx)
 				{
 					auto& rc = *static_cast<RenderContext*>(ctx);
@@ -108,7 +130,7 @@ namespace Rendering
 
 					rc.device->begin_render_pass_from_frame_buffer(frame_buffer, Rect2i(0, 0, w, h), clear_values);
 
-					for (auto drawable : drawables) {
+					for (const auto& drawable : drawables) {
 						submit_drawable(rc, cmd, drawable, storage);
 					}
 
@@ -134,7 +156,7 @@ namespace Rendering
 					tf.usage_bits = RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT;
 					tf.format = RD::DATA_FORMAT_R8G8B8A8_UNORM;
 					data.scene = builder.create<FrameGraphTexture>("scene texture", { tf, RD::TextureView(), "scene texture" });
-					
+
 					// read from offscreen pass.
 					data.depth = builder.read(offscreen_resource.depth_resource, TEXTURE_READ_FLAGS::READ_DEPTH);
 					builder.read(offscreen_resource.position_resource, TEXTURE_READ_FLAGS::READ_COLOR);
@@ -210,7 +232,7 @@ namespace Rendering
 				});
 	}
 
-	void DeferredRenderer::create_offscreen_pipeline(WSI* wsi, RenderingDevice* device)
+	void DeferredRenderer::create_offscreen_pipeline(WSI* wsi, RenderingDevice* dev)
 	{
 		auto vertex_format = wsi->get_vertex_format_by_type(VERTEX_FORMAT_VARIATIONS::DEFAULT);
 
@@ -251,19 +273,19 @@ namespace Rendering
 			.set_blend_state(RDC::PipelineColorBlendState::create_disabled(3))
 			.build(main_fb_format);
 
-		sampler = RIDHandle(device->sampler_create({})); // nearest + clamp (default)
+		sampler = RIDHandle(dev->sampler_create({}));
 
 		// --- UBOs ---
-		frame_ubo.create(device, "Frame UBO");
+		frame_ubo.create(dev, "Frame UBO");
 
 		// --- Uniform sets (set 0) ---
 		uniform_set_0 = UniformSetBuilder{}
 			.add(frame_ubo.as_uniform(0))
 			.add_sampler(3, sampler)
-			.build(device, offscreen_pipeline.shader_rid, 0);
+			.build(dev, offscreen_pipeline.shader_rid, 0);
 	}
 
-	void DeferredRenderer::create_deferred_pipeline(WSI* wsi, RenderingDevice* device)
+	void DeferredRenderer::create_deferred_pipeline(WSI* wsi, RenderingDevice* dev)
 	{
 		// --- Framebuffer formats ---
 
@@ -291,15 +313,15 @@ namespace Rendering
 			.build(main_fb_format);
 
 		// --- UBOs ---
-		light_ubo.create(device, "Light UBO");
-		point_shadow_ubo.create(device, "Point Shadow UBO");
+		light_ubo.create(dev, "Light UBO");
+		point_shadow_ubo.create(dev, "Point Shadow UBO");
 
 		// --- Uniform sets (set 0) ---
 		uniform_set_0_deferred = UniformSetBuilder{}
 			.add(frame_ubo.as_uniform(0))
 			.add(light_ubo.as_uniform(2))
 			.add_sampler(3, sampler)
-			.build(device, deferred_pipeline.shader_rid, 0);
+			.build(dev, deferred_pipeline.shader_rid, 0);
 	}
 
 }

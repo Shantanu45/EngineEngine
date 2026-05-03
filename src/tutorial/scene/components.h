@@ -4,9 +4,9 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include "rendering/mesh_storage.h"
 #include "rendering/rendering_device.h"
-#include "rendering/pipeline_builder.h"
 #include "rendering/light.h"
 #include "rendering/material.h"
+#include "rendering/mesh_category.h"
 
 struct TransformComponent {
 	glm::vec3 position = glm::vec3(0.0f);
@@ -30,9 +30,8 @@ struct TransformComponent {
 
 struct MeshComponent {
 	Rendering::MeshHandle                  mesh;
-	Rendering::Pipeline                    pipeline;
-	RID                                    uniform_set_0 = {};
-	std::vector<Rendering::MaterialHandle> materials; // one per primitive slot
+	std::vector<Rendering::MaterialHandle> materials;
+	Rendering::MeshCategory                category = Rendering::MeshCategory::Opaque;
 };
 
 struct LightComponent {

@@ -6,9 +6,13 @@
 #include "rendering/render_passes/shadow_passes.h"
 #include "math/rect2.h"
 
+#include <glm/gtc/matrix_transform.hpp>
+
 namespace Rendering {
 
-void ForwardRenderer::initialize(WSI* wsi, RenderingDevice* device, RID cubemap) {
+void ForwardRenderer::initialize(WSI* wsi, RenderingDevice* dev, RID cubemap) {
+    device = dev;
+
     auto vertex_format = wsi->get_vertex_format_by_type(VERTEX_FORMAT_VARIATIONS::DEFAULT);
 
     // --- Framebuffer formats ---
@@ -96,12 +100,12 @@ void ForwardRenderer::initialize(WSI* wsi, RenderingDevice* device, RID cubemap)
         .build(shadow_fb_format);
 
     // --- UBOs ---
-    frame_ubo.create(device,       "Frame UBO");
-    light_ubo.create(device,       "Light UBO");
+    frame_ubo.create(device,        "Frame UBO");
+    light_ubo.create(device,        "Light UBO");
     point_shadow_ubo.create(device, "Point Shadow UBO");
 
     // --- Samplers ---
-    sampler              = RIDHandle(device->sampler_create({})); // nearest + clamp (default)
+    sampler              = RIDHandle(device->sampler_create({}));
     sampler_cube         = RIDHandle(device->sampler_create({}));
     point_shadow_sampler = RIDHandle(device->sampler_create({}));
 
@@ -142,31 +146,128 @@ void ForwardRenderer::initialize(WSI* wsi, RenderingDevice* device, RID cubemap)
         .build(device, pipeline_skybox.shader_rid, 0);
 }
 
-void ForwardRenderer::upload_frame_data(RenderingDevice* device, const Camera& camera,
-                                        double elapsed, const glm::mat4& light_space_matrix) {
-    FrameData_UBO data{};
-    data.camera.view        = camera.get_view();
-    data.camera.proj        = camera.get_projection();
-    data.camera.cameraPos   = camera.get_position();
-    data.time               = static_cast<float>(elapsed);
-    data.light_space_matrix = light_space_matrix;
-    frame_ubo.upload(device, data);
+// ---------------------------------------------------------------------------
+// Private — per-frame helpers
+// ---------------------------------------------------------------------------
+
+glm::mat4 ForwardRenderer::compute_light_space_matrix(const std::vector<Light>& lights) const {
+    glm::mat4 result = glm::mat4(1.0f);
+    for (const auto& l : lights) {
+        if (l.type != static_cast<uint32_t>(LightType::Directional)) continue;
+        glm::vec3 pos  = glm::vec3(l.position);
+        glm::mat4 proj = glm::orthoRH_ZO(-8.0f, 8.0f, -8.0f, 8.0f, 1.0f, 30.0f);
+        glm::mat4 v    = glm::lookAt(pos, pos + glm::vec3(l.direction), glm::vec3(0, 1, 0));
+        result = proj * v;
+    }
+    return result;
 }
 
-void ForwardRenderer::upload_light_data(RenderingDevice* device, const LightBuffer_UBO& lights) {
-    light_ubo.upload(device, lights);
+PointShadow_UBO ForwardRenderer::build_point_shadow_ubo(const std::vector<Light>& lights) const {
+    constexpr float ps_near = 0.1f;
+    PointShadow_UBO data{};
+    for (const auto& l : lights) {
+        if (l.type != static_cast<uint32_t>(LightType::Point)) continue;
+        glm::vec3 lp     = glm::vec3(l.position);
+        float     ps_far = l.position.w;
+        glm::mat4 proj   = glm::perspectiveRH_ZO(glm::radians(90.0f), 1.0f, ps_near, ps_far);
+        data.shadowMatrices[0] = proj * glm::lookAt(lp, lp + glm::vec3( 1, 0, 0), glm::vec3(0,-1, 0));
+        data.shadowMatrices[1] = proj * glm::lookAt(lp, lp + glm::vec3(-1, 0, 0), glm::vec3(0,-1, 0));
+        data.shadowMatrices[2] = proj * glm::lookAt(lp, lp + glm::vec3( 0, 1, 0), glm::vec3(0, 0, 1));
+        data.shadowMatrices[3] = proj * glm::lookAt(lp, lp + glm::vec3( 0,-1, 0), glm::vec3(0, 0,-1));
+        data.shadowMatrices[4] = proj * glm::lookAt(lp, lp + glm::vec3( 0, 0, 1), glm::vec3(0,-1, 0));
+        data.shadowMatrices[5] = proj * glm::lookAt(lp, lp + glm::vec3( 0, 0,-1), glm::vec3(0,-1, 0));
+        data.lightPos = glm::vec4(lp, ps_far);
+    }
+    return data;
 }
 
-void ForwardRenderer::upload_point_shadow_data(RenderingDevice* device, const PointShadow_UBO& data) {
-    point_shadow_ubo.upload(device, data);
+std::vector<Drawable> ForwardRenderer::build_shadow_drawables(const SceneView& view) const {
+    std::vector<Drawable> out;
+    for (const auto& inst : view.instances) {
+        if (inst.category != MeshCategory::Opaque) continue;
+        out.push_back(Drawable::make(
+            pipeline_shadow, inst.mesh,
+            PushConstantData::from(ObjectData_UBO{ inst.model, inst.normal_matrix }),
+            { { uniform_set_0_shadow, 0 } }
+        ));
+    }
+    return out;
 }
+
+std::vector<Drawable> ForwardRenderer::build_point_shadow_drawables(const SceneView& view) const {
+    std::vector<Drawable> out;
+    for (const auto& inst : view.instances) {
+        if (inst.category != MeshCategory::Opaque) continue;
+        out.push_back(Drawable::make(
+            pipeline_point_shadow, inst.mesh,
+            PushConstantData::from(ObjectData_UBO{ inst.model, inst.normal_matrix }),
+            { { uniform_set_0_point_shadow, 0 } }
+        ));
+    }
+    return out;
+}
+
+std::vector<Drawable> ForwardRenderer::build_main_drawables(const SceneView& view) const {
+    std::vector<Drawable> out;
+    glm::mat4 identity = glm::mat4(1.0f);
+
+    out.push_back(Drawable::make(pipeline_skybox, view.skybox_mesh,
+        PushConstantData::from(ObjectData_UBO{ identity, identity }),
+        { { (RID)uniform_set_skybox, 0 } }));
+
+    out.push_back(Drawable::make(pipeline_grid, view.grid_mesh,
+        PushConstantData::from(ObjectData_UBO{ identity, glm::transpose(glm::inverse(identity)) }),
+        { { (RID)uniform_set_0_light, 0 } }));
+
+    for (const auto& inst : view.instances) {
+        bool opaque = inst.category == MeshCategory::Opaque;
+        Pipeline p    = opaque ? pipeline_color : pipeline_light;
+        RID      set0 = opaque ? (RID)uniform_set_0 : (RID)uniform_set_0_light;
+        out.push_back(Drawable::make(
+            p, inst.mesh,
+            PushConstantData::from(ObjectData_UBO{ inst.model, inst.normal_matrix }),
+            { { set0, 0 } },
+            inst.material_sets
+        ));
+    }
+
+    return out;
+}
+
+// ---------------------------------------------------------------------------
+// IRenderer
+// ---------------------------------------------------------------------------
 
 void ForwardRenderer::setup_passes(FrameGraph& fg, FrameGraphBlackboard& bb,
                                    const SceneView& view, MeshStorage& storage) {
-    add_point_shadow_pass(fg, bb, 1024, view.point_shadow_drawables, storage);
-    add_shadow_pass(fg, bb, { 2048, 2048 }, view.shadow_drawables, storage);
+    // Upload per-frame UBOs
+    {
+        FrameData_UBO frame{};
+        frame.camera.view        = view.camera->get_view();
+        frame.camera.proj        = view.camera->get_projection();
+        frame.camera.cameraPos   = view.camera->get_position();
+        frame.time               = static_cast<float>(view.elapsed);
+        frame.light_space_matrix = compute_light_space_matrix(view.lights);
+        frame_ubo.upload(device, frame);
+    }
+    {
+        LightBuffer_UBO buf{};
+        for (const auto& l : view.lights) {
+            if (buf.count >= MAX_LIGHTS) break;
+            buf.lights[buf.count++] = l;
+        }
+        light_ubo.upload(device, buf);
+    }
+    point_shadow_ubo.upload(device, build_point_shadow_ubo(view.lights));
 
-    // Cache the pipeline RID so the execute lambda can compare without capturing `this`.
+    // Build drawable lists
+    auto shadow_draws       = build_shadow_drawables(view);
+    auto point_shadow_draws = build_point_shadow_drawables(view);
+    auto main_draws         = build_main_drawables(view);
+
+    add_point_shadow_pass(fg, bb, 1024, point_shadow_draws, storage);
+    add_shadow_pass(fg, bb, { 2048, 2048 }, shadow_draws, storage);
+
     auto color_pipeline_rid = pipeline_color.pipeline_rid;
 
     bb.add<forward_pass_resource>() =
@@ -195,8 +296,8 @@ void ForwardRenderer::setup_passes(FrameGraph& fg, FrameGraphBlackboard& bb,
 
                 auto& shadow_res       = bb.get<shadow_pass_resource>();
                 auto& point_shadow_res = bb.get<point_shadow_pass_resource>();
-                data.shadow_map_in   = builder.read(shadow_res.shadow_map,            TEXTURE_READ_FLAGS::READ_DEPTH);
-                data.point_shadow_in = builder.read(point_shadow_res.shadow_cubemap,  TEXTURE_READ_FLAGS::READ_DEPTH);
+                data.shadow_map_in   = builder.read(shadow_res.shadow_map,           TEXTURE_READ_FLAGS::READ_DEPTH);
+                data.point_shadow_in = builder.read(point_shadow_res.shadow_cubemap, TEXTURE_READ_FLAGS::READ_DEPTH);
 
                 data.shadow_uniform_set = builder.create<FrameGraphUniformSet>(
                     "shadow uniform set",
@@ -206,7 +307,7 @@ void ForwardRenderer::setup_passes(FrameGraph& fg, FrameGraphBlackboard& bb,
                                   shadow_id  = shadow_res.shadow_map,
                                   point_id   = point_shadow_res.shadow_cubemap]
                                  (RenderContext& rc) -> RID {
-                            auto& shadow_tex      = fg.get_resource<FrameGraphTexture>(shadow_id);
+                            auto& shadow_tex       = fg.get_resource<FrameGraphTexture>(shadow_id);
                             auto& point_shadow_tex = fg.get_resource<FrameGraphTexture>(point_id);
                             return UniformSetBuilder{}
                                 .add_texture_only(0, shadow_tex.texture_rid)
@@ -229,7 +330,7 @@ void ForwardRenderer::setup_passes(FrameGraph& fg, FrameGraphBlackboard& bb,
                     });
                 data.framebuffer_resource = builder.write(data.framebuffer_resource, FrameGraph::kFlagsIgnored);
             },
-            [drawables = view.main_drawables, &storage, color_pipeline_rid](
+            [drawables = main_draws, &storage, color_pipeline_rid](
                 const forward_pass_resource& data, FrameGraphPassResources& resources, void* ctx)
             {
                 auto& rc  = *static_cast<RenderContext*>(ctx);

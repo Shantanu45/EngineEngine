@@ -93,10 +93,8 @@ struct TutorialApplication : EE::Application
                 world.emplace<TransformComponent>(entity, TransformComponent{
                     .position = glm::vec3(x * 2.5f, 0.5f, z * 2.5f) });
                 world.emplace<MeshComponent>(entity, MeshComponent{
-                    .mesh        = object_mesh,
-                    .pipeline    = renderer.color_pipeline(),
-                    .uniform_set_0 = renderer.color_set0(),
-                    .materials   = { h },
+                    .mesh      = object_mesh,
+                    .materials = { h },
                 });
             }
         }
@@ -106,10 +104,8 @@ struct TutorialApplication : EE::Application
             .position = glm::vec3(0.0f, 0.0f, 0.0f),
             .scale    = glm::vec3(10.0f) });
         world.emplace<MeshComponent>(entity_plane, MeshComponent{
-            .mesh        = plane_mesh,
-            .pipeline    = renderer.color_pipeline(),
-            .uniform_set_0 = renderer.color_set0(),
-            .materials   = { h_rock },
+            .mesh      = plane_mesh,
+            .materials = { h_rock },
         });
 
         // Directional light
@@ -118,9 +114,9 @@ struct TutorialApplication : EE::Application
             .position = glm::vec3(5.0f, 10.0f, 5.0f),
             .scale    = glm::vec3(0.2f) });
         world.emplace<MeshComponent>(light, MeshComponent{
-            .mesh        = light_mesh,
-            .pipeline    = renderer.light_pipeline(),
-            .uniform_set_0 = renderer.light_set0() });
+            .mesh     = light_mesh,
+            .category = Rendering::MeshCategory::LightVisualization,
+        });
         world.emplace<LightComponent>(light, LightComponent{ .data = {
             .position    = glm::vec4(5.0f, 10.0f, 5.0f, 15.0f),
             .direction   = glm::vec4(-0.0f, -1.0f, -0.5f, 0.0f),
@@ -135,9 +131,9 @@ struct TutorialApplication : EE::Application
             .position = glm::vec3(1.0f, 1.0f, 1.0f),
             .scale    = glm::vec3(0.1f) });
         world.emplace<MeshComponent>(point_light, MeshComponent{
-            .mesh        = point_light_mesh,
-            .pipeline    = renderer.light_pipeline(),
-            .uniform_set_0 = renderer.light_set0() });
+            .mesh     = point_light_mesh,
+            .category = Rendering::MeshCategory::LightVisualization,
+        });
         world.emplace<LightComponent>(point_light, LightComponent{ .data = {
             .position    = glm::vec4(1.0f, 1.0f, 1.0f, 15.0f),
             .direction   = glm::vec4(-0.5f, -1.0f, -0.5f, 0.0f),
@@ -154,20 +150,12 @@ struct TutorialApplication : EE::Application
     {
         camera.update_from_input(input_system.get(), frame_time);
 
-        renderer.upload_light_data(device, build_light_buffer());
-        renderer.upload_point_shadow_data(device, build_point_shadow_ubo());
-        renderer.upload_frame_data(device, camera, elapsed_time, compute_light_space_matrix());
-
         device->imgui_begin_frame();
         const auto timer = Services::get().get<Util::FrameTimer>();
         ImGui::Text("FPS: %.1f", timer->get_fps());
         ImGui::Text("Frame Time: %.3f ms", timer->get_frame_time() * 1000.0);
 
-        Rendering::SceneView view;
-        view.extent                  = { device->screen_get_width(), device->screen_get_height() };
-        view.shadow_drawables        = build_shadow_drawables();
-        view.point_shadow_drawables  = build_point_shadow_drawables();
-        view.main_drawables          = build_main_drawables();
+        Rendering::SceneView view = build_scene_view(elapsed_time);
 
         fg.reset();
         bb.reset();
@@ -193,123 +181,40 @@ struct TutorialApplication : EE::Application
     }
 
 private:
-    // -----------------------------------------------------------------------
-    // Per-frame data builders
-    // -----------------------------------------------------------------------
-
-    LightBuffer_UBO build_light_buffer()
-    {
-        LightBuffer_UBO buf{};
-        world.view<TransformComponent, LightComponent>().each(
-            [&](auto, TransformComponent& t, LightComponent& l) {
-                if (buf.count >= MAX_LIGHTS) return;
-                Light gpu_light = l.data;
-                gpu_light.position = glm::vec4(t.position, l.data.position.w);
-                buf.lights[buf.count++] = gpu_light;
-            });
-        return buf;
-    }
-
-    glm::mat4 compute_light_space_matrix()
-    {
-        glm::mat4 result = glm::mat4(1.0f);
-        world.view<TransformComponent, LightComponent>().each(
-            [&](auto, TransformComponent& t, LightComponent& l) {
-                if (l.data.type != static_cast<uint32_t>(LightType::Directional)) return;
-                glm::mat4 proj = glm::orthoRH_ZO(-8.0f, 8.0f, -8.0f, 8.0f, 1.0f, 30.0f);
-                glm::mat4 view = glm::lookAt(
-                    t.position,
-                    t.position + glm::vec3(l.data.direction),
-                    glm::vec3(0, 1, 0));
-                result = proj * view;
-            });
-        return result;
-    }
-
-    PointShadow_UBO build_point_shadow_ubo()
-    {
-        constexpr float ps_near = 0.1f;
-        PointShadow_UBO data{};
-        world.view<TransformComponent, LightComponent>().each(
-            [&](auto, TransformComponent& t, LightComponent& l) {
-                if (l.data.type != static_cast<uint32_t>(LightType::Point)) return;
-                glm::vec3 lp     = t.position;
-                float     ps_far = l.data.position.w;
-                glm::mat4 proj   = glm::perspectiveRH_ZO(glm::radians(90.0f), 1.0f, ps_near, ps_far);
-                data.shadowMatrices[0] = proj * glm::lookAt(lp, lp + glm::vec3( 1, 0, 0), glm::vec3(0,-1, 0));
-                data.shadowMatrices[1] = proj * glm::lookAt(lp, lp + glm::vec3(-1, 0, 0), glm::vec3(0,-1, 0));
-                data.shadowMatrices[2] = proj * glm::lookAt(lp, lp + glm::vec3( 0, 1, 0), glm::vec3(0, 0, 1));
-                data.shadowMatrices[3] = proj * glm::lookAt(lp, lp + glm::vec3( 0,-1, 0), glm::vec3(0, 0,-1));
-                data.shadowMatrices[4] = proj * glm::lookAt(lp, lp + glm::vec3( 0, 0, 1), glm::vec3(0,-1, 0));
-                data.shadowMatrices[5] = proj * glm::lookAt(lp, lp + glm::vec3( 0, 0,-1), glm::vec3(0,-1, 0));
-                data.lightPos = glm::vec4(lp, ps_far);
-            });
-        return data;
-    }
-
-    // -----------------------------------------------------------------------
-    // Drawable builders
-    // -----------------------------------------------------------------------
-
-    std::vector<Rendering::Drawable> build_shadow_drawables()
-    {
-        std::vector<Rendering::Drawable> out;
-        world.view<TransformComponent, MeshComponent>(entt::exclude<LightComponent>).each(
-            [&](auto, TransformComponent& t, MeshComponent& m) {
-                out.push_back(Rendering::Drawable::make(
-                    renderer.shadow_pipeline(), m.mesh,
-                    Rendering::PushConstantData::from(ObjectData_UBO{ t.get_model(), t.get_normal_matrix() }),
-                    { { renderer.shadow_set0(), 0 } }
-                ));
-            });
-        return out;
-    }
-
-    std::vector<Rendering::Drawable> build_point_shadow_drawables()
-    {
-        std::vector<Rendering::Drawable> out;
-        world.view<TransformComponent, MeshComponent>(entt::exclude<LightComponent>).each(
-            [&](auto, TransformComponent& t, MeshComponent& m) {
-                out.push_back(Rendering::Drawable::make(
-                    renderer.point_shadow_pipeline(), m.mesh,
-                    Rendering::PushConstantData::from(ObjectData_UBO{ t.get_model(), t.get_normal_matrix() }),
-                    { { renderer.point_shadow_set0(), 0 } }
-                ));
-            });
-        return out;
-    }
-
-    std::vector<Rendering::Drawable> build_main_drawables()
+    Rendering::SceneView build_scene_view(double elapsed)
     {
         material_registry.upload_dirty(device);
-        std::vector<Rendering::Drawable> out;
-        glm::mat4 identity = glm::mat4(1.0f);
 
-        out.push_back(Rendering::Drawable::make(renderer.skybox_pipeline(), skybox_mesh,
-            Rendering::PushConstantData::from(ObjectData_UBO{ identity, identity }),
-            { { renderer.skybox_set0(), 0 } }));
-
-        out.push_back(Rendering::Drawable::make(renderer.grid_pipeline(), grid_mesh,
-            Rendering::PushConstantData::from(ObjectData_UBO{ identity, glm::transpose(glm::inverse(identity)) }),
-            { { renderer.light_set0(), 0 } }));
+        Rendering::SceneView view;
+        view.camera      = &camera;
+        view.elapsed     = elapsed;
+        view.extent      = { device->screen_get_width(), device->screen_get_height() };
+        view.skybox_mesh = skybox_mesh;
+        view.grid_mesh   = grid_mesh;
 
         world.view<TransformComponent, MeshComponent>().each(
             [&](auto, TransformComponent& t, MeshComponent& m) {
-                std::vector<RID> mat_sets;
-                for (auto h : m.materials) {
-                    mat_sets.push_back(h != Rendering::INVALID_MATERIAL
-                        ? material_registry.get_uniform_set(h)
-                        : RID());
-                }
-                out.push_back(Rendering::Drawable::make(
-                    m.pipeline, m.mesh,
-                    Rendering::PushConstantData::from(ObjectData_UBO{ t.get_model(), t.get_normal_matrix() }),
-                    { { m.uniform_set_0, 0 } },
-                    std::move(mat_sets)
-                ));
+                Rendering::MeshInstance inst;
+                inst.mesh          = m.mesh;
+                inst.model         = t.get_model();
+                inst.normal_matrix = t.get_normal_matrix();
+                inst.category      = m.category;
+                for (auto h : m.materials)
+                    inst.material_sets.push_back(
+                        h != Rendering::INVALID_MATERIAL
+                            ? material_registry.get_uniform_set(h)
+                            : RID());
+                view.instances.push_back(std::move(inst));
             });
 
-        return out;
+        world.view<TransformComponent, LightComponent>().each(
+            [&](auto, TransformComponent& t, LightComponent& l) {
+                Light gl = l.data;
+                gl.position = glm::vec4(t.position, l.data.position.w);
+                view.lights.push_back(gl);
+            });
+
+        return view;
     }
 
     // -----------------------------------------------------------------------
