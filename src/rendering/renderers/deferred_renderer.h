@@ -11,13 +11,19 @@
 
 #include <glm/glm.hpp>
 
-struct offscreen_pass_resource : public blit_scene_input_resource
+struct offscreen_pass_resource
 {
 	FrameGraphResource framebuffer_resource;
 	FrameGraphResource position_resource;
 	FrameGraphResource albedo_resource;
 	FrameGraphResource normal_resource;
+	FrameGraphResource depth_resource;
 };
+
+struct deferred_pass_resource : public blit_scene_input_resource
+{
+	FrameGraphResource framebuffer_resource;
+}
 
 
 namespace Rendering {

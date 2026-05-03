@@ -84,14 +84,6 @@ namespace Rendering
 				"Offscreen Pass",
 				[&](FrameGraph::Builder& builder, offscreen_pass_resource& data)
 				{
-					// needed by blit pass---
-					RD::TextureFormat tf;
-					tf.texture_type = RD::TEXTURE_TYPE_2D;
-					tf.width = view.extent.x;
-					tf.height = view.extent.y;
-					tf.usage_bits = RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT;
-					tf.format = RD::DATA_FORMAT_R8G8B8A8_UNORM;
-					data.scene = builder.create<FrameGraphTexture>("scene texture", { tf, RD::TextureView(), "scene texture" });
 
 					RD::TextureFormat tf_depth;
 					tf_depth.texture_type = RD::TEXTURE_TYPE_2D;
@@ -99,26 +91,26 @@ namespace Rendering
 					tf_depth.height = view.extent.y;
 					tf_depth.usage_bits = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 					tf_depth.format = RD::DATA_FORMAT_D32_SFLOAT;
-					data.depth = builder.create<FrameGraphTexture>("scene depth texture", { tf_depth, RD::TextureView(), "scene depth texture" });
+					data.depth_resource = builder.create<FrameGraphTexture>("scene depth texture", { tf_depth, RD::TextureView(), "scene depth texture" });
 
-					data.scene = builder.write(data.scene, TEXTURE_WRITE_FLAGS::WRITE_COLOR);
-					data.depth = builder.write(data.depth, TEXTURE_WRITE_FLAGS::WRITE_DEPTH);
+					//data.scene = builder.write(data.scene, TEXTURE_WRITE_FLAGS::WRITE_COLOR);
+					data.depth_resource = builder.write(data.depth_resource, TEXTURE_WRITE_FLAGS::WRITE_DEPTH);
 					// ----
 
 					RD::TextureFormat tf_color;
-					tf.texture_type = RD::TEXTURE_TYPE_2D;
-					tf.width = view.extent.x;
-					tf.height = view.extent.y;
-					tf.usage_bits = RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT;
-					tf.format = RD::DATA_FORMAT_R8G8B8A8_UNORM;
+					tf_color.texture_type = RD::TEXTURE_TYPE_2D;
+					tf_color.width = view.extent.x;
+					tf_color.height = view.extent.y;
+					tf_color.usage_bits = RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT;
+					tf_color.format = RD::DATA_FORMAT_R8G8B8A8_UNORM;
 					data.albedo_resource = builder.create<FrameGraphTexture>("albedo texture", { tf_color, RD::TextureView(), "albedo texture" });
 
 					RD::TextureFormat tf_data;
-					tf.texture_type = RD::TEXTURE_TYPE_2D;
-					tf.width = view.extent.x;
-					tf.height = view.extent.y;
-					tf.usage_bits = RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT;
-					tf.format = RD::DATA_FORMAT_R16G16B16A16_UNORM;
+					tf_data.texture_type = RD::TEXTURE_TYPE_2D;
+					tf_data.width = view.extent.x;
+					tf_data.height = view.extent.y;
+					tf_data.usage_bits = RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT;
+					tf_data.format = RD::DATA_FORMAT_R16G16B16A16_UNORM;
 					data.normal_resource = builder.create<FrameGraphTexture>("normal texture", { tf_data, RD::TextureView(), "normal texture" });
 					data.position_resource = builder.create<FrameGraphTexture>("position texture", { tf_data, RD::TextureView(), "position texture" });
 
@@ -126,7 +118,7 @@ namespace Rendering
 					data.framebuffer_resource = builder.create<FrameGraphFramebuffer>(
 						"offscreen framebuffer",
 						{
-							.build = [&fg, albedo = data.albedo_resource, normal = data.normal_resource, position = data.position_resource, depth_id = data.depth](RenderContext& rc) -> RID {
+							.build = [&fg, albedo = data.albedo_resource, normal = data.normal_resource, position = data.position_resource, depth_id = data.depth_resource](RenderContext& rc) -> RID {
 								auto& position_tex = fg.get_resource<FrameGraphTexture>(position);
 								auto& normal_tex = fg.get_resource<FrameGraphTexture>(normal);
 								auto& albedo_tex = fg.get_resource<FrameGraphTexture>(albedo);
@@ -147,7 +139,7 @@ namespace Rendering
 					uint32_t w = rc.device->screen_get_width();
 					uint32_t h = rc.device->screen_get_height();
 
-					GPU_SCOPE(cmd, "Basic Pass", Color(1.0f, 0.0f, 0.0f, 1.0f));
+					GPU_SCOPE(cmd, "Offscreen Pass", Color(1.0f, 0.0f, 0.0f, 1.0f));
 					std::array<RDD::RenderPassClearValue, 2> clear_values;
 					clear_values[0].color = Color();
 					clear_values[1].depth = 1.0f;
@@ -167,7 +159,23 @@ namespace Rendering
 
 	void DeferredRenderer::setup_deferred_pass(FrameGraph& fg, FrameGraphBlackboard& bb, const SceneView& view, MeshStorage& storage)
 	{
-		throw std::logic_error("The method or operation is not implemented.");
+		auto pipeline_rid = deferred_pipeline.pipeline_rid;
+
+		bb.add<deferred_pass_resource>() =
+			fg.add_callback_pass<deferred_pass_resource>(
+				"Differed Pass",
+				[&](FrameGraph::Builder& builder, deferred_pass_resource& data)
+				{
+				},
+				[drawables = view.main_drawables, &storage, pipeline_rid](
+					const deferred_pass_resource& data, FrameGraphPassResources& resources, void* ctx)
+				{
+					auto& rc = *static_cast<RenderContext*>(ctx);
+					auto  cmd = rc.command_buffer;
+
+					uint32_t w = rc.device->screen_get_width();
+					uint32_t h = rc.device->screen_get_height();
+				});
 	}
 
 }
