@@ -139,7 +139,7 @@ namespace Rendering
 					data.depth = builder.write(data.depth, TEXTURE_WRITE_FLAGS::WRITE_DEPTH);
 
 					data.offscreen_tex_resources = builder.create<FrameGraphUniformSet>(
-						"shadow uniform set",
+						"offscreen uniform set",
 						{
 							.build = [&fg,
 										shader_rid = deferred_pipeline.shader_rid,
@@ -181,6 +181,25 @@ namespace Rendering
 
 					uint32_t w = rc.device->screen_get_width();
 					uint32_t h = rc.device->screen_get_height();
+
+					RID uniform_set_1 = resources.get<FrameGraphUniformSet>(data.offscreen_tex_resources).uniform_set_rid;
+					RID frame_buffer = resources.get<FrameGraphFramebuffer>(data.framebuffer_resource).framebuffer_rid;
+
+					GPU_SCOPE(cmd, "Basic Pass", Color(1.0f, 0.0f, 0.0f, 1.0f));
+					std::array<RDD::RenderPassClearValue, 2> clear_values;
+					clear_values[0].color = Color();
+					clear_values[1].depth = 1.0f;
+					clear_values[1].stencil = 0;
+
+					rc.device->begin_render_pass_from_frame_buffer(frame_buffer, Rect2i(0, 0, w, h), clear_values);
+
+					for (auto drawable : drawables) {
+						if (drawable.pipeline.pipeline_rid == pipeline_rid)
+							drawable.set_uniform_set({ uniform_set_1, 1 });
+						submit_drawable(rc, cmd, drawable, storage);
+					}
+
+					rc.wsi->end_render_pass(cmd);
 				});
 	}
 
@@ -219,7 +238,7 @@ namespace Rendering
 
 		offscreen_pipeline = PipelineBuilder{}
 			.set_shader({ "assets://shaders/deferred/mrt.vert", "assets://shaders/deferred/mrt.frag" },
-				"deferred_shader")
+				"offscreen_shader")
 			.set_vertex_format(vertex_format)
 			.set_depth_stencil_state(depth_state)
 			.build(main_fb_format);
@@ -238,6 +257,30 @@ namespace Rendering
 
 	void DeferredRenderer::create_deferred_pipeline(WSI* wsi, RenderingDevice* device)
 	{
+		auto vertex_format = wsi->get_vertex_format_by_type(VERTEX_FORMAT_VARIATIONS::DEFAULT);
+
+		// --- Framebuffer formats ---
+
+		RD::AttachmentFormat color_att;
+		color_att.format = RD::DATA_FORMAT_R8G8B8A8_UNORM;
+		color_att.usage_flags = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT;
+
+		auto main_fb_format = RD::get_singleton()->framebuffer_format_create({ color_att, depth_att });
+
+		// --- Pipelines ---
+
+		RDC::PipelineDepthStencilState ds_standard;
+		ds_standard.enable_depth_test = true;
+		ds_standard.enable_depth_write = true;
+		ds_standard.depth_compare_operator = RDC::COMPARE_OP_LESS;
+
+		deferred_pipeline = PipelineBuilder{}
+			.set_shader({ "assets://shaders/tutorial/deferred/deferred.vert",
+						  "assets://shaders/tutorial/deferred/deferred.frag" }, "deferred")
+			.set_vertex_format(vertex_format)
+			.set_depth_stencil_state(ds_standard)
+			.build(main_fb_format);
+
 
 	}
 
