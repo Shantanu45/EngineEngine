@@ -105,7 +105,14 @@ void ForwardRenderer::initialize(WSI* wsi, RenderingDevice* dev, RID cubemap) {
     shadow_ubo.create(device, "Shadow UBO");
 
     // --- Samplers ---
-    sampler              = RIDHandle(device->sampler_create({}));
+    {
+        RDC::SamplerState ss;
+        ss.mag_filter = RDC::SAMPLER_FILTER_LINEAR;
+        ss.min_filter = RDC::SAMPLER_FILTER_LINEAR;
+        ss.repeat_u   = RDC::SAMPLER_REPEAT_MODE_REPEAT;
+        ss.repeat_v   = RDC::SAMPLER_REPEAT_MODE_REPEAT;
+        sampler = RIDHandle(device->sampler_create(ss));
+    }
     sampler_cube         = RIDHandle(device->sampler_create({}));
     point_shadow_sampler = RIDHandle(device->sampler_create({}));
 

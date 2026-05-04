@@ -1,5 +1,6 @@
 // scene/components.h
 #pragma once
+#include <optional>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include "rendering/mesh_storage.h"
@@ -11,9 +12,11 @@
 struct TransformComponent {
 	glm::vec3 position = glm::vec3(0.0f);
 	glm::vec3 rotation = glm::vec3(0.0f); // euler angles in degrees
-	glm::vec3 scale = glm::vec3(1.0f);
+	glm::vec3 scale    = glm::vec3(1.0f);
+	std::optional<glm::mat4> matrix_override; // set when loading from GLTF node hierarchy
 
 	glm::mat4 get_model() const {
+		if (matrix_override) return *matrix_override;
 		glm::mat4 m = glm::mat4(1.0f);
 		m = glm::translate(m, position);
 		m = glm::rotate(m, glm::radians(rotation.x), glm::vec3(1, 0, 0));

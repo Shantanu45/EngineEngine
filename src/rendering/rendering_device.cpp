@@ -278,7 +278,7 @@ namespace Rendering
 
 		// Convert block size from KB.
 		//upload_staging_buffers.block_size = GLOBAL_GET("rendering/rendering_device/staging_buffer/block_size_kb");
-		upload_staging_buffers.block_size = MAX(8u, upload_staging_buffers.block_size);			// SHAN: revisit to configure block size.
+		upload_staging_buffers.block_size = MAX(4u, upload_staging_buffers.block_size);			// SHAN: revisit to configure block size.
 		upload_staging_buffers.block_size *= 1024;
 
 		// Convert staging buffer size from MB.
@@ -4646,15 +4646,9 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 			return ERR_CANT_CREATE;
 		}
 
-		if (p_staging_buffers.current >= p_staging_buffers.blocks.size())
-		{
-			p_staging_buffers.blocks.push_back(block);
-			p_staging_buffers.current++;
-			return OK;
-		}
-
-		p_staging_buffers.blocks[p_staging_buffers.current] = block;
-		
+		p_staging_buffers.blocks.insert(
+			p_staging_buffers.blocks.begin() + p_staging_buffers.current, block);
+		// current now points to the newly inserted (empty) block
 		return OK;
 	}
 

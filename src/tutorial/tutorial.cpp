@@ -2,16 +2,18 @@
 
 #include "rendering/frame_data.h"
 #include "rendering/skybox.h"
-#include "rendering/texture_cache.h"
 #include "rendering/camera.h"
 #include "rendering/renderers/forward_renderer.h"
 #include "rendering/primitve_shapes.h"
-#include "rendering/drawable.h"
 #include "rendering/default_textures.h"
+#include "rendering/mesh_loader.h"
+#include "rendering/gltf_material_bridge.h"
 #include "input/input.h"
 #include "util/timer.h"
 #include "tutorial/scene/components.h"
 #include "entt/entt.hpp"
+
+#include <functional>
 
 /**
  *  Set 0 - Per-frame global data   (camera, time, lights)
@@ -31,7 +33,7 @@ struct TutorialApplication : EE::Application
         camera.set_reset_on_resize();
         camera.set_mode(CameraMode::Fly);
 
-        wsi = get_wsi();
+        wsi    = get_wsi();
         device = wsi->get_rendering_device();
 
         wsi->set_vertex_data_mode(Rendering::WSI::VERTEX_DATA_MODE::INTERLEVED_DATA);
@@ -42,17 +44,12 @@ struct TutorialApplication : EE::Application
 
         auto fs = Services::get().get<FilesystemInterface>();
         mesh_storage->initialize(device);
-        tex_cache.init(device, *fs);
 
-        // --- Meshes ---
+        grid_mesh        = Rendering::Shapes::upload_grid(*wsi, *mesh_storage, 10, 1, "object_grid");
+        skybox_mesh      = Rendering::Shapes::upload_cube(*wsi, *mesh_storage, "skybox_cube");
         light_mesh       = Rendering::Shapes::upload_cube(*wsi, *mesh_storage, "light_cube");
         point_light_mesh = Rendering::Shapes::upload_cube(*wsi, *mesh_storage, "point_light_cube");
-        object_mesh      = Rendering::Shapes::upload_cube(*wsi, *mesh_storage, "object_cube");
-        grid_mesh        = Rendering::Shapes::upload_grid(*wsi, *mesh_storage, 10, 1, "object_grid");
-        plane_mesh       = Rendering::Shapes::upload_plane(*wsi, *mesh_storage, 1, "object_plane");
-        skybox_mesh      = Rendering::Shapes::upload_cube(*wsi, *mesh_storage, "skybox_cube");
 
-        // --- Textures ---
         fallback_texture = Rendering::create_white_texture(device);
 
         std::array<std::string, 6> faces = {
@@ -65,76 +62,87 @@ struct TutorialApplication : EE::Application
         };
         cubemap_uniform = Rendering::load_skybox_cubemap(device, *fs, faces);
 
-        // --- Renderer ---
         renderer.initialize(wsi, device, cubemap_uniform.get());
 
-        // --- Materials ---
-        Rendering::Material mat;
-        mat.diffuse            = tex_cache.color("assets://textures/container2.png");
-        mat.metallic_roughness = tex_cache.linear("assets://textures/container2_specular.png");
-        mat.base_color_factor  = glm::vec4(1.0f);
-        mat.shininess          = 64.0f;
-        Rendering::MaterialHandle h = material_registry.create(
-            device, std::move(mat), fallback_texture, renderer.color_pipeline().shader_rid);
+        // --- Load Sponza ---
+        auto vfmt = wsi->get_vertex_format_by_type(Rendering::VERTEX_FORMAT_VARIATIONS::DEFAULT);
+        mesh_loader   = std::make_unique<Rendering::MeshLoader>(*fs, device);
+        sponza_meshes = mesh_loader->load_gltf_all(
+            *mesh_storage,
+            "assets://gltf/Sponza/glTF/Sponza.gltf",
+            "sponza",
+            vfmt);
 
-        Rendering::Material mat_rock;
-        mat_rock.diffuse           = tex_cache.color("assets://textures/bricks2.jpg");
-        mat_rock.normal            = tex_cache.linear("assets://textures/bricks2_normal.jpg");
-        mat_rock.displacement      = tex_cache.linear("assets://textures/bricks2_disp.jpg");
-        mat_rock.base_color_factor = glm::vec4(1.0f);
-        mat_rock.shininess         = 32.0f;
-        Rendering::MaterialHandle h_rock = material_registry.create(
-            device, std::move(mat_rock), fallback_texture, renderer.color_pipeline().shader_rid);
+        const Rendering::GltfScene* gs = mesh_loader->get_scene();
 
-        // --- Scene entities ---
-        for (int x = 0; x < 2; x++) {
-            for (int z = 0; z < 2; z++) {
-                auto entity = world.create();
-                world.emplace<TransformComponent>(entity, TransformComponent{
-                    .position = glm::vec3(x * 2.5f, 0.5f, z * 2.5f) });
-                world.emplace<MeshComponent>(entity, MeshComponent{
-                    .mesh      = object_mesh,
-                    .materials = { h },
-                });
-            }
+        // Upload all images — one RID per image, indexed by GltfScene::images
+        std::vector<RID> image_rids;
+        for (int i = 0; i < (int)gs->images.size(); i++)
+            image_rids.push_back(mesh_loader->upload_cached(
+                gs, i, "assets://models/sponza/Sponza.gltf"));
+
+        // Convert PBR materials → MaterialRegistry entries
+        for (const auto& pbr : gs->materials) {
+            Rendering::Material mat = Rendering::material_from_pbr(pbr, image_rids);
+            sponza_mats.push_back(material_registry.create(
+                device, std::move(mat), fallback_texture, renderer.color_pipeline().shader_rid));
         }
 
-        auto entity_plane = world.create();
-        world.emplace<TransformComponent>(entity_plane, TransformComponent{
-            .position = glm::vec3(0.0f, 0.0f, 0.0f),
-            .scale    = glm::vec3(10.0f) });
-        world.emplace<MeshComponent>(entity_plane, MeshComponent{
-            .mesh      = plane_mesh,
-            .materials = { h_rock },
-        });
+        // Walk GLTF node hierarchy → create one entity per mesh node
+        std::function<void(int, glm::mat4)> visit = [&](int ni, glm::mat4 parent_world) {
+            const auto& node     = gs->nodes[ni];
+            glm::mat4 node_world = parent_world * node.get_local_transform();
 
-        // Directional light
-        auto light = world.create();
-        world.emplace<TransformComponent>(light, TransformComponent{
+            if (node.mesh_index >= 0 && node.mesh_index < (int)sponza_meshes.size()) {
+                std::vector<Rendering::MaterialHandle> prim_mats;
+                for (const auto& prim : gs->meshes[node.mesh_index].primitives)
+                    prim_mats.push_back(prim.material_index >= 0
+                        ? sponza_mats[prim.material_index]
+                        : Rendering::INVALID_MATERIAL);
+
+                auto e = world.create();
+                world.emplace<TransformComponent>(e, TransformComponent{
+                    .matrix_override = node_world });
+                world.emplace<MeshComponent>(e, MeshComponent{
+                    .mesh      = sponza_meshes[node.mesh_index],
+                    .materials = std::move(prim_mats),
+                });
+            }
+
+            for (int child : node.children)
+                visit(child, node_world);
+        };
+
+        if (!gs->scenes.empty())
+            for (int root : gs->scenes[gs->default_scene].root_nodes)
+                visit(root, glm::mat4(1.0f));
+
+        // --- Lights ---
+        auto dir_light = world.create();
+        world.emplace<TransformComponent>(dir_light, TransformComponent{
             .position = glm::vec3(5.0f, 10.0f, 5.0f),
             .scale    = glm::vec3(0.2f) });
-        world.emplace<MeshComponent>(light, MeshComponent{
+        world.emplace<MeshComponent>(dir_light, MeshComponent{
             .mesh     = light_mesh,
             .category = Rendering::MeshCategory::LightVisualization,
         });
-        world.emplace<LightComponent>(light, LightComponent{ .data = {
+        world.emplace<LightComponent>(dir_light, LightComponent{ .data = {
             .position    = glm::vec4(5.0f, 10.0f, 5.0f, 15.0f),
-            .direction   = glm::vec4(-0.0f, -1.0f, -0.5f, 0.0f),
+            .direction   = glm::vec4(0.0f, -1.0f, -0.5f, 0.0f),
             .color       = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f),
             .type        = static_cast<uint32_t>(LightType::Directional),
             .outer_angle = 0.0f,
         } });
 
-        // Point light
-        auto point_light = world.create();
-        world.emplace<TransformComponent>(point_light, TransformComponent{
+        auto pt_light = world.create();
+        world.emplace<TransformComponent>(pt_light, TransformComponent{
             .position = glm::vec3(1.0f, 1.0f, 1.0f),
             .scale    = glm::vec3(0.1f) });
-        world.emplace<MeshComponent>(point_light, MeshComponent{
+        world.emplace<MeshComponent>(pt_light, MeshComponent{
             .mesh     = point_light_mesh,
             .category = Rendering::MeshCategory::LightVisualization,
         });
-        world.emplace<LightComponent>(point_light, LightComponent{ .data = {
+        world.emplace<LightComponent>(pt_light, LightComponent{ .data = {
             .position    = glm::vec4(1.0f, 1.0f, 1.0f, 15.0f),
             .direction   = glm::vec4(-0.5f, -1.0f, -0.5f, 0.0f),
             .color       = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f),
@@ -168,15 +176,16 @@ struct TutorialApplication : EE::Application
 
         Rendering::RenderContext rc;
         rc.command_buffer = device->get_current_command_buffer();
-        rc.device = device;
-        rc.wsi = wsi;
+        rc.device         = device;
+        rc.wsi            = wsi;
         fg.execute(&rc, &rc);
     }
 
     void teardown_application() override
     {
         material_registry.free_all(device);
-        tex_cache.free_all();
+        if (mesh_loader)
+            mesh_loader->free_owned_resources();
         mesh_storage->finalize();
     }
 
@@ -224,21 +233,23 @@ private:
     // Textures — declared first so they outlive the renderer's uniform sets that reference them.
     RIDHandle fallback_texture;
     RIDHandle cubemap_uniform;
-    Rendering::TextureCache tex_cache;
 
-    // Material registry — uniform sets reference tex_cache textures, so must be
-    // destroyed before tex_cache (declared after it, destroyed before it).
+    // Material registry — uniform sets reference texture RIDs, destroyed before mesh_loader.
     Rendering::MaterialRegistry material_registry;
 
-    // Scene data
+    // Scene
     entt::registry world;
     std::unique_ptr<Rendering::MeshStorage> mesh_storage = std::make_unique<Rendering::MeshStorage>();
+
     Rendering::MeshHandle light_mesh;
     Rendering::MeshHandle point_light_mesh;
-    Rendering::MeshHandle object_mesh;
     Rendering::MeshHandle grid_mesh;
-    Rendering::MeshHandle plane_mesh;
     Rendering::MeshHandle skybox_mesh;
+
+    // Sponza — mesh_loader owns image RIDs, must outlive material_registry
+    std::unique_ptr<Rendering::MeshLoader>     mesh_loader;
+    std::vector<Rendering::MeshHandle>         sponza_meshes;
+    std::vector<Rendering::MaterialHandle>     sponza_mats;
 
     Camera camera;
     std::shared_ptr<EE::InputSystemInterface> input_system;
@@ -249,8 +260,7 @@ private:
     FrameGraph           fg;
     FrameGraphBlackboard bb;
 
-    // Renderer — declared last so it is destroyed first, before cubemap_uniform
-    // and fallback_texture which its uniform sets reference.
+    // Renderer — declared last, destroyed first (uniform sets reference texture RIDs above).
     Rendering::ForwardRenderer renderer;
 };
 
