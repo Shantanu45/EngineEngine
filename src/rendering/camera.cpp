@@ -155,6 +155,6 @@ void Camera::_update_frustum()
 	_frustum.planes[1] = extract(c3 - c0); // Right
 	_frustum.planes[2] = extract(c3 + c1); // Bottom
 	_frustum.planes[3] = extract(c3 - c1); // Top
-	_frustum.planes[4] = extract(c3 + c2); // Near
+	_frustum.planes[4] = extract(c2);       // Near  (Vulkan ZO: z_clip >= 0, not OpenGL's c3+c2)
 	_frustum.planes[5] = extract(c3 - c2); // Far
 }

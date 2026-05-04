@@ -6,4 +6,6 @@ struct RenderSettings {
     bool draw_grid       = true;
     bool draw_skybox     = true;
     bool show_timings    = false;
+
+    int last_draw_count  = 0;  // updated each frame by scene builder
 };

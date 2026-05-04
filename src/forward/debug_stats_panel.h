@@ -12,6 +12,8 @@ struct DebugStatsPanel : IUIPanel {
         auto timer = Services::get().get<Util::FrameTimer>();
         ImGui::Text("FPS: %.1f  (avg %.1f)", timer->get_fps(), timer->get_fps_avg());
         ImGui::Text("CPU frame: %.3f ms", timer->get_frame_time() * 1000.0);
+        if (ctx.settings)
+            ImGui::Text("Draw calls: %d", ctx.settings->last_draw_count);
 
         if (ctx.settings && ctx.settings->show_timings && ctx.wsi) {
             ImGui::Separator();

@@ -23,6 +23,17 @@ inline AABB compute_aabb(const PrimRange& primitives) {
     return result;
 }
 
+// Compute AABB from a single primitive
+template<typename Prim>
+inline AABB compute_aabb_single(const Prim& prim) {
+    AABB result;
+    for (const auto& v : prim.vertices) {
+        result.min = glm::min(result.min, v.position);
+        result.max = glm::max(result.max, v.position);
+    }
+    return result;
+}
+
 // Transform local-space AABB to world space via model matrix
 inline AABB transform_aabb(const AABB& aabb, const glm::mat4& m) {
     const glm::vec3& lo = aabb.min;

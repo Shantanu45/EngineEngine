@@ -109,6 +109,21 @@ namespace Rendering
 			return handles;
 		}
 
+		// Load GLTF file without uploading any geometry to GPU.
+		// Use get_scene() afterward, then upload_primitive() per primitive.
+		bool load_file(const std::string& path) {
+			return gltf_loader->load(path) == OK;
+		}
+
+		// Upload a single primitive as its own MeshHandle (name must be unique).
+		MeshHandle upload_primitive(MeshStorage& storage, const std::string& name,
+			const MeshPrimitive& prim,
+			RD::VertexFormatID vertex_format,
+			RDC::IndexBufferFormat index_format = RDC::INDEX_BUFFER_FORMAT_UINT32)
+		{
+			return _build_and_upload(storage, name, { prim }, vertex_format, index_format);
+		}
+
 		// Expose the loaded scene so the caller can access materials,
 		// nodes, animations etc. after a load_gltf call
 		const GltfScene* get_scene() const

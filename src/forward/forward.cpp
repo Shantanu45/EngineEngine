@@ -71,12 +71,8 @@ struct ForwardApplication : EE::Application
 
         // --- Load Sponza ---
         auto vfmt = wsi->get_vertex_format_by_type(Rendering::VERTEX_FORMAT_VARIATIONS::DEFAULT);
-        mesh_loader   = std::make_unique<Rendering::MeshLoader>(*fs, device);
-        sponza_meshes = mesh_loader->load_gltf_all(
-            *mesh_storage,
-            "assets://gltf/Sponza/glTF/Sponza.gltf",
-            "sponza",
-            vfmt);
+        mesh_loader = std::make_unique<Rendering::MeshLoader>(*fs, device);
+        mesh_loader->load_file("assets://gltf/Sponza/glTF/Sponza.gltf");
 
         const Rendering::GltfScene* gs = mesh_loader->get_scene();
 
@@ -93,26 +89,39 @@ struct ForwardApplication : EE::Application
                 device, std::move(mat), fallback_texture, renderer.color_pipeline().shader_rid));
         }
 
-        // Walk GLTF node hierarchy -> create one entity per mesh node
+        // Upload each primitive as its own MeshHandle — [mesh_idx][prim_idx]
+        // Shared by multiple nodes that reference the same mesh (no duplicate uploads)
+        std::vector<std::vector<Rendering::MeshHandle>> prim_handles(gs->meshes.size());
+        for (int mi = 0; mi < (int)gs->meshes.size(); mi++) {
+            const auto& mesh = gs->meshes[mi];
+            prim_handles[mi].resize(mesh.primitives.size(), Rendering::INVALID_MESH);
+            for (int pi = 0; pi < (int)mesh.primitives.size(); pi++) {
+                std::string name = "sponza/m" + std::to_string(mi) + "/p" + std::to_string(pi);
+                prim_handles[mi][pi] = mesh_loader->upload_primitive(
+                    *mesh_storage, name, mesh.primitives[pi], vfmt);
+            }
+        }
+
+        // Walk GLTF node hierarchy -> one entity per primitive for tight per-primitive AABBs
         std::function<void(int, glm::mat4)> visit = [&](int ni, glm::mat4 parent_world) {
             const auto& node     = gs->nodes[ni];
             glm::mat4 node_world = parent_world * node.get_local_transform();
 
-            if (node.mesh_index >= 0 && node.mesh_index < (int)sponza_meshes.size()) {
-                std::vector<Rendering::MaterialHandle> prim_mats;
-                for (const auto& prim : gs->meshes[node.mesh_index].primitives)
-                    prim_mats.push_back(prim.material_index >= 0
-                        ? sponza_mats[prim.material_index]
-                        : Rendering::INVALID_MATERIAL);
-
-                auto e = world.create();
-                world.emplace<TransformComponent>(e, TransformComponent{
-                    .matrix_override = node_world });
-                world.emplace<MeshComponent>(e, MeshComponent{
-                    .mesh       = sponza_meshes[node.mesh_index],
-                    .materials  = std::move(prim_mats),
-                    .local_aabb = Rendering::compute_aabb(gs->meshes[node.mesh_index].primitives),
-                });
+            if (node.mesh_index >= 0 && node.mesh_index < (int)prim_handles.size()) {
+                const auto& mesh = gs->meshes[node.mesh_index];
+                for (int pi = 0; pi < (int)mesh.primitives.size(); pi++) {
+                    const auto& prim = mesh.primitives[pi];
+                    auto e = world.create();
+                    world.emplace<TransformComponent>(e, TransformComponent{
+                        .matrix_override = node_world });
+                    world.emplace<MeshComponent>(e, MeshComponent{
+                        .mesh       = prim_handles[node.mesh_index][pi],
+                        .materials  = { prim.material_index >= 0
+                                        ? sponza_mats[prim.material_index]
+                                        : Rendering::INVALID_MATERIAL },
+                        .local_aabb = Rendering::compute_aabb_single(prim),
+                    });
+                }
             }
 
             for (int child : node.children)
@@ -217,6 +226,7 @@ private:
         view.skybox_mesh = render_settings.draw_skybox ? skybox_mesh : Rendering::INVALID_MESH;
         view.grid_mesh   = render_settings.draw_grid   ? grid_mesh   : Rendering::INVALID_MESH;
 
+        render_settings.last_draw_count = 0;
         world.view<TransformComponent, MeshComponent>().each(
             [&](auto, TransformComponent& t, MeshComponent& m) {
                 glm::mat4 model = t.get_model();
@@ -236,6 +246,7 @@ private:
                             ? material_registry.get_uniform_set(h)
                             : RID());
                 view.instances.push_back(std::move(inst));
+                render_settings.last_draw_count++;
             });
 
         world.view<TransformComponent, LightComponent>().each(
@@ -269,9 +280,8 @@ private:
     Rendering::MeshHandle skybox_mesh;
 
     // Sponza — mesh_loader owns image RIDs, must outlive material_registry
-    std::unique_ptr<Rendering::MeshLoader>     mesh_loader;
-    std::vector<Rendering::MeshHandle>         sponza_meshes;
-    std::vector<Rendering::MaterialHandle>     sponza_mats;
+    std::unique_ptr<Rendering::MeshLoader>  mesh_loader;
+    std::vector<Rendering::MaterialHandle>  sponza_mats;
 
     Camera camera;
     std::shared_ptr<EE::InputSystemInterface> input_system;
