@@ -4505,9 +4505,14 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 		r_alloc_offset = 0;
 		r_required_action = STAGING_REQUIRED_ACTION_NONE;
 
+		//DEBUG
 		//LOGI(std::format("[Staging] Request: {} bytes  | Current block fill: {} / {}  | Total blocks: {}  | Max size: {}",
 		//	p_amount, p_staging_buffers.blocks[p_staging_buffers.current].fill_amount, p_staging_buffers.block_size,
 		//	p_staging_buffers.blocks.size(), p_staging_buffers.max_size).c_str());
+
+		ERR_FAIL_COND_V_MSG(!p_can_segment && p_amount > p_staging_buffers.block_size,
+			ERR_CANT_CREATE,
+			"Texture upload exceeds staging block_size — increase block_size during config.");
 
 		// Optimization: Use bitwise alignment (requires p_required_align to be power of 2)
 		auto align_up = [](uint32_t val, uint32_t align) {
