@@ -7,8 +7,9 @@
 #include "entt/entt.hpp"
 
 struct UIContext {
-    Camera*         camera = nullptr;
-    entt::registry* world  = nullptr;
+    Camera*         camera     = nullptr;
+    entt::registry* world      = nullptr;
+    bool            show_stats = true;
 };
 
 struct IUIPanel {

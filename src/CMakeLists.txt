@@ -23,7 +23,7 @@ add_subdirectory(math)
 add_subdirectory(filesystem)
 add_subdirectory(compiler)
 add_subdirectory(rendering)
-add_subdirectory(tutorial)
+add_subdirectory(forward)
 add_subdirectory(shader_playground)
 add_subdirectory(deferred)
 

@@ -12,6 +12,7 @@
 #include "util/timer.h"
 #include "tutorial/scene/components.h"
 #include "tutorial/ui_layer.h"
+#include "tutorial/menu_bar.h"
 #include "tutorial/debug_stats_panel.h"
 #include "entt/entt.hpp"
 
@@ -152,6 +153,10 @@ struct ForwardApplication : EE::Application
             .outer_angle = 0.0f,
         } });
 
+        ui_ctx.camera = &camera;
+        ui_ctx.world  = &world;
+
+        ui_layer.add(std::make_unique<MenuBarPanel>());
         ui_layer.add(std::make_unique<DebugStatsPanel>());
 
         wsi->submit_transfer_workers();
@@ -163,8 +168,7 @@ struct ForwardApplication : EE::Application
         camera.update_from_input(input_system.get(), frame_time);
 
         device->imgui_begin_frame();
-        UIContext ctx{ &camera, &world };
-        ui_layer.draw_frame(ctx);
+        ui_layer.draw_frame(ui_ctx);
 
         Rendering::SceneView view = build_scene_view(elapsed_time);
 
@@ -260,7 +264,8 @@ private:
     Rendering::WSI*             wsi    = nullptr;
     Rendering::RenderingDevice* device = nullptr;
 
-    UILayer ui_layer;
+    UIContext ui_ctx;
+    UILayer  ui_layer;
 
     FrameGraph           fg;
     FrameGraphBlackboard bb;
