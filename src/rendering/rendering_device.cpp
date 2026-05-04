@@ -1227,7 +1227,7 @@ namespace Rendering
 		std::vector<RDD::AttachmentLoadOp> load_ops;
 		std::vector<RDD::AttachmentStoreOp> store_ops;
 		for (int64_t i = 0; i < p_attachments.size(); i++) {
-			load_ops.push_back(RDD::ATTACHMENT_LOAD_OP_CLEAR);
+			load_ops.push_back(p_attachments[i].load_op);
 			store_ops.push_back(RDD::ATTACHMENT_STORE_OP_STORE);
 		}
 
@@ -1442,6 +1442,73 @@ namespace Rendering
 		// This relies on the fact that HashMap will not change the address of an object after it's been inserted into the container.
 		//framebuffer_cache->render_pass_creation_user_data = (void*)(&framebuffer_formats[framebuffer.format_id].E->key());
 
+		return id;
+	}
+
+	RID RenderingDevice::framebuffer_create_load(const std::vector<RID>& p_texture_attachments) {
+		FramebufferPass pass;
+		std::vector<AttachmentFormat> attachments;
+		std::vector<RDD::TextureID> textures;
+		int32_t vrs_attachment = -1;
+		Size2i size;
+		bool size_set = false;
+		uint32_t texture_layers = 1;
+		attachments.resize(p_texture_attachments.size());
+
+		for (int i = 0; i < (int)p_texture_attachments.size(); i++) {
+			Texture* texture = texture_owner.get_or_null(p_texture_attachments[i]);
+			ERR_FAIL_COND_V(!texture, RID());
+
+			_check_transfer_worker_texture(texture);
+
+			if (!size_set) {
+				size.x = texture->width;
+				size.y = texture->height;
+				size_set = true;
+			}
+			texture_layers = texture->layers;
+
+			AttachmentFormat af;
+			af.format     = texture->format;
+			af.samples    = texture->samples;
+			af.usage_flags = texture->usage_flags;
+			af.load_op    = RDD::ATTACHMENT_LOAD_OP_LOAD;
+			attachments[i] = af;
+			textures.push_back(texture->driver_id);
+
+			if (texture->usage_flags & TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)
+				pass.depth_attachment = i;
+			else
+				pass.color_attachments.push_back(i);
+		}
+
+		ERR_FAIL_COND_V_MSG(!size_set, RID(), "All attachments unused.");
+
+		std::vector<FramebufferPass> passes = { pass };
+		FramebufferFormatID format_id = framebuffer_format_create_multipass(attachments, passes, 1, vrs_attachment);
+		ERR_FAIL_COND_V(format_id == INVALID_ID, RID());
+
+		Framebuffer framebuffer;
+		framebuffer.format_id  = format_id;
+		framebuffer.texture_ids = p_texture_attachments;
+		framebuffer.size       = size;
+		framebuffer.view_count = 1;
+
+		FramebufferKey key{
+			.render_pass = framebuffer_formats[format_id].render_pass,
+			.width       = size.x,
+			.height      = size.y,
+			.layers      = texture_layers,
+			.attachments = p_texture_attachments
+		};
+
+		RID id = framebuffer_owner.make_rid(framebuffer);
+		for (int i = 0; i < (int)p_texture_attachments.size(); i++)
+			if (p_texture_attachments[i].is_valid())
+				_add_dependency(id, p_texture_attachments[i]);
+
+		auto frame_buffer = fb_cache->get(key);
+		rid_to_frame_buffer_id[id] = frame_buffer;
 		return id;
 	}
 

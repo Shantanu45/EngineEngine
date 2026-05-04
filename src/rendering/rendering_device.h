@@ -383,6 +383,7 @@ namespace Rendering
 			DataFormat format;
 			TextureSamples samples;
 			uint32_t usage_flags;
+			RenderingDeviceDriver::AttachmentLoadOp load_op = RenderingDeviceDriver::ATTACHMENT_LOAD_OP_CLEAR;
 			AttachmentFormat() {
 				format = DATA_FORMAT_R8G8B8A8_UNORM;
 				samples = TEXTURE_SAMPLES_1;
@@ -548,6 +549,9 @@ namespace Rendering
 					}
 					if (a.usage_flags != b.usage_flags) {
 						return a.usage_flags < b.usage_flags;
+					}
+					if (a.load_op != b.load_op) {
+						return a.load_op < b.load_op;
 					}
 				}
 
@@ -932,6 +936,7 @@ namespace Rendering
 		RenderingDevice::TextureSamples framebuffer_format_get_texture_samples(FramebufferFormatID p_format, uint32_t p_pass);
 		RID framebuffer_create_empty(const Size2i& p_size, TextureSamples p_samples, FramebufferFormatID p_format_check);
 		RID framebuffer_create(const std::vector<RID>& p_texture_attachments, FramebufferFormatID p_format_check = INVALID_ID, uint32_t p_view_count = 1);
+		RID framebuffer_create_load(const std::vector<RID>& p_texture_attachments);
 		RID framebuffer_create_multipass(const std::vector<RID>& p_texture_attachments, const std::vector<FramebufferPass>& p_passes, FramebufferFormatID p_format_check, uint32_t p_view_count);
 FramebufferFormatID framebuffer_format_create_empty(TextureSamples p_samples = TEXTURE_SAMPLES_1);
 
