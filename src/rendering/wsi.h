@@ -71,6 +71,7 @@ namespace Rendering
 
         double get_gpu_frame_time();
         double get_cpu_frame_time();
+        bool   has_timing_data() const { return frame_profile.size() >= 2; }
 
         // -- Mesh API --------------------------------------------------
         // Load a gltf/glb into MeshStorage. Returns INVALID_MESH on failure.

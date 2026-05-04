@@ -8,6 +8,8 @@
 #include "rendering/default_textures.h"
 #include "rendering/mesh_loader.h"
 #include "rendering/gltf_material_bridge.h"
+#include "rendering/render_settings.h"
+#include "rendering/utils.h"
 #include "input/input.h"
 #include "util/timer.h"
 #include "forward/scene/components.h"
@@ -154,8 +156,10 @@ struct ForwardApplication : EE::Application
             .outer_angle = 0.0f,
         } });
 
-        ui_ctx.camera = &camera;
-        ui_ctx.world  = &world;
+        ui_ctx.camera    = &camera;
+        ui_ctx.world     = &world;
+        ui_ctx.wsi       = wsi;
+        ui_ctx.settings  = &render_settings;
 
         ui_layer.add(std::make_unique<MenuBarPanel>());
         ui_layer.add(std::make_unique<DebugStatsPanel>());
@@ -167,6 +171,7 @@ struct ForwardApplication : EE::Application
     void render_frame(double frame_time, double elapsed_time) override
     {
         camera.update_from_input(input_system.get(), frame_time);
+        RenderUtilities::capturing_timestamps = render_settings.show_timings;
 
         device->imgui_begin_frame();
         ui_layer.draw_frame(ui_ctx);
@@ -186,7 +191,9 @@ struct ForwardApplication : EE::Application
         rc.command_buffer = device->get_current_command_buffer();
         rc.device         = device;
         rc.wsi            = wsi;
+        TIMESTAMP_BEGIN();
         fg.execute(&rc, &rc);
+        RENDER_TIMESTAMP("Frame End");
     }
 
     void teardown_application() override
@@ -204,15 +211,16 @@ private:
 
         Rendering::SceneView view;
         view.camera      = &camera;
+        view.settings    = &render_settings;
         view.elapsed     = elapsed;
         view.extent      = { device->screen_get_width(), device->screen_get_height() };
-        view.skybox_mesh = skybox_mesh;
-        view.grid_mesh   = grid_mesh;
+        view.skybox_mesh = render_settings.draw_skybox ? skybox_mesh : Rendering::INVALID_MESH;
+        view.grid_mesh   = render_settings.draw_grid   ? grid_mesh   : Rendering::INVALID_MESH;
 
         world.view<TransformComponent, MeshComponent>().each(
             [&](auto, TransformComponent& t, MeshComponent& m) {
                 glm::mat4 model = t.get_model();
-                if (m.local_aabb.valid()) {
+                if (render_settings.frustum_culling && m.local_aabb.valid()) {
                     Rendering::AABB world_aabb = Rendering::transform_aabb(m.local_aabb, model);
                     if (!camera.is_aabb_visible(world_aabb.min, world_aabb.max))
                         return;
@@ -271,8 +279,9 @@ private:
     Rendering::WSI*             wsi    = nullptr;
     Rendering::RenderingDevice* device = nullptr;
 
-    UIContext ui_ctx;
-    UILayer  ui_layer;
+    RenderSettings render_settings;
+    UIContext      ui_ctx;
+    UILayer        ui_layer;
 
     FrameGraph           fg;
     FrameGraphBlackboard bb;

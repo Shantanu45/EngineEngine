@@ -4,12 +4,16 @@
 #include <vector>
 
 #include "rendering/camera.h"
+#include "rendering/render_settings.h"
+#include "rendering/wsi.h"
 #include "entt/entt.hpp"
 
 struct UIContext {
-    Camera*         camera     = nullptr;
-    entt::registry* world      = nullptr;
-    bool            show_stats = true;
+    Camera*           camera     = nullptr;
+    entt::registry*   world      = nullptr;
+    Rendering::WSI*   wsi        = nullptr;
+    bool              show_stats = true;
+    RenderSettings*   settings   = nullptr;
 };
 
 struct IUIPanel {

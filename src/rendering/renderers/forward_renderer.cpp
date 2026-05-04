@@ -231,13 +231,15 @@ std::vector<Drawable> ForwardRenderer::build_main_drawables(const SceneView& vie
     std::vector<Drawable> out;
     glm::mat4 identity = glm::mat4(1.0f);
 
-    out.push_back(Drawable::make(pipeline_skybox, view.skybox_mesh,
-        PushConstantData::from(ObjectData_UBO{ identity, identity }),
-        { { (RID)uniform_set_skybox, 0 } }));
+    if (view.skybox_mesh != INVALID_MESH)
+        out.push_back(Drawable::make(pipeline_skybox, view.skybox_mesh,
+            PushConstantData::from(ObjectData_UBO{ identity, identity }),
+            { { (RID)uniform_set_skybox, 0 } }));
 
-    out.push_back(Drawable::make(pipeline_grid, view.grid_mesh,
-        PushConstantData::from(ObjectData_UBO{ identity, glm::transpose(glm::inverse(identity)) }),
-        { { (RID)uniform_set_0_light, 0 } }));
+    if (view.grid_mesh != INVALID_MESH)
+        out.push_back(Drawable::make(pipeline_grid, view.grid_mesh,
+            PushConstantData::from(ObjectData_UBO{ identity, glm::transpose(glm::inverse(identity)) }),
+            { { (RID)uniform_set_0_light, 0 } }));
 
     for (const auto& inst : view.instances) {
         bool opaque = inst.category == MeshCategory::Opaque;

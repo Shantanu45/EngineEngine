@@ -5,6 +5,7 @@
 #include "rendering/light.h"
 #include "rendering/camera.h"
 #include "rendering/mesh_category.h"
+#include "rendering/render_settings.h"
 #include "math/math_common.h"
 
 #include <glm/glm.hpp>
@@ -22,6 +23,7 @@ struct MeshInstance {
 
 struct SceneView {
     Camera*                   camera      = nullptr;
+    RenderSettings*           settings    = nullptr;
     double                    elapsed     = 0.0;
     MeshHandle                skybox_mesh;
     MeshHandle                grid_mesh;
