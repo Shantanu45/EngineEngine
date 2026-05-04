@@ -11,6 +11,8 @@
 #include "input/input.h"
 #include "util/timer.h"
 #include "tutorial/scene/components.h"
+#include "tutorial/ui_layer.h"
+#include "tutorial/debug_stats_panel.h"
 #include "entt/entt.hpp"
 
 #include <functional>
@@ -150,6 +152,8 @@ struct TutorialApplication : EE::Application
             .outer_angle = 0.0f,
         } });
 
+        ui_layer.add(std::make_unique<DebugStatsPanel>());
+
         wsi->submit_transfer_workers();
         return wsi->pre_frame_loop();
     }
@@ -159,9 +163,8 @@ struct TutorialApplication : EE::Application
         camera.update_from_input(input_system.get(), frame_time);
 
         device->imgui_begin_frame();
-        const auto timer = Services::get().get<Util::FrameTimer>();
-        ImGui::Text("FPS: %.1f", timer->get_fps());
-        ImGui::Text("Frame Time: %.3f ms", timer->get_frame_time() * 1000.0);
+        UIContext ctx{ &camera, &world };
+        ui_layer.draw_frame(ctx);
 
         Rendering::SceneView view = build_scene_view(elapsed_time);
 
@@ -256,6 +259,8 @@ private:
 
     Rendering::WSI*             wsi    = nullptr;
     Rendering::RenderingDevice* device = nullptr;
+
+    UILayer ui_layer;
 
     FrameGraph           fg;
     FrameGraphBlackboard bb;
