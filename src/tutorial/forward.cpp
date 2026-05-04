@@ -24,7 +24,7 @@
     Set 3 - Per-object data         (model matrix, bone data).
  */
 
-struct TutorialApplication : EE::Application
+struct ForwardApplication : EE::Application
 {
     bool pre_frame() override
     {
@@ -276,7 +276,7 @@ namespace EE
         EE_APPLICATION_SETUP;
 
         try {
-            return new TutorialApplication();
+            return new ForwardApplication();
         }
         catch (const std::exception& e) {
             LOGE("application_create() threw exception: %s\n", e.what());

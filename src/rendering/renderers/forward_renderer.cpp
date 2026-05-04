@@ -40,8 +40,8 @@ void ForwardRenderer::initialize(WSI* wsi, RenderingDevice* dev, RID cubemap) {
     ds_standard.depth_compare_operator = RDC::COMPARE_OP_LESS;
 
     pipeline_color = PipelineBuilder{}
-        .set_shader({ "assets://shaders/tutorial/light_map.vert",
-                      "assets://shaders/tutorial/light_map.frag" }, "light_map")
+        .set_shader({ "assets://shaders/forward/forward.vert",
+                      "assets://shaders/forward/forward.frag" }, "light_map")
         .set_vertex_format(vertex_format)
         .set_depth_stencil_state(ds_standard)
         .build(main_fb_format);

@@ -1,4 +1,4 @@
-set(PROJECT_NAME tutorial)
+set(PROJECT_NAME forward)
 
 file(GLOB SOURCES CONFIGURE_DEPENDS "*.cpp")
 file(GLOB HEADERS CONFIGURE_DEPENDS "*.h")
