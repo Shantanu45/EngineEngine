@@ -81,14 +81,14 @@ struct TutorialApplication : EE::Application
             image_rids.push_back(mesh_loader->upload_cached(
                 gs, i, "assets://models/sponza/Sponza.gltf"));
 
-        // Convert PBR materials → MaterialRegistry entries
+        // Convert PBR materials -> MaterialRegistry entries
         for (const auto& pbr : gs->materials) {
             Rendering::Material mat = Rendering::material_from_pbr(pbr, image_rids);
             sponza_mats.push_back(material_registry.create(
                 device, std::move(mat), fallback_texture, renderer.color_pipeline().shader_rid));
         }
 
-        // Walk GLTF node hierarchy → create one entity per mesh node
+        // Walk GLTF node hierarchy -> create one entity per mesh node
         std::function<void(int, glm::mat4)> visit = [&](int ni, glm::mat4 parent_world) {
             const auto& node     = gs->nodes[ni];
             glm::mat4 node_world = parent_world * node.get_local_transform();
