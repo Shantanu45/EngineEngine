@@ -54,10 +54,8 @@ struct DeferredApp : EE::Application
 				world.emplace<TransformComponent>(e, TransformComponent{
 					.position = glm::vec3((x - 1) * 2.5f, 0.5f, (z - 1) * 2.5f) });
 				world.emplace<MeshComponent>(e, MeshComponent{
-					.mesh          = cube_mesh,
-					.pipeline      = renderer.color_pipeline(),
-					.uniform_set_0 = renderer.color_set0(),
-					.materials     = { mat_handle },
+					.mesh      = cube_mesh,
+					.materials = { mat_handle },
 				});
 			}
 		}
@@ -70,16 +68,16 @@ struct DeferredApp : EE::Application
 	{
 		camera.update_from_input(input_system.get(), frame_time);
 
-		renderer.upload_frame_data(device, camera, elapsed_time, glm::mat4(1.0f));
-
 		device->imgui_begin_frame();
 		const auto timer = Services::get().get<Util::FrameTimer>();
 		ImGui::Text("FPS: %.1f", timer->get_fps());
 		ImGui::Text("Frame Time: %.3f ms", timer->get_frame_time() * 1000.0);
 
 		Rendering::SceneView view;
-		view.extent         = { device->screen_get_width(), device->screen_get_height() };
-		view.main_drawables = build_main_drawables();
+		view.camera    = &camera;
+		view.elapsed   = elapsed_time;
+		view.extent    = { device->screen_get_width(), device->screen_get_height() };
+		view.instances = build_main_instances();
 
 		fg.reset();
 		bb.reset();
@@ -104,10 +102,10 @@ struct DeferredApp : EE::Application
 	}
 
 private:
-	std::vector<Rendering::Drawable> build_main_drawables()
+	std::vector<Rendering::MeshInstance> build_main_instances()
 	{
 		material_registry.upload_dirty(device);
-		std::vector<Rendering::Drawable> out;
+		std::vector<Rendering::MeshInstance> out;
 
 		world.view<TransformComponent, MeshComponent>().each(
 			[&](auto, TransformComponent& t, MeshComponent& m) {
@@ -116,11 +114,13 @@ private:
 					mat_sets.push_back(h != Rendering::INVALID_MATERIAL
 						? material_registry.get_uniform_set(h) : RID());
 
-				out.push_back(Rendering::Drawable::make(
-					m.pipeline, m.mesh,
-					Rendering::PushConstantData::from(ObjectData_UBO{ t.get_model(), t.get_normal_matrix() }),
-					{ { m.uniform_set_0, 0 } },
-					std::move(mat_sets)));
+				out.push_back(Rendering::MeshInstance{
+					.mesh          = m.mesh,
+					.model         = t.get_model(),
+					.normal_matrix = t.get_normal_matrix(),
+					.material_sets = std::move(mat_sets),
+					.category      = m.category,
+				});
 			});
 
 		return out;
