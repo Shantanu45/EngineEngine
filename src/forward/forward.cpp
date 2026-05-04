@@ -10,10 +10,10 @@
 #include "rendering/gltf_material_bridge.h"
 #include "input/input.h"
 #include "util/timer.h"
-#include "tutorial/scene/components.h"
-#include "tutorial/ui_layer.h"
-#include "tutorial/menu_bar.h"
-#include "tutorial/debug_stats_panel.h"
+#include "forward/scene/components.h"
+#include "forward/ui_layer.h"
+#include "forward/menu_bar.h"
+#include "forward/debug_stats_panel.h"
 #include "entt/entt.hpp"
 
 #include <functional>
@@ -107,8 +107,9 @@ struct ForwardApplication : EE::Application
                 world.emplace<TransformComponent>(e, TransformComponent{
                     .matrix_override = node_world });
                 world.emplace<MeshComponent>(e, MeshComponent{
-                    .mesh      = sponza_meshes[node.mesh_index],
-                    .materials = std::move(prim_mats),
+                    .mesh       = sponza_meshes[node.mesh_index],
+                    .materials  = std::move(prim_mats),
+                    .local_aabb = Rendering::compute_aabb(gs->meshes[node.mesh_index].primitives),
                 });
             }
 
@@ -210,9 +211,15 @@ private:
 
         world.view<TransformComponent, MeshComponent>().each(
             [&](auto, TransformComponent& t, MeshComponent& m) {
+                glm::mat4 model = t.get_model();
+                if (m.local_aabb.valid()) {
+                    Rendering::AABB world_aabb = Rendering::transform_aabb(m.local_aabb, model);
+                    if (!camera.is_aabb_visible(world_aabb.min, world_aabb.max))
+                        return;
+                }
                 Rendering::MeshInstance inst;
                 inst.mesh          = m.mesh;
-                inst.model         = t.get_model();
+                inst.model         = model;
                 inst.normal_matrix = t.get_normal_matrix();
                 inst.category      = m.category;
                 for (auto h : m.materials)
