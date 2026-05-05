@@ -7,9 +7,11 @@ struct MenuBarPanel : IUIPanel {
     void draw(UIContext& ctx) override {
         if (ImGui::BeginMainMenuBar()) {
             if (ImGui::BeginMenu("Debug")) {
-                ImGui::MenuItem("Stats",   nullptr, &ctx.show_stats);
-                if (ctx.settings)
-                    ImGui::MenuItem("Timings", nullptr, &ctx.settings->show_timings);
+                ImGui::MenuItem("Stats",          nullptr, &ctx.show_stats);
+                if (ctx.settings) {
+                    ImGui::MenuItem("Timings",        nullptr, &ctx.settings->show_timings);
+                    ImGui::MenuItem("Timing Graphs",  nullptr, &ctx.settings->show_timing_graphs);
+                }
                 ImGui::EndMenu();
             }
 

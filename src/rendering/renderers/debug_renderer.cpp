@@ -118,6 +118,8 @@ void DebugRenderer::add_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
             clear[0].color = Color();
             clear[1].depth = 1.0f;
 
+            GPU_SCOPE(cmd, "Debug Viz Pass", Color(0.5f, 0.5f, 0.0f, 1.0f));
+
             rc.device->begin_render_pass_from_frame_buffer(fb, Rect2i(0, 0, extent.x, extent.y), clear);
             rc.device->bind_render_pipeline(cmd, pipeline.pipeline_rid);
             rc.device->set_push_constant(&vp, sizeof(vp), pipeline.shader_rid);
