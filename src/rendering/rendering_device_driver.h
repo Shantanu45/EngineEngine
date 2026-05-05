@@ -78,6 +78,8 @@ namespace Rendering
 
 		virtual Error initialize(uint32_t p_device_index, uint32_t p_frame_count) = 0;
 
+		virtual Error initialize_tracy(const uint32_t p_queue_family, const uint32_t p_queue_index, CommandBufferID p_cmd_buffer) = 0;
+
 		/****************/
 		/**** MEMORY ****/
 		/****************/
@@ -729,6 +731,10 @@ namespace Rendering
 
 		virtual void command_begin_label(CommandBufferID p_cmd_buffer, const char* p_label_name, const Color& p_color) = 0;
 		virtual void command_end_label(CommandBufferID p_cmd_buffer) = 0;
+		virtual void tracy_collect(CommandBufferID p_cmd_buffer, const uint32_t p_frame_index) = 0;
+		virtual void* tracy_get_context() { return nullptr; }
+		virtual void* command_buffer_get_native(CommandBufferID p_cmd_buffer) { return nullptr; }
+
 
 		/****************/
 		/**** DEBUG *****/

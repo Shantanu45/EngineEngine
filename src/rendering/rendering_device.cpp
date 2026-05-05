@@ -275,6 +275,18 @@ namespace Rendering
 
 		}
 
+		{
+			RDD::CommandPoolID tracy_pool = driver->command_pool_create(main_queue_family, RDD::COMMAND_BUFFER_TYPE_PRIMARY);
+			RDD::CommandBufferID tracy_cmd = driver->command_buffer_create(tracy_pool);
+			// TracyVkContext calls vkBeginCommandBuffer/vkEndCommandBuffer internally — do not begin/end here.
+			driver->initialize_tracy(static_cast<uint32_t>(main_queue_family.id - 1), 0, tracy_cmd);
+			//RDD::FenceID tracy_fence = driver->fence_create();
+			//RDD::CommandBufferID tracy_cmds[] = { tracy_cmd };
+			//driver->command_queue_execute_and_present(main_queue, {}, tracy_cmds, {}, tracy_fence, {});
+			//driver->fence_wait(tracy_fence);
+			//driver->fence_free(tracy_fence);
+			driver->command_pool_free(tracy_pool);
+		}
 
 		// Convert block size from KB.
 		//upload_staging_buffers.block_size = GLOBAL_GET("rendering/rendering_device/staging_buffer/block_size_kb");
@@ -3466,6 +3478,8 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 		RDD::CommandBufferID command_buffer = frames[frame].command_buffer;
 
 		driver->command_buffer_begin(command_buffer);
+
+		driver->tracy_collect(command_buffer, frame);
 
 		_free_pending_resources(frame);
 

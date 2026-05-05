@@ -270,6 +270,22 @@ namespace Vulkan
 		//TODO:
 	}
 
+	Error RenderingDeviceDriverVulkan::initialize_tracy(const uint32_t p_queue_family, const uint32_t p_queue_index, CommandBufferID p_cmd_buffer)
+	{
+#ifdef TRACY_ENABLE
+		CommandBufferInfo* command_buffer = (CommandBufferInfo*)(p_cmd_buffer.id);
+		// One context: one calibration cmdbuf, one query pool. Caller must submit+wait p_cmd_buffer after this returns.
+		tracy_vk_contexts.resize(1);
+		tracy_vk_contexts[0] = TracyVkContext(
+			physical_device,
+			vk_device,
+			_get_vk_queue(p_queue_family, p_queue_index),
+			command_buffer->vk_command_buffer
+		);
+#endif
+		return OK;
+	}
+
 	void RenderingDeviceDriverVulkan::_register_requested_device_extension(const std::string& p_extension_name, bool p_required) {
 		ERR_FAIL_COND(requested_device_extensions.contains(p_extension_name));
 		requested_device_extensions[p_extension_name] = p_required;
@@ -5684,6 +5700,15 @@ namespace Vulkan
 		vkCmdEndDebugUtilsLabelEXT(command_buffer->vk_command_buffer);
 	}
 
+	void RenderingDeviceDriverVulkan::tracy_collect(CommandBufferID p_cmd_buffer, const uint32_t p_frame_index)
+	{
+#ifdef TRACY_ENABLE
+		CommandBufferInfo* command_buffer = (CommandBufferInfo*)(p_cmd_buffer.id);
+		// This collects the results from the GPU queries
+		TracyVkCollect(tracy_vk_contexts[0], command_buffer->vk_command_buffer);
+#endif
+	}
+
 #pragma endregion
 
 #pragma region Misc
@@ -5773,6 +5798,11 @@ namespace Vulkan
 
 	RenderingDeviceDriverVulkan::~RenderingDeviceDriverVulkan()
 	{
+#ifdef TRACY_ENABLE
+		for (auto& ctx : tracy_vk_contexts) {
+			TracyVkDestroy(ctx);
+		}
+#endif
 #if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
 		if (breadcrumb_buffer != BufferID()) {
 			buffer_free(breadcrumb_buffer);

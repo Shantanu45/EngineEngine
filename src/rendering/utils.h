@@ -3,9 +3,19 @@
 #include "rendering_device.h"
 #include "util/profiler.h"
 
+#ifdef TRACY_ENABLE
+#define GPU_SCOPE(cmd, name, color) \
+	auto debug_marker = Rendering::RenderingDevice::ScopedDebugMarker(Rendering::RenderingDevice::get_singleton(), cmd, name, color); \
+	ZoneScopedN(name); \
+	TracyVkZone( \
+		static_cast<TracyVkCtx>(Rendering::RenderingDevice::get_singleton()->get_driver().tracy_get_context()), \
+		static_cast<VkCommandBuffer>(Rendering::RenderingDevice::get_singleton()->get_driver().command_buffer_get_native(cmd)), \
+		name)
+#else
 #define GPU_SCOPE(cmd, name, color) \
 	auto debug_marker = Rendering::RenderingDevice::ScopedDebugMarker(Rendering::RenderingDevice::get_singleton(), cmd, name, color); \
 	ZoneScopedN(name);
+#endif
 
 using RD = Rendering::RenderingDevice;
 

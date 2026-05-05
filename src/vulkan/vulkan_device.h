@@ -17,6 +17,9 @@
 #include "math/rect2i.h"
 #include "shader_container.h"
 #include "rendering/rendering_device_driver.h"
+#ifdef TRACY_ENABLE
+#include "tracy/TracyVulkan.hpp"
+#endif
 
 namespace Vulkan
 {
@@ -524,6 +527,21 @@ namespace Vulkan
 
 		void command_end_label(CommandBufferID p_cmd_buffer) override;
 
+		void tracy_collect(CommandBufferID p_cmd_buffer, const uint32_t p_frame_index);
+
+		void* tracy_get_context() override {
+#ifdef TRACY_ENABLE
+			return tracy_vk_contexts.empty() ? nullptr : static_cast<void*>(tracy_vk_contexts[0]);
+#else
+			return nullptr;
+#endif
+		}
+
+		void* command_buffer_get_native(CommandBufferID p_cmd_buffer) override {
+			CommandBufferInfo* info = (CommandBufferInfo*)(p_cmd_buffer.id);
+			return static_cast<void*>(info->vk_command_buffer);
+		}
+
 		const RenderingShaderContainerFormat& get_shader_container_format() const override;
 
 		void set_object_name(ObjectType p_type, ID p_driver_id, const std::string& p_name);
@@ -561,6 +579,9 @@ namespace Vulkan
 		}
 
 		virtual const MultiviewCapabilities& get_multiview_capabilities() override;
+
+		virtual Error initialize_tracy(const uint32_t p_queue_family, const uint32_t p_queue_index, CommandBufferID p_cmd_buffer) override;
+
 	private:
 		void _register_requested_device_extension(const std::string& p_extension_name, bool p_required);
 		Error _initialize_device_extensions();
@@ -628,6 +649,8 @@ namespace Vulkan
 		RenderingShaderContainerFormatVulkan shader_container_format;
 
 		MultiviewCapabilities multiview_capabilities;
+		std::vector<TracyVkCtx> tracy_vk_contexts;
+
 
 		friend class ImGuiDevice;
 

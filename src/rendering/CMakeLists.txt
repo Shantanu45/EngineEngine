@@ -45,6 +45,8 @@ ${RENDERERS}
 
 setup_msvc_options(${PROJECT_NAME})
 
+target_compile_definitions(${PROJECT_NAME} PRIVATE TRACY_ENABLE)
+
 add_definitions(-DNOMINMAX) 
 
 find_package(SDL3 REQUIRED)
