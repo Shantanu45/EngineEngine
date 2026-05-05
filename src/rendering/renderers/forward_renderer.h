@@ -1,6 +1,7 @@
 #pragma once
 
 #include "rendering/renderers/renderer.h"
+#include "rendering/renderers/debug_renderer.h"
 #include "rendering/drawable.h"
 #include "rendering/pipeline_builder.h"
 #include "rendering/uniform_buffer.h"
@@ -54,6 +55,7 @@ namespace Rendering {
                                              uint32_t& out_pt_idx) const;
 
         RenderingDevice* device = nullptr;
+        DebugRenderer debug_renderer;
 
         // UBOs — declared first so they outlive the uniform sets that reference them.
         UniformBuffer<FrameData_UBO>   frame_ubo;

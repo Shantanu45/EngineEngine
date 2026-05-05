@@ -33,8 +33,8 @@ public:
     // scene_res and depth_res must be FrameGraphTexture resources already
     // written by the preceding scene pass.
     void add_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
-                  FrameGraphResource scene_res,
-                  FrameGraphResource depth_res,
+                  FrameGraphResource& scene_res,
+                  FrameGraphResource& depth_res,
                   const Camera& camera,
                   glm::uvec2 extent);
 

@@ -230,9 +230,11 @@ private:
         world.view<TransformComponent, MeshComponent>().each(
             [&](auto, TransformComponent& t, MeshComponent& m) {
                 glm::mat4 model = t.get_model();
-                if (render_settings.frustum_culling && m.local_aabb.valid()) {
+                if (m.local_aabb.valid()) {
                     Rendering::AABB world_aabb = Rendering::transform_aabb(m.local_aabb, model);
-                    if (!camera.is_aabb_visible(world_aabb.min, world_aabb.max))
+                    if (render_settings.draw_debug_aabbs)
+                        Rendering::DebugDraw::get().add_aabb(world_aabb.min, world_aabb.max);
+                    if (render_settings.frustum_culling && !camera.is_aabb_visible(world_aabb.min, world_aabb.max))
                         return;
                 }
                 Rendering::MeshInstance inst;

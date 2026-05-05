@@ -99,6 +99,8 @@ void ForwardRenderer::initialize(WSI* wsi, RenderingDevice* dev, RID cubemap) {
         .set_depth_stencil_state(ds_standard)
         .build(shadow_fb_format);
 
+    debug_renderer.initialize(dev);
+
     // --- UBOs ---
     frame_ubo.create(device,  "Frame UBO");
     light_ubo.create(device,  "Light UBO");
@@ -300,7 +302,7 @@ void ForwardRenderer::setup_passes(FrameGraph& fg, FrameGraphBlackboard& bb,
 
     bb.add<forward_pass_resource>() =
         fg.add_callback_pass<forward_pass_resource>(
-            "Basic Pass",
+            "Forward Pass",
             [&](FrameGraph::Builder& builder, forward_pass_resource& data)
             {
                 RD::TextureFormat tf;
@@ -347,14 +349,14 @@ void ForwardRenderer::setup_passes(FrameGraph& fg, FrameGraphBlackboard& bb,
                 data.shadow_uniform_set = builder.write(data.shadow_uniform_set, FrameGraph::kFlagsIgnored);
 
                 data.framebuffer_resource = builder.create<FrameGraphFramebuffer>(
-                    "basic framebuffer",
+                    "forward framebuffer",
                     {
                         .build = [&fg, scene_id = data.scene, depth_id = data.depth](RenderContext& rc) -> RID {
                             auto& scene_tex = fg.get_resource<FrameGraphTexture>(scene_id);
                             auto& depth_tex = fg.get_resource<FrameGraphTexture>(depth_id);
                             return rc.device->framebuffer_create({ scene_tex.texture_rid, depth_tex.texture_rid });
                         },
-                        .name = "basic framebuffer"
+                        .name = "forward framebuffer"
                     });
                 data.framebuffer_resource = builder.write(data.framebuffer_resource, FrameGraph::kFlagsIgnored);
             },
@@ -370,7 +372,7 @@ void ForwardRenderer::setup_passes(FrameGraph& fg, FrameGraphBlackboard& bb,
                 uint32_t w = rc.device->screen_get_width();
                 uint32_t h = rc.device->screen_get_height();
 
-                GPU_SCOPE(cmd, "Basic Pass", Color(1.0f, 0.0f, 0.0f, 1.0f));
+                GPU_SCOPE(cmd, "Forward Pass", Color(1.0f, 0.0f, 0.0f, 1.0f));
                 std::array<RDD::RenderPassClearValue, 2> clear_values;
                 clear_values[0].color   = Color();
                 clear_values[1].depth   = 1.0f;
@@ -386,6 +388,9 @@ void ForwardRenderer::setup_passes(FrameGraph& fg, FrameGraphBlackboard& bb,
 
                 rc.wsi->end_render_pass(cmd);
             });
+
+    auto& fwd = bb.get<forward_pass_resource>();
+    debug_renderer.add_pass(fg, bb, fwd.scene, fwd.depth, *view.camera, view.extent);
 }
 
 } // namespace Rendering

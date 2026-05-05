@@ -58,8 +58,8 @@ void DebugRenderer::initialize(RenderingDevice* dev) {
 }
 
 void DebugRenderer::add_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
-                              FrameGraphResource scene_res,
-                              FrameGraphResource depth_res,
+                              FrameGraphResource& scene_res,
+                              FrameGraphResource& depth_res,
                               const Camera& camera,
                               glm::uvec2 extent)
 {
@@ -88,10 +88,14 @@ void DebugRenderer::add_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
             data.scene = builder.write(scene_res, TEXTURE_WRITE_FLAGS::WRITE_COLOR_LOAD);
             data.depth = builder.write(depth_res, TEXTURE_WRITE_FLAGS::WRITE_DEPTH_LOAD);
 
+            // Write back versioned IDs so the caller's blackboard entry stays current.
+            scene_res = data.scene;
+            depth_res = data.depth;
+
             data.framebuffer = builder.create<FrameGraphFramebuffer>(
                 "debug framebuffer",
                 {
-                    .build = [&fg, scene_id = scene_res, depth_id = depth_res](RenderContext& rc) -> RID {
+                    .build = [&fg, scene_id = data.scene, depth_id = data.depth](RenderContext& rc) -> RID {
                         auto& scene_tex = fg.get_resource<FrameGraphTexture>(scene_id);
                         auto& depth_tex = fg.get_resource<FrameGraphTexture>(depth_id);
                         return rc.device->framebuffer_create_load(
