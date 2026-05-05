@@ -57,6 +57,7 @@ find_package(TinyGLTF REQUIRED)
 find_package(stb REQUIRED)
 find_package(imgui REQUIRED)
 find_package(EnTT REQUIRED)
+find_package(Tracy REQUIRED)
 
 
 set(INCLUDES 
@@ -85,6 +86,7 @@ set(ADDITIONAL_LIBRARY_DEPENDENCIES
 	util
 	event
 	EnTT::EnTT
+	Tracy::TracyClient
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE ${ADDITIONAL_LIBRARY_DEPENDENCIES})

@@ -13,6 +13,7 @@
 #include "SDL3/SDL_vulkan.h"
 #include "util/logger.h"
 #include "util/timer.h"
+#include "util/profiler.h"
 #include "volk.h"
 #include "input/input.h"
 #include "application_events.h"
@@ -268,7 +269,7 @@ namespace EE
 				event_manager->dispatch();
 
 				app->run_frame(frame_time, elapsed_time);
-
+				FrameMark;
 			}
 		}
 
