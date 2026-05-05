@@ -8,6 +8,7 @@
 #include <memory>
 #include "application.h"
 #include "application_entry/application_entry.h"
+#include "application_options.h"
 #include "SDL3/SDL.h"
 #include "SDL3/SDL_vulkan.h"
 #include "util/logger.h"
@@ -15,6 +16,7 @@
 #include "volk.h"
 #include "input/input.h"
 #include "application_events.h"
+#include <CLI/CLI.hpp>
 
 namespace EE
 {
@@ -66,7 +68,9 @@ namespace EE
 		int run(Application* app) override
 		{
 			_app = app;
-			ERR_FAIL_COND_V_MSG(!init(app->get_name(), app->get_default_width(), app->get_default_height()), EXIT_FAILURE, "SDL initialization failed");
+			unsigned w = options.override_width  ? options.override_width  : app->get_default_width();
+			unsigned h = options.override_height ? options.override_height : app->get_default_height();
+			ERR_FAIL_COND_V_MSG(!init(app->get_name(), w, h, options.fullscreen), EXIT_FAILURE, "SDL initialization failed");
 			auto data = create_window_data();
 			
 			ERR_FAIL_COND_V_MSG(!app->on_init(DisplayServerEnums::MAIN_WINDOW_ID, data.get()), EXIT_FAILURE, "on init failed");
@@ -88,10 +92,11 @@ namespace EE
 		}
 
 		explicit WSIPlatformSDL(const Options& options_)
+			: options(options_)
 		{
 		}
 
-		bool init(const std::string& name, unsigned width_, unsigned height_)
+		bool init(const std::string& name, unsigned width_, unsigned height_, bool fullscreen_)
 		{
 			request_tear_down.store(false);
 
@@ -116,8 +121,11 @@ namespace EE
 			if (application.name.empty())
 				application.name = "EngineEngine";
 
+			SDL_WindowFlags window_flags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_VULKAN;
+			if (fullscreen_)
+				window_flags |= SDL_WINDOW_FULLSCREEN;
 			window = SDL_CreateWindow(application.name.empty() ? "SDL Window" : application.name.c_str(),
-				int(width), int(height), SDL_WINDOW_RESIZABLE | SDL_WINDOW_VULKAN);
+				int(width), int(height), window_flags);
 			if (!window)
 			{
 				LOGE("Failed to create SDL window.\n");
@@ -284,6 +292,7 @@ namespace EE
 		}
 
 	private:
+		Options options;
 		std::shared_ptr<InputSystemInterface> input;
 		uint32_t wake_event_type = 0;
 		bool async_loop_alive = true;  // TODO:
@@ -315,7 +324,19 @@ namespace EE
 {
 	int application_main(Application* (*create_application)(int, char**), int argc, char* argv[])
 	{
-		WSIPlatformSDL::Options options;
+		AppOptions opts;
+		CLI::App cli{"EngineEngine"};
+		cli.add_option("--assets",     opts.assets_path, "Asset directory path (default: <exe>/../../../assets)");
+		cli.add_option("--width",  opts.width,  "Window width  (default: application default)");
+		cli.add_option("--height", opts.height, "Window height (default: application default)");
+		cli.add_flag  ("--fullscreen", opts.fullscreen,  "Fullscreen mode");
+		cli.add_flag  ("--no-vsync{false}", opts.vsync,  "Disable vsync");
+		CLI11_PARSE(cli, argc, argv);
+
+		WSIPlatformSDL::Options wsi_options;
+		wsi_options.override_width  = opts.width;
+		wsi_options.override_height = opts.height;
+		wsi_options.fullscreen      = opts.fullscreen;
 		int exit_code;
 
 		Locator::ServiceLocator& locator = Services::get();
@@ -328,8 +349,10 @@ namespace EE
 		locator.provide<EE::EventManager>(std::make_shared<EE::EventManager>());
 		std::shared_ptr<FilesystemInterface> fs = locator.get<FilesystemInterface>();
 		const std::string exe_path = Path::get_executable_path();
-		//FileSystem::Filesystem::setup_default_filesystem(static_cast<Filesystem*>(fs.get()), Path::join(exe_path, "../../../assets").c_str());		// 		default assets directory for now`
-		FileSystem::Filesystem::setup_default_filesystem(static_cast<Filesystem*>(fs.get()), "D:/Code/CG/EngineEngine/assets");		// 		default assets directory for now`
+		const std::string assets_dir = opts.assets_path.empty()
+			? Path::join(exe_path, "../../../assets")
+			: opts.assets_path;
+		FileSystem::Filesystem::setup_default_filesystem(static_cast<Filesystem*>(fs.get()), assets_dir.c_str());
 
 
 		//auto fs = Services::get().get<FilesystemInterface>();
@@ -341,7 +364,7 @@ namespace EE
 		if (app)
 		{
 			// creates platform 
-			auto platform = std::make_unique<WSIPlatformSDL>(options);
+			auto platform = std::make_unique<WSIPlatformSDL>(wsi_options);
 			return platform->run(app.get());
 
 		}

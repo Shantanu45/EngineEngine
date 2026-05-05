@@ -6,6 +6,8 @@
  * \date   March 2026
  *********************************************************************/
 #include "application_entry.h"
+#include <vector>
+#include <string>
 
 namespace EE
 {
@@ -25,10 +27,19 @@ int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 {
 	int argc;
 	wchar_t** wide_argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-	std::vector<char*> argv_buffer(argc + 1);
-	char** argv = nullptr;
 
-	int ret = EE::application_main(EE::application_create, argc, argv);
+	std::vector<std::string> narrow(argc);
+	std::vector<char*> argv_ptrs(argc + 1, nullptr);
+	for (int i = 0; i < argc; i++)
+	{
+		int len = WideCharToMultiByte(CP_UTF8, 0, wide_argv[i], -1, nullptr, 0, nullptr, nullptr);
+		narrow[i].resize(len);
+		WideCharToMultiByte(CP_UTF8, 0, wide_argv[i], -1, narrow[i].data(), len, nullptr, nullptr);
+		argv_ptrs[i] = narrow[i].data();
+	}
+	LocalFree(wide_argv);
+
+	int ret = EE::application_main(EE::application_create, argc, argv_ptrs.data());
 
 	return ret;
 }
