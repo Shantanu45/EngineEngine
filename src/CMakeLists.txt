@@ -29,6 +29,7 @@ add_subdirectory(deferred)
 
 setup_msvc_options(${PROJECT_NAME})
 
+find_package(Tracy CONFIG REQUIRED)
 find_package(SDL3 REQUIRED)
 find_package(VulkanMemoryAllocator REQUIRED)
 find_package(glm REQUIRED)
@@ -69,6 +70,9 @@ set(ADDITIONAL_LIBRARY_DEPENDENCIES
 	TinyGLTF::TinyGLTF
 	stb::stb
 	imgui::imgui
+	Tracy::TracyClient
 )
+
+target_compile_definitions(${PROJECT_NAME} PRIVATE TRACY_ENABLE)
 
 target_link_libraries(${PROJECT_NAME} PRIVATE "${ADDITIONAL_LIBRARY_DEPENDENCIES}")

@@ -11,6 +11,7 @@ ${HEADERS}
 setup_msvc_options(${PROJECT_NAME})
 
 find_package(xxHash REQUIRED)
+find_package(Tracy CONFIG REQUIRED)
 
 set(INCLUDES 
 	"${PROJECT_SOURCE_DIR}/src"
@@ -23,6 +24,8 @@ set(ADDITIONAL_LIBRARY_DEPENDENCIES
 	libassert::assert
 	volk::volk
 	xxHash::xxhash
+	Tracy::TracyClient
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE ${ADDITIONAL_LIBRARY_DEPENDENCIES})
+target_compile_definitions(${PROJECT_NAME} PRIVATE TRACY_ENABLE)

@@ -186,6 +186,7 @@ namespace EE
 
 		void poll_input() override
 		{
+			ZoneScopedN("poll_input");
 			if (/*!options.threaded && */!iterate_message_loop())
 				request_tear_down = true;
 		}

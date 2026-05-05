@@ -7,6 +7,7 @@
 #include "math/rect2.h"
 
 #include <glm/gtc/matrix_transform.hpp>
+#include "util/profiler.h"
 
 namespace Rendering {
 
@@ -264,6 +265,7 @@ std::vector<Drawable> ForwardRenderer::build_main_drawables(const SceneView& vie
 
 void ForwardRenderer::setup_passes(FrameGraph& fg, FrameGraphBlackboard& bb,
                                    const SceneView& view, MeshStorage& storage) {
+    ZoneScoped;
     // Upload shadow buffer first — frame UBO references shadow indices from it.
     uint32_t dir_idx = 0, pt_idx = 0;
     shadow_ubo.upload(device, build_shadow_buffer(view.lights, dir_idx, pt_idx));

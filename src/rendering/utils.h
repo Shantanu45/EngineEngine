@@ -1,9 +1,11 @@
 #pragma once
 #include <cstdint>
 #include "rendering_device.h"
+#include "util/profiler.h"
 
 #define GPU_SCOPE(cmd, name, color) \
-	auto debug_marker = Rendering::RenderingDevice::ScopedDebugMarker(Rendering::RenderingDevice::get_singleton(), cmd, name, color);
+	auto debug_marker = Rendering::RenderingDevice::ScopedDebugMarker(Rendering::RenderingDevice::get_singleton(), cmd, name, color); \
+	ZoneScopedN(name);
 
 using RD = Rendering::RenderingDevice;
 

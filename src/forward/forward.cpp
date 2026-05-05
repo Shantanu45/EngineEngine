@@ -12,6 +12,7 @@
 #include "rendering/utils.h"
 #include "input/input.h"
 #include "util/timer.h"
+#include "util/profiler.h"
 #include "forward/scene/components.h"
 #include "forward/ui_layer.h"
 #include "forward/menu_bar.h"
@@ -179,6 +180,7 @@ struct ForwardApplication : EE::Application
 
     void render_frame(double frame_time, double elapsed_time) override
     {
+        ZoneScoped;
         camera.update_from_input(input_system.get(), frame_time);
         RenderUtilities::capturing_timestamps = render_settings.show_timings;
 
@@ -200,6 +202,7 @@ struct ForwardApplication : EE::Application
         rc.command_buffer = device->get_current_command_buffer();
         rc.device         = device;
         rc.wsi            = wsi;
+        TracyPlot("Draw Calls", (int64_t)render_settings.last_draw_count);
         TIMESTAMP_BEGIN();
         fg.execute(&rc, &rc);
         RENDER_TIMESTAMP("Frame End");
@@ -216,6 +219,7 @@ struct ForwardApplication : EE::Application
 private:
     Rendering::SceneView build_scene_view(double elapsed)
     {
+        ZoneScoped;
         material_registry.upload_dirty(device);
 
         Rendering::SceneView view;
