@@ -260,6 +260,9 @@ namespace EE
 
 		void thread_main(Application* app/*, Global::GlobalManagersHandle ctx*/)
 		{
+#ifdef TRACY_ENABLE
+			tracy::SetThreadName("Main");
+#endif
 			while (alive())
 			{
 				frame_time = get_frame_timer()->frame();

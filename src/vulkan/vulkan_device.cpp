@@ -849,6 +849,13 @@ namespace Vulkan
 		return OK;
 	}
 
+	static void _vma_alloc_callback(VmaAllocator, uint32_t, VkDeviceMemory memory, VkDeviceSize size, void*) {
+		TracyAlloc(reinterpret_cast<void*>(static_cast<uintptr_t>(reinterpret_cast<uint64_t>(memory))), static_cast<size_t>(size));
+	}
+	static void _vma_free_callback(VmaAllocator, uint32_t, VkDeviceMemory memory, VkDeviceSize, void*) {
+		TracyFree(reinterpret_cast<void*>(static_cast<uintptr_t>(reinterpret_cast<uint64_t>(memory))));
+	}
+
 	Error RenderingDeviceDriverVulkan::_initialize_allocator() {
 		VmaAllocatorCreateInfo allocator_info = {};
 		allocator_info.physicalDevice = physical_device;
@@ -866,6 +873,9 @@ namespace Vulkan
 		vulkanFunctions.vkGetInstanceProcAddr = vkGetInstanceProcAddr;
 		vulkanFunctions.vkGetDeviceProcAddr = vkGetDeviceProcAddr;
 		allocator_info.pVulkanFunctions = &vulkanFunctions;
+
+		static const VmaDeviceMemoryCallbacks tracy_mem_callbacks = { _vma_alloc_callback, _vma_free_callback, nullptr };
+		allocator_info.pDeviceMemoryCallbacks = &tracy_mem_callbacks;
 
 		VkResult err = vmaCreateAllocator(&allocator_info, &allocator);
 		std::string msg = "vmaCreateAllocator failed with error " + std::to_string(err) + ".";
@@ -4965,17 +4975,20 @@ namespace Vulkan
 	void RenderingDeviceDriverVulkan::command_render_draw(CommandBufferID p_cmd_buffer, uint32_t p_vertex_count, uint32_t p_instance_count, uint32_t p_base_vertex, uint32_t p_first_instance) {
 		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
 		vkCmdDraw(command_buffer->vk_command_buffer, p_vertex_count, p_instance_count, p_base_vertex, p_first_instance);
+		frame_draw_calls++;
 	}
 
 	void RenderingDeviceDriverVulkan::command_render_draw_indexed(CommandBufferID p_cmd_buffer, uint32_t p_index_count, uint32_t p_instance_count, uint32_t p_first_index, int32_t p_vertex_offset, uint32_t p_first_instance) {
 		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
 		vkCmdDrawIndexed(command_buffer->vk_command_buffer, p_index_count, p_instance_count, p_first_index, p_vertex_offset, p_first_instance);
+		frame_draw_calls++;
 	}
 
 	void RenderingDeviceDriverVulkan::command_render_draw_indexed_indirect(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset, uint32_t p_draw_count, uint32_t p_stride) {
 		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
 		const BufferInfo* buf_info = (const BufferInfo*)p_indirect_buffer.id;
 		vkCmdDrawIndexedIndirect(command_buffer->vk_command_buffer, buf_info->vk_buffer, p_offset, p_draw_count, p_stride);
+		frame_draw_calls++;
 	}
 
 	void RenderingDeviceDriverVulkan::command_render_draw_indexed_indirect_count(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset, BufferID p_count_buffer, uint64_t p_count_buffer_offset, uint32_t p_max_draw_count, uint32_t p_stride) {
@@ -4983,12 +4996,14 @@ namespace Vulkan
 		const BufferInfo* indirect_buf_info = (const BufferInfo*)p_indirect_buffer.id;
 		const BufferInfo* count_buf_info = (const BufferInfo*)p_count_buffer.id;
 		vkCmdDrawIndexedIndirectCount(command_buffer->vk_command_buffer, indirect_buf_info->vk_buffer, p_offset, count_buf_info->vk_buffer, p_count_buffer_offset, p_max_draw_count, p_stride);
+		frame_draw_calls++;
 	}
 
 	void RenderingDeviceDriverVulkan::command_render_draw_indirect(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset, uint32_t p_draw_count, uint32_t p_stride) {
 		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
 		const BufferInfo* buf_info = (const BufferInfo*)p_indirect_buffer.id;
 		vkCmdDrawIndirect(command_buffer->vk_command_buffer, buf_info->vk_buffer, p_offset, p_draw_count, p_stride);
+		frame_draw_calls++;
 	}
 
 	void RenderingDeviceDriverVulkan::command_render_draw_indirect_count(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset, BufferID p_count_buffer, uint64_t p_count_buffer_offset, uint32_t p_max_draw_count, uint32_t p_stride) {
@@ -4996,6 +5011,7 @@ namespace Vulkan
 		const BufferInfo* indirect_buf_info = (const BufferInfo*)p_indirect_buffer.id;
 		const BufferInfo* count_buf_info = (const BufferInfo*)p_count_buffer.id;
 		vkCmdDrawIndirectCount(command_buffer->vk_command_buffer, indirect_buf_info->vk_buffer, p_offset, count_buf_info->vk_buffer, p_count_buffer_offset, p_max_draw_count, p_stride);
+		frame_draw_calls++;
 	}
 
 	void RenderingDeviceDriverVulkan::command_render_bind_vertex_buffers(CommandBufferID p_cmd_buffer, uint32_t p_binding_count, const BufferID* p_buffers, const uint64_t* p_offsets, uint64_t p_dynamic_offsets) {
@@ -5704,7 +5720,16 @@ namespace Vulkan
 	{
 #ifdef TRACY_ENABLE
 		CommandBufferInfo* command_buffer = (CommandBufferInfo*)(p_cmd_buffer.id);
-		// This collects the results from the GPU queries
+
+		TracyPlot("Draw Calls", (int64_t)frame_draw_calls);
+		frame_draw_calls = 0;
+
+		VmaBudget budgets[VK_MAX_MEMORY_HEAPS] = {};
+		vmaGetHeapBudgets(allocator, budgets);
+		VkDeviceSize gpu_used = 0;
+		for (const VmaBudget& b : budgets) gpu_used += b.usage;
+		TracyPlot("GPU Memory MB", (double)gpu_used / (1024.0 * 1024.0));
+
 		TracyVkCollect(tracy_vk_contexts[0], command_buffer->vk_command_buffer);
 #endif
 	}

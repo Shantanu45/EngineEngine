@@ -650,6 +650,7 @@ namespace Vulkan
 
 		MultiviewCapabilities multiview_capabilities;
 		std::vector<TracyVkCtx> tracy_vk_contexts;
+		uint32_t frame_draw_calls = 0;
 
 
 		friend class ImGuiDevice;
