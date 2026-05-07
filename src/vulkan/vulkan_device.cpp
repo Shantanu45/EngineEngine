@@ -853,10 +853,10 @@ namespace Vulkan
 	}
 
 	static void _vma_alloc_callback(VmaAllocator, uint32_t, VkDeviceMemory memory, VkDeviceSize size, void*) {
-		TracyAllocNS(reinterpret_cast<void*>(static_cast<uintptr_t>(reinterpret_cast<uint64_t>(memory))), static_cast<size_t>(size), 8, "GPU/VMA");
+		TracyAllocNS(reinterpret_cast<void*>(static_cast<uintptr_t>(reinterpret_cast<uint64_t>(memory))), static_cast<size_t>(size), 12, "GPU/VMA");
 	}
 	static void _vma_free_callback(VmaAllocator, uint32_t, VkDeviceMemory memory, VkDeviceSize, void*) {
-		TracyFreeNS(reinterpret_cast<void*>(static_cast<uintptr_t>(reinterpret_cast<uint64_t>(memory))), 8, "GPU/VMA");
+		TracyFreeNS(reinterpret_cast<void*>(static_cast<uintptr_t>(reinterpret_cast<uint64_t>(memory))), 12, "GPU/VMA");
 	}
 
 	Error RenderingDeviceDriverVulkan::_initialize_allocator() {

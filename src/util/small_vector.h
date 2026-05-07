@@ -206,7 +206,7 @@ public:
 			// Pilfer allocated pointer.
 			if (this->ptr != stack_storage.data())
 			{
-				TracyFreeN(this->ptr, "SmallVector");
+				TracyFreeNS(this->ptr, 12, "SmallVector");
 				free(this->ptr);
 			}
 			this->ptr = other.ptr;
@@ -258,7 +258,7 @@ public:
 		clear();
 		if (this->ptr != stack_storage.data())
 		{
-			TracyFreeN(this->ptr, "SmallVector");
+			TracyFreeNS(this->ptr, 12, "SmallVector");
 			free(this->ptr);
 		}
 	}
@@ -320,7 +320,7 @@ public:
 				std::terminate();
 
 			if (new_buffer != stack_storage.data())
-				TracyAllocN(new_buffer, target_capacity * sizeof(T), "SmallVector");
+				TracyAllocNS(new_buffer, target_capacity * sizeof(T), 12, "SmallVector");
 
 			// In case for some reason two allocations both come from same stack.
 			if (new_buffer != this->ptr)
@@ -335,7 +335,7 @@ public:
 
 			if (this->ptr != stack_storage.data())
 			{
-				TracyFreeN(this->ptr, "SmallVector");
+				TracyFreeNS(this->ptr, 12, "SmallVector");
 				free(this->ptr);
 			}
 			this->ptr = new_buffer;
@@ -373,7 +373,7 @@ public:
 					std::terminate();
 
 				if (new_buffer != stack_storage.data())
-					TracyAllocN(new_buffer, target_capacity * sizeof(T), "SmallVector");
+					TracyAllocNS(new_buffer, target_capacity * sizeof(T), 12, "SmallVector");
 
 				// First, move elements from source buffer to new buffer.
 				// We don't deal with types which can throw in move constructor.
@@ -409,7 +409,7 @@ public:
 
 				if (this->ptr != stack_storage.data())
 				{
-					TracyFreeN(this->ptr, "SmallVector");
+					TracyFreeNS(this->ptr, 12, "SmallVector");
 					free(this->ptr);
 				}
 				this->ptr = new_buffer;
