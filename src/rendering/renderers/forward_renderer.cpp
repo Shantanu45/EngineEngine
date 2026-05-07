@@ -111,10 +111,13 @@ void ForwardRenderer::initialize(WSI* wsi, RenderingDevice* dev, RID cubemap) {
     // --- Samplers ---
     {
         RDC::SamplerState ss;
-        ss.mag_filter = RDC::SAMPLER_FILTER_LINEAR;
-        ss.min_filter = RDC::SAMPLER_FILTER_LINEAR;
-        ss.repeat_u   = RDC::SAMPLER_REPEAT_MODE_REPEAT;
-        ss.repeat_v   = RDC::SAMPLER_REPEAT_MODE_REPEAT;
+        ss.mag_filter     = RDC::SAMPLER_FILTER_LINEAR;
+        ss.min_filter     = RDC::SAMPLER_FILTER_LINEAR;
+        ss.mip_filter     = RDC::SAMPLER_FILTER_LINEAR; // trilinear
+        ss.repeat_u       = RDC::SAMPLER_REPEAT_MODE_REPEAT;
+        ss.repeat_v       = RDC::SAMPLER_REPEAT_MODE_REPEAT;
+        ss.use_anisotropy = true;
+        ss.anisotropy_max = 16.0f;
         sampler = RIDHandle(device->sampler_create(ss));
     }
     sampler_cube         = RIDHandle(device->sampler_create({}));
