@@ -39,8 +39,8 @@ struct DebugStatsPanel : IUIPanel {
         bool timings = ctx.settings && ctx.settings->show_timings && ctx.wsi;
 
         ImGui::Text("FPS: %.1f  (avg %.1f)", timer->get_fps(), timer->get_fps_avg());
-        if (ctx.settings)
-            ImGui::Text("Draw calls: %d", ctx.settings->last_draw_count);
+        if (ctx.stats)
+            ImGui::Text("Draw calls: %d", ctx.stats->draw_count);
 
         ImGui::Separator();
 

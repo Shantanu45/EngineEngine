@@ -1,41 +1,46 @@
 // scene/components.h
 #pragma once
-#include <optional>
+#include "entt/entt.hpp"
 #include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-#include "rendering/mesh_storage.h"
-#include "rendering/rendering_device.h"
+#include "rendering/render_asset_registry.h"
 #include "rendering/light.h"
-#include "rendering/material.h"
 #include "rendering/mesh_category.h"
 #include "rendering/aabb.h"
 #include "util/small_vector.h"
 
-struct TransformComponent {
+struct LocalTransform {
 	glm::vec3 position = glm::vec3(0.0f);
-	glm::vec3 rotation = glm::vec3(0.0f); // euler angles in degrees
+	glm::quat rotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
 	glm::vec3 scale    = glm::vec3(1.0f);
-	std::optional<glm::mat4> matrix_override; // set when loading from GLTF node hierarchy
 
-	glm::mat4 get_model() const {
-		if (matrix_override) return *matrix_override;
-		glm::mat4 m = glm::mat4(1.0f);
-		m = glm::translate(m, position);
-		m = glm::rotate(m, glm::radians(rotation.x), glm::vec3(1, 0, 0));
-		m = glm::rotate(m, glm::radians(rotation.y), glm::vec3(0, 1, 0));
-		m = glm::rotate(m, glm::radians(rotation.z), glm::vec3(0, 0, 1));
-		m = glm::scale(m, scale);
-		return m;
-	}
-
-	glm::mat4 get_normal_matrix() const {
-		return glm::transpose(glm::inverse(get_model()));
+	glm::mat4 get_matrix() const {
+		return glm::translate(glm::mat4(1.0f), position)
+			* glm::mat4_cast(rotation)
+			* glm::scale(glm::mat4(1.0f), scale);
 	}
 };
 
+struct WorldTransform {
+	glm::mat4 matrix = glm::mat4(1.0f);
+
+	glm::mat4 get_normal_matrix() const {
+		return glm::transpose(glm::inverse(matrix));
+	}
+};
+
+struct Parent {
+	entt::entity entity = entt::null;
+};
+
+struct Children {
+	Util::SmallVector<entt::entity> entities;
+};
+
 struct MeshComponent {
-	Rendering::MeshHandle                  mesh;
-	Util::SmallVector<Rendering::MaterialHandle> materials;
+	Rendering::MeshAssetHandle             mesh;
+	Util::SmallVector<Rendering::MaterialAssetHandle> materials;
 	Rendering::MeshCategory                category   = Rendering::MeshCategory::Opaque;
 	Rendering::AABB                        local_aabb;  // local-space; invalid by default (valid() == false)
 };

@@ -75,7 +75,9 @@ struct DeferredApp : EE::Application
 		ImGui::Text("Frame Time: %.3f ms", timer->get_frame_time() * 1000.0);
 
 		Rendering::SceneView view;
-		view.camera    = &camera;
+		view.camera.view = camera.get_view();
+		view.camera.proj = camera.get_projection();
+		view.camera.cameraPos = camera.get_position();
 		view.elapsed   = elapsed_time;
 		view.extent    = { device->screen_get_width(), device->screen_get_height() };
 		view.instances = build_main_instances();

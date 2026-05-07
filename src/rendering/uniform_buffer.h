@@ -52,10 +52,10 @@ namespace Rendering
 		// Uniform binding helpers
 		// -------------------------------------------------------
 
-		// Returns a pre-filled RD::Uniform ready to pass to uniform_set_create
-		RD::Uniform as_uniform(uint32_t binding) const {
-			RD::Uniform u;
-			u.uniform_type = RDC::UNIFORM_TYPE_UNIFORM_BUFFER;
+		// Returns a pre-filled uniform ready to pass to uniform_set_create.
+		RenderingDevice::Uniform as_uniform(uint32_t binding) const {
+			RenderingDevice::Uniform u;
+			u.uniform_type = RenderingDeviceCommons::UNIFORM_TYPE_UNIFORM_BUFFER;
 			u.binding = binding;
 			u.append_id(rid);
 			return u;

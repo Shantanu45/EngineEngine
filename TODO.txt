@@ -1,0 +1,199 @@
+Engine Architecture TODOs
+=========================
+
+Current Direction
+-----------------
+Keep refactors incremental. Do not introduce large engine-level abstractions
+until the data boundaries are clean enough to justify them.
+
+Preferred design direction:
+- Keep forward-specific composition in `src/forward` until it is genuinely
+  reusable.
+- Keep ECS scene data renderer-neutral where possible.
+- Prefer thin facades/registries over a full asset database for now.
+- Resolve asset handles into GPU handles during render extraction.
+- Let renderer-facing systems own frame graph pass ordering and execution.
+
+
+Done
+----
+- `forward.cpp` is now a thin application bridge.
+- Forward setup moved into `ForwardRuntime`.
+- High-level sample choices are back in `forward.cpp`:
+  - scene path
+  - scene name prefix
+  - skybox faces
+- Sponza loading was moved out of `forward.cpp`.
+- `GltfSceneImporter` handles GLTF image/material/primitive upload.
+- Forward scene setup instantiates GLTF nodes/entities.
+- GLTF import no longer bakes or exposes world transforms.
+- Forward scene uses explicit transform hierarchy:
+  - `LocalTransform`
+  - `WorldTransform`
+  - `Parent`
+  - `Children`
+- `TransformComponent::matrix_override` and forward fallback transform path were
+  removed.
+- `RenderSceneExtractor` extracts render instances/lights/stats from ECS.
+- `SceneView` no longer stores mutable camera/settings pointers.
+- Render stats are separate from render settings.
+- `RenderResourceStore` owns:
+  - texture cache
+  - material registry
+  - mesh storage
+  - default white texture
+  - render asset registry
+- Forward ECS `MeshComponent` stores asset handles instead of renderer handles:
+  - `MeshAssetHandle`
+  - `MaterialAssetHandle`
+- `RenderSceneExtractor` resolves asset handles to renderer handles.
+- `ForwardRenderPipeline` owns forward frame graph scheduling, compilation, and
+  execution.
+- Default forward UI panel registration moved into `forward_ui_setup`.
+
+
+Recommended Next Tasks
+----------------------
+
+1. Harden the Transform System
+------------------------------
+Current transform system works, but is intentionally simple.
+
+Tasks:
+- Add cycle protection or debug assertions for invalid parent graphs.
+- Handle orphaned children / destroyed parent entities safely.
+- Decide whether brute-force full hierarchy update is acceptable for now.
+- If needed later, add dirty propagation.
+- Consider moving transform components/system out of `forward` once another
+  target needs them.
+
+
+2. Improve Scene Loading Boundary
+---------------------------------
+`load_forward_gltf_scene()` is still forward-specific, which is acceptable for
+now, but the boundary can be cleaner.
+
+Tasks:
+- Rename/shape it as a scene instantiation function, not a loader, if the name
+  starts to become misleading.
+- Keep GLTF parsing/import in `rendering`.
+- Keep forward ECS creation in `forward`.
+- Avoid adding a full `SceneManager` until there is more than one scene workflow.
+
+Potential shape:
+```
+ForwardSceneHandle instantiate_gltf_scene(const ForwardGltfSceneRequest& request);
+```
+
+
+3. Reduce RenderResourceStore Gaps
+----------------------------------
+Resource ownership is better, but still not complete.
+
+Tasks:
+- Consider moving skybox cubemap ownership into `RenderResourceStore` or a small
+  environment/skybox resource helper.
+- Decide whether primitive helper meshes should be registered as named assets
+  in `RenderAssetRegistry`.
+- Add clearer ownership comments around resources that intentionally remain in
+  `ForwardRuntime`.
+- Keep `RenderAssetRegistry` thin for now; do not build async loading,
+  dependency graphs, hot reload, or serialization yet.
+
+
+4. Make ForwardRuntime More Configurable
+----------------------------------------
+`ForwardRuntime` now accepts scene/skybox configuration, but still owns default
+camera, default lights, and default UI choices.
+
+Tasks:
+- Move default camera settings into `ForwardRuntimeConfig`.
+- Move default light setup behind a config flag or explicit setup call.
+- Move default UI setup behind a config flag or explicit setup call.
+- Keep `forward.cpp` responsible for high-level sample choices only.
+
+Possible shape:
+```
+ForwardRuntimeConfig config;
+config.scene_path = "...";
+config.skybox_faces = ...;
+config.enable_default_lights = true;
+config.enable_default_ui = true;
+config.camera = ForwardCameraConfig{ ... };
+```
+
+
+5. Continue Scene Data Decoupling
+---------------------------------
+Mesh/material handles are now asset handles, but other scene data can still be
+cleaned up.
+
+Tasks:
+- Audit forward ECS components for renderer-specific concepts.
+- Decide whether `Rendering::MeshCategory` belongs in scene data or extraction
+  input.
+- Decide whether `Light` should remain the renderer-facing light struct or be
+  split into scene light data plus renderer conversion.
+- Keep changes incremental; do not split all scene/render types at once.
+
+
+6. Move UI Toward Modules
+-------------------------
+Panel registration is cleaner, but UI is still forward/editor mixed.
+
+Tasks:
+- Split debug panels from forward sample panels if more panels are added.
+- Add registration helpers per module:
+  - frame stats
+  - renderer timings
+  - scene controls
+  - material inspection
+- Keep `UILayer` as an engine/editor facility.
+
+
+7. Render Pipeline API Cleanup
+------------------------------
+`ForwardRenderPipeline` owns frame graph execution now.
+
+Tasks:
+- Decide whether ImGui should always be part of the pipeline or passed as
+  optional UI draw input later.
+- Add a small render result if useful:
+```
+Rendering::RenderStats render_pipeline.render(view, resources.meshes());
+```
+- Avoid returning renderer stats through mutable settings.
+- Keep deferred/shader playground paths unchanged until they need the same
+  abstraction.
+
+
+8. Target Separation Later
+--------------------------
+Do not split targets yet unless the current boundaries become painful.
+
+Eventual target direction:
+- EngineRuntime:
+  app loop, services, input, filesystem, events, ECS runtime
+- EngineRendererVulkan:
+  Vulkan backend, WSI, render graph, GPU resources
+- EngineRenderFeatures:
+  forward renderer, debug renderer, shadows, skybox
+- SandboxForward:
+  Sponza/default forward sample configuration
+- Editor:
+  ImGui tools, scene inspection, asset browser, debug panels
+
+Prerequisites before target split:
+- Scene components mostly renderer-neutral.
+- Asset handles established.
+- Transform system stable.
+- UI/debug modules separated.
+
+
+Suggested Order For Tomorrow
+----------------------------
+1. Make `ForwardRuntimeConfig` own default camera/light/UI choices.
+2. Harden transform hierarchy edge cases.
+3. Review whether skybox cubemap should move into `RenderResourceStore`.
+4. Audit `LightComponent` and `MeshCategory` for renderer coupling.
+5. Build and fix compile/runtime issues from the recent refactors.

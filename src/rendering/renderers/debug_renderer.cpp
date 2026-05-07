@@ -60,7 +60,7 @@ void DebugRenderer::initialize(RenderingDevice* dev) {
 void DebugRenderer::add_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
                               FrameGraphResource& scene_res,
                               FrameGraphResource& depth_res,
-                              const Camera& camera,
+                              const CameraData& camera,
                               glm::uvec2 extent)
 {
     auto& dd = DebugDraw::get();
@@ -74,7 +74,7 @@ void DebugRenderer::add_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
         vert_count * sizeof(DebugVertex), verts.data());
     dd.clear();
 
-    glm::mat4 vp = camera.get_projection() * camera.get_view();
+    glm::mat4 vp = camera.proj * camera.view;
 
     struct DebugPassData {
         FrameGraphResource scene;

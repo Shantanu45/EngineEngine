@@ -8,6 +8,4 @@ struct RenderSettings {
     bool show_timings       = false;
     bool show_timing_graphs = false;
     bool draw_debug_aabbs = false;
-
-    int last_draw_count  = 0;  // updated each frame by scene builder
 };

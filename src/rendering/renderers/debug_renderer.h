@@ -4,7 +4,7 @@
 #include "rendering/pipeline_builder.h"
 #include "rendering/rid_handle.h"
 #include "rendering/debug_draw.h"
-#include "rendering/camera.h"
+#include "rendering/frame_data.h"
 #include "rendering/render_passes/common.h"
 #include "rendering/render_passes/framegraph_resources.h"
 #include "rendering/fg/frame_graph.h"
@@ -22,7 +22,7 @@ class RenderingDevice;
 //
 // Usage per frame:
 //   1. Fill DebugDraw singleton with geometry.
-//   2. Call add_pass(fg, bb, scene_res, depth_res, camera, extent)
+//   2. Call add_pass(fg, bb, scene_res, depth_res, camera_data, extent)
 //      after the scene pass has been scheduled in the frame graph.
 class DebugRenderer {
 public:
@@ -35,7 +35,7 @@ public:
     void add_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
                   FrameGraphResource& scene_res,
                   FrameGraphResource& depth_res,
-                  const Camera& camera,
+                  const CameraData& camera,
                   glm::uvec2 extent);
 
 private:

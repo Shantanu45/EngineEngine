@@ -21,9 +21,7 @@ namespace Rendering
 		// Upload per-frame UBOs
 		{
 			FrameData_UBO frame{};
-			frame.camera.view      = view.camera->get_view();
-			frame.camera.proj      = view.camera->get_projection();
-			frame.camera.cameraPos = view.camera->get_position();
+			frame.camera                  = view.camera;
 			frame.time                     = static_cast<float>(view.elapsed);
 			frame.directional_shadow_index = 0;
 			frame.point_shadow_index       = 0;

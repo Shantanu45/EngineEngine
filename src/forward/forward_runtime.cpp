@@ -1,0 +1,128 @@
+#include "forward/forward_runtime.h"
+
+#include "forward/forward_scene_setup.h"
+#include "forward/forward_ui_setup.h"
+#include "forward/scene/transform_system.h"
+#include "rendering/primitve_shapes.h"
+#include "rendering/skybox.h"
+#include "rendering/utils.h"
+#include "util/profiler.h"
+
+#include <array>
+#include <cstdint>
+#include <string>
+
+bool ForwardRuntime::initialize(const ForwardRuntimeConfig& config)
+{
+	wsi = config.wsi;
+	device = wsi->get_rendering_device();
+	input_system = config.input_system;
+
+	RenderUtilities::capturing_timestamps = false;
+
+	configure_camera();
+	configure_wsi();
+	create_default_resources(config.filesystem, config.skybox_faces);
+	load_scene(config.filesystem, config.scene_path, config.scene_name_prefix);
+	register_default_ui();
+
+	wsi->submit_transfer_workers();
+	return wsi->pre_frame_loop();
+}
+
+void ForwardRuntime::render_frame(double frame_time, double elapsed_time)
+{
+	ZoneScoped;
+	camera.update_from_input(input_system.get(), frame_time);
+	update_world_transforms(world);
+	RenderUtilities::capturing_timestamps = render_settings.show_timings;
+
+	device->imgui_begin_frame();
+	ui_layer.draw_frame(ui_ctx);
+
+	RenderSceneExtractResult extracted_scene = scene_extractor.extract(RenderSceneExtractInput{
+		.world             = world,
+		.camera            = camera,
+		.settings          = render_settings,
+		.asset_registry    = resources.assets(),
+		.material_registry = resources.materials(),
+		.device            = device,
+		.skybox_mesh       = skybox_mesh,
+		.grid_mesh         = grid_mesh,
+		.extent            = { device->screen_get_width(), device->screen_get_height() },
+		.elapsed           = elapsed_time,
+	});
+	render_stats = extracted_scene.stats;
+	const Rendering::SceneView& view = extracted_scene.view;
+
+	TracyPlot("Draw Calls", (int64_t)render_stats.draw_count);
+	render_pipeline.render(view, resources.meshes());
+}
+
+void ForwardRuntime::shutdown()
+{
+	resources.shutdown();
+}
+
+void ForwardRuntime::configure_camera()
+{
+	camera.set_perspective(60.0f, 16.0f / 9.0f, 0.1f, 1000.0f);
+	camera.set_reset_on_resize();
+	camera.set_mode(CameraMode::Fly);
+}
+
+void ForwardRuntime::configure_wsi()
+{
+	using VertexDataMode = Rendering::WSI::VERTEX_DATA_MODE;
+	wsi->set_vertex_data_mode(static_cast<VertexDataMode>(0));
+	wsi->set_index_buffer_format(Rendering::RenderingDeviceCommons::INDEX_BUFFER_FORMAT_UINT32);
+	wsi->create_new_vertex_format(
+		wsi->get_default_vertex_attribute(),
+		Rendering::VERTEX_FORMAT_VARIATIONS::DEFAULT);
+}
+
+void ForwardRuntime::create_default_resources(FileSystem::Filesystem& filesystem, const std::array<std::string, 6>& skybox_faces)
+{
+	resources.initialize(device, filesystem);
+
+	grid_mesh        = Rendering::Shapes::upload_grid(*wsi, resources.meshes(), 10, 1, "object_grid");
+	skybox_mesh      = Rendering::Shapes::upload_cube(*wsi, resources.meshes(), "skybox_cube");
+	light_mesh       = Rendering::Shapes::upload_cube(*wsi, resources.meshes(), "light_cube");
+	point_light_mesh = Rendering::Shapes::upload_cube(*wsi, resources.meshes(), "point_light_cube");
+
+	cubemap_uniform = Rendering::load_skybox_cubemap(device, filesystem, skybox_faces);
+
+	render_pipeline.initialize(wsi, device, cubemap_uniform.get());
+}
+
+void ForwardRuntime::load_scene(FileSystem::Filesystem& filesystem, const std::string& path, const std::string& name_prefix)
+{
+	auto vfmt = wsi->get_vertex_format_by_type(Rendering::VERTEX_FORMAT_VARIATIONS::DEFAULT);
+	load_forward_gltf_scene(ForwardGltfSceneRequest{
+		.world             = world,
+		.filesystem        = filesystem,
+		.device            = device,
+		.resources         = resources,
+		.fallback_texture  = resources.default_white_texture(),
+		.shader_rid        = render_pipeline.color_pipeline().shader_rid,
+		.vertex_format     = vfmt,
+		.path              = path,
+		.name_prefix       = name_prefix,
+	});
+
+	add_default_forward_lights(world, ForwardDemoLightMeshes{
+		.directional = resources.assets().register_mesh(light_mesh),
+		.point       = resources.assets().register_mesh(point_light_mesh),
+	});
+}
+
+void ForwardRuntime::register_default_ui()
+{
+	ui_ctx.camera   = &camera;
+	ui_ctx.world    = &world;
+	ui_ctx.wsi      = wsi;
+	ui_ctx.settings = &render_settings;
+	ui_ctx.stats    = &render_stats;
+
+	register_default_forward_panels(ui_layer);
+}

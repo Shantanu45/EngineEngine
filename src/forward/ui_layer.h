@@ -5,6 +5,7 @@
 
 #include "rendering/camera.h"
 #include "rendering/render_settings.h"
+#include "rendering/render_stats.h"
 #include "rendering/wsi.h"
 #include "entt/entt.hpp"
 #include "util/small_vector.h"
@@ -15,6 +16,7 @@ struct UIContext {
     Rendering::WSI*   wsi        = nullptr;
     bool              show_stats = true;
     RenderSettings*   settings   = nullptr;
+    Rendering::RenderStats* stats = nullptr;
 };
 
 struct IUIPanel {

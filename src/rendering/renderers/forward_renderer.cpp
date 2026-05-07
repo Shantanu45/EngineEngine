@@ -277,9 +277,7 @@ void ForwardRenderer::setup_passes(FrameGraph& fg, FrameGraphBlackboard& bb,
     // Upload frame UBO
     {
         FrameData_UBO frame{};
-        frame.camera.view              = view.camera->get_view();
-        frame.camera.proj              = view.camera->get_projection();
-        frame.camera.cameraPos         = view.camera->get_position();
+        frame.camera                   = view.camera;
         frame.time                     = static_cast<float>(view.elapsed);
         frame.directional_shadow_index = dir_idx;
         frame.point_shadow_index       = pt_idx;
@@ -396,7 +394,7 @@ void ForwardRenderer::setup_passes(FrameGraph& fg, FrameGraphBlackboard& bb,
             });
 
     auto& fwd = bb.get<forward_pass_resource>();
-    debug_renderer.add_pass(fg, bb, fwd.scene, fwd.depth, *view.camera, view.extent);
+    debug_renderer.add_pass(fg, bb, fwd.scene, fwd.depth, view.camera, view.extent);
 }
 
 } // namespace Rendering

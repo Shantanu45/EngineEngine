@@ -3,9 +3,8 @@
 #include "rendering/render_passes/framegraph_resources.h"
 #include "rendering/mesh_storage.h"
 #include "rendering/light.h"
-#include "rendering/camera.h"
+#include "rendering/frame_data.h"
 #include "rendering/mesh_category.h"
-#include "rendering/render_settings.h"
 #include "math/math_common.h"
 
 #include <glm/glm.hpp>
@@ -23,14 +22,13 @@ struct MeshInstance {
 };
 
 struct SceneView {
-    Camera*                   camera      = nullptr;
-    RenderSettings*           settings    = nullptr;
+    CameraData                camera;
     double                    elapsed     = 0.0;
-    MeshHandle                skybox_mesh;
-    MeshHandle                grid_mesh;
+    MeshHandle                skybox_mesh = INVALID_MESH;
+    MeshHandle                grid_mesh   = INVALID_MESH;
     Util::SmallVector<MeshInstance> instances;
     Util::SmallVector<Light>        lights;
-    Size2i                    extent;
+    Size2i                    extent{};
 };
 
 struct IRenderer {
