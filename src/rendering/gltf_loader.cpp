@@ -175,7 +175,7 @@ namespace Rendering
 		out.width = img.width;
 		out.height = img.height;
 		out.channels = img.component;
-		out.pixels = Util::SmallVector<uint8_t>(img.image.data(), img.image.data() + img.image.size());
+		out.pixels = std::move(Util::SmallVector<uint8_t>(img.image.data(), img.image.data() + img.image.size()));
 		return out;
 	}
 
