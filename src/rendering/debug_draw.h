@@ -1,6 +1,7 @@
 #pragma once
 #include <vector>
 #include <glm/glm.hpp>
+#include "util/small_vector.h"
 
 namespace Rendering {
 
@@ -35,13 +36,13 @@ public:
         l({mn.x,mx.y,mx.z}, {mx.x,mx.y,mx.z});
     }
 
-    const std::vector<DebugVertex>& vertices() const { return verts; }
+    const Util::SmallVector<DebugVertex>& vertices() const { return verts; }
     void     clear()                                  { verts.clear(); }
     bool     empty()                            const { return verts.empty(); }
 
 private:
     DebugDraw() = default;
-    std::vector<DebugVertex> verts;
+    Util::SmallVector<DebugVertex> verts;
 };
 
 } // namespace Rendering

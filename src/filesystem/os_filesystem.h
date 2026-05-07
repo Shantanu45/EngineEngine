@@ -1,6 +1,7 @@
 #pragma once
 #include "filesystem.h"
 #include <unordered_map>
+#include "util/small_vector.h"
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
@@ -32,7 +33,7 @@ namespace FileSystem
 	public:
 		OSFilesystem(const std::string& base);
 		~OSFilesystem();
-		std::vector<ListEntry> list(const std::string& path) override;
+		Util::SmallVector<ListEntry> list(const std::string& path) override;
 		std::unique_ptr<File> open(const std::string& path, FileMode mode) override;
 		bool stat(const std::string& path, FileStat& stat) override;
 		FileNotifyHandle install_notification(const std::string& path, std::function<void(const FileNotifyInfo&)> func) override;

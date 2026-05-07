@@ -7,6 +7,7 @@
  *********************************************************************/
 #include "shader_container.h"
 #include "spirv_reflect.h"
+#include "util/small_vector.h"
 
 namespace Vulkan
 {
@@ -22,7 +23,7 @@ namespace Vulkan
 
 	bool RenderingShaderContainerVulkan::_set_code_from_spirv(const ReflectShader& p_shader)
 	{
-		const std::vector<ReflectShaderStage>& p_spirv = p_shader.shader_stages;
+		const Util::SmallVector<ReflectShaderStage>& p_spirv = p_shader.shader_stages;
 
 		PackedByteArray code_bytes;
 		shaders.resize(p_spirv.size());

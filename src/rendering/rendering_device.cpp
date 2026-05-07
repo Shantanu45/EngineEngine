@@ -13,6 +13,7 @@
  //TODO: add abstraction for imgui
 #include "vulkan/imgui_vulkan_device.h"
 #include "util/timer.h"
+#include "util/small_vector.h"
 #include "cache.h"
 
 
@@ -474,7 +475,7 @@ namespace Rendering
 
 #pragma region Shader
 
-	RID RenderingDevice::create_program(const std::string& p_shader_name, const std::vector<std::string> programs)
+	RID RenderingDevice::create_program(const std::string& p_shader_name, const Util::SmallVector<std::string> programs)
 	{
 		auto hash = hash_xxhash_strings_32(programs);
 		if (shader_cache.contains(hash))
@@ -510,7 +511,7 @@ namespace Rendering
 			std::string source = p_source->get_stage_source(stage);
 
 			if (!source.empty()) {
-				std::vector<uint8_t> spirv = shader_compile_spirv_from_source_file(stage, source, p_source->get_language(), &error, p_allow_cache);
+				Util::SmallVector<uint8_t> spirv = shader_compile_spirv_from_source_file(stage, source, p_source->get_language(), &error, p_allow_cache);
 				bytecode->set_stage_bytecode(stage, spirv);
 				bytecode->set_stage_compile_error(stage, error);
 			}
@@ -522,7 +523,7 @@ namespace Rendering
 	{
 		ERR_FAIL_COND_V(p_spirv == nullptr, RID());
 
-		std::vector<ShaderStageSPIRVData> stage_data;
+		Util::SmallVector<ShaderStageSPIRVData> stage_data;
 		for (int i = 0; i < RenderingDeviceCommons::SHADER_STAGE_MAX; i++) {
 			ShaderStage stage = ShaderStage(i);
 			ShaderStageSPIRVData sd;
@@ -538,16 +539,16 @@ namespace Rendering
 
 		const RenderingShaderContainerFormat& container_format = driver->get_shader_container_format();
 		RenderingShaderContainer* shader_container = container_format.create_container();
-		//ERR_FAIL_COND_V(shader_container == nullptr, std::vector<uint8_t>());
+		//ERR_FAIL_COND_V(shader_container == nullptr, Util::SmallVector<uint8_t>());
 		bool code_compiled = shader_container->set_code_from_spirv(p_shader_name, stage_data);
-		//ERR_FAIL_COND_V_MSG(!code_compiled, std::vector<uint8_t>(), std::format("Failed to compile code to native for SPIR-V."));
-		std::vector<PipelineImmutableSampler> immutable_samplers;
+		//ERR_FAIL_COND_V_MSG(!code_compiled, Util::SmallVector<uint8_t>(), std::format("Failed to compile code to native for SPIR-V."));
+		Util::SmallVector<PipelineImmutableSampler> immutable_samplers;
 		auto id = shader_create_from_container_with_samplers(shader_container, RID(), immutable_samplers);
 		shader_name_rid_map[p_shader_name] = id;
 		return id;//_shader_create_from_spirv(stage_data);
 	}
 
-	std::vector<uint8_t> RenderingDevice::shader_compile_spirv_from_source_file(ShaderStage p_stage, const std::string& p_source_code_file, ShaderLanguage p_language /*= SHADER_LANGUAGE_GLSL*/, std::string* r_error /*= nullptr*/, bool p_allow_cache /*= true*/)
+	Util::SmallVector<uint8_t> RenderingDevice::shader_compile_spirv_from_source_file(ShaderStage p_stage, const std::string& p_source_code_file, ShaderLanguage p_language /*= SHADER_LANGUAGE_GLSL*/, std::string* r_error /*= nullptr*/, bool p_allow_cache /*= true*/)
 	{
 		switch (p_language) {
 			//#ifdef MODULE_GLSLANG_ENABLED
@@ -556,18 +557,18 @@ namespace Rendering
 			//ShaderSpirvVersion spirv_version = driver->get_shader_container_format().get_shader_spirv_version();
 			compiler->set_source_from_file(p_source_code_file, compiler_stage_from_shader_stage(p_stage));
 			compiler->preprocess();
-			std::vector<uint32_t> spirv_compiled = compiler->compile(*r_error, {});
-			std::vector<uint8_t> bytes_spirv(spirv_compiled.size() * sizeof(uint32_t));
+			Util::SmallVector<uint32_t> spirv_compiled = compiler->compile(*r_error, {});
+			Util::SmallVector<uint8_t> bytes_spirv(spirv_compiled.size() * sizeof(uint32_t));
 			std::memcpy(bytes_spirv.data(), spirv_compiled.data(), bytes_spirv.size());
 			return bytes_spirv;
 		}
 												 //#endif
 		default:
-			ERR_FAIL_V_MSG(std::vector<uint8_t>(), "Shader language is not supported.");
+			ERR_FAIL_V_MSG(Util::SmallVector<uint8_t>(), "Shader language is not supported.");
 		}
 	}
 
-	RID RenderingDevice::shader_create_from_container_with_samplers(RenderingShaderContainer* shader_container, RID p_placeholder, const std::vector<PipelineImmutableSampler>& p_immutable_samplers)
+	RID RenderingDevice::shader_create_from_container_with_samplers(RenderingShaderContainer* shader_container, RID p_placeholder, const Util::SmallVector<PipelineImmutableSampler>& p_immutable_samplers)
 	{
 		//RenderingShaderContainer* shader_container = driver->get_shader_container_format().create_container();
 		ERR_FAIL_COND_V(shader_container == nullptr, RID());
@@ -575,7 +576,7 @@ namespace Rendering
 		//bool parsed_container = shader_container->from_shader_stage_spirv_data(p_shader);
 		//ERR_FAIL_COND_V_MSG(!parsed_container, RID(), "Failed to parse shader container from binary.");
 
-		std::vector<RDD::ImmutableSampler> driver_immutable_samplers;
+		Util::SmallVector<RDD::ImmutableSampler> driver_immutable_samplers;
 		for (const PipelineImmutableSampler& source_sampler : p_immutable_samplers) {
 			RDD::ImmutableSampler driver_sampler;
 			driver_sampler.type = source_sampler.uniform_type;
@@ -680,7 +681,7 @@ namespace Rendering
 		const PipelineRasterizationState& p_rasterization_state, const PipelineMultisampleState& p_multisample_state, 
 		const PipelineDepthStencilState& p_depth_stencil_state, const PipelineColorBlendState& p_blend_state, 
 		BitField<PipelineDynamicStateFlags> p_dynamic_state_flags /*= 0*/, uint32_t p_for_render_pass /*= 0*/, 
-		const std::vector<PipelineSpecializationConstant>& p_specialization_constants /*= std::vector<PipelineSpecializationConstant>()*/)
+		const Util::SmallVector<PipelineSpecializationConstant>& p_specialization_constants /*= Util::SmallVector<PipelineSpecializationConstant>()*/)
 	{
 		Shader* shader = shader_owner.get_or_null(p_shader);
 		ERR_FAIL_NULL_V(shader, RID());
@@ -695,7 +696,7 @@ namespace Rendering
 
 			if (p_framebuffer_format == INVALID_ID) {
 				// If nothing provided, use an empty one (no attachments).
-				p_framebuffer_format = framebuffer_format_create(std::vector<AttachmentFormat>());
+				p_framebuffer_format = framebuffer_format_create(Util::SmallVector<AttachmentFormat>());
 			}
 			ERR_FAIL_COND_V(!framebuffer_formats.contains(p_framebuffer_format), RID());
 			fb_format = framebuffer_formats[p_framebuffer_format];
@@ -792,8 +793,8 @@ namespace Rendering
 				}
 			}
 		}
-		std::vector<int32_t> color_attachments = pass.color_attachments;
-		std::vector<PipelineSpecializationConstant> specialization_constants = p_specialization_constants;
+		Util::SmallVector<int32_t> color_attachments = pass.color_attachments;
+		Util::SmallVector<PipelineSpecializationConstant> specialization_constants = p_specialization_constants;
 		RenderPipeline pipeline;
 		pipeline.driver_id = driver->render_pipeline_create(
 			shader->driver_id,
@@ -863,7 +864,7 @@ namespace Rendering
 		const PipelineRasterizationState& p_rasterization_state, const PipelineMultisampleState& p_multisample_state,
 		const PipelineDepthStencilState& p_depth_stencil_state, const PipelineColorBlendState& p_blend_state,
 		BitField<PipelineDynamicStateFlags> p_dynamic_state_flags /*= 0*/, uint32_t p_for_render_pass /*= 0*/,
-		const std::vector<PipelineSpecializationConstant>& p_specialization_constants /*= std::vector<PipelineSpecializationConstant>()*/)
+		const Util::SmallVector<PipelineSpecializationConstant>& p_specialization_constants /*= Util::SmallVector<PipelineSpecializationConstant>()*/)
 	{
 		Shader* shader = shader_owner.get_or_null(p_shader);
 		ERR_FAIL_NULL_V(shader, RID());
@@ -881,7 +882,7 @@ namespace Rendering
 
 			if (frame_buffer_format == INVALID_ID) {
 				// If nothing provided, use an empty one (no attachments).
-				frame_buffer_format = framebuffer_format_create(std::vector<AttachmentFormat>());
+				frame_buffer_format = framebuffer_format_create(Util::SmallVector<AttachmentFormat>());
 			}
 			ERR_FAIL_COND_V(!framebuffer_formats.contains(frame_buffer_format), RID());
 			fb_format = framebuffer_formats[frame_buffer_format];
@@ -978,8 +979,8 @@ namespace Rendering
 				}
 			}
 		}
-		std::vector<int32_t> color_attachments = pass.color_attachments;
-		std::vector<PipelineSpecializationConstant> specialization_constants = p_specialization_constants;
+		Util::SmallVector<int32_t> color_attachments = pass.color_attachments;
+		Util::SmallVector<PipelineSpecializationConstant> specialization_constants = p_specialization_constants;
 		RenderPipeline pipeline;
 		pipeline.driver_id = driver->render_pipeline_create(
 			shader->driver_id,
@@ -1092,7 +1093,7 @@ namespace Rendering
 		uint32_t to_present_index = 0;
 		while (to_present_index < frames[frame].swap_chains_to_present.size()) {
 			if (frames[frame].swap_chains_to_present[to_present_index] == it->second) {
-				std::vector<RenderingDeviceDriver::SwapChainID> v = { it->second };
+				Util::SmallVector<RenderingDeviceDriver::SwapChainID> v = { it->second };
 				// TODO: fix: vkQueuePresentKHR(): pPresentInfo->pSwapchains[0] images passed to present must be in layout VK_IMAGE_LAYOUT_PRESENT_SRC duting this present
 				driver->command_queue_execute_and_present(present_queue, {}, {}, {}, {}, v);
 
@@ -1165,7 +1166,7 @@ namespace Rendering
 		attachment.format = format;
 		attachment.samples = TEXTURE_SAMPLES_1;
 		attachment.usage_flags = TEXTURE_USAGE_COLOR_ATTACHMENT_BIT;
-		std::vector<AttachmentFormat> screen_attachment;
+		Util::SmallVector<AttachmentFormat> screen_attachment;
 		screen_attachment.push_back(attachment);
 		return const_cast<RenderingDevice*>(this)->framebuffer_format_create(screen_attachment);
 	}
@@ -1197,7 +1198,7 @@ namespace Rendering
 		return OK;
 	}
 
-	Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_format_create(const std::vector<AttachmentFormat>& p_format,
+	Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_format_create(const Util::SmallVector<AttachmentFormat>& p_format,
 		uint32_t p_view_count /*= 1*/, int32_t p_fragment_density_map_attachment /*= -1*/)
 	{
 		FramebufferPass pass;
@@ -1213,13 +1214,13 @@ namespace Rendering
 			}
 		}
 
-		std::vector<FramebufferPass> passes;
+		Util::SmallVector<FramebufferPass> passes;
 		passes.push_back(pass);
 		return framebuffer_format_create_multipass(p_format, passes, p_view_count, p_fragment_density_map_attachment);
 	}
 
-	Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_format_create_multipass(const std::vector<AttachmentFormat>& p_attachments,
-		const std::vector<FramebufferPass>& p_passes, uint32_t p_view_count /*= 1*/, int32_t p_vrs_attachment /*= -1*/)
+	Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_format_create_multipass(const Util::SmallVector<AttachmentFormat>& p_attachments,
+		const Util::SmallVector<FramebufferPass>& p_passes, uint32_t p_view_count /*= 1*/, int32_t p_vrs_attachment /*= -1*/)
 	{
 		FramebufferFormatKey key;
 		key.attachments = p_attachments;
@@ -1235,9 +1236,9 @@ namespace Rendering
 			return it->second;
 		}
 
-		std::vector<TextureSamples> samples;
-		std::vector<RDD::AttachmentLoadOp> load_ops;
-		std::vector<RDD::AttachmentStoreOp> store_ops;
+		Util::SmallVector<TextureSamples> samples;
+		Util::SmallVector<RDD::AttachmentLoadOp> load_ops;
+		Util::SmallVector<RDD::AttachmentStoreOp> store_ops;
 		for (int64_t i = 0; i < p_attachments.size(); i++) {
 			load_ops.push_back(p_attachments[i].load_op);
 			store_ops.push_back(RDD::ATTACHMENT_STORE_OP_STORE);
@@ -1305,7 +1306,7 @@ namespace Rendering
 
 	
 
-	RID RenderingDevice::framebuffer_create(const std::vector<RID>& p_texture_attachments, FramebufferFormatID p_format_check, uint32_t p_view_count) {
+	RID RenderingDevice::framebuffer_create(const Util::SmallVector<RID>& p_texture_attachments, FramebufferFormatID p_format_check, uint32_t p_view_count) {
 		//_THREAD_SAFE_METHOD_
 
 		FramebufferPass pass;
@@ -1338,19 +1339,19 @@ namespace Rendering
 			}
 		}
 
-		std::vector<FramebufferPass> passes;
+		Util::SmallVector<FramebufferPass> passes;
 		passes.push_back(pass);
 
 		return framebuffer_create_multipass(p_texture_attachments, passes, p_format_check, p_view_count);
 	}
 
-	RID RenderingDevice::framebuffer_create_multipass(const std::vector<RID>& p_texture_attachments, const std::vector<FramebufferPass>& p_passes, FramebufferFormatID p_format_check, uint32_t p_view_count) {
+	RID RenderingDevice::framebuffer_create_multipass(const Util::SmallVector<RID>& p_texture_attachments, const Util::SmallVector<FramebufferPass>& p_passes, FramebufferFormatID p_format_check, uint32_t p_view_count) {
 		//_THREAD_SAFE_METHOD_
 		uint32_t texture_layers = 1;
 
-		std::vector<AttachmentFormat> attachments;
-		std::vector<RDD::TextureID> textures;
-		//std::vector<RDG::ResourceTracker*> trackers;
+		Util::SmallVector<AttachmentFormat> attachments;
+		Util::SmallVector<RDD::TextureID> textures;
+		//Util::SmallVector<RDG::ResourceTracker*> trackers;
 		int32_t vrs_attachment = -1;
 		attachments.resize(p_texture_attachments.size());
 		Size2i size;
@@ -1457,10 +1458,10 @@ namespace Rendering
 		return id;
 	}
 
-	RID RenderingDevice::framebuffer_create_load(const std::vector<RID>& p_texture_attachments) {
+	RID RenderingDevice::framebuffer_create_load(const Util::SmallVector<RID>& p_texture_attachments) {
 		FramebufferPass pass;
-		std::vector<AttachmentFormat> attachments;
-		std::vector<RDD::TextureID> textures;
+		Util::SmallVector<AttachmentFormat> attachments;
+		Util::SmallVector<RDD::TextureID> textures;
 		int32_t vrs_attachment = -1;
 		Size2i size;
 		bool size_set = false;
@@ -1496,7 +1497,7 @@ namespace Rendering
 
 		ERR_FAIL_COND_V_MSG(!size_set, RID(), "All attachments unused.");
 
-		std::vector<FramebufferPass> passes = { pass };
+		Util::SmallVector<FramebufferPass> passes = { pass };
 		FramebufferFormatID format_id = framebuffer_format_create_multipass(attachments, passes, 1, vrs_attachment);
 		ERR_FAIL_COND_V(format_id == INVALID_ID, RID());
 
@@ -1535,7 +1536,7 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 			return it->second;
 		}
 
-		std::vector<RDD::Subpass> subpass;
+		Util::SmallVector<RDD::Subpass> subpass;
 		subpass.resize(1);
 
 		RDD::RenderPassID render_pass = driver->render_pass_create({}, subpass, {}, 1, RDD::AttachmentReference());
@@ -1658,7 +1659,7 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 			std::format("Desired set ({}) not used by shader.", p_shader_set));
 		// See that all sets in shader are satisfied.
 
-		const std::vector<ShaderUniform>& set = shader->uniform_sets[p_shader_set];
+		const Util::SmallVector<ShaderUniform>& set = shader->uniform_sets[p_shader_set];
 
 		uint32_t uniform_count = p_uniforms.size();
 		const Uniform* uniforms = p_uniforms.data();
@@ -1666,16 +1667,16 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 		uint32_t set_uniform_count = set.size();
 		const ShaderUniform* set_uniforms = set.data();
 
-		std::vector<RDD::BoundUniform> driver_uniforms;
+		Util::SmallVector<RDD::BoundUniform> driver_uniforms;
 		driver_uniforms.resize(set_uniform_count);
 
 		// Used for verification to make sure a uniform set does not use a framebuffer bound texture.
-		//std::vector<UniformSet::AttachableTexture> attachable_textures;
-		//std::vector<RDG::ResourceTracker*> draw_trackers;
-		//std::vector<RDG::ResourceUsage> draw_trackers_usage;
+		//Util::SmallVector<UniformSet::AttachableTexture> attachable_textures;
+		//Util::SmallVector<RDG::ResourceTracker*> draw_trackers;
+		//Util::SmallVector<RDG::ResourceUsage> draw_trackers_usage;
 		//std::unordered_map<RID, RDG::ResourceUsage> untracked_usage;
-		//std::vector<UniformSet::SharedTexture> shared_textures_to_update;
-		std::vector<RID> pending_clear_textures;
+		//Util::SmallVector<UniformSet::SharedTexture> shared_textures_to_update;
+		Util::SmallVector<RID> pending_clear_textures;
 
 		for (uint32_t i = 0; i < set_uniform_count; i++) {
 			const ShaderUniform& set_uniform = set_uniforms[i];
@@ -2161,7 +2162,7 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 		size_t to_submit = p_size;
 		size_t submit_from = 0;
 
-		thread_local std::vector<RecordedBufferCopy> command_buffer_copies_vector;
+		thread_local Util::SmallVector<RecordedBufferCopy> command_buffer_copies_vector;
 		command_buffer_copies_vector.clear();
 
 		const uint8_t* src_data = reinterpret_cast<const uint8_t*>(p_data);
@@ -2261,7 +2262,7 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 		driver->buffer_flush(buffer->driver_id);
 	}
 
-	RID RenderingDevice::vertex_array_create(uint32_t p_vertex_count, VertexFormatID p_vertex_format, const std::vector<RID>& p_src_buffers, const std::vector<uint64_t>& p_offsets /*= std::vector<uint64_t>()*/)
+	RID RenderingDevice::vertex_array_create(uint32_t p_vertex_count, VertexFormatID p_vertex_format, const Util::SmallVector<RID>& p_src_buffers, const Util::SmallVector<uint64_t>& p_offsets /*= Util::SmallVector<uint64_t>()*/)
 	{
 		ERR_FAIL_COND_V(!vertex_formats.contains(p_vertex_format), RID());
 		const VertexDescriptionCache& vd = vertex_formats[p_vertex_format];
@@ -2470,7 +2471,7 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 			"This render pipeline requires (" + itos(draw_list.validation.pipeline_push_constant_size) + ") bytes of push constant data, supplied: (" + itos(p_data_size) + ")");
 #endif
 		auto shader = shader_owner.get_or_null(p_shader);
-		std::vector<uint32_t> push_constant_data_view(reinterpret_cast<const uint32_t*>(p_data), (reinterpret_cast<const uint32_t*>(p_data)) + p_data_size / sizeof(uint32_t));
+		Util::SmallVector<uint32_t> push_constant_data_view(reinterpret_cast<const uint32_t*>(p_data), (reinterpret_cast<const uint32_t*>(p_data)) + p_data_size / sizeof(uint32_t));
 		driver->command_bind_push_constants(get_current_command_buffer(), shader->driver_id, 0, push_constant_data_view);
 
 #ifdef DEBUG_ENABLED
@@ -2525,7 +2526,7 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 		return id;
 	}
 
-	RID RenderingDevice::acquire_texture(const RDD::TextureFormat& p_format, const RenderingDevice::TextureView& p_view, const std::vector<std::vector<uint8_t>>& p_data)
+	RID RenderingDevice::acquire_texture(const RDD::TextureFormat& p_format, const RenderingDevice::TextureView& p_view, const Util::SmallVector<Util::SmallVector<uint8_t>>& p_data)
 	{
 		return tex_cache->acquire(p_format, p_view, p_data);
 	}
@@ -2535,7 +2536,7 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 		tex_cache->release(p_texture);
 	}
 
-	RID RenderingDevice::texture_create(const TextureFormat& p_format, const TextureView& p_view, const std::vector<std::vector<uint8_t>>& p_data /*= std::vector<std::vector<uint8_t>>()*/)
+	RID RenderingDevice::texture_create(const TextureFormat& p_format, const TextureView& p_view, const Util::SmallVector<Util::SmallVector<uint8_t>>& p_data /*= Util::SmallVector<Util::SmallVector<uint8_t>>()*/)
 	{
 		TextureFormat format = p_format;
 
@@ -2607,7 +2608,7 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 		ERR_FAIL_COND_V_MSG(required_mipmaps < format.mipmaps, RID(),
 			std::format("Too many mipmaps requested for texture format and dimensions ({}), maximum allowed: ({}).", format.mipmaps, required_mipmaps));
 
-		std::vector<std::vector<uint8_t>> data = p_data;
+		Util::SmallVector<Util::SmallVector<uint8_t>> data = p_data;
 		bool immediate_flush = false;
 
 		// If this is a VRS texture, we make sure that it is created with valid initial data. This prevents a crash on Qualcomm Snapdragon XR2 Gen 1
@@ -2616,7 +2617,7 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 			immediate_flush = true;
 			for (uint32_t i = 0; i < format.array_layers; i++) {
 				uint32_t required_size = get_image_format_required_size(format.format, format.width, format.height, format.depth, format.mipmaps);
-				std::vector<uint8_t> layer;
+				Util::SmallVector<uint8_t> layer;
 				layer.resize(required_size);
 				std::fill(layer.begin(), layer.end(), 255);
 				data.push_back(layer);
@@ -2758,7 +2759,7 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 		return id;
 	}
 
-	Error RenderingDevice::texture_update(RID p_texture, uint32_t p_layer, const std::vector<uint8_t>& p_data)
+	Error RenderingDevice::texture_update(RID p_texture, uint32_t p_layer, const Util::SmallVector<uint8_t>& p_data)
 	{
 
 		Texture* texture = texture_owner.get_or_null(p_texture);
@@ -2802,7 +2803,7 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 
 		const uint8_t* read_ptr = p_data.data();
 
-		thread_local std::vector<RecordedBufferToTextureCopy> command_buffer_to_texture_copies_vector;
+		thread_local Util::SmallVector<RecordedBufferToTextureCopy> command_buffer_to_texture_copies_vector;
 		command_buffer_to_texture_copies_vector.clear();
 
 		// Indicate the texture will get modified for the shared texture fallback.
@@ -2900,19 +2901,19 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 		return OK;
 	}
 
-	std::vector<uint8_t> RenderingDevice::texture_get_data(RID p_texture, uint32_t p_layer)
+	Util::SmallVector<uint8_t> RenderingDevice::texture_get_data(RID p_texture, uint32_t p_layer)
 	{
-		//ERR_RENDER_THREAD_GUARD_V(std::vector<uint8_t>());
+		//ERR_RENDER_THREAD_GUARD_V(Util::SmallVector<uint8_t>());
 
 		Texture* tex = texture_owner.get_or_null(p_texture);
-		ERR_FAIL_NULL_V(tex, std::vector<uint8_t>());
+		ERR_FAIL_NULL_V(tex, Util::SmallVector<uint8_t>());
 
-		ERR_FAIL_COND_V_MSG(tex->bound, std::vector<uint8_t>(),
+		ERR_FAIL_COND_V_MSG(tex->bound, Util::SmallVector<uint8_t>(),
 			"Texture can't be retrieved while a draw list that uses it as part of a framebuffer is being created. Ensure the draw list is finalized (and that the color/depth texture using it is not set to `RenderingDevice.FINAL_ACTION_CONTINUE`) to retrieve this texture.");
-		ERR_FAIL_COND_V_MSG(!(tex->usage_flags & TEXTURE_USAGE_CAN_COPY_FROM_BIT), std::vector<uint8_t>(),
+		ERR_FAIL_COND_V_MSG(!(tex->usage_flags & TEXTURE_USAGE_CAN_COPY_FROM_BIT), Util::SmallVector<uint8_t>(),
 			"Texture requires the `RenderingDevice.TEXTURE_USAGE_CAN_COPY_FROM_BIT` to be set to be retrieved.");
 
-		ERR_FAIL_COND_V(p_layer >= tex->layers, std::vector<uint8_t>());
+		ERR_FAIL_COND_V(p_layer >= tex->layers, Util::SmallVector<uint8_t>());
 
 		// Clear the texture if the driver requires it during its first use.
 		_texture_check_pending_clear(p_texture, tex);
@@ -2927,8 +2928,8 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 			uint32_t mip_alignment = driver->api_trait_get(RDD::API_TRAIT_TEXTURE_TRANSFER_ALIGNMENT);
 			uint32_t buffer_size = 0;
 
-			thread_local std::vector<RDD::TextureCopyableLayout> mip_layouts;
-			thread_local std::vector<RDD::BufferTextureCopyRegion> copy_regions;
+			thread_local Util::SmallVector<RDD::TextureCopyableLayout> mip_layouts;
+			thread_local Util::SmallVector<RDD::BufferTextureCopyRegion> copy_regions;
 			mip_layouts.resize(tex->mipmaps);
 			copy_regions.resize(tex->mipmaps);
 
@@ -2956,7 +2957,7 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 			}
 
 			RDD::BufferID tmp_buffer = driver->buffer_create(buffer_size, RDD::BUFFER_USAGE_TRANSFER_TO_BIT, RDD::MEMORY_ALLOCATION_TYPE_CPU, frames_drawn);
-			ERR_FAIL_COND_V(!tmp_buffer, std::vector<uint8_t>());
+			ERR_FAIL_COND_V(!tmp_buffer, Util::SmallVector<uint8_t>());
 
 			//if (_texture_make_mutable(tex, p_texture)) {
 			//	// The texture must be mutable to be used as a copy source due to layout transitions.
@@ -2969,13 +2970,13 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 			_flush_and_stall_for_all_frames();
 
 			const uint8_t* read_ptr = driver->buffer_map(tmp_buffer);
-			ERR_FAIL_NULL_V(read_ptr, std::vector<uint8_t>());
+			ERR_FAIL_NULL_V(read_ptr, Util::SmallVector<uint8_t>());
 
 			uint32_t block_w = 0;
 			uint32_t block_h = 0;
 			get_compressed_image_format_block_dimensions(tex->format, block_w, block_h);
 
-			std::vector<uint8_t> buffer_data;
+			Util::SmallVector<uint8_t> buffer_data;
 			uint32_t tight_buffer_size = get_image_format_required_size(tex->format, tex->width, tex->height, tex->depth, tex->mipmaps);
 			buffer_data.resize(tight_buffer_size);
 
@@ -3069,13 +3070,13 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 			buffer_pool.buffers_used = 0;
 		}
 
-		thread_local std::vector<RDD::SwapChainID> swap_chains;
+		thread_local Util::SmallVector<RDD::SwapChainID> swap_chains;
 		swap_chains.clear();
 
 		// Instead of having just one command; we have potentially many (which had to be split due to an
 		// Adreno workaround on mobile, only if the workaround is active). Thus we must execute all of them
 		// and chain them together via semaphores as dependent executions.
-		thread_local std::vector<RDD::SemaphoreID> wait_semaphores;
+		thread_local Util::SmallVector<RDD::SemaphoreID> wait_semaphores;
 		wait_semaphores = frames[frame].semaphores_to_wait_on;
 
 		for (uint32_t i = 0; i < command_buffer_count; i++) {
@@ -3146,7 +3147,7 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 		ERR_FAIL_COND_V_MSG(sc_it == screen_swap_chains.end(), INVALID_ID, "Screen was never prepared.");
 		ERR_FAIL_COND_V_MSG(fb_it == screen_framebuffers.end(), INVALID_ID, "Framebuffer was never prepared.");
 
-		std::vector<Rect2i> viewport{ Rect2i(0, 0, context->surface_get_width(surface), context->surface_get_height(surface)) };
+		Util::SmallVector<Rect2i> viewport{ Rect2i(0, 0, context->surface_get_width(surface), context->surface_get_height(surface)) };
 
 		RDD::RenderPassID render_pass = driver->swap_chain_get_render_pass(sc_it->second);
 
@@ -3176,9 +3177,9 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 		return id;
 	}
 
-	RDD::FramebufferID RenderingDevice::create_framebuffer_from_format_id(FramebufferFormatID p_format_id, std::vector<RID> p_attachments, uint32_t p_width, uint32_t p_height)
+	RDD::FramebufferID RenderingDevice::create_framebuffer_from_format_id(FramebufferFormatID p_format_id, Util::SmallVector<RID> p_attachments, uint32_t p_width, uint32_t p_height)
 	{
-		std::vector<RDD::TextureID> attachments;
+		Util::SmallVector<RDD::TextureID> attachments;
 		for (auto a: p_attachments)
 		{
 			attachments.push_back(texture_owner.get_or_null(a)->driver_id);
@@ -3186,9 +3187,9 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 		return driver->framebuffer_create(framebuffer_formats[p_format_id].render_pass, attachments, p_width, p_height);
 	}
 
-	RDD::FramebufferID RenderingDevice::create_framebuffer_from_render_pass(RDD::RenderPassID p_render_pass, std::vector<RID> p_attachments, uint32_t p_width, uint32_t p_height, uint32_t p_layers /*= 1*/)
+	RDD::FramebufferID RenderingDevice::create_framebuffer_from_render_pass(RDD::RenderPassID p_render_pass, Util::SmallVector<RID> p_attachments, uint32_t p_width, uint32_t p_height, uint32_t p_layers /*= 1*/)
 	{
-		std::vector<RDD::TextureID> attachments;
+		Util::SmallVector<RDD::TextureID> attachments;
 		for (auto a : p_attachments)
 		{
 			attachments.push_back(texture_owner.get_or_null(a)->driver_id);
@@ -3204,7 +3205,7 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 	bool RenderingDevice::begin_render_pass(RDD::RenderPassID p_render_pass, RDD::FramebufferID p_frame_buffer, Rect2i p_region, const Color& p_clear_color)
 	{
 		RDD::CommandBufferID command_buffer = frames[frame].command_buffer;
-		std::vector<Rect2i> viewport{ p_region };
+		Util::SmallVector<Rect2i> viewport{ p_region };
 
 		std::array<RenderingDeviceDriver::RenderPassClearValue, 1> val;
 		val[0].color = p_clear_color;
@@ -3218,7 +3219,7 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 	bool RenderingDevice::begin_render_pass_from_frame_buffer(RID p_frame_buffer, Rect2i p_region, const std::span<RenderingDeviceDriver::RenderPassClearValue>& p_clear_color)
 	{
 		RDD::CommandBufferID command_buffer = frames[frame].command_buffer;
-		std::vector<Rect2i> viewport{ p_region };
+		Util::SmallVector<Rect2i> viewport{ p_region };
 
 		auto frame_buffer = framebuffer_owner.get_or_null(p_frame_buffer);
 		auto frame_buffer_format = framebuffer_formats[frame_buffer->format_id];
@@ -3246,7 +3247,7 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 		driver->command_render_draw_indexed(p_command_buffer, p_index_count, p_instance_count, p_first_index, p_vertex_offset, p_first_instance);
 	}
 
-	Rendering::RenderingDevice::VertexFormatID RenderingDevice::vertex_format_create(const std::vector<VertexAttribute>& p_vertex_descriptions)
+	Rendering::RenderingDevice::VertexFormatID RenderingDevice::vertex_format_create(const Util::SmallVector<VertexAttribute>& p_vertex_descriptions)
 	{
 		VertexDescriptionKey key;
 		key.vertex_formats = p_vertex_descriptions;
@@ -3263,7 +3264,7 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 		VertexAttributeBindingsMap bindings;
 		bool has_implicit = false;
 		bool has_explicit = false;
-		std::vector<VertexAttribute> vertex_descriptions = p_vertex_descriptions;
+		Util::SmallVector<VertexAttribute> vertex_descriptions = p_vertex_descriptions;
 		std::unordered_set<int> used_locations;
 
 		for (int i = 0; i < vertex_descriptions.size(); i++) {
@@ -3325,7 +3326,7 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 	RID RenderingDevice::create_swapchain_pipeline(DisplayServerEnums::WindowID window, RID p_shader, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, 
 		const PipelineRasterizationState& p_rasterization_state, const PipelineMultisampleState& p_multisample_state, const PipelineDepthStencilState& p_depth_stencil_state, 
 		const PipelineColorBlendState& p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags /*= 0*/, uint32_t p_for_render_pass /*= 0*/, 
-		const std::vector<PipelineSpecializationConstant>& p_specialization_constants /*= std::vector<PipelineSpecializationConstant>()*/)
+		const Util::SmallVector<PipelineSpecializationConstant>& p_specialization_constants /*= Util::SmallVector<PipelineSpecializationConstant>()*/)
 	{
 		Shader* shader = shader_owner.get_or_null(p_shader);
 		ERR_FAIL_NULL_V(shader, RID());
@@ -3402,8 +3403,8 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 		}
 
 		auto render_pass = driver->swap_chain_get_render_pass(sc_it->second);
-		std::vector<int32_t> color_attachments{ 1 };
-		std::vector<PipelineSpecializationConstant> specialization_constants = p_specialization_constants;
+		Util::SmallVector<int32_t> color_attachments{ 1 };
+		Util::SmallVector<PipelineSpecializationConstant> specialization_constants = p_specialization_constants;
 		RenderPipeline pipeline;
 		pipeline.driver_id = driver->render_pipeline_create(
 			shader->driver_id,
@@ -3547,7 +3548,7 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 		// Indicate the fence has been signaled so the next time the frame's contents need to be
 		// used, the CPU needs to wait on the work to be completed.
 		frames[frame].fence_signaled = true;
-		std::vector<RenderingDeviceDriver::SemaphoreID> frame_semaphores{ frames[frame].semaphore };
+		Util::SmallVector<RenderingDeviceDriver::SemaphoreID> frame_semaphores{ frames[frame].semaphore };
 		if (frame_can_present) {
 			if (separate_present_queue) {
 				// Issue the presentation separately if the presentation queue is different from the main queue.
@@ -3587,7 +3588,7 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 
 	void RenderingDevice::imgui_execute(void* p_draw_data, RDD::CommandBufferID p_command_buffer, RID p_frame_buffer, RDD::PipelineID p_pipeline /*= RDD::PipelineID()*/)
 	{
-		std::vector<Rect2i> viewport{ Rect2i(0, 0, screen_get_width(), screen_get_height()) };
+		Util::SmallVector<Rect2i> viewport{ Rect2i(0, 0, screen_get_width(), screen_get_height()) };
 
 		std::array<RenderingDeviceDriver::RenderPassClearValue, 1> val;
 		val[0].color = Color();
@@ -3750,7 +3751,7 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 			{
 				std::lock_guard lock(worker->thread_mutex);
 				if (worker->recording) {
-					std::vector<RenderingDeviceDriver::SemaphoreID> tws{ frames[frame].transfer_worker_semaphores[i] };
+					Util::SmallVector<RenderingDeviceDriver::SemaphoreID> tws{ frames[frame].transfer_worker_semaphores[i] };
 					std::span<RDD::SemaphoreID> semaphores = p_draw_command_buffer ? tws : std::span<RDD::SemaphoreID>();
 					_end_transfer_worker(worker);
 					_submit_transfer_worker(worker, semaphores);
@@ -4150,7 +4151,7 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 		return least_common_multiple(alignment, driver->api_trait_get(RDD::API_TRAIT_TEXTURE_TRANSFER_ALIGNMENT));
 	}
 
-	Error RenderingDevice::_texture_initialize(RID p_texture, uint32_t p_layer, const std::vector<uint8_t>& p_data, RDD::TextureLayout p_dst_layout, bool p_immediate_flush)
+	Error RenderingDevice::_texture_initialize(RID p_texture, uint32_t p_layer, const Util::SmallVector<uint8_t>& p_data, RDD::TextureLayout p_dst_layout, bool p_immediate_flush)
 	{
 		Texture* texture = texture_owner.get_or_null(p_texture);
 		ERR_FAIL_NULL_V(texture, ERR_INVALID_PARAMETER);
@@ -4391,8 +4392,8 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 			}
 
 			// Copying each mipmap from main texture to a buffer and then to the slice texture.
-			thread_local std::vector<RDD::BufferTextureCopyRegion> get_data_vector;
-			thread_local std::vector<RecordedBufferToTextureCopy> update_vector;
+			thread_local Util::SmallVector<RDD::BufferTextureCopyRegion> get_data_vector;
+			thread_local Util::SmallVector<RecordedBufferToTextureCopy> update_vector;
 			get_data_vector.clear();
 			update_vector.clear();
 
@@ -4459,7 +4460,7 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 			copy_region.dst_subresources.layer_count = copy_region.src_subresources.layer_count;
 
 			// Copying each mipmap from main texture to to the slice texture.
-			thread_local std::vector<RDD::TextureCopyRegion> region_vector;
+			thread_local Util::SmallVector<RDD::TextureCopyRegion> region_vector;
 			region_vector.clear();
 			for (uint32_t i = 0; i < p_dst_texture->mipmaps; i++) {
 				uint32_t mipmap = p_dst_texture->base_mipmap + i;
@@ -4568,7 +4569,7 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 		}
 	}
 
-	std::vector<uint8_t> RenderingDevice::_load_pipeline_cache()
+	Util::SmallVector<uint8_t> RenderingDevice::_load_pipeline_cache()
 	{
 		// TODO
 		return {};
@@ -4750,17 +4751,17 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 		}
 	}
 
-	RDD::RenderPassID RenderingDevice::_render_pass_create(RenderingDeviceDriver* p_driver, const std::vector<AttachmentFormat>& p_attachments, 
-		const std::vector<FramebufferPass>& p_passes, std::span<RDD::AttachmentLoadOp> p_load_ops, std::span<RDD::AttachmentStoreOp> p_store_ops, 
+	RDD::RenderPassID RenderingDevice::_render_pass_create(RenderingDeviceDriver* p_driver, const Util::SmallVector<AttachmentFormat>& p_attachments, 
+		const Util::SmallVector<FramebufferPass>& p_passes, std::span<RDD::AttachmentLoadOp> p_load_ops, std::span<RDD::AttachmentStoreOp> p_store_ops, 
 		uint32_t p_view_count /*= 1*/, VRSMethod p_vrs_method /*= VRS_METHOD_NONE*/, int32_t p_vrs_attachment /*= -1*/, 
-		Size2i p_vrs_texel_size /*= Size2i()*/, std::vector<TextureSamples>* r_samples /*= nullptr*/)
+		Size2i p_vrs_texel_size /*= Size2i()*/, Util::SmallVector<TextureSamples>* r_samples /*= nullptr*/)
 	{
 		// NOTE:
 		// Before the refactor to RenderingDevice-RenderingDeviceDriver, there was commented out code to
 		// specify dependencies to external subpasses. Since it had been unused for a long timel it wasn't ported
 		// to the new architecture.
 
-		std::vector<int32_t> attachment_last_pass;
+		Util::SmallVector<int32_t> attachment_last_pass;
 		attachment_last_pass.resize(p_attachments.size());
 
 		if (p_view_count > 1) {
@@ -4773,8 +4774,8 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 			ERR_FAIL_COND_V_MSG(p_view_count > capabilities.max_view_count, RDD::RenderPassID(), "Hardware does not support requested number of views for Multiview render pass");
 		}
 
-		std::vector<RDD::Attachment> attachments;
-		std::vector<uint32_t> attachment_remap;
+		Util::SmallVector<RDD::Attachment> attachments;
+		Util::SmallVector<uint32_t> attachment_remap;
 
 		for (int i = 0; i < p_attachments.size(); i++) {
 			if (p_attachments[i].usage_flags == AttachmentFormat::UNUSED_ATTACHMENT) {
@@ -4843,9 +4844,9 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 			attachments.push_back(description);
 		}
 
-		std::vector<RDD::Subpass> subpasses;
+		Util::SmallVector<RDD::Subpass> subpasses;
 		subpasses.resize(p_passes.size());
-		std::vector<RDD::SubpassDependency> subpass_dependencies;
+		Util::SmallVector<RDD::SubpassDependency> subpass_dependencies;
 
 		for (int i = 0; i < p_passes.size(); i++) {
 			const FramebufferPass* pass = &p_passes[i];

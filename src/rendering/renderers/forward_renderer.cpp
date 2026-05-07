@@ -8,6 +8,7 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 #include "util/profiler.h"
+#include "util/small_vector.h"
 
 namespace Rendering {
 
@@ -165,7 +166,7 @@ void ForwardRenderer::initialize(WSI* wsi, RenderingDevice* dev, RID cubemap) {
 // Private — per-frame helpers
 // ---------------------------------------------------------------------------
 
-ShadowBuffer_UBO ForwardRenderer::build_shadow_buffer(const std::vector<Light>& lights,
+ShadowBuffer_UBO ForwardRenderer::build_shadow_buffer(const Util::SmallVector<Light>& lights,
                                                        uint32_t& out_dir_idx,
                                                        uint32_t& out_pt_idx) const {
     constexpr float ps_near = 0.1f;

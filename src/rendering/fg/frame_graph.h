@@ -3,6 +3,7 @@
 #include "pass_node.h"
 #include "resource_node.h"
 #include "resource_entry.h"
+#include "util/small_vector.h"
 
 class FrameGraph {
   friend class FrameGraphPassResources;
@@ -142,9 +143,9 @@ private:
   }
 
 private:
-  std::vector<PassNode> m_passNodes;
-  std::vector<ResourceNode> m_resourceNodes;
-  std::vector<ResourceEntry> m_resourceRegistry;
+  Util::SmallVector<PassNode> m_passNodes;
+  Util::SmallVector<ResourceNode> m_resourceNodes;
+  Util::SmallVector<ResourceEntry> m_resourceRegistry;
 };
 
 

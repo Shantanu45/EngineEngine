@@ -6,6 +6,7 @@
  * \date   March 2026
  *********************************************************************/
 #include "compiler.h"
+#include "util/small_vector.h"
 #include "shaderc/shaderc.hpp"
 
 namespace Compiler
@@ -68,7 +69,7 @@ namespace Compiler
 		return true;
 	}
 
-	void GLSLCompiler::set_include_directories(const std::vector<std::string>* include_directories_)
+	void GLSLCompiler::set_include_directories(const Util::SmallVector<std::string>* include_directories_)
 	{
 		include_directories = include_directories_;
 	}
@@ -235,7 +236,7 @@ namespace Compiler
 		return hash;
 	}
 
-	std::vector<uint32_t> GLSLCompiler::compile(std::string& error_message, const std::vector<std::pair<std::string, int>>* defines) const
+	Util::SmallVector<uint32_t> GLSLCompiler::compile(std::string& error_message, const Util::SmallVector<std::pair<std::string, int>>* defines) const
 	{
 		shaderc::Compiler compiler;
 		shaderc::CompileOptions options;
@@ -351,7 +352,7 @@ namespace Compiler
 			return {};
 		}
 
-		std::vector<uint32_t> compiled_spirv(result.cbegin(), result.cend());
+		Util::SmallVector<uint32_t> compiled_spirv(result.cbegin(), result.cend());
 
 #if 0
 		spvtools::SpirvTools core(target == Target::Vulkan13 ? SPV_ENV_VULKAN_1_3 : SPV_ENV_VULKAN_1_1);

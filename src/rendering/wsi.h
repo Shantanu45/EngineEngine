@@ -15,6 +15,7 @@
 #include "rendering/mesh_loader.h"
 #include "rendering/utils.h"
 #include "application/application_events.h"
+#include "util/small_vector.h"
 
 namespace Rendering
 {
@@ -84,10 +85,10 @@ namespace Rendering
         // --------------------------------------------------------------
 
         // -- Vertex format API -----------------------------------------
-        void create_new_vertex_format(const std::vector<RenderingDeviceCommons::VertexAttribute>& p_attributes, 
+        void create_new_vertex_format(const Util::SmallVector<RenderingDeviceCommons::VertexAttribute>& p_attributes,
             VERTEX_FORMAT_VARIATIONS p_type);
         RenderingDevice::VertexFormatID get_vertex_format_by_type(VERTEX_FORMAT_VARIATIONS p_type);
-        std::vector<RenderingDeviceCommons::VertexAttribute> get_default_vertex_attribute();
+        Util::SmallVector<RenderingDeviceCommons::VertexAttribute> get_default_vertex_attribute();
         RenderingDeviceCommons::VertexAttribute get_vertex_attribute(uint32_t p_binding, 
             uint32_t p_location, RenderingDeviceCommons::DataFormat p_format, uint32_t p_offset, uint32_t p_stride);
         // --------------------------------------------------------------
@@ -113,8 +114,8 @@ namespace Rendering
             const std::string& p_rendering_driver = "vulkan");
         void  _destroy_rendering_context_window(DisplayServerEnums::WindowID p_window_id);
         void  _free_pending_resources(int p_frame);
-        std::vector<uint8_t> _get_attrib_interleaved(const std::vector<RenderingDeviceCommons::VertexAttribute>& p_attribs,
-            const std::vector<uint8_t>& p_vertex_data);
+        Util::SmallVector<uint8_t> _get_attrib_interleaved(const Util::SmallVector<RenderingDeviceCommons::VertexAttribute>& p_attribs,
+            const Util::SmallVector<uint8_t>& p_vertex_data);
 
     private:
         std::unique_ptr<RenderingContextDriver> rendering_context = nullptr;
@@ -136,7 +137,7 @@ namespace Rendering
 
         std::unordered_map<VERTEX_FORMAT_VARIATIONS, RenderingDevice::VertexFormatID> vertex_format_map;
 
-        std::vector<RenderUtilities::FrameProfileArea> frame_profile;
+        Util::SmallVector<RenderUtilities::FrameProfileArea> frame_profile;
         uint64_t frame_profile_frame = 0;
 
         std::unordered_map<std::string, float> gpu_profile_task_time;

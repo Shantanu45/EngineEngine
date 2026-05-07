@@ -3,6 +3,7 @@
 #pragma once
 #include "rendering/rendering_device.h"
 #include "rendering/uniform_buffer.h"
+#include "util/small_vector.h"
 
 namespace Rendering {
 	using RD = RenderingDevice;
@@ -54,7 +55,7 @@ namespace Rendering {
 		}
 
 	private:
-		std::vector<RD::Uniform> uniforms;
+		Util::SmallVector<RD::Uniform> uniforms;
 	};
 
 } // namespace Rendering

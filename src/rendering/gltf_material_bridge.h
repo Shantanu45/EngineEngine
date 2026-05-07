@@ -4,12 +4,13 @@
 // clobbering enum values and RenderingDevice symbols in material.h.
 #include "material.h"
 #include "gltf_loader.h"
+#include "util/small_vector.h"
 
 namespace Rendering
 {
 	// Convert a loaded PBRMaterial to a runtime Material.
 	// image_rids must be indexed by GltfScene::images — one RID per uploaded image.
-	inline Material material_from_pbr(const PBRMaterial& pbr, const std::vector<RID>& image_rids)
+	inline Material material_from_pbr(const PBRMaterial& pbr, const Util::SmallVector<RID>& image_rids)
 	{
 		auto get_rid = [&](const std::optional<TextureInfo>& ti) -> RID {
 			if (!ti || ti->image_index < 0 || ti->image_index >= (int)image_rids.size())

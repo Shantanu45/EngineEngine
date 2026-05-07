@@ -4,6 +4,7 @@
 #include <rendering/drawable.h>
 #include <rendering/wsi.h>
 #include "math/rect2.h"
+#include "util/small_vector.h"
 
 namespace Rendering
 {
@@ -60,7 +61,7 @@ namespace Rendering
 		bb.add<offscreen_pass_resource>() =
 			fg.add_callback_pass<offscreen_pass_resource>(
 				"Offscreen Pass",
-				[&](FrameGraph::Builder& builder, offscreen_pass_resource& data)
+				[&view, &fg](FrameGraph::Builder& builder, offscreen_pass_resource& data)
 				{
 
 					RD::TextureFormat tf_depth;

@@ -20,6 +20,7 @@
 #include "input/input.h"
 #include "util/timer.h"
 #include "rendering/primitve_shapes.h"
+#include "util/small_vector.h"
 
 void add_basic_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
 	Size2i extent,
@@ -134,7 +135,7 @@ struct TriangleApplication : EE::Application
 
 		// Create frame buffer format
 
-		std::vector<RD::AttachmentFormat> attachments;
+		Util::SmallVector<RD::AttachmentFormat> attachments;
 
 		RD::AttachmentFormat color;
 		color.format = RD::DATA_FORMAT_R8G8B8A8_UNORM;
@@ -189,7 +190,7 @@ struct TriangleApplication : EE::Application
 
 		sampler = device->sampler_create(s);
 
-		std::vector<RD::Uniform> uniforms;
+		Util::SmallVector<RD::Uniform> uniforms;
 
 		RD::Uniform tu;
 		tu.uniform_type = RDC::UNIFORM_TYPE_TEXTURE;

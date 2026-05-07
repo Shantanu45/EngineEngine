@@ -31,6 +31,7 @@
 
 #include "rendering/mesh_storage.h"
 #include "rendering/wsi.h"
+#include "util/small_vector.h"
 
  // Forward declaration - Vertex is defined in your rendering headers
 namespace Rendering { struct Vertex; }
@@ -42,8 +43,8 @@ namespace Rendering::Shapes
 
     struct ShapeData
     {
-        std::vector<Vertex>   vertices;
-        std::vector<uint32_t> indices;
+        Util::SmallVector<Vertex>   vertices;
+        Util::SmallVector<uint32_t> indices;
     };
 
     // --- Shape generators --------------------------------------------------------
@@ -405,8 +406,8 @@ namespace Rendering::Shapes
         const uint64_t vb_size = shape.vertices.size() * sizeof(Vertex);
         const uint64_t ib_size = shape.indices.size() * sizeof(uint32_t);
 
-        std::vector<uint8_t> vertex_data(vb_size);
-        std::vector<uint8_t> index_data(ib_size);
+        Util::SmallVector<uint8_t> vertex_data(vb_size);
+        Util::SmallVector<uint8_t> index_data(ib_size);
 
         std::memcpy(vertex_data.data(), shape.vertices.data(), vb_size);
         std::memcpy(index_data.data(), shape.indices.data(), ib_size);

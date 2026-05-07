@@ -1,4 +1,5 @@
 #include "renderer_compositor.h"
+#include "util/small_vector.h"
 
 namespace Rendering
 {
@@ -17,7 +18,7 @@ namespace Rendering
 		RID rd_texture_ui = p_render_targets[0].ui;		// 0 for now
 		RID uniform_set;
 		if (!render_target_descriptors.contains(rd_texture)) {
-			std::vector<RenderingDevice::Uniform> uniforms;
+			Util::SmallVector<RenderingDevice::Uniform> uniforms;
 			RenderingDevice::Uniform u;
 			u.uniform_type = RenderingDevice::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
 			u.binding = 0;
@@ -85,7 +86,7 @@ namespace Rendering
 			RenderingDeviceCommons::PipelineDepthStencilState(), blend_state,
 			0));
 
-		std::vector<uint8_t> pv;
+		Util::SmallVector<uint8_t> pv;
 		pv.resize(6 * 4);
 		{
 			uint8_t* w = pv.data();

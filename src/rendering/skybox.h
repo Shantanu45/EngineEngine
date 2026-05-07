@@ -4,6 +4,7 @@
 #include <vector>
 #include "rendering/image_loader.h"
 #include "filesystem/filesystem.h"
+#include "util/small_vector.h"
 
 namespace Rendering
 {
@@ -26,7 +27,7 @@ namespace Rendering
                         | RenderingDeviceCommons::TEXTURE_USAGE_CAN_UPDATE_BIT;
         tf.format       = RenderingDeviceCommons::DATA_FORMAT_R8G8B8A8_SRGB;
 
-        std::vector<std::vector<uint8_t>> face_pixels;
+        Util::SmallVector<Util::SmallVector<uint8_t>> face_pixels;
         face_pixels.push_back(std::move(face0.pixels));
         for (int i = 1; i < 6; i++)
             face_pixels.push_back(img_loader.load_from_file(faces[i]).pixels);

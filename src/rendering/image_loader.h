@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <stdexcept>
 #include "util/error_macros.h"
+#include "util/small_vector.h"
 #include "filesystem/filesystem.h"
 #include "filesystem/path_utils.h"
 #include "rendering_device.h"
@@ -42,7 +43,7 @@ namespace Rendering
 
 		Format format = Format::Unknown;
 
-		std::vector<uint8_t> pixels;
+		Util::SmallVector<uint8_t> pixels;
 
 		bool is_valid() const
 		{

@@ -14,6 +14,7 @@
 #include "util/logger.h"
 #include "util/timer.h"
 #include "util/profiler.h"
+#include "util/small_vector.h"
 #include "volk.h"
 #include "input/input.h"
 #include "application_events.h"
@@ -29,7 +30,7 @@ namespace EE
 		virtual int run(Application* app) = 0;
 
 		virtual std::unique_ptr<Rendering::WindowData> create_window_data() = 0;
-		virtual std::vector<const char*> get_device_extensions()
+		virtual Util::SmallVector<const char*> get_device_extensions()
 		{
 			return { "VK_KHR_swapchain" };
 		}

@@ -13,6 +13,7 @@
 
 #include <glm/glm.hpp>
 #include <vector>
+#include "util/small_vector.h"
 
 struct forward_pass_resource : public blit_scene_input_resource
 {
@@ -50,7 +51,7 @@ namespace Rendering {
         std::vector<Drawable> build_point_shadow_drawables(const SceneView& view) const;
         std::vector<Drawable> build_main_drawables(const SceneView& view) const;
 
-        ShadowBuffer_UBO build_shadow_buffer(const std::vector<Light>& lights,
+        ShadowBuffer_UBO build_shadow_buffer(const Util::SmallVector<Light>& lights,
                                              uint32_t& out_dir_idx,
                                              uint32_t& out_pt_idx) const;
 

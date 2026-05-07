@@ -5,6 +5,7 @@
 #include "frame_graph_resource.h"
 #include <memory>
 #include <vector>
+#include "util/small_vector.h"
 
 class PassNode final : public GraphNode {
   friend class FrameGraph;
@@ -52,9 +53,9 @@ private:
 private:
   std::unique_ptr<FrameGraphPassConcept> m_exec;
 
-  std::vector<FrameGraphResource> m_creates;
-  std::vector<AccessDeclaration> m_reads;
-  std::vector<AccessDeclaration> m_writes;
+  Util::SmallVector<FrameGraphResource> m_creates;
+  Util::SmallVector<AccessDeclaration> m_reads;
+  Util::SmallVector<AccessDeclaration> m_writes;
 
   bool m_hasSideEffect{false};
 };

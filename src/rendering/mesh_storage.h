@@ -5,6 +5,7 @@
 #include <vector>
 #include <cstdint>
 #include "rendering_device.h"
+#include "util/small_vector.h"
 
 namespace Rendering
 {
@@ -34,7 +35,7 @@ namespace Rendering
 	// GPU-resident mesh - owns the shared VB/IB and a list of primitives
 	struct MeshGPU
 	{
-		std::vector<PrimitiveGPU> primitives;
+		Util::SmallVector<PrimitiveGPU> primitives;
 
 		// Shared buffers - all primitives in this mesh reference into these
 		RID vertex_buffer;
@@ -53,7 +54,7 @@ namespace Rendering
 			const std::string& name,
 			std::span<uint8_t> vertex_data,
 			std::span<uint8_t> index_data,
-			const std::vector<PrimitiveRange>& ranges,
+			const Util::SmallVector<PrimitiveRange>& ranges,
 			RenderingDevice::VertexFormatID vertex_format,
 			RenderingDeviceCommons::IndexBufferFormat index_format);
 

@@ -1,5 +1,6 @@
 #include "image_loader.h"
 #include "util/error_macros.h"
+#include "util/small_vector.h"
 
 namespace Rendering
 {
@@ -64,7 +65,7 @@ namespace Rendering
 	void ImageLoader::flip_vertical(ImageData& image)
 	{
 		const int row_size = image.width * image.get_pixel_size();
-		std::vector<uint8_t> temp(row_size);
+		Util::SmallVector<uint8_t> temp(row_size);
 
 		for (int y = 0; y < image.height / 2; ++y)
 		{
@@ -83,7 +84,7 @@ namespace Rendering
 		if (image.get_pixel_size() != 3)
 			return;
 
-		std::vector<uint8_t> new_pixels;
+		Util::SmallVector<uint8_t> new_pixels;
 		new_pixels.resize(static_cast<size_t>(image.width) *
 			image.height * 4);
 

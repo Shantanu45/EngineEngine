@@ -10,6 +10,7 @@
 
 #include <glm/glm.hpp>
 #include <vector>
+#include "util/small_vector.h"
 
 namespace Rendering {
 
@@ -17,7 +18,7 @@ struct MeshInstance {
     MeshHandle          mesh;
     glm::mat4           model;
     glm::mat4           normal_matrix;
-    std::vector<RID>    material_sets; // pre-resolved from MaterialRegistry, one per primitive
+    Util::SmallVector<RID>    material_sets; // pre-resolved from MaterialRegistry, one per primitive
     MeshCategory        category = MeshCategory::Opaque;
 };
 
@@ -27,8 +28,8 @@ struct SceneView {
     double                    elapsed     = 0.0;
     MeshHandle                skybox_mesh;
     MeshHandle                grid_mesh;
-    std::vector<MeshInstance> instances;
-    std::vector<Light>        lights;
+    Util::SmallVector<MeshInstance> instances;
+    Util::SmallVector<Light>        lights;
     Size2i                    extent;
 };
 

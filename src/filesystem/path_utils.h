@@ -9,6 +9,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include "util/small_vector.h"
 
 namespace FileSystem
 {
@@ -34,11 +35,11 @@ namespace FileSystem
 		std::wstring to_utf16(const std::string& str);
 #endif
 
-		inline std::vector<std::string> split(const std::string& str, const char* delim, bool allow_empty)
+		inline Util::SmallVector<std::string> split(const std::string& str, const char* delim, bool allow_empty)
 		{
 			if (str.empty())
 				return {};
-			std::vector<std::string> ret;
+			Util::SmallVector<std::string> ret;
 
 			size_t start_index = 0;
 			size_t index = 0;
@@ -57,12 +58,12 @@ namespace FileSystem
 			return ret;
 		}
 
-		inline std::vector<std::string> split(const std::string& str, const char* delim)
+		inline Util::SmallVector<std::string> split(const std::string& str, const char* delim)
 		{
 			return split(str, delim, true);
 		}
 
-		inline std::vector<std::string> split_no_empty(const std::string& str, const char* delim)
+		inline Util::SmallVector<std::string> split_no_empty(const std::string& str, const char* delim)
 		{
 			return split(str, delim, false);
 		}

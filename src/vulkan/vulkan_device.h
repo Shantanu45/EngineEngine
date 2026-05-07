@@ -13,6 +13,7 @@
 #include "vma/vk_mem_alloc.h"
 #include "util/typedefs.h"
 #include "util/bit_field.h"
+#include "util/small_vector.h"
 #include "re-spirv/re-spirv.h"
 #include "math/rect2i.h"
 #include "shader_container.h"
@@ -112,7 +113,7 @@ namespace Vulkan
 		struct PipelineCache {
 			std::string file_path;
 			size_t current_size = 0;
-			std::vector<uint8_t> buffer; // Header then data.
+			Util::SmallVector<uint8_t> buffer; // Header then data.
 			VkPipelineCache vk_cache = VK_NULL_HANDLE;
 		};
 
@@ -132,12 +133,12 @@ namespace Vulkan
 
 		struct Fence;
 		struct CommandQueue {
-			std::vector<VkSemaphore> image_semaphores;
-			std::vector<SwapChain*> image_semaphores_swap_chains;
-			std::vector<uint32_t> pending_semaphores_for_execute;
-			std::vector<uint32_t> pending_semaphores_for_fence;
-			std::vector<uint32_t> free_image_semaphores;
-			std::vector<std::pair<Fence*, uint32_t>> image_semaphores_for_fences;
+			Util::SmallVector<VkSemaphore> image_semaphores;
+			Util::SmallVector<SwapChain*> image_semaphores_swap_chains;
+			Util::SmallVector<uint32_t> pending_semaphores_for_execute;
+			Util::SmallVector<uint32_t> pending_semaphores_for_fence;
+			Util::SmallVector<uint32_t> free_image_semaphores;
+			Util::SmallVector<std::pair<Fence*, uint32_t>> image_semaphores_for_fences;
 			uint32_t queue_family = 0;
 			uint32_t queue_index = 0;
 		};
@@ -154,12 +155,12 @@ namespace Vulkan
 			RenderingContextDriverVulkan::SurfaceID surface = RenderingContextDriverVulkan::SurfaceID();
 			VkFormat format = VK_FORMAT_UNDEFINED;
 			VkColorSpaceKHR color_space = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
-			std::vector<VkImage> images;
-			std::vector<VkImageView> image_views;
-			std::vector<VkSemaphore> present_semaphores;
-			std::vector<FramebufferID> framebuffers;
-			std::vector<CommandQueue*> command_queues_acquired;
-			std::vector<uint32_t> command_queues_acquired_semaphores;
+			Util::SmallVector<VkImage> images;
+			Util::SmallVector<VkImageView> image_views;
+			Util::SmallVector<VkSemaphore> present_semaphores;
+			Util::SmallVector<FramebufferID> framebuffers;
+			Util::SmallVector<CommandQueue*> command_queues_acquired;
+			Util::SmallVector<uint32_t> command_queues_acquired_semaphores;
 			// The swap chain's surface format can vary per window/monitor/display, so each swap chain needs its own render pass tied to its specific VkFormat. 
 			// That's why render_pass is stored on the swap chain struct itself.
 			RenderPassID render_pass;
@@ -229,9 +230,9 @@ namespace Vulkan
 		};
 
 		struct PendingFlushes {
-			std::vector<VmaAllocation> allocations;
-			std::vector<VkDeviceSize> offsets;
-			std::vector<VkDeviceSize> sizes;
+			Util::SmallVector<VmaAllocation> allocations;
+			Util::SmallVector<VkDeviceSize> offsets;
+			Util::SmallVector<VkDeviceSize> sizes;
 		};
 
 		struct CommandBufferInfo {
@@ -243,26 +244,26 @@ namespace Vulkan
 		struct CommandPool {
 			VkCommandPool vk_command_pool = VK_NULL_HANDLE;
 			CommandBufferType buffer_type = COMMAND_BUFFER_TYPE_PRIMARY;
-			std::vector<CommandBufferInfo*> command_buffers_created;
+			Util::SmallVector<CommandBufferInfo*> command_buffers_created;
 		};
 
 		struct ShaderInfo {
 			std::string name;
 			VkShaderStageFlags vk_push_constant_stages = 0;
-			std::vector<VkPipelineShaderStageCreateInfo> vk_stages_create_info;
-			std::vector<VkRayTracingShaderGroupCreateInfoKHR> vk_groups_create_info;
-			std::vector<VkDescriptorSetLayout> vk_descriptor_set_layouts;
-			std::vector<respv::Shader> respv_stage_shaders;
-			std::vector<std::vector<uint8_t>> spirv_stage_bytes;
-			std::vector<uint64_t> original_stage_size;
+			Util::SmallVector<VkPipelineShaderStageCreateInfo> vk_stages_create_info;
+			Util::SmallVector<VkRayTracingShaderGroupCreateInfoKHR> vk_groups_create_info;
+			Util::SmallVector<VkDescriptorSetLayout> vk_descriptor_set_layouts;
+			Util::SmallVector<respv::Shader> respv_stage_shaders;
+			Util::SmallVector<Util::SmallVector<uint8_t>> spirv_stage_bytes;
+			Util::SmallVector<uint64_t> original_stage_size;
 			VkPipelineLayout vk_pipeline_layout = VK_NULL_HANDLE;
 			// Used to update the shader binding table buffer.
 			//RaytracingShaderRegionCount region_count;
 		};
 
 		struct VertexFormatInfo {
-			std::vector<VkVertexInputBindingDescription> vk_bindings;
-			std::vector<VkVertexInputAttributeDescription> vk_attributes;
+			Util::SmallVector<VkVertexInputBindingDescription> vk_bindings;
+			Util::SmallVector<VkVertexInputAttributeDescription> vk_attributes;
 			VkPipelineVertexInputStateCreateInfo vk_create_info = {};
 		};
 
@@ -281,7 +282,7 @@ namespace Vulkan
 			VkDescriptorPool vk_descriptor_pool = VK_NULL_HANDLE;
 			VkDescriptorPool vk_linear_descriptor_pool = VK_NULL_HANDLE;
 			DescriptorSetPools::iterator pool_sets_it;
-			std::vector<BufferInfo const*/*, uint32_t*/> dynamic_buffers;
+			Util::SmallVector<BufferInfo const*/*, uint32_t*/> dynamic_buffers;
 		};
 
 	public:
@@ -337,7 +338,7 @@ namespace Vulkan
 
 		void texture_get_copyable_layout(TextureID p_texture, const TextureSubresource& p_subresource, TextureCopyableLayout* r_layout) override;
 
-		std::vector<uint8_t> texture_get_data(TextureID p_texture, uint32_t p_layer) override;
+		Util::SmallVector<uint8_t> texture_get_data(TextureID p_texture, uint32_t p_layer) override;
 
 		BitField<TextureUsageBits> texture_get_usages_supported_by_format(DataFormat p_format, bool p_cpu_readable) override;
 
@@ -443,13 +444,13 @@ namespace Vulkan
 
 		void command_bind_push_constants(CommandBufferID p_cmd_buffer, ShaderID p_shader, uint32_t p_dst_first_index, std::span<uint32_t> p_data) override;
 
-		bool pipeline_cache_create(const std::vector<uint8_t>& p_data) override;
+		bool pipeline_cache_create(const Util::SmallVector<uint8_t>& p_data) override;
 
 		void pipeline_cache_free() override;
 
 		size_t pipeline_cache_query_size() override;
 
-		std::vector<uint8_t> pipeline_cache_serialize() override;
+		Util::SmallVector<uint8_t> pipeline_cache_serialize() override;
 
 		RenderingDeviceDriverVulkan::RenderPassID render_pass_create(std::span<Attachment> p_attachments, std::span<Subpass> p_subpasses,
 			std::span<SubpassDependency> p_subpass_dependencies, uint32_t p_view_count, AttachmentReference p_fragment_density_map_attachment) override;
@@ -564,7 +565,7 @@ namespace Vulkan
 
 		void command_uniform_set_prepare_for_use(CommandBufferID p_cmd_buffer, UniformSetID p_uniform_set, ShaderID p_shader, uint32_t p_set_index) override;
 
-		ShaderID shader_create_from_container(const RenderingShaderContainer* p_shader_container, const std::vector<ImmutableSampler>& p_immutable_samplers) override;
+		ShaderID shader_create_from_container(const RenderingShaderContainer* p_shader_container, const Util::SmallVector<ImmutableSampler>& p_immutable_samplers) override;
 
 		void shader_free(ShaderID p_shader) override;
 
@@ -587,8 +588,8 @@ namespace Vulkan
 		Error _initialize_device_extensions();
 		Error _check_device_features();
 		Error _check_device_capabilities();
-		Error _add_queue_create_info(std::vector<VkDeviceQueueCreateInfo>& r_queue_create_info);
-		Error _initialize_device(const std::vector<VkDeviceQueueCreateInfo>& p_queue_create_info);
+		Error _add_queue_create_info(Util::SmallVector<VkDeviceQueueCreateInfo>& r_queue_create_info);
+		Error _initialize_device(const Util::SmallVector<VkDeviceQueueCreateInfo>& p_queue_create_info);
 		Error _initialize_allocator();
 		Error _initialize_pipeline_cache();
 		VkResult _create_render_pass(VkDevice p_device, const VkRenderPassCreateInfo2* p_create_info, const VkAllocationCallbacks* p_allocator, VkRenderPass* p_render_pass);
@@ -599,7 +600,7 @@ namespace Vulkan
 		bool _determine_swap_chain_format(RenderingContextDriverVulkan::SurfaceID p_surface, VkFormat& r_format, VkColorSpaceKHR& r_color_space);
 		void _swap_chain_release(SwapChain* p_swap_chain);
 		VmaPool _find_or_create_small_allocs_pool(uint32_t p_mem_type_index);
-		//Device::ShaderID shader_create_from_container(const RenderingShaderContainer* p_shader_container, const std::vector<ImmutableSampler>& p_immutable_samplers);
+		//Device::ShaderID shader_create_from_container(const RenderingShaderContainer* p_shader_container, const Util::SmallVector<ImmutableSampler>& p_immutable_samplers);
 		VkDescriptorPool _descriptor_set_pool_create(const DescriptorSetPoolKey& p_key, bool p_linear_pool);
 		void _descriptor_set_pool_unreference(DescriptorSetPools::iterator p_pool_sets_it, VkDescriptorPool p_vk_descriptor_pool, int p_linear_pool_index);
 		VkSampleCountFlagBits _ensure_supported_sample_count(TextureSamples p_requested_sample_count) ;
@@ -623,8 +624,8 @@ namespace Vulkan
 
 		std::unordered_map<std::string, bool> requested_device_extensions;
 		std::set<std::string> enabled_device_extension_names;
-		std::vector<std::vector<Queue>> queue_families;
-		std::vector<VkQueueFamilyProperties> queue_family_properties;
+		Util::SmallVector<Util::SmallVector<Queue>> queue_families;
+		Util::SmallVector<VkQueueFamilyProperties> queue_family_properties;
 
 		bool framebuffer_depth_resolve = false;
 		std::unordered_map<uint64_t, bool> has_comp_alpha;
@@ -649,7 +650,7 @@ namespace Vulkan
 		RenderingShaderContainerFormatVulkan shader_container_format;
 
 		MultiviewCapabilities multiview_capabilities;
-		std::vector<TracyVkCtx> tracy_vk_contexts;
+		Util::SmallVector<TracyVkCtx> tracy_vk_contexts;
 		uint32_t frame_draw_calls = 0;
 
 

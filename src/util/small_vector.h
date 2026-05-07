@@ -28,6 +28,7 @@
 #include <exception>
 #include <algorithm>
 #include <initializer_list>
+#include <vector>
 
 namespace Util
 {
@@ -110,6 +111,16 @@ public:
 		return ptr + buffer_size;
 	}
 
+	const T *cbegin() const
+	{
+		return ptr;
+	}
+
+	const T *cend() const
+	{
+		return ptr + buffer_size;
+	}
+
 	T &front()
 	{
 		return ptr[0];
@@ -172,6 +183,18 @@ public:
 	SmallVector(const std::initializer_list<T> &init_list) : SmallVector()
 	{
 		insert(this->end(), init_list.begin(), init_list.end());
+	}
+
+	SmallVector(const std::vector<T> &other)
+	    : SmallVector(other.data(), other.data() + other.size())
+	{
+	}
+
+	SmallVector &operator=(const std::vector<T> &other)
+	{
+		clear();
+		insert(this->end(), other.data(), other.data() + other.size());
+		return *this;
 	}
 
 	SmallVector &operator=(SmallVector &&other) noexcept
@@ -411,6 +434,11 @@ public:
 		insert(itr, &value, &value + 1);
 	}
 
+	void insert(T* itr, std::initializer_list<T> list)
+	{
+		insert(itr, list.begin(), list.end());
+	}
+
 	T *erase(T *itr)
 	{
 		std::move(itr + 1, this->end(), itr);
@@ -447,6 +475,38 @@ public:
 		}
 
 		this->buffer_size = new_size;
+	}
+
+	void resize(size_t new_size, const T& value)
+	{
+		if (new_size < this->buffer_size)
+		{
+			for (size_t i = new_size; i < this->buffer_size; i++)
+				this->ptr[i].~T();
+		}
+		else if (new_size > this->buffer_size)
+		{
+			reserve(new_size);
+			for (size_t i = this->buffer_size; i < new_size; i++)
+				new (&this->ptr[i]) T(value);
+		}
+
+		this->buffer_size = new_size;
+	}
+
+	bool operator==(const SmallVector &other) const
+	{
+		if (this->buffer_size != other.buffer_size)
+			return false;
+		for (size_t i = 0; i < this->buffer_size; i++)
+			if (!(this->ptr[i] == other.ptr[i]))
+				return false;
+		return true;
+	}
+
+	bool operator!=(const SmallVector &other) const
+	{
+		return !(*this == other);
 	}
 
 private:

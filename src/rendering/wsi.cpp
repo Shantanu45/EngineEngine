@@ -12,6 +12,7 @@
 #include "application/service_locator.h"
 #include "rendering/renderer_compositor.h"
 #include "rendering/utils.h"
+#include "util/small_vector.h"
 
 namespace Rendering
 {
@@ -126,7 +127,7 @@ namespace Rendering
     {
         if (RenderUtilities::get_captured_timestamps_count())
         {
-            std::vector<RenderUtilities::FrameProfileArea> new_profile;
+            Util::SmallVector<RenderUtilities::FrameProfileArea> new_profile;
             if (RenderUtilities::capturing_timestamps)
                 new_profile.resize(RenderUtilities::get_captured_timestamps_count());
 
@@ -260,7 +261,7 @@ namespace Rendering
         return va;
     }
 
-    void WSI::create_new_vertex_format(const std::vector<RenderingDeviceCommons::VertexAttribute>& p_attributes, VERTEX_FORMAT_VARIATIONS p_type)
+    void WSI::create_new_vertex_format(const Util::SmallVector<RenderingDeviceCommons::VertexAttribute>& p_attributes, VERTEX_FORMAT_VARIATIONS p_type)
     {
         DEBUG_ASSERT(p_type < VERTEX_FORMAT_VARIATIONS::COUNT);
         vertex_format_map[p_type] = rendering_device->vertex_format_create(p_attributes);
@@ -272,9 +273,9 @@ namespace Rendering
         return vertex_format_map[p_type];
     }
 
-    std::vector<RenderingDeviceCommons::VertexAttribute> WSI::get_default_vertex_attribute()
+    Util::SmallVector<RenderingDeviceCommons::VertexAttribute> WSI::get_default_vertex_attribute()
     {
-        std::vector<RenderingDeviceCommons::VertexAttribute> attrs;
+        Util::SmallVector<RenderingDeviceCommons::VertexAttribute> attrs;
         attrs.emplace_back(get_vertex_attribute(0, 0, RenderingDeviceCommons::DATA_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, position), sizeof(Vertex)));
         attrs.emplace_back(get_vertex_attribute(0, 1, RenderingDeviceCommons::DATA_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, normal), sizeof(Vertex)));
         attrs.emplace_back(get_vertex_attribute(0, 2, RenderingDeviceCommons::DATA_FORMAT_R32G32_SFLOAT, offsetof(Vertex, texcoord), sizeof(Vertex)));
@@ -319,11 +320,11 @@ namespace Rendering
         return OK;
     }
 
-    std::vector<uint8_t> WSI::_get_attrib_interleaved(
-        const std::vector<RenderingDeviceCommons::VertexAttribute>& p_attribs,
-        const std::vector<uint8_t>& p_vertex_data)
+    Util::SmallVector<uint8_t> WSI::_get_attrib_interleaved(
+        const Util::SmallVector<RenderingDeviceCommons::VertexAttribute>& p_attribs,
+        const Util::SmallVector<uint8_t>& p_vertex_data)
     {
-        std::vector<uint8_t> interleaved_data;
+        Util::SmallVector<uint8_t> interleaved_data;
         const uint32_t vert_num = p_vertex_data.size() / p_attribs[0].stride;
         const uint32_t stride = p_attribs[0].stride;
         interleaved_data.resize(p_vertex_data.size());

@@ -10,6 +10,7 @@
 #include "filesystem/filesystem.h"
 #include "filesystem/path_utils.h"
 #include "math/math_common.h"
+#include "util/small_vector.h"
 
 namespace Rendering
 {
@@ -24,14 +25,14 @@ namespace Rendering
 	};
 
 	struct MeshPrimitive {
-		std::vector<Vertex>   vertices;
-		std::vector<uint32_t> indices;
+		Util::SmallVector<Vertex>   vertices;
+		Util::SmallVector<uint32_t> indices;
 		int                   material_index = -1; // index into GltfScene::materials
 	};
 
 	struct Mesh {
-		std::string                 name;
-		std::vector<MeshPrimitive>  primitives;
+		std::string                      name;
+		Util::SmallVector<MeshPrimitive> primitives;
 	};
 
 	// ----------------------------------------------------------------
@@ -86,7 +87,7 @@ namespace Rendering
 		int                    width = 0;
 		int                    height = 0;
 		int                    channels = 0;
-		std::vector<uint8_t>   pixels;
+		Util::SmallVector<uint8_t>   pixels;
 	};
 
 	// ----------------------------------------------------------------
@@ -96,7 +97,7 @@ namespace Rendering
 		std::string        name;
 		int                mesh_index = -1;  // -1 = no mesh
 		int                parent_index = -1;  // -1 = root
-		std::vector<int>   children;
+		Util::SmallVector<int>   children;
 
 		// Local transform - glTF gives either TRS or a matrix
 		glm::vec3          translation = glm::vec3(0.0f);
@@ -112,8 +113,8 @@ namespace Rendering
 	};
 
 	struct Scene {
-		std::string      name;
-		std::vector<int> root_nodes;
+		std::string           name;
+		Util::SmallVector<int> root_nodes;
 	};
 
 	// ----------------------------------------------------------------
@@ -123,8 +124,8 @@ namespace Rendering
 	enum class AnimationInterpolation { Linear, Step, CubicSpline };
 
 	struct AnimationSampler {
-		std::vector<float>      times;      // keyframe timestamps
-		std::vector<glm::vec4>  values;     // vec3 or quat packed into vec4
+		Util::SmallVector<float>      times;      // keyframe timestamps
+		Util::SmallVector<glm::vec4>  values;     // vec3 or quat packed into vec4
 		AnimationInterpolation  interpolation = AnimationInterpolation::Linear;
 	};
 
@@ -135,9 +136,9 @@ namespace Rendering
 	};
 
 	struct Animation {
-		std::string                   name;
-		std::vector<AnimationSampler> samplers;
-		std::vector<AnimationChannel> channels;
+		std::string                        name;
+		Util::SmallVector<AnimationSampler> samplers;
+		Util::SmallVector<AnimationChannel> channels;
 		float                         duration = 0.0f; // max timestamp across all samplers
 	};
 
@@ -145,13 +146,13 @@ namespace Rendering
 	// Top-level result
 	// ----------------------------------------------------------------
 	struct GltfScene {
-		std::vector<Mesh>        meshes;
-		std::vector<PBRMaterial> materials;
-		std::vector<GltfImageData>   images;
-		std::vector<SamplerInfo> samplers;
-		std::vector<Node>        nodes;
-		std::vector<Scene>       scenes;
-		std::vector<Animation>   animations;
+		Util::SmallVector<Mesh>          meshes;
+		Util::SmallVector<PBRMaterial>   materials;
+		Util::SmallVector<GltfImageData> images;
+		Util::SmallVector<SamplerInfo>   samplers;
+		Util::SmallVector<Node>          nodes;
+		Util::SmallVector<Scene>         scenes;
+		Util::SmallVector<Animation>     animations;
 		int                      default_scene = 0;
 	};
 
@@ -186,7 +187,7 @@ namespace Rendering
 
 		void _copy_attrib(const tinygltf::Primitive& prim,
 			const std::string& semantic,
-			std::vector<Vertex>& verts,
+			Util::SmallVector<Vertex>& verts,
 			size_t byteOffset,
 			int numComponents);
 

@@ -8,6 +8,7 @@
 #include "application_entry.h"
 #include <vector>
 #include <string>
+#include "util/small_vector.h"
 
 namespace EE
 {
@@ -28,8 +29,8 @@ int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	int argc;
 	wchar_t** wide_argv = CommandLineToArgvW(GetCommandLineW(), &argc);
 
-	std::vector<std::string> narrow(argc);
-	std::vector<char*> argv_ptrs(argc + 1, nullptr);
+	Util::SmallVector<std::string> narrow(argc);
+	Util::SmallVector<char*> argv_ptrs(argc + 1);
 	for (int i = 0; i < argc; i++)
 	{
 		int len = WideCharToMultiByte(CP_UTF8, 0, wide_argv[i], -1, nullptr, 0, nullptr, nullptr);

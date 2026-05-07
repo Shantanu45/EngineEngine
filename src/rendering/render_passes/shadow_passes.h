@@ -2,6 +2,7 @@
 #include "framegraph_resources.h"
 #include "rendering/drawable.h"
 #include "math/math_common.h"
+#include "util/small_vector.h"
 
 struct shadow_pass_resource {
     FrameGraphResource shadow_map;

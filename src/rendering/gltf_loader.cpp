@@ -4,6 +4,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "gltf_loader.h"
+#include "util/small_vector.h"
 
 namespace Rendering
 {
@@ -51,7 +52,7 @@ namespace Rendering
 		for (auto& s : m_model.scenes) {
 			Scene sc;
 			sc.name = s.name;
-			sc.root_nodes = s.nodes;
+			sc.root_nodes = Util::SmallVector<int>(s.nodes.data(), s.nodes.data() + s.nodes.size());
 			m_scene.scenes.push_back(sc);
 		}
 		m_scene.default_scene = m_model.defaultScene >= 0 ? m_model.defaultScene : 0;
@@ -174,7 +175,7 @@ namespace Rendering
 		out.width = img.width;
 		out.height = img.height;
 		out.channels = img.component;
-		out.pixels = img.image; // tinygltf already decoded it via stb_image
+		out.pixels = Util::SmallVector<uint8_t>(img.image.data(), img.image.data() + img.image.size());
 		return out;
 	}
 
@@ -197,7 +198,7 @@ namespace Rendering
 		Node out;
 		out.name = n.name;
 		out.mesh_index = n.mesh;
-		out.children = n.children;
+		out.children = Util::SmallVector<int>(n.children.data(), n.children.data() + n.children.size());
 
 		// Set parent index on children (we do it here since we have the index)
 		for (int child : n.children)
@@ -268,7 +269,8 @@ namespace Rendering
 			const float* timeData = reinterpret_cast<const float*>(
 				m_model.buffers[timeBv.buffer].data.data()
 				+ timeBv.byteOffset + timeAcc.byteOffset);
-			smp.times.assign(timeData, timeData + timeAcc.count);
+			smp.times.clear();
+			smp.times.insert(smp.times.end(), timeData, timeData + timeAcc.count);
 			out.duration = std::max(out.duration, smp.times.back());
 
 			// Output = values (vec3 or vec4)
@@ -309,7 +311,7 @@ namespace Rendering
 	// Unchanged helpers
 	// ----------------------------------------------------------------
 	void GltfLoader::_copy_attrib(const tinygltf::Primitive& prim, const std::string& semantic,
-		std::vector<Vertex>& verts, size_t byteOffset, int numComponents)
+		Util::SmallVector<Vertex>& verts, size_t byteOffset, int numComponents)
 	{
 		auto it = prim.attributes.find(semantic);
 		if (it == prim.attributes.end()) return;

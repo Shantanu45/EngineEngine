@@ -1,6 +1,7 @@
 #pragma  once
 #include "wsi.h"
 #include "rid_handle.h"
+#include "util/small_vector.h"
 
 namespace Rendering
 {
@@ -48,7 +49,7 @@ namespace Rendering
 
 		RIDHandle blit_pipeline;
 
-		std::vector<uint8_t> pv;
+		Util::SmallVector<uint8_t> pv;
 
 		RenderingDevice* rendering_device;
 		DisplayServerEnums::WindowID screen;

@@ -15,10 +15,12 @@
 #include "math/math_common.h"
 #include "util/error_macros.h"
 #include "xxhash.h"
+#include "util/small_vector.h"
+#include <algorithm>
 
 #define STEPIFY(m_number, m_alignment) ((((m_number) + ((m_alignment) - 1)) / (m_alignment)) * (m_alignment))
 
-using PackedByteArray = std::vector<uint8_t>;
+using PackedByteArray = Util::SmallVector<uint8_t>;
 
 namespace Rendering
 {
@@ -417,7 +419,7 @@ namespace Rendering
 			TextureType texture_type = TEXTURE_TYPE_2D;
 			TextureSamples samples = TEXTURE_SAMPLES_1;
 			uint32_t usage_bits = 0;
-			std::vector<DataFormat> shareable_formats;
+			Util::SmallVector<DataFormat> shareable_formats;
 			bool is_resolve_buffer = false;
 			bool is_discardable = false;
 
@@ -449,7 +451,8 @@ namespace Rendering
 				else if (usage_bits != b.usage_bits) {
 					return false;
 				}
-				else if (shareable_formats != b.shareable_formats) {
+				else if (shareable_formats.size() != b.shareable_formats.size() ||
+					!std::equal(shareable_formats.begin(), shareable_formats.end(), b.shareable_formats.begin())) {
 					return false;
 				}
 				else if (is_resolve_buffer != b.is_resolve_buffer) {
@@ -668,8 +671,8 @@ namespace Rendering
 
 		struct ShaderStageSPIRVData {
 			ShaderStage shader_stage = SHADER_STAGE_MAX;
-			std::vector<uint8_t> spirv;
-			std::vector<uint64_t> dynamic_buffers;
+			Util::SmallVector<uint8_t> spirv;
+			Util::SmallVector<uint64_t> dynamic_buffers;
 		};
 
 		/*********************/
@@ -838,7 +841,7 @@ namespace Rendering
 			TextureSamples sample_count = TEXTURE_SAMPLES_1;
 			bool enable_sample_shading = false;
 			float min_sample_shading = 0.0f;
-			std::vector<uint32_t> sample_mask;
+			Util::SmallVector<uint32_t> sample_mask;
 			bool enable_alpha_to_coverage = false;
 			bool enable_alpha_to_one = false;
 		};
@@ -907,7 +910,7 @@ namespace Rendering
 				return bs;
 			}
 
-			std::vector<Attachment> attachments; // One per render target texture.
+			Util::SmallVector<Attachment> attachments; // One per render target texture.
 			Color blend_constant;
 		};
 
@@ -1135,9 +1138,9 @@ namespace Rendering
 			uint32_t compute_local_size[3] = {};
 			uint32_t push_constant_size = 0;
 
-			std::vector<std::vector<ShaderUniform>> uniform_sets;
-			std::vector<ShaderSpecializationConstant> specialization_constants;
-			std::vector<ShaderStage> stages_vector;
+			Util::SmallVector<Util::SmallVector<ShaderUniform>> uniform_sets;
+			Util::SmallVector<ShaderSpecializationConstant> specialization_constants;
+			Util::SmallVector<ShaderStage> stages_vector;
 			BitField<ShaderStage> stages_bits = {};
 			BitField<ShaderStage> push_constant_stages = {};
 		};

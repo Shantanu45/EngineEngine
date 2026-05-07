@@ -7,6 +7,7 @@
  *********************************************************************/
 #pragma once
 #include "rendering_device.h"
+#include "util/small_vector.h"
 
 namespace Rendering
 {
@@ -40,7 +41,7 @@ namespace Rendering
 
 		~PipelineBuilder() = default;
 
-		PipelineBuilder& set_shader(const std::vector<std::string>& shaders, const std::string& name)
+		PipelineBuilder& set_shader(const Util::SmallVector<std::string>& shaders, const std::string& name)
 		{
 			shader = device->create_program(name, shaders);
 			return *this;
@@ -88,7 +89,7 @@ namespace Rendering
 			return *this;
 		}
 
-		PipelineBuilder& set_specialization_constants(const std::vector<RDC::PipelineSpecializationConstant>& p_specializatoin_constants)
+		PipelineBuilder& set_specialization_constants(const Util::SmallVector<RDC::PipelineSpecializationConstant>& p_specializatoin_constants)
 		{
 			specialization_constants = p_specializatoin_constants;
 			return *this;
@@ -124,6 +125,6 @@ namespace Rendering
 		RDC::PipelineDynamicStateFlags dynamic_state_flags;
 		RDC::PipelineMultisampleState multisample_state;
 		RDC::PipelineDepthStencilState depth_stencil_state;
-		std::vector<RDC::PipelineSpecializationConstant> specialization_constants;
+		Util::SmallVector<RDC::PipelineSpecializationConstant> specialization_constants;
 	};
 }

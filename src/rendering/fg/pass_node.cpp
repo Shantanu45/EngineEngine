@@ -1,10 +1,11 @@
 #include "pass_node.h"
+#include "util/small_vector.h"
 #include <algorithm>
 #include <cassert>
 
 namespace {
 
-[[nodiscard]] bool hasId(const std::vector<FrameGraphResource> &v,
+[[nodiscard]] bool hasId(const Util::SmallVector<FrameGraphResource> &v,
                          FrameGraphResource id) {
 #if __cplusplus >= 202002L
   return std::ranges::find(v, id) != v.cend();
@@ -12,7 +13,7 @@ namespace {
   return std::find(v.cbegin(), v.cend(), id) != v.cend();
 #endif
 }
-[[nodiscard]] bool hasId(const std::vector<PassNode::AccessDeclaration> &v,
+[[nodiscard]] bool hasId(const Util::SmallVector<PassNode::AccessDeclaration> &v,
                          FrameGraphResource id) {
   const auto match = [id](const auto &e) { return e.id == id; };
 #if __cplusplus >= 202002L
@@ -22,7 +23,7 @@ namespace {
 #endif
 }
 
-[[nodiscard]] bool contains(const std::vector<PassNode::AccessDeclaration> &v,
+[[nodiscard]] bool contains(const Util::SmallVector<PassNode::AccessDeclaration> &v,
                             PassNode::AccessDeclaration n) {
 #if __cplusplus >= 202002L
   return std::ranges::find(v, n) != v.cend();
@@ -55,12 +56,12 @@ PassNode::PassNode(const std::string_view name, uint32_t nodeId,
 
 FrameGraphResource PassNode::_read(FrameGraphResource id, uint32_t flags) {
   assert(!creates(id) && !writes(id));
-  return contains(m_reads, {id, flags})
-           ? id
-           : m_reads.emplace_back(AccessDeclaration{id, flags}).id;
+  if (contains(m_reads, {id, flags})) return id;
+  m_reads.emplace_back(AccessDeclaration{id, flags});
+  return m_reads.back().id;
 }
 FrameGraphResource PassNode::_write(FrameGraphResource id, uint32_t flags) {
-  return contains(m_writes, {id, flags})
-           ? id
-           : m_writes.emplace_back(AccessDeclaration{id, flags}).id;
+  if (contains(m_writes, {id, flags})) return id;
+  m_writes.emplace_back(AccessDeclaration{id, flags});
+  return m_writes.back().id;
 }

@@ -12,6 +12,7 @@
 #include "util/timer.h"
 #include "tutorial/scene/components.h"
 #include "entt/entt.hpp"
+#include "util/small_vector.h"
 
 struct DeferredApp : EE::Application
 {
@@ -102,14 +103,14 @@ struct DeferredApp : EE::Application
 	}
 
 private:
-	std::vector<Rendering::MeshInstance> build_main_instances()
+	Util::SmallVector<Rendering::MeshInstance> build_main_instances()
 	{
 		material_registry.upload_dirty(device);
-		std::vector<Rendering::MeshInstance> out;
+		Util::SmallVector<Rendering::MeshInstance> out;
 
 		world.view<TransformComponent, MeshComponent>().each(
 			[&](auto, TransformComponent& t, MeshComponent& m) {
-				std::vector<RID> mat_sets;
+				Util::SmallVector<RID> mat_sets;
 				for (auto h : m.materials)
 					mat_sets.push_back(h != Rendering::INVALID_MATERIAL
 						? material_registry.get_uniform_set(h) : RID());

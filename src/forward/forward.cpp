@@ -20,6 +20,7 @@
 #include "entt/entt.hpp"
 
 #include <functional>
+#include "util/small_vector.h"
 
 /**
  *  Set 0 - Per-frame global data   (camera, time, lights)
@@ -78,7 +79,7 @@ struct ForwardApplication : EE::Application
         const Rendering::GltfScene* gs = mesh_loader->get_scene();
 
         // Upload all images — one RID per image, indexed by GltfScene::images
-        std::vector<RID> image_rids;
+        Util::SmallVector<RID> image_rids;
         for (int i = 0; i < (int)gs->images.size(); i++)
             image_rids.push_back(mesh_loader->upload_cached(
                 gs, i, "assets://models/sponza/Sponza.gltf"));
@@ -92,7 +93,7 @@ struct ForwardApplication : EE::Application
 
         // Upload each primitive as its own MeshHandle — [mesh_idx][prim_idx]
         // Shared by multiple nodes that reference the same mesh (no duplicate uploads)
-        std::vector<std::vector<Rendering::MeshHandle>> prim_handles(gs->meshes.size());
+        Util::SmallVector<Util::SmallVector<Rendering::MeshHandle>> prim_handles(gs->meshes.size());
         for (int mi = 0; mi < (int)gs->meshes.size(); mi++) {
             const auto& mesh = gs->meshes[mi];
             prim_handles[mi].resize(mesh.primitives.size(), Rendering::INVALID_MESH);
@@ -287,7 +288,7 @@ private:
 
     // Sponza — mesh_loader owns image RIDs, must outlive material_registry
     std::unique_ptr<Rendering::MeshLoader>  mesh_loader;
-    std::vector<Rendering::MaterialHandle>  sponza_mats;
+    Util::SmallVector<Rendering::MaterialHandle>  sponza_mats;
 
     Camera camera;
     std::shared_ptr<EE::InputSystemInterface> input_system;

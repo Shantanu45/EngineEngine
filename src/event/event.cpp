@@ -6,6 +6,7 @@
  * \date   April 2026
  *********************************************************************/
 #include "event.h"
+#include "util/small_vector.h"
 #include <algorithm>
 #include <assert.h>
 
@@ -58,11 +59,13 @@ namespace EE
 			// Snapshot and clear the queue before dispatching so that events enqueued
 			// by handlers during dispatch are deferred to the next dispatch() call
 			// rather than processed mid-iteration (which could invalidate iterators).
-			std::vector<std::unique_ptr<Event>> current_events;
-			current_events.swap(queued_events);
+			Util::SmallVector<std::unique_ptr<Event>> current_events;
+			auto tmp = std::move(current_events);
+			current_events = std::move(queued_events);
+			queued_events = std::move(tmp);
 
 			event_type.second.dispatching = true;
-			auto itr = remove_if(begin(handlers), end(handlers), [&](const Handler& handler) {
+			auto itr = std::remove_if(handlers.begin(), handlers.end(), [&](const Handler& handler) {
 				for (auto& event : current_events)
 				{
 					if (!handler.mem_fn(handler.handler, *event))
@@ -73,31 +76,31 @@ namespace EE
 				}
 				return false;
 				});
-			handlers.erase(itr, end(handlers));
+			handlers.erase(itr, handlers.end());
 			event_type.second.dispatching = false;
 			event_type.second.flush_recursive_handlers();
 		}
 	}
 
-	void EventManager::dispatch_event(std::vector<Handler>& handlers, const Event& e)
+	void EventManager::dispatch_event(Util::SmallVector<Handler>& handlers, const Event& e)
 	{
-		auto itr = remove_if(begin(handlers), end(handlers), [&](const Handler& handler) -> bool {
+		auto itr = std::remove_if(handlers.begin(), handlers.end(), [&](const Handler& handler) -> bool {
 			bool to_remove = !handler.mem_fn(handler.handler, e);
 			if (to_remove)
 				handler.unregister_key->release_manager_reference();
 			return to_remove;
 			});
 
-		handlers.erase(itr, end(handlers));
+		handlers.erase(itr, handlers.end());
 	}
 
-	void EventManager::dispatch_up_events(std::vector<std::unique_ptr<Event>>& up_events, const LatchHandler& handler)
+	void EventManager::dispatch_up_events(Util::SmallVector<std::unique_ptr<Event>>& up_events, const LatchHandler& handler)
 	{
 		for (auto& event : up_events)
 			handler.up_fn(handler.handler, *event);
 	}
 
-	void EventManager::dispatch_down_events(std::vector<std::unique_ptr<Event>>& down_events, const LatchHandler& handler)
+	void EventManager::dispatch_down_events(Util::SmallVector<std::unique_ptr<Event>>& down_events, const LatchHandler& handler)
 	{
 		for (auto& event : down_events)
 			handler.down_fn(handler.handler, *event);
@@ -105,13 +108,13 @@ namespace EE
 
 	void EventManager::LatchEventTypeData::flush_recursive_handlers()
 	{
-		handlers.insert(end(handlers), begin(recursive_handlers), end(recursive_handlers));
+		handlers.insert(handlers.end(), recursive_handlers.begin(), recursive_handlers.end());
 		recursive_handlers.clear();
 	}
 
 	void EventManager::EventTypeData::flush_recursive_handlers()
 	{
-		handlers.insert(end(handlers), begin(recursive_handlers), end(recursive_handlers));
+		handlers.insert(handlers.end(), recursive_handlers.begin(), recursive_handlers.end());
 		recursive_handlers.clear();
 	}
 
@@ -140,15 +143,15 @@ namespace EE
 			if (event_type.second.dispatching)
 				throw std::logic_error("Unregistering handlers while dispatching events.");
 
-			auto remove_from = [&](std::vector<Handler>& vec)
+			auto remove_from = [&](Util::SmallVector<Handler>& vec)
 				{
-					auto itr = remove_if(begin(vec), end(vec), [&](const Handler& h) -> bool {
+					auto itr = std::remove_if(vec.begin(), vec.end(), [&](const Handler& h) -> bool {
 						bool to_remove = h.unregister_key == handler;
 						if (to_remove)
 							h.unregister_key->release_manager_reference();
 						return to_remove;
 						});
-					vec.erase(itr, end(vec));
+					vec.erase(itr, vec.end());
 				};
 
 			remove_from(event_type.second.handlers);
@@ -161,15 +164,15 @@ namespace EE
 	{
 		for (auto& event_type : latched_events)
 		{
-			auto remove_from = [&](std::vector<LatchHandler>& vec)
+			auto remove_from = [&](Util::SmallVector<LatchHandler>& vec)
 				{
-					auto itr = remove_if(begin(vec), end(vec), [&](const LatchHandler& h) -> bool {
+					auto itr = std::remove_if(vec.begin(), vec.end(), [&](const LatchHandler& h) -> bool {
 						bool to_remove = h.unregister_key == handler;
 						if (to_remove)
 							h.unregister_key->release_manager_reference();
 						return to_remove;
 						});
-					vec.erase(itr, end(vec));
+					vec.erase(itr, vec.end());
 				};
 
 			remove_from(event_type.second.handlers);
@@ -201,12 +204,12 @@ namespace EE
 		auto& queued_events = event_type.queued_events;
 
 		// FIX: separate find from dispatch from erase - avoids side effects inside remove_if predicate
-		auto itr = std::find_if(begin(queued_events), end(queued_events),
+		auto itr = std::find_if(queued_events.begin(), queued_events.end(),
 			[&](const std::unique_ptr<Event>& event) {
 				return event->get_cookie() == cookie;
 			});
 
-		if (itr != end(queued_events))
+		if (itr != queued_events.end())
 		{
 			dispatch_down_event(event_type, **itr);
 			queued_events.erase(itr);

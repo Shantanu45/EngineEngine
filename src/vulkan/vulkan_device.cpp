@@ -8,6 +8,7 @@
 #include "vulkan_device.h"
 #include "libassert/assert.hpp"
 #include "util/error_macros.h"
+#include "util/small_vector.h"
 #include "vulkan/vk_enum_string_helper.h"
 
 //#include "vma/vk_mem_alloc.h"
@@ -250,7 +251,7 @@ namespace Vulkan
 		err = _check_device_capabilities();
 		ERR_FAIL_COND_V(err != OK, err);
 
-		std::vector<VkDeviceQueueCreateInfo> queue_create_info;
+		Util::SmallVector<VkDeviceQueueCreateInfo> queue_create_info;
 		err = _add_queue_create_info(queue_create_info);
 		ERR_FAIL_COND_V(err != OK, err);
 
@@ -347,7 +348,7 @@ namespace Vulkan
 		ERR_FAIL_COND_V(err != VK_SUCCESS, ERR_CANT_CREATE);
 		ERR_FAIL_COND_V_MSG(device_extension_count == 0, ERR_CANT_CREATE, "vkEnumerateDeviceExtensionProperties failed to find any extensions\n\nDo you have a compatible Vulkan installable client driver (ICD) installed?");
 
-		std::vector<VkExtensionProperties> device_extensions;
+		Util::SmallVector<VkExtensionProperties> device_extensions;
 		device_extensions.resize(device_extension_count);
 		err = vkEnumerateDeviceExtensionProperties(physical_device, nullptr, &device_extension_count, device_extensions.data());
 		ERR_FAIL_COND_V(err != VK_SUCCESS, ERR_CANT_CREATE);
@@ -703,7 +704,7 @@ namespace Vulkan
 		return OK;
 	}
 
-	Error RenderingDeviceDriverVulkan::_add_queue_create_info(std::vector<VkDeviceQueueCreateInfo>& r_queue_create_info) {
+	Error RenderingDeviceDriverVulkan::_add_queue_create_info(Util::SmallVector<VkDeviceQueueCreateInfo>& r_queue_create_info) {
 		uint32_t queue_family_count = queue_family_properties.size();
 		queue_families.resize(queue_family_count);
 
@@ -730,8 +731,8 @@ namespace Vulkan
 		return OK;
 	}
 
-	Error RenderingDeviceDriverVulkan::_initialize_device(const std::vector<VkDeviceQueueCreateInfo>& p_queue_create_info) {
-		std::vector<const char*> enabled_extension_names;
+	Error RenderingDeviceDriverVulkan::_initialize_device(const Util::SmallVector<VkDeviceQueueCreateInfo>& p_queue_create_info) {
+		Util::SmallVector<const char*> enabled_extension_names;
 		enabled_extension_names.reserve(enabled_device_extension_names.size());
 		for (const std::string& extension_name : enabled_device_extension_names) {
 			enabled_extension_names.push_back(extension_name.data());
@@ -884,7 +885,7 @@ namespace Vulkan
 		return OK;
 	}
 
-	static void _convert_subpass_attachments(const VkAttachmentReference2* p_attachment_references_2, uint32_t p_attachment_references_count, std::vector<VkAttachmentReference>& r_attachment_references) {
+	static void _convert_subpass_attachments(const VkAttachmentReference2* p_attachment_references_2, uint32_t p_attachment_references_count, Util::SmallVector<VkAttachmentReference>& r_attachment_references) {
 		r_attachment_references.resize(p_attachment_references_count);
 		for (uint32_t i = 0; i < p_attachment_references_count; i++) {
 			// Ignore sType, pNext and aspectMask (which is currently unused).
@@ -916,7 +917,7 @@ namespace Vulkan
 		}
 		else {
 			// Compatibility fallback with regular create render pass but by converting the inputs from the newer version to the older one.
-			std::vector<VkAttachmentDescription> attachments;
+			Util::SmallVector<VkAttachmentDescription> attachments;
 			attachments.resize(p_create_info->attachmentCount);
 			for (uint32_t i = 0; i < p_create_info->attachmentCount; i++) {
 				// Ignores sType and pNext from the attachment.
@@ -934,8 +935,8 @@ namespace Vulkan
 			}
 
 			const uint32_t attachment_vectors_per_subpass = 4;
-			std::vector<std::vector<VkAttachmentReference>> subpasses_attachments;
-			std::vector<VkSubpassDescription> subpasses;
+			Util::SmallVector<Util::SmallVector<VkAttachmentReference>> subpasses_attachments;
+			Util::SmallVector<VkSubpassDescription> subpasses;
 			subpasses_attachments.resize(p_create_info->subpassCount * attachment_vectors_per_subpass);
 			subpasses.resize(p_create_info->subpassCount);
 
@@ -965,7 +966,7 @@ namespace Vulkan
 				dst_subpass.pPreserveAttachments = src_subpass.pPreserveAttachments;
 			}
 
-			std::vector<VkSubpassDependency> dependencies;
+			Util::SmallVector<VkSubpassDependency> dependencies;
 			dependencies.resize(p_create_info->dependencyCount);
 
 			for (uint32_t i = 0; i < p_create_info->dependencyCount; i++) {
@@ -1362,7 +1363,7 @@ namespace Vulkan
 			create_info.flags |= VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
 
 			if (enabled_device_extension_names.contains(VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME)) {
-				std::vector<VkFormat> vk_allowed_formats_array(p_format.shareable_formats.size());
+				Util::SmallVector<VkFormat> vk_allowed_formats_array(p_format.shareable_formats.size());
 				VkFormat* vk_allowed_formats = vk_allowed_formats_array.data();
 				for (int i = 0; i < p_format.shareable_formats.size(); i++) {
 					vk_allowed_formats[i] = RD_TO_VK_FORMAT[p_format.shareable_formats[i]];
@@ -1751,7 +1752,7 @@ namespace Vulkan
 		r_layout->row_pitch = r_layout->size / ((sbh / bh) * d);
 	}
 
-	std::vector<uint8_t> RenderingDeviceDriverVulkan::texture_get_data(TextureID p_texture, uint32_t p_layer) {
+	Util::SmallVector<uint8_t> RenderingDeviceDriverVulkan::texture_get_data(TextureID p_texture, uint32_t p_layer) {
 		const TextureInfo* tex = (const TextureInfo*)p_texture.id;
 
 		DataFormat tex_format = tex->rd_format;
@@ -1763,7 +1764,7 @@ namespace Vulkan
 		uint32_t width, height, depth;
 		uint32_t tight_mip_size = get_image_format_required_size(tex_format, tex_width, tex_height, tex_depth, tex_mipmaps, &width, &height, &depth);
 
-		std::vector<uint8_t> image_data;
+		Util::SmallVector<uint8_t> image_data;
 		image_data.resize(tight_mip_size);
 
 		uint32_t blockw, blockh;
@@ -1773,7 +1774,7 @@ namespace Vulkan
 
 		void* data_ptr = nullptr;
 		VkResult err = vmaMapMemory(allocator, tex->allocation.handle, &data_ptr);
-		ERR_FAIL_COND_V_MSG(err, std::vector<uint8_t>(), std::format("vmaMapMemory failed with error {} .", std::to_string(err)));
+		ERR_FAIL_COND_V_MSG(err, Util::SmallVector<uint8_t>(), std::format("vmaMapMemory failed with error {} .", std::to_string(err)));
 
 		{
 			uint8_t* w = image_data.data();
@@ -1971,7 +1972,7 @@ namespace Vulkan
 		std::span<TextureBarrier> p_texture_barriers,
 		std::span<AccelerationStructureBarrier> p_acceleration_structure_barriers) {
 
-		std::vector<VkMemoryBarrier> vk_mem_barrier_vec(p_memory_barriers.size());
+		Util::SmallVector<VkMemoryBarrier> vk_mem_barrier_vec(p_memory_barriers.size());
 		VkMemoryBarrier* vk_memory_barriers = vk_mem_barrier_vec.data();
 		for (uint32_t i = 0; i < p_memory_barriers.size(); i++) {
 			vk_memory_barriers[i] = {};
@@ -1979,7 +1980,7 @@ namespace Vulkan
 			vk_memory_barriers[i].srcAccessMask = _rd_to_vk_access_flags(p_memory_barriers[i].src_access) & ~VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR;
 			vk_memory_barriers[i].dstAccessMask = _rd_to_vk_access_flags(p_memory_barriers[i].dst_access) & ~VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR;
 		}
-		std::vector<VkBufferMemoryBarrier> vk_buffer_vec(p_buffer_barriers.size());
+		Util::SmallVector<VkBufferMemoryBarrier> vk_buffer_vec(p_buffer_barriers.size());
 		VkBufferMemoryBarrier* vk_buffer_barriers = vk_buffer_vec.data();
 		for (uint32_t i = 0; i < p_buffer_barriers.size(); i++) {
 			vk_buffer_barriers[i] = {};
@@ -1993,7 +1994,7 @@ namespace Vulkan
 			vk_buffer_barriers[i].size = p_buffer_barriers[i].size;
 		}
 
-		std::vector<VkImageMemoryBarrier> vk_image_barrier_vec(p_texture_barriers.size());
+		Util::SmallVector<VkImageMemoryBarrier> vk_image_barrier_vec(p_texture_barriers.size());
 
 		VkImageMemoryBarrier* vk_image_barriers = vk_image_barrier_vec.data();
 		for (uint32_t i = 0; i < p_texture_barriers.size(); i++) {
@@ -2124,7 +2125,7 @@ namespace Vulkan
 
 		if (fence->queue_signaled_from != nullptr) {
 			// Release all semaphores that the command queue associated to the fence waited on the last time it was submitted.
-			std::vector<std::pair<Fence*, uint32_t>>& pairs = fence->queue_signaled_from->image_semaphores_for_fences;
+			Util::SmallVector<std::pair<Fence*, uint32_t>>& pairs = fence->queue_signaled_from->image_semaphores_for_fences;
 			uint32_t i = 0;
 			while (i < pairs.size()) {
 				if (pairs[i].first == fence) {
@@ -2213,7 +2214,7 @@ namespace Vulkan
 
 		// Make a virtual queue on top of a real queue. Use the queue from the family with the least amount of virtual queues created.
 		uint32_t family_index = p_cmd_queue_family.id - 1;
-		std::vector<Queue>& queue_family = queue_families[family_index];
+		Util::SmallVector<Queue>& queue_family = queue_families[family_index];
 		uint32_t picked_queue_index = UINT_MAX;
 		uint32_t picked_virtual_count = UINT_MAX;
 		for (uint32_t i = 0; i < queue_family.size(); i++) {
@@ -2253,8 +2254,8 @@ namespace Vulkan
 		Fence* fence = (Fence*)(p_cmd_fence.id);
 		VkFence vk_fence = (fence != nullptr) ? fence->vk_fence : VK_NULL_HANDLE;
 
-		thread_local std::vector<VkSemaphore> wait_semaphores;
-		thread_local std::vector<VkPipelineStageFlags> wait_semaphores_stages;
+		thread_local Util::SmallVector<VkSemaphore> wait_semaphores;
+		thread_local Util::SmallVector<VkPipelineStageFlags> wait_semaphores_stages;
 		wait_semaphores.clear();
 		wait_semaphores_stages.clear();
 
@@ -2287,9 +2288,9 @@ namespace Vulkan
 		}
 
 		if (p_cmd_buffers.size() > 0) {
-			thread_local std::vector<VkCommandBuffer> command_buffers;
-			thread_local std::vector<VkSemaphore> present_semaphores;
-			thread_local std::vector<VkSemaphore> signal_semaphores;
+			thread_local Util::SmallVector<VkCommandBuffer> command_buffers;
+			thread_local Util::SmallVector<VkSemaphore> present_semaphores;
+			thread_local Util::SmallVector<VkSemaphore> signal_semaphores;
 			command_buffers.clear();
 			present_semaphores.clear();
 			signal_semaphores.clear();
@@ -2348,9 +2349,9 @@ namespace Vulkan
 		}
 
 		if (p_swap_chains.size() > 0) {
-			thread_local std::vector<VkSwapchainKHR> swapchains;
-			thread_local std::vector<uint32_t> image_indices;
-			thread_local std::vector<VkResult> results;
+			thread_local Util::SmallVector<VkSwapchainKHR> swapchains;
+			thread_local Util::SmallVector<uint32_t> image_indices;
+			thread_local Util::SmallVector<VkResult> results;
 			swapchains.clear();
 			image_indices.clear();
 
@@ -2428,7 +2429,7 @@ namespace Vulkan
 
 		// Retrieve the queue family corresponding to the virtual queue.
 		DEV_ASSERT(command_queue->queue_family < queue_families.size());
-		std::vector<Queue>& queue_family = queue_families[command_queue->queue_family];
+		Util::SmallVector<Queue>& queue_family = queue_families[command_queue->queue_family];
 
 		// Decrease the virtual queue count.
 		DEV_ASSERT(command_queue->queue_index < queue_family.size());
@@ -2554,7 +2555,7 @@ namespace Vulkan
 	}
 
 	void RenderingDeviceDriverVulkan::command_buffer_execute_secondary(CommandBufferID p_cmd_buffer, std::span<CommandBufferID> p_secondary_cmd_buffers) {
-		thread_local std::vector<VkCommandBuffer> secondary_command_buffers;
+		thread_local Util::SmallVector<VkCommandBuffer> secondary_command_buffers;
 		CommandBufferInfo* command_buffer = (CommandBufferInfo*)(p_cmd_buffer.id);
 		secondary_command_buffers.resize(p_secondary_cmd_buffers.size());
 		for (uint32_t i = 0; i < p_secondary_cmd_buffers.size(); i++) {
@@ -2584,7 +2585,7 @@ namespace Vulkan
 		VkResult err = vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface->vk_surface, &format_count, nullptr);
 		ERR_FAIL_COND_V(err != VK_SUCCESS, false);
 
-		std::vector<VkSurfaceFormatKHR> formats;
+		Util::SmallVector<VkSurfaceFormatKHR> formats;
 		formats.resize(format_count);
 		err = vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface->vk_surface, &format_count, formats.data());
 		ERR_FAIL_COND_V(err != VK_SUCCESS, false);
@@ -2600,7 +2601,7 @@ namespace Vulkan
 		bool hdr_output_requested = context_driver->surface_get_hdr_output_enabled(p_surface);
 
 		// Determine which formats to prefer based on the requested capabilities.
-		std::vector<FormatCandidate> preferred_formats;
+		Util::SmallVector<FormatCandidate> preferred_formats;
 
 		// If the surface requests HDR output, try to get an HDR format.
 		if (hdr_output_requested && colorspace_supported) {
@@ -2753,7 +2754,7 @@ namespace Vulkan
 		}
 
 		// Find what present modes are supported.
-		std::vector<VkPresentModeKHR> present_modes;
+		Util::SmallVector<VkPresentModeKHR> present_modes;
 		uint32_t present_modes_count = 0;
 		err = vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface->vk_surface, &present_modes_count, nullptr);
 		ERR_FAIL_COND_V(err != VK_SUCCESS, ERR_CANT_CREATE);
@@ -3115,7 +3116,7 @@ namespace Vulkan
 		RenderPassInfo* render_pass = (RenderPassInfo*)(p_render_pass.id);
 
 		uint32_t fragment_density_map_offsets_layers = 0;
-		std::vector< VkImageView> vk_img_vec(p_attachments.size());
+		Util::SmallVector<VkImageView> vk_img_vec(p_attachments.size());
 		VkImageView* vk_img_views = vk_img_vec.data();
 		for (uint32_t i = 0; i < p_attachments.size(); i++) {
 			const TextureInfo* texture = (const TextureInfo*)p_attachments[i].id;
@@ -3173,7 +3174,7 @@ namespace Vulkan
 	VK_SHADER_STAGE_INTERSECTION_BIT_KHR,
 	};
 
-	RenderingDeviceDriverVulkan::ShaderID RenderingDeviceDriverVulkan::shader_create_from_container(const RenderingShaderContainer* p_shader_container, const std::vector<ImmutableSampler>& p_immutable_samplers) {
+	RenderingDeviceDriverVulkan::ShaderID RenderingDeviceDriverVulkan::shader_create_from_container(const RenderingShaderContainer* p_shader_container, const Util::SmallVector<ImmutableSampler>& p_immutable_samplers) {
 		ShaderReflection shader_refl = p_shader_container->get_shader_reflection();
 		ShaderInfo shader_info;
 		shader_info.name = p_shader_container->shader_name;
@@ -3185,7 +3186,7 @@ namespace Vulkan
 		}
 
 		// Set bindings.
-		std::vector<std::vector<VkDescriptorSetLayoutBinding>> vk_set_bindings;
+		Util::SmallVector<Util::SmallVector<VkDescriptorSetLayoutBinding>> vk_set_bindings;
 		vk_set_bindings.resize(shader_refl.uniform_sets.size());
 		for (uint32_t i = 0; i < shader_refl.uniform_sets.size(); i++) {
 			for (uint32_t j = 0; j < shader_refl.uniform_sets[i].size(); j++) {
@@ -3266,7 +3267,7 @@ namespace Vulkan
 		// Modules.
 		VkResult res;
 		std::string error_text;
-		std::vector<uint8_t> decompressed_code;
+		Util::SmallVector<uint8_t> decompressed_code;
 		VkShaderModule vk_module;
 		PackedByteArray decoded_spirv;
 		const bool use_respv = RESPV_ENABLED && !shader_container_format.get_debug_info_enabled();
@@ -3461,7 +3462,7 @@ namespace Vulkan
 			pipeline_layout_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 			pipeline_layout_create_info.setLayoutCount = shader_info.vk_descriptor_set_layouts.size();
 			pipeline_layout_create_info.pSetLayouts = shader_info.vk_descriptor_set_layouts.data();
-			std::vector<VkPushConstantRange> push_constant_range_vec;
+			Util::SmallVector<VkPushConstantRange> push_constant_range_vec;
 
 			if (shader_refl.push_constant_size > 0) {
 				push_constant_range_vec.emplace_back();
@@ -3691,7 +3692,7 @@ namespace Vulkan
 
 	VkDescriptorPool RenderingDeviceDriverVulkan::_descriptor_set_pool_create(const DescriptorSetPoolKey& p_key, bool p_linear_pool) {
 		// Here comes more vulkan API strangeness.
-		std::vector< VkDescriptorPoolSize> vk_sizes_vec(UNIFORM_TYPE_MAX);
+		Util::SmallVector<VkDescriptorPoolSize> vk_sizes_vec(UNIFORM_TYPE_MAX);
 		VkDescriptorPoolSize* vk_sizes = vk_sizes_vec.data();
 		uint32_t vk_sizes_count = 0;
 		{
@@ -3873,15 +3874,15 @@ namespace Vulkan
 		// Single flat allocation per descriptor struct type.
 		// Pointers into these arrays remain stable (no reallocation) because
 		// we pre-sized them exactly � safe to hand to vkUpdateDescriptorSets.
-		std::vector<VkDescriptorImageInfo>  img_infos(total_image_infos);
-		std::vector<VkDescriptorBufferInfo> buf_infos(total_buffer_infos);
-		std::vector<VkBufferView>           buf_views(total_buffer_views);
+		Util::SmallVector<VkDescriptorImageInfo>  img_infos(total_image_infos);
+		Util::SmallVector<VkDescriptorBufferInfo> buf_infos(total_buffer_infos);
+		Util::SmallVector<VkBufferView>           buf_views(total_buffer_views);
 
 		uint32_t img_offset = 0;
 		uint32_t buf_offset = 0;
 		uint32_t view_offset = 0;
 
-		std::vector<VkWriteDescriptorSet> vk_writes_vec(p_uniforms.size());
+		Util::SmallVector<VkWriteDescriptorSet> vk_writes_vec(p_uniforms.size());
 		VkWriteDescriptorSet* vk_writes = vk_writes_vec.data();
 		uint32_t writes_amount = 0;
 
@@ -4320,7 +4321,7 @@ namespace Vulkan
 	}
 
 	void RenderingDeviceDriverVulkan::command_copy_texture(CommandBufferID p_cmd_buffer, TextureID p_src_texture, TextureLayout p_src_texture_layout, TextureID p_dst_texture, TextureLayout p_dst_texture_layout, std::span<TextureCopyRegion> p_regions) {
-		std::vector<VkImageCopy> vk_copy_regions_vec(p_regions.size());
+		Util::SmallVector<VkImageCopy> vk_copy_regions_vec(p_regions.size());
 		VkImageCopy* vk_copy_regions = vk_copy_regions_vec.data();
 		for (uint32_t i = 0; i < p_regions.size(); i++) {
 			_texture_copy_region_to_vk(p_regions[i], &vk_copy_regions[i]);
@@ -4415,7 +4416,7 @@ namespace Vulkan
 		uint32_t block_w, block_h;
 		get_compressed_image_format_block_dimensions(tex_info->rd_format, block_w, block_h);
 
-		std::vector<VkBufferImageCopy> vk_copy_regions_vec(p_regions.size());
+		Util::SmallVector<VkBufferImageCopy> vk_copy_regions_vec(p_regions.size());
 		VkBufferImageCopy* vk_copy_regions = vk_copy_regions_vec.data();
 		for (uint32_t i = 0; i < p_regions.size(); i++) {
 			_buffer_texture_copy_region_to_vk(p_regions[i], p_regions[i].row_pitch * block_w / (pixel_size * block_size), &vk_copy_regions[i]);
@@ -4439,7 +4440,7 @@ namespace Vulkan
 		uint32_t block_w, block_h;
 		get_compressed_image_format_block_dimensions(tex_info->rd_format, block_w, block_h);
 
-		std::vector<VkBufferImageCopy> vk_copy_regions_vec(p_regions.size());
+		Util::SmallVector<VkBufferImageCopy> vk_copy_regions_vec(p_regions.size());
 		VkBufferImageCopy* vk_copy_regions = vk_copy_regions_vec.data();
 		for (uint32_t i = 0; i < p_regions.size(); i++) {
 			_buffer_texture_copy_region_to_vk(p_regions[i], p_regions[i].row_pitch * block_w / (pixel_size * block_size), &vk_copy_regions[i]);
@@ -4476,7 +4477,7 @@ namespace Vulkan
 	int RenderingDeviceDriverVulkan::caching_instance_count = 0;
 
 
-	bool RenderingDeviceDriverVulkan::pipeline_cache_create(const std::vector<uint8_t>& p_data) {
+	bool RenderingDeviceDriverVulkan::pipeline_cache_create(const Util::SmallVector<uint8_t>& p_data) {
 		if (caching_instance_count) {
 			WARN_PRINT("There's already a RenderingDeviceDriverVulkan instance doing PSO caching. Only one can at the same time. This one won't.");
 			return false;
@@ -4559,13 +4560,13 @@ namespace Vulkan
 		return pipelines_cache.current_size;
 	}
 
-	std::vector<uint8_t> RenderingDeviceDriverVulkan::pipeline_cache_serialize() {
+	Util::SmallVector<uint8_t> RenderingDeviceDriverVulkan::pipeline_cache_serialize() {
 		DEV_ASSERT(pipelines_cache.vk_cache);
 
 		pipelines_cache.buffer.resize(pipelines_cache.current_size + sizeof(PipelineCacheHeader));
 
 		VkResult err = vkGetPipelineCacheData(vk_device, pipelines_cache.vk_cache, &pipelines_cache.current_size, pipelines_cache.buffer.data() + sizeof(PipelineCacheHeader));
-		ERR_FAIL_COND_V(err != VK_SUCCESS && err != VK_INCOMPLETE, std::vector<uint8_t>()); // Incomplete is OK because the cache may have grown since the size was queried (unless when exiting).
+		ERR_FAIL_COND_V(err != VK_SUCCESS && err != VK_INCOMPLETE, Util::SmallVector<uint8_t>()); // Incomplete is OK because the cache may have grown since the size was queried (unless when exiting).
 
 		// The real buffer size may now be bigger than the updated current_size.
 		// We take into account the new size but keep the buffer resized in a worst-case fashion.
@@ -4591,198 +4592,205 @@ namespace Vulkan
 		r_vk_attachment_reference->aspectMask = (VkImageAspectFlags)p_attachment_reference.aspect;
 	}
 
-	RenderingDeviceDriverVulkan::RenderPassID RenderingDeviceDriverVulkan::render_pass_create(std::span<Attachment> p_attachments, std::span<Subpass> p_subpasses, std::span<SubpassDependency> p_subpass_dependencies, uint32_t p_view_count, AttachmentReference p_fragment_density_map_attachment) {
-		// These are only used if we use multiview but we need to define them in scope.
+	RenderingDeviceDriverVulkan::RenderPassID RenderingDeviceDriverVulkan::render_pass_create(
+		std::span<Attachment> p_attachments,
+		std::span<Subpass> p_subpasses,
+		std::span<SubpassDependency> p_subpass_dependencies,
+		uint32_t p_view_count,
+		AttachmentReference p_fragment_density_map_attachment)
+	{
 		const uint32_t view_mask = (1 << p_view_count) - 1;
 		const uint32_t correlation_mask = (1 << p_view_count) - 1;
 
-		std::vector<VkAttachmentDescription2KHR> vk_attachments_vec(p_attachments.size());
-		VkAttachmentDescription2KHR* vk_attachments = vk_attachments_vec.data();
-		for (uint32_t i = 0; i < p_attachments.size(); i++) {
-			vk_attachments[i] = {};
-			vk_attachments[i].sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2_KHR;
-			vk_attachments[i].format = RD_TO_VK_FORMAT[p_attachments[i].format];
-			vk_attachments[i].samples = _ensure_supported_sample_count(p_attachments[i].samples);
-			vk_attachments[i].loadOp = (VkAttachmentLoadOp)p_attachments[i].load_op;
-			vk_attachments[i].storeOp = (VkAttachmentStoreOp)p_attachments[i].store_op;
-			vk_attachments[i].stencilLoadOp = (VkAttachmentLoadOp)p_attachments[i].stencil_load_op;
-			vk_attachments[i].stencilStoreOp = (VkAttachmentStoreOp)p_attachments[i].stencil_store_op;
-			vk_attachments[i].initialLayout = RD_TO_VK_LAYOUT[p_attachments[i].initial_layout];
-			vk_attachments[i].finalLayout = RD_TO_VK_LAYOUT[p_attachments[i].final_layout];
-		}
-		std::vector<VkAttachmentReference2KHR> vk_subpass_input_attachments_vec;
-		std::vector<VkAttachmentReference2KHR> vk_subpass_color_attachments_vec;
-		std::vector<VkAttachmentReference2KHR> vk_subpass_resolve_attachments_vec;
-		std::vector<VkAttachmentReference2KHR> vk_subpass_depth_stencil_attachment_vec;
-
-		std::vector<VkSubpassDescription2KHR> vk_subpasses_vec(p_subpasses.size());
-		VkSubpassDescription2KHR* vk_subpasses = vk_subpasses_vec.data();
-
-		for (uint32_t i = 0; i < p_subpasses.size(); i++) {
-
-			//vk_subpass_input_attachments_vec.resize(p_subpasses[i].input_references.size());
-			//VkAttachmentReference2KHR* vk_subpass_input_attachments = vk_subpass_input_attachments_vec.data();
-			for (uint32_t j = 0; j < p_subpasses[i].input_references.size(); j++) {
-				vk_subpass_input_attachments_vec.emplace_back();
-				auto& attachment = vk_subpass_input_attachments_vec.back();
-				_attachment_reference_to_vk(p_subpasses[i].input_references[j], &attachment);
-			}
-
-			//vk_subpass_color_attachments_vec.resize(p_subpasses[i].color_references.size());
-			//VkAttachmentReference2KHR* vk_subpass_color_attachments = vk_subpass_color_attachments_vec.data();
-			for (uint32_t j = 0; j < p_subpasses[i].color_references.size(); j++) {
-				vk_subpass_color_attachments_vec.emplace_back();
-				auto& attachment = vk_subpass_color_attachments_vec.back();
-				_attachment_reference_to_vk(p_subpasses[i].color_references[j], &attachment);
-			}
-
-			//vk_subpass_resolve_attachments_vec.resize(p_subpasses[i].resolve_references.size());
-			//VkAttachmentReference2KHR* vk_subpass_resolve_attachments = vk_subpass_resolve_attachments_vec.data();
-			for (uint32_t j = 0; j < p_subpasses[i].resolve_references.size(); j++) {
-				vk_subpass_resolve_attachments_vec.emplace_back();
-				auto& attachment = vk_subpass_resolve_attachments_vec.back();
-				_attachment_reference_to_vk(p_subpasses[i].resolve_references[j], &attachment);
-			}
-
-			//VkAttachmentReference2KHR* vk_subpass_depth_stencil_attachment = nullptr;
-			if (p_subpasses[i].depth_stencil_reference.attachment != AttachmentReference::UNUSED) {
-				vk_subpass_depth_stencil_attachment_vec.emplace_back(); // create element
-				auto& attachment = vk_subpass_depth_stencil_attachment_vec.back();
-				//vk_subpass_depth_stencil_attachment = vk_subpass_depth_stencil_attachment_vec.data();
-				_attachment_reference_to_vk(p_subpasses[i].depth_stencil_reference, &attachment);
-			}
-
-			vk_subpasses[i] = {};
-			vk_subpasses[i].sType = VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_2_KHR;
-			vk_subpasses[i].pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-			vk_subpasses[i].viewMask = p_view_count == 1 ? 0 : view_mask;
-			vk_subpasses[i].inputAttachmentCount = p_subpasses[i].input_references.size();
-			vk_subpasses[i].pInputAttachments = vk_subpass_input_attachments_vec.data();
-			vk_subpasses[i].colorAttachmentCount = p_subpasses[i].color_references.size();
-			vk_subpasses[i].pColorAttachments = vk_subpass_color_attachments_vec.data();
-			vk_subpasses[i].pResolveAttachments = vk_subpass_resolve_attachments_vec.data();
-			vk_subpasses[i].pDepthStencilAttachment = vk_subpass_depth_stencil_attachment_vec.data();
-			vk_subpasses[i].preserveAttachmentCount = p_subpasses[i].preserve_attachments.size();
-			vk_subpasses[i].pPreserveAttachments = p_subpasses[i].preserve_attachments.data();
-
-			// Fragment shading rate.
-			/*if (fsr_capabilities.attachment_supported && p_subpasses[i].fragment_shading_rate_reference.attachment != AttachmentReference::UNUSED) {
-				VkAttachmentReference2KHR* vk_subpass_fsr_attachment = ALLOCA_SINGLE(VkAttachmentReference2KHR);
-				*vk_subpass_fsr_attachment = {};
-				vk_subpass_fsr_attachment->sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2_KHR;
-				vk_subpass_fsr_attachment->attachment = p_subpasses[i].fragment_shading_rate_reference.attachment;
-				vk_subpass_fsr_attachment->layout = VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR;
-
-				VkFragmentShadingRateAttachmentInfoKHR* vk_fsr_info = ALLOCA_SINGLE(VkFragmentShadingRateAttachmentInfoKHR);
-				*vk_fsr_info = {};
-				vk_fsr_info->sType = VK_STRUCTURE_TYPE_FRAGMENT_SHADING_RATE_ATTACHMENT_INFO_KHR;
-				vk_fsr_info->pNext = vk_subpasses[i].pNext;
-				vk_fsr_info->pFragmentShadingRateAttachment = vk_subpass_fsr_attachment;
-				vk_fsr_info->shadingRateAttachmentTexelSize.width = p_subpasses[i].fragment_shading_rate_texel_size.x;
-				vk_fsr_info->shadingRateAttachmentTexelSize.height = p_subpasses[i].fragment_shading_rate_texel_size.y;
-
-				vk_subpasses[i].pNext = vk_fsr_info;
-			}*/
-
-			// Depth resolve.
-			//if (framebuffer_depth_resolve && p_subpasses[i].depth_resolve_reference.attachment != AttachmentReference::UNUSED) {
-			//	std::vector<VkAttachmentReference2KHR> vk_subpass_depth_resolve_attachment_vec;
-			//	VkAttachmentReference2KHR* vk_subpass_depth_resolve_attachment = vk_subpass_depth_resolve_attachment_vec.data();
-			//	*vk_subpass_depth_resolve_attachment = {};
-			//	vk_subpass_depth_resolve_attachment->sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2_KHR;
-			//	vk_subpass_depth_resolve_attachment->attachment = p_subpasses[i].depth_resolve_reference.attachment;
-			//	vk_subpass_depth_resolve_attachment->layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-			//	std::vector<VkSubpassDescriptionDepthStencilResolveKHR> vk_depth_resolve_info_vec;
-			//	VkSubpassDescriptionDepthStencilResolveKHR* vk_depth_resolve_info = vk_depth_resolve_info_vec.data();
-			//	*vk_depth_resolve_info = {};
-			//	vk_depth_resolve_info->sType = VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_DEPTH_STENCIL_RESOLVE;
-			//	vk_depth_resolve_info->pNext = vk_subpasses[i].pNext;
-			//	vk_depth_resolve_info->depthResolveMode = VK_RESOLVE_MODE_MAX_BIT_KHR;
-			//	vk_depth_resolve_info->stencilResolveMode = VK_RESOLVE_MODE_NONE_KHR; // we don't resolve our stencil (for now)
-			//	vk_depth_resolve_info->pDepthStencilResolveAttachment = vk_subpass_depth_resolve_attachment;
-
-			//	vk_subpasses[i].pNext = vk_depth_resolve_info;
-			//}
-
-			if (framebuffer_depth_resolve && p_subpasses[i].depth_resolve_reference.attachment != AttachmentReference::UNUSED) {
-				VkAttachmentReference2KHR vk_subpass_depth_resolve_attachment{};
-				vk_subpass_depth_resolve_attachment.sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2_KHR;
-				vk_subpass_depth_resolve_attachment.attachment = p_subpasses[i].depth_resolve_reference.attachment;
-				vk_subpass_depth_resolve_attachment.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-				VkSubpassDescriptionDepthStencilResolveKHR vk_depth_resolve_info{};
-				vk_depth_resolve_info.sType = VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_DEPTH_STENCIL_RESOLVE;
-				vk_depth_resolve_info.pNext = vk_subpasses[i].pNext;
-				vk_depth_resolve_info.depthResolveMode = VK_RESOLVE_MODE_MAX_BIT_KHR;
-				vk_depth_resolve_info.stencilResolveMode = VK_RESOLVE_MODE_NONE_KHR;
-				vk_depth_resolve_info.pDepthStencilResolveAttachment = &vk_subpass_depth_resolve_attachment;
-
-				vk_subpasses[i].pNext = &vk_depth_resolve_info;
-			}
+		// -------------------------
+		// Attachments
+		// -------------------------
+		Util::SmallVector<VkAttachmentDescription2KHR> vk_attachments_vec(p_attachments.size());
+		for (uint32_t i = 0; i < p_attachments.size(); i++)
+		{
+			auto& a = vk_attachments_vec[i];
+			a = {};
+			a.sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2_KHR;
+			a.format = RD_TO_VK_FORMAT[p_attachments[i].format];
+			a.samples = _ensure_supported_sample_count(p_attachments[i].samples);
+			a.loadOp = (VkAttachmentLoadOp)p_attachments[i].load_op;
+			a.storeOp = (VkAttachmentStoreOp)p_attachments[i].store_op;
+			a.stencilLoadOp = (VkAttachmentLoadOp)p_attachments[i].stencil_load_op;
+			a.stencilStoreOp = (VkAttachmentStoreOp)p_attachments[i].stencil_store_op;
+			a.initialLayout = RD_TO_VK_LAYOUT[p_attachments[i].initial_layout];
+			a.finalLayout = RD_TO_VK_LAYOUT[p_attachments[i].final_layout];
 		}
 
-		std::vector<VkSubpassDependency2KHR> vk_subpass_dependencies_vec(p_subpass_dependencies.size());
-		VkSubpassDependency2KHR* vk_subpass_dependencies = vk_subpass_dependencies_vec.data();
-		for (uint32_t i = 0; i < p_subpass_dependencies.size(); i++) {
-			vk_subpass_dependencies[i] = {};
-			vk_subpass_dependencies[i].sType = VK_STRUCTURE_TYPE_SUBPASS_DEPENDENCY_2;
-			vk_subpass_dependencies[i].srcSubpass = p_subpass_dependencies[i].src_subpass;
-			vk_subpass_dependencies[i].dstSubpass = p_subpass_dependencies[i].dst_subpass;
-			vk_subpass_dependencies[i].srcStageMask = _rd_to_vk_pipeline_stages(p_subpass_dependencies[i].src_stages);
-			vk_subpass_dependencies[i].dstStageMask = _rd_to_vk_pipeline_stages(p_subpass_dependencies[i].dst_stages);
-			vk_subpass_dependencies[i].srcAccessMask = _rd_to_vk_access_flags(p_subpass_dependencies[i].src_access);
-			vk_subpass_dependencies[i].dstAccessMask = _rd_to_vk_access_flags(p_subpass_dependencies[i].dst_access);
-		}
+		// -------------------------
+		// Global backing storage
+		// -------------------------
+		Util::SmallVector<VkAttachmentReference2KHR> input_refs;
+		Util::SmallVector<VkAttachmentReference2KHR> color_refs;
+		Util::SmallVector<VkAttachmentReference2KHR> resolve_refs;
+		Util::SmallVector<VkAttachmentReference2KHR> depth_refs;
 
-		VkRenderPassCreateInfo2KHR create_info = {};
-		create_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO_2_KHR;
-		create_info.attachmentCount = p_attachments.size();
-		create_info.pAttachments = vk_attachments;
-		create_info.subpassCount = p_subpasses.size();
-		create_info.pSubpasses = vk_subpasses;
-		create_info.dependencyCount = p_subpass_dependencies.size();
-		create_info.pDependencies = vk_subpass_dependencies;
-		create_info.correlatedViewMaskCount = p_view_count == 1 ? 0 : 1;
-		create_info.pCorrelatedViewMasks = p_view_count == 1 ? nullptr : &correlation_mask;
+		Util::SmallVector<VkSubpassDescriptionDepthStencilResolveKHR> depth_resolve_infos;
+		Util::SmallVector<VkAttachmentReference2KHR> depth_resolve_attachments;
 
-		std::vector<uint32_t> vk_view_masks_vec(p_subpasses.size());
-		VkRenderPassMultiviewCreateInfo multiview_create_info{}; // plain stack variable, no vector needed
+		Util::SmallVector<VkSubpassDescription2KHR> vk_subpasses_vec(p_subpasses.size());
 
-		if (p_view_count > 1 && vkCreateRenderPass2KHR == nullptr) {
-			uint32_t* vk_view_masks = vk_view_masks_vec.data();
-			for (uint32_t i = 0; i < p_subpasses.size(); i++) {
-				vk_view_masks[i] = view_mask;
+		// -------------------------
+		// Subpasses
+		// -------------------------
+		for (uint32_t i = 0; i < p_subpasses.size(); i++)
+		{
+			const auto& sp = p_subpasses[i];
+
+			size_t input_offset = input_refs.size();
+			size_t color_offset = color_refs.size();
+			size_t resolve_offset = resolve_refs.size();
+
+			// Input
+			for (auto& ref : sp.input_references)
+			{
+				input_refs.emplace_back();
+				_attachment_reference_to_vk(ref, &input_refs.back());
 			}
 
-			multiview_create_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO;
-			multiview_create_info.subpassCount = p_subpasses.size();
-			multiview_create_info.pViewMasks = vk_view_masks;
-			multiview_create_info.correlationMaskCount = 1;
-			multiview_create_info.pCorrelationMasks = &correlation_mask;
+			// Color
+			for (auto& ref : sp.color_references)
+			{
+				color_refs.emplace_back();
+				_attachment_reference_to_vk(ref, &color_refs.back());
+			}
 
-			create_info.pNext = &multiview_create_info;
+			// Resolve
+			for (auto& ref : sp.resolve_references)
+			{
+				resolve_refs.emplace_back();
+				_attachment_reference_to_vk(ref, &resolve_refs.back());
+			}
+
+			// Depth
+			VkAttachmentReference2KHR* depth_ptr = nullptr;
+			if (sp.depth_stencil_reference.attachment != AttachmentReference::UNUSED)
+			{
+				depth_refs.emplace_back();
+				_attachment_reference_to_vk(sp.depth_stencil_reference, &depth_refs.back());
+				depth_ptr = &depth_refs.back();
+			}
+
+			// Build subpass
+			auto& vk_sp = vk_subpasses_vec[i];
+			vk_sp = {};
+			vk_sp.sType = VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_2_KHR;
+			vk_sp.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+			vk_sp.viewMask = (p_view_count == 1) ? 0 : view_mask;
+
+			vk_sp.inputAttachmentCount = sp.input_references.size();
+			vk_sp.pInputAttachments = sp.input_references.empty()
+				? nullptr
+				: input_refs.data() + input_offset;
+
+			vk_sp.colorAttachmentCount = sp.color_references.size();
+			vk_sp.pColorAttachments = sp.color_references.empty()
+				? nullptr
+				: color_refs.data() + color_offset;
+
+			vk_sp.pResolveAttachments = sp.resolve_references.empty()
+				? nullptr
+				: resolve_refs.data() + resolve_offset;
+
+			vk_sp.pDepthStencilAttachment = depth_ptr;
+
+			vk_sp.preserveAttachmentCount = sp.preserve_attachments.size();
+			vk_sp.pPreserveAttachments = sp.preserve_attachments.data();
+
+			// -------------------------
+			// Depth resolve (FIXED lifetime)
+			// -------------------------
+			if (framebuffer_depth_resolve &&
+				sp.depth_resolve_reference.attachment != AttachmentReference::UNUSED)
+			{
+				depth_resolve_attachments.emplace_back();
+				auto& ref = depth_resolve_attachments.back();
+
+				ref = {};
+				ref.sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2_KHR;
+				ref.attachment = sp.depth_resolve_reference.attachment;
+				ref.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+				depth_resolve_infos.emplace_back();
+				auto& info = depth_resolve_infos.back();
+
+				info = {};
+				info.sType = VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_DEPTH_STENCIL_RESOLVE;
+				info.pNext = vk_sp.pNext;
+				info.depthResolveMode = VK_RESOLVE_MODE_MAX_BIT_KHR;
+				info.stencilResolveMode = VK_RESOLVE_MODE_NONE_KHR;
+				info.pDepthStencilResolveAttachment = &ref;
+
+				vk_sp.pNext = &info;
+			}
 		}
 
-		// Fragment density map.
-		//bool uses_fragment_density_map = fdm_capabilities.attachment_supported && p_fragment_density_map_attachment.attachment != AttachmentReference::UNUSED;
-		//if (uses_fragment_density_map) {
-		//	VkRenderPassFragmentDensityMapCreateInfoEXT* vk_fdm_info = ALLOCA_SINGLE(VkRenderPassFragmentDensityMapCreateInfoEXT);
-		//	vk_fdm_info->sType = VK_STRUCTURE_TYPE_RENDER_PASS_FRAGMENT_DENSITY_MAP_CREATE_INFO_EXT;
-		//	vk_fdm_info->fragmentDensityMapAttachment.attachment = p_fragment_density_map_attachment.attachment;
-		//	vk_fdm_info->fragmentDensityMapAttachment.layout = RD_TO_VK_LAYOUT[p_fragment_density_map_attachment.layout];
-		//	vk_fdm_info->pNext = create_info.pNext;
-		//	create_info.pNext = vk_fdm_info;
-		//}
+		// -------------------------
+		// Dependencies
+		// -------------------------
+		Util::SmallVector<VkSubpassDependency2KHR> deps(p_subpass_dependencies.size());
+		for (uint32_t i = 0; i < p_subpass_dependencies.size(); i++)
+		{
+			auto& d = deps[i];
+			d = {};
+			d.sType = VK_STRUCTURE_TYPE_SUBPASS_DEPENDENCY_2;
+			d.srcSubpass = p_subpass_dependencies[i].src_subpass;
+			d.dstSubpass = p_subpass_dependencies[i].dst_subpass;
+			d.srcStageMask = _rd_to_vk_pipeline_stages(p_subpass_dependencies[i].src_stages);
+			d.dstStageMask = _rd_to_vk_pipeline_stages(p_subpass_dependencies[i].dst_stages);
+			d.srcAccessMask = _rd_to_vk_access_flags(p_subpass_dependencies[i].src_access);
+			d.dstAccessMask = _rd_to_vk_access_flags(p_subpass_dependencies[i].dst_access);
+		}
 
+		// -------------------------
+		// Render pass create
+		// -------------------------
+		VkRenderPassCreateInfo2KHR ci{};
+		ci.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO_2_KHR;
+		ci.attachmentCount = vk_attachments_vec.size();
+		ci.pAttachments = vk_attachments_vec.data();
+		ci.subpassCount = vk_subpasses_vec.size();
+		ci.pSubpasses = vk_subpasses_vec.data();
+		ci.dependencyCount = deps.size();
+		ci.pDependencies = deps.data();
+		ci.correlatedViewMaskCount = (p_view_count == 1) ? 0 : 1;
+		ci.pCorrelatedViewMasks = (p_view_count == 1) ? nullptr : &correlation_mask;
+
+		// Multiview fallback
+		Util::SmallVector<uint32_t> view_masks(p_subpasses.size());
+		VkRenderPassMultiviewCreateInfo mv{};
+		if (p_view_count > 1 && vkCreateRenderPass2KHR == nullptr)
+		{
+			for (uint32_t i = 0; i < p_subpasses.size(); i++)
+				view_masks[i] = view_mask;
+
+			mv.sType = VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO;
+			mv.subpassCount = p_subpasses.size();
+			mv.pViewMasks = view_masks.data();
+			mv.correlationMaskCount = 1;
+			mv.pCorrelationMasks = &correlation_mask;
+
+			ci.pNext = &mv;
+		}
+
+		// -------------------------
+		// Create
+		// -------------------------
 		VkRenderPass vk_render_pass = VK_NULL_HANDLE;
-		VkResult res = _create_render_pass(vk_device, &create_info, nullptr, &vk_render_pass);
-		ERR_FAIL_COND_V_MSG(res, RenderPassID(), std::format("vkCreateRenderPass2KHR failed with error {} .", std::to_string(res)));
+		VkResult res = _create_render_pass(vk_device, &ci, nullptr, &vk_render_pass);
 
-		RenderPassInfo* render_pass = new RenderPassInfo;
-		render_pass->vk_render_pass = vk_render_pass;
-		render_pass->uses_fragment_density_map = false;// uses_fragment_density_map;
-		return RenderPassID(render_pass);
+		ERR_FAIL_COND_V_MSG(res, RenderPassID(),
+			std::format("vkCreateRenderPass2KHR failed with error {}.", std::to_string(res)));
+
+		auto* rp = new RenderPassInfo;
+		rp->vk_render_pass = vk_render_pass;
+		rp->uses_fragment_density_map = false;
+
+		return RenderPassID(rp);
 	}
 
 	void RenderingDeviceDriverVulkan::render_pass_free(RenderPassID p_render_pass) {
@@ -4887,7 +4895,7 @@ namespace Vulkan
 	void RenderingDeviceDriverVulkan::command_render_set_viewport(CommandBufferID p_cmd_buffer, std::span<Rect2i> p_viewports) {
 		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
 
-		std::vector<VkViewport> vk_viewports_vec(p_viewports.size());
+		Util::SmallVector<VkViewport> vk_viewports_vec(p_viewports.size());
 		VkViewport* vk_viewports = vk_viewports_vec.data();
 		for (uint32_t i = 0; i < p_viewports.size(); i++) {
 			vk_viewports[i] = {};
@@ -4909,7 +4917,7 @@ namespace Vulkan
 	void RenderingDeviceDriverVulkan::command_render_clear_attachments(CommandBufferID p_cmd_buffer, std::span<AttachmentClear> p_attachment_clears, std::span<Rect2i> p_rects) {
 		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
 
-		std::vector<VkClearAttachment> vk_clears_vec(p_attachment_clears.size());
+		Util::SmallVector<VkClearAttachment> vk_clears_vec(p_attachment_clears.size());
 		VkClearAttachment* vk_clears = vk_clears_vec.data();
 		for (uint32_t i = 0; i < p_attachment_clears.size(); i++) {
 			vk_clears[i] = {};
@@ -4918,7 +4926,7 @@ namespace Vulkan
 			vk_clears[i].aspectMask = p_attachment_clears[i].aspect;
 		}
 
-		std::vector<VkClearRect> vk_rects_vec(p_rects.size());
+		Util::SmallVector<VkClearRect> vk_rects_vec(p_rects.size());
 		VkClearRect* vk_rects = vk_rects_vec.data();
 		for (uint32_t i = 0; i < p_rects.size(); i++) {
 			vk_rects[i] = {};
@@ -4943,7 +4951,7 @@ namespace Vulkan
 			return;
 		}
 
-		thread_local std::vector<VkDescriptorSet> sets;
+		thread_local Util::SmallVector<VkDescriptorSet> sets;
 		sets.clear();
 		sets.resize(p_set_count);
 
@@ -5017,9 +5025,9 @@ namespace Vulkan
 	void RenderingDeviceDriverVulkan::command_render_bind_vertex_buffers(CommandBufferID p_cmd_buffer, uint32_t p_binding_count, const BufferID* p_buffers, const uint64_t* p_offsets, uint64_t p_dynamic_offsets) {
 		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
 
-		std::vector<VkBuffer> vk_buffers_vec(p_binding_count);
+		Util::SmallVector<VkBuffer> vk_buffers_vec(p_binding_count);
 		VkBuffer* vk_buffers = vk_buffers_vec.data();
-		std::vector<uint64_t> vk_offsets_vec(p_binding_count);
+		Util::SmallVector<uint64_t> vk_offsets_vec(p_binding_count);
 		uint64_t* vk_offsets = vk_offsets_vec.data();
 		for (uint32_t i = 0; i < p_binding_count; i++) {
 			const BufferInfo* buf_info = (const BufferInfo*)p_buffers[i].id;
@@ -5082,7 +5090,7 @@ namespace Vulkan
 								std::span<PipelineSpecializationConstant> p_specialization_constants) {
 		// Vertex.
 		const VkPipelineVertexInputStateCreateInfo* vertex_input_state_create_info = nullptr;
-		std::vector< VkPipelineVertexInputStateCreateInfo> null_vertex_input_state_vec;
+		Util::SmallVector<VkPipelineVertexInputStateCreateInfo> null_vertex_input_state_vec;
 
 		if (p_vertex_format.id) {
 			const VertexFormatInfo* vf_info = (const VertexFormatInfo*)p_vertex_format.id;
@@ -5179,7 +5187,7 @@ namespace Vulkan
 		color_blend_state_create_info.logicOpEnable = p_blend_state.enable_logic_op;
 		color_blend_state_create_info.logicOp = (VkLogicOp)p_blend_state.logic_op;
 
-		std::vector<VkPipelineColorBlendAttachmentState> vk_attachment_states_vec(p_color_attachments.size());
+		Util::SmallVector<VkPipelineColorBlendAttachmentState> vk_attachment_states_vec(p_color_attachments.size());
 		VkPipelineColorBlendAttachmentState* vk_attachment_states = vk_attachment_states_vec.data();
 		{
 			for (uint32_t i = 0; i < p_color_attachments.size(); i++) {
@@ -5225,7 +5233,7 @@ namespace Vulkan
 
 		static const uint32_t MAX_DYN_STATE_COUNT = 9;
 
-		std::vector<VkDynamicState> vk_dynamic_static_vec(MAX_DYN_STATE_COUNT);
+		Util::SmallVector<VkDynamicState> vk_dynamic_static_vec(MAX_DYN_STATE_COUNT);
 		VkDynamicState* vk_dynamic_states = vk_dynamic_static_vec.data();
 		uint32_t vk_dynamic_states_count = 0;
 
@@ -5296,17 +5304,17 @@ namespace Vulkan
 
 		ERR_FAIL_COND_V_MSG(pipeline_create_info.stageCount == 0, PipelineID(),
 			"Cannot create pipeline without shader module, please make sure shader modules are destroyed only after all associated pipelines are created.");
-		std::vector<VkPipelineShaderStageCreateInfo> vk_pipeline_stage_vec(shader_info->vk_stages_create_info.size());
+		Util::SmallVector<VkPipelineShaderStageCreateInfo> vk_pipeline_stage_vec(shader_info->vk_stages_create_info.size());
 		VkPipelineShaderStageCreateInfo* vk_pipeline_stages = vk_pipeline_stage_vec.data();
 
 		thread_local std::vector<uint8_t> respv_optimized_data;
-		thread_local std::vector<respv::SpecConstant> respv_spec_constants;
-		thread_local std::vector<VkShaderModule> respv_shader_modules;
-		thread_local std::vector<VkSpecializationMapEntry> specialization_entries;
+		thread_local Util::SmallVector<respv::SpecConstant> respv_spec_constants;
+		thread_local Util::SmallVector<VkShaderModule> respv_shader_modules;
+		thread_local Util::SmallVector<VkSpecializationMapEntry> specialization_entries;
 
 #if RECORD_PIPELINE_STATISTICS
-		thread_local std::vector<uint64_t> respv_run_time;
-		thread_local std::vector<uint64_t> respv_size;
+		thread_local Util::SmallVector<uint64_t> respv_run_time;
+		thread_local Util::SmallVector<uint64_t> respv_size;
 		uint32_t stage_count = shader_info->vk_stages_create_info.size();
 		respv_run_time.clear();
 		respv_size.clear();
@@ -5389,7 +5397,7 @@ namespace Vulkan
 						}
 					}
 
-					std::vector<VkSpecializationInfo> specialization_info_vec;
+					Util::SmallVector<VkSpecializationInfo> specialization_info_vec;
 					VkSpecializationInfo* specialization_info = specialization_info_vec.data();
 					*specialization_info = {};
 					specialization_info->dataSize = p_specialization_constants.size() * sizeof(PipelineSpecializationConstant);
@@ -5792,7 +5800,7 @@ namespace Vulkan
 		const VkPhysicalDeviceMemoryProperties* memory_properties = nullptr;
 		vmaGetMemoryProperties(allocator, &memory_properties);
 
-		VmaBudget* budgets = std::vector<VmaBudget>(memory_properties->memoryHeapCount).data();
+		VmaBudget* budgets = Util::SmallVector<VmaBudget>(memory_properties->memoryHeapCount).data();
 		vmaGetHeapBudgets(allocator, budgets);
 
 		uint64_t total_memory_used = 0;

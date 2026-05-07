@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <algorithm>
 #include <vector>
+#include "util/small_vector.h"
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -157,7 +158,7 @@ namespace FileSystem
 #ifdef _WIN32
         std::string to_utf8(const wchar_t* wstr, size_t len)
         {
-            std::vector<char> char_buffer;
+            Util::SmallVector<char> char_buffer;
             auto ret = WideCharToMultiByte(CP_UTF8, 0, wstr, len, nullptr, 0, nullptr, nullptr);
             if (ret < 0)
                 return "";
@@ -168,7 +169,7 @@ namespace FileSystem
 
         std::wstring to_utf16(const char* str, size_t len)
         {
-            std::vector<wchar_t> wchar_buffer;
+            Util::SmallVector<wchar_t> wchar_buffer;
             auto ret = MultiByteToWideChar(CP_UTF8, 0, str, len, nullptr, 0);
             if (ret < 0)
                 return L"";

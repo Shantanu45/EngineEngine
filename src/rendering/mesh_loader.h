@@ -3,6 +3,7 @@
 #include <memory>
 #include "rendering/mesh_storage.h"
 #include "rendering/gltf_loader.h"
+#include "util/small_vector.h"
 
 namespace Rendering
 {
@@ -77,10 +78,10 @@ namespace Rendering
 
 		// Convenience: load and retrieve all handles produced
 		// Useful when you need to address individual meshes in a multi-mesh file
-		std::vector<MeshHandle> load_gltf_all( MeshStorage& storage, const std::string& path, const std::string& name,
+		Util::SmallVector<MeshHandle> load_gltf_all( MeshStorage& storage, const std::string& path, const std::string& name,
 			RenderingDevice::VertexFormatID vertex_format, RDC::IndexBufferFormat index_format = RDC::INDEX_BUFFER_FORMAT_UINT32)
 		{
-			std::vector<MeshHandle> handles;
+			Util::SmallVector<MeshHandle> handles;
 
 			if (gltf_loader->load(path) != OK)
 			{
@@ -205,7 +206,7 @@ namespace Rendering
 		std::unordered_map<std::string, RID> image_cache;
 
 		MeshHandle _build_and_upload( MeshStorage& storage, const std::string& name,
-			const std::vector<MeshPrimitive>& prims, RD::VertexFormatID vertex_format, RDC::IndexBufferFormat index_format)
+			const Util::SmallVector<MeshPrimitive>& prims, RD::VertexFormatID vertex_format, RDC::IndexBufferFormat index_format)
 		{
 			if (storage.has(name))
 			{
@@ -218,9 +219,9 @@ namespace Rendering
 				? sizeof(uint16_t)
 				: sizeof(uint32_t);
 
-			std::vector<uint8_t>        vertex_data;
-			std::vector<uint8_t>        index_data;
-			std::vector<PrimitiveRange> ranges;
+			Util::SmallVector<uint8_t>        vertex_data;
+			Util::SmallVector<uint8_t>        index_data;
+			Util::SmallVector<PrimitiveRange> ranges;
 
 			uint32_t total_vertices = 0;
 			uint32_t total_indices = 0;

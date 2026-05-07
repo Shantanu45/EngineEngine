@@ -9,6 +9,7 @@
 #include "rendering/material.h"
 #include "rendering/mesh_category.h"
 #include "rendering/aabb.h"
+#include "util/small_vector.h"
 
 struct TransformComponent {
 	glm::vec3 position = glm::vec3(0.0f);
@@ -34,7 +35,7 @@ struct TransformComponent {
 
 struct MeshComponent {
 	Rendering::MeshHandle                  mesh;
-	std::vector<Rendering::MaterialHandle> materials;
+	Util::SmallVector<Rendering::MaterialHandle> materials;
 	Rendering::MeshCategory                category   = Rendering::MeshCategory::Opaque;
 	Rendering::AABB                        local_aabb;  // local-space; invalid by default (valid() == false)
 };

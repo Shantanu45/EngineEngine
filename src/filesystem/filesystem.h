@@ -17,6 +17,7 @@
 #include <stdio.h>
 
 #include "util/logger.h"
+#include "util/small_vector.h"
 
 namespace FileSystem
 {
@@ -92,8 +93,8 @@ namespace FileSystem
 	{
 	public:
 		virtual ~FilesystemBackend() = default;
-		std::vector<ListEntry> walk(const std::string& path);
-		virtual std::vector<ListEntry> list(const std::string& path) = 0;
+		Util::SmallVector<ListEntry> walk(const std::string& path);
+		virtual Util::SmallVector<ListEntry> list(const std::string& path) = 0;
 		virtual std::unique_ptr<File> open(const std::string& path, FileMode mode = FileMode::ReadOnly) = 0;
 		virtual bool stat(const std::string& path, FileStat& stat) = 0;
 
@@ -170,7 +171,7 @@ namespace FileSystem
 		 * \param path
 		 * \return
 		 */
-		std::vector<ListEntry> walk(const std::string& path);
+		Util::SmallVector<ListEntry> walk(const std::string& path);
 		/**
 		 * Returns the immediate children of a directory (non-recursive).
 		 *  Splits the protocol from the path, finds the backend, delegates to backend->list().
@@ -178,7 +179,7 @@ namespace FileSystem
 		 * \param path
 		 * \return
 		 */
-		std::vector<ListEntry> list(const std::string& path);
+		Util::SmallVector<ListEntry> list(const std::string& path);
 
 		/**
 		 * The core open primitive. Splits the protocol, finds the backend, returns a raw File*.
@@ -325,7 +326,7 @@ namespace FileSystem
 	class ScratchFilesystem final : public FilesystemBackend
 	{
 	public:
-		std::vector<ListEntry> list(const std::string& path) override;
+		Util::SmallVector<ListEntry> list(const std::string& path) override;
 		std::unique_ptr<File> open(const std::string& path, FileMode mode = FileMode::ReadOnly) override;
 		bool stat(const std::string& path, FileStat& stat) override;
 		FileNotifyHandle install_notification(const std::string& path, std::function<void(const FileNotifyInfo&)> func) override;
@@ -334,7 +335,7 @@ namespace FileSystem
 		int get_notification_fd() const override;
 
 	private:
-		struct ScratchFile { std::vector<uint8_t> data; };
+		struct ScratchFile { Util::SmallVector<uint8_t> data; };
 		std::unordered_map<std::string, std::unique_ptr<ScratchFile>> scratch_files;
 	};
 
@@ -345,7 +346,7 @@ namespace FileSystem
 	public:
 		explicit BlobFilesystem(std::unique_ptr<File> file);
 
-		std::vector<ListEntry> list(const std::string& path) override;
+		Util::SmallVector<ListEntry> list(const std::string& path) override;
 		std::unique_ptr<File> open(const std::string& path, FileMode mode) override;
 		bool stat(const std::string& path, FileStat& stat) override;
 		FileNotifyHandle install_notification(const std::string& path, std::function<void(const FileNotifyInfo&)> func) override;
@@ -362,8 +363,8 @@ namespace FileSystem
 		struct Directory
 		{
 			std::string path;
-			std::vector<std::unique_ptr<Directory>> dirs;
-			std::vector<BlobFile> files;
+			Util::SmallVector<std::unique_ptr<Directory>> dirs;
+			Util::SmallVector<BlobFile> files;
 		};
 		std::unique_ptr<Directory> root;
 		BlobFile* find_file(const std::string& path);
@@ -382,7 +383,7 @@ namespace FileSystem
 	class ScratchFilesystemFile final : public File
 	{
 	public:
-		explicit ScratchFilesystemFile(std::vector<uint8_t>& data_) : data(data_) {}
+		explicit ScratchFilesystemFile(Util::SmallVector<uint8_t>& data_) : data(data_) {}
 
 		std::unique_ptr<FileMapping> map_subset(uint64_t offset, size_t range,
 			std::shared_ptr<File> self) override
@@ -405,7 +406,7 @@ namespace FileSystem
 
 		uint64_t get_size() override { return data.size(); }
 
-		std::vector<uint8_t>& data;
+		Util::SmallVector<uint8_t>& data;
 	};
 
 

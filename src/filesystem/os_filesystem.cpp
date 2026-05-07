@@ -1,5 +1,6 @@
 #include "os_filesystem.h"
 #include "path_utils.h"
+#include "util/small_vector.h"
 //#include "util/logging.h"
 #include <stdexcept>
 #include <sys/stat.h>
@@ -403,9 +404,9 @@ namespace FileSystem
 		return bool(ReplaceFileW(joined_dst.c_str(), joined_src.c_str(), nullptr, 0, nullptr, nullptr));
 	}
 
-	std::vector<ListEntry> OSFilesystem::list(const std::string& path)
+	Util::SmallVector<ListEntry> OSFilesystem::list(const std::string& path)
 	{
-		std::vector<ListEntry> entries;
+		Util::SmallVector<ListEntry> entries;
 		WIN32_FIND_DATAW result;
 		auto joined = Path::to_utf16(Path::join(base, path));
 		joined += L"/*";

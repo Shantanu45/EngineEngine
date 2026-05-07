@@ -10,6 +10,7 @@
 #include "rendering_device_driver.h"
 #include "rendering_context_driver.h"
 #include "util/rid_owner.h"
+#include "util/small_vector.h"
 #include "xxhash.h"
 #include "compiler/compiler.h"
 #include "libassert/assert.hpp"
@@ -96,22 +97,22 @@ namespace Rendering
 	//internally holds separate SPIR-V blobs per stage
 	class RDShaderSPIRV
 	{
-		std::vector<uint8_t> bytecode[RenderingDeviceCommons::SHADER_STAGE_MAX];
+		Util::SmallVector<uint8_t> bytecode[RenderingDeviceCommons::SHADER_STAGE_MAX];
 		std::string compile_error[RenderingDeviceCommons::SHADER_STAGE_MAX];
 
 	public:
-		void set_stage_bytecode(RenderingDeviceCommons::ShaderStage p_stage, const std::vector<uint8_t>& p_bytecode) {
+		void set_stage_bytecode(RenderingDeviceCommons::ShaderStage p_stage, const Util::SmallVector<uint8_t>& p_bytecode) {
 			ERR_FAIL_INDEX(p_stage, RenderingDeviceCommons::SHADER_STAGE_MAX);
 			bytecode[p_stage] = p_bytecode;
 		}
 
-		std::vector<uint8_t> get_stage_bytecode(RenderingDeviceCommons::ShaderStage p_stage) const {
-			ERR_FAIL_INDEX_V(p_stage, RenderingDeviceCommons::SHADER_STAGE_MAX, std::vector<uint8_t>());
+		Util::SmallVector<uint8_t> get_stage_bytecode(RenderingDeviceCommons::ShaderStage p_stage) const {
+			ERR_FAIL_INDEX_V(p_stage, RenderingDeviceCommons::SHADER_STAGE_MAX, Util::SmallVector<uint8_t>());
 			return bytecode[p_stage];
 		}
 
-		std::vector<RenderingDeviceCommons::ShaderStageSPIRVData> get_stages() const {
-			std::vector<RenderingDeviceCommons::ShaderStageSPIRVData> stages;
+		Util::SmallVector<RenderingDeviceCommons::ShaderStageSPIRVData> get_stages() const {
+			Util::SmallVector<RenderingDeviceCommons::ShaderStageSPIRVData> stages;
 			for (int i = 0; i < RenderingDeviceCommons::SHADER_STAGE_MAX; i++) {
 				if (bytecode[i].size()) {
 					RenderingDeviceCommons::ShaderStageSPIRVData stage;
@@ -191,7 +192,7 @@ namespace Rendering
 		private:
 			// In most cases only one ID is provided per binding, so avoid allocating memory unnecessarily for performance.
 			RID id; // If only one is provided, this is used.
-			std::vector<RID> ids; // If multiple ones are provided, this is used instead.
+			Util::SmallVector<RID> ids; // If multiple ones are provided, this is used instead.
 
 		public:
 			_FORCE_INLINE_ uint32_t get_id_count() const {
@@ -243,7 +244,7 @@ namespace Rendering
 				binding = p_binding;
 				id = p_id;
 			}
-			_FORCE_INLINE_ Uniform(UniformType p_type, int p_binding, const std::vector<RID>& p_ids) {
+			_FORCE_INLINE_ Uniform(UniformType p_type, int p_binding, const Util::SmallVector<RID>& p_ids) {
 				uniform_type = p_type;
 				binding = p_binding;
 				ids = p_ids;
@@ -253,7 +254,7 @@ namespace Rendering
 		typedef Uniform PipelineImmutableSampler;
 
 		struct VertexDescriptionKey {
-			std::vector<VertexAttribute> vertex_formats;
+			Util::SmallVector<VertexAttribute> vertex_formats;
 
 			bool operator==(const VertexDescriptionKey& p_key) const {
 				int vdc = vertex_formats.size();
@@ -321,13 +322,13 @@ namespace Rendering
 		};
 
 		struct VertexDescriptionCache {
-			std::vector<VertexAttribute> vertex_formats;
+			Util::SmallVector<VertexAttribute> vertex_formats;
 			VertexAttributeBindingsMap bindings;
 			RDD::VertexFormatID driver_id;
 		};
 
 		struct UniformSetFormat {
-			std::vector<ShaderUniform> uniforms;
+			Util::SmallVector<ShaderUniform> uniforms;
 
 			_FORCE_INLINE_ bool operator<(const UniformSetFormat& p_other) const {
 				if (uniforms.size() != p_other.uniforms.size()) {
@@ -362,7 +363,7 @@ namespace Rendering
 			RID shader;
 			RDD::ShaderID shader_driver_id;
 			uint32_t shader_layout_hash = 0;
-			std::vector<uint32_t> set_formats;
+			Util::SmallVector<uint32_t> set_formats;
 			RDD::PipelineID driver_id;
 			BitField<RDD::PipelineStageBits> stage_bits = {};
 			uint32_t push_constant_size = 0;
@@ -373,7 +374,7 @@ namespace Rendering
 			RDD::ShaderID driver_id;
 			uint32_t layout_hash = 0;
 			BitField<RDD::PipelineStageBits> stage_bits = {};
-			std::vector<uint32_t> set_formats;
+			Util::SmallVector<uint32_t> set_formats;
 		};
 
 		struct AttachmentFormat {
@@ -392,10 +393,10 @@ namespace Rendering
 		};
 
 		struct FramebufferPass {
-			std::vector<int32_t> color_attachments;
-			std::vector<int32_t> input_attachments;
-			std::vector<int32_t> resolve_attachments;
-			std::vector<int32_t> preserve_attachments;
+			Util::SmallVector<int32_t> color_attachments;
+			Util::SmallVector<int32_t> input_attachments;
+			Util::SmallVector<int32_t> resolve_attachments;
+			Util::SmallVector<int32_t> preserve_attachments;
 			int32_t depth_attachment = ATTACHMENT_UNUSED;
 			int32_t depth_resolve_attachment = ATTACHMENT_UNUSED;
 		};
@@ -430,8 +431,8 @@ namespace Rendering
 		};
 
 		struct FramebufferFormatKey {
-			std::vector<AttachmentFormat> attachments;
-			std::vector<FramebufferPass> passes;
+			Util::SmallVector<AttachmentFormat> attachments;
+			Util::SmallVector<FramebufferPass> passes;
 			uint32_t view_count = 1;
 			VRSMethod vrs_method = VRS_METHOD_NONE;
 			int32_t vrs_attachment = ATTACHMENT_UNUSED;
@@ -562,7 +563,7 @@ namespace Rendering
 		struct FramebufferFormat {
 			std::pair<const FramebufferFormatKey, FramebufferFormatID>* E;
 			RDD::RenderPassID render_pass; // Here for constructing shaders, never used, see section (7.2. Render Pass Compatibility from Vulkan spec).
-			std::vector<TextureSamples> pass_samples;
+			Util::SmallVector<TextureSamples> pass_samples;
 			uint32_t view_count = 1; // Number of views.
 		};
 
@@ -570,7 +571,7 @@ namespace Rendering
 		struct Framebuffer {
 			FramebufferFormatID format_id;
 			uint32_t storage_mask = 0;
-			std::vector<RID> texture_ids;
+			Util::SmallVector<RID> texture_ids;
 			InvalidationCallback invalidated_callback = nullptr;
 			void* invalidated_callback_userdata = nullptr;
 			//RDG::FramebufferCache* framebuffer_cache = nullptr;
@@ -596,7 +597,7 @@ namespace Rendering
 			RDD::CommandBufferID command_buffer;
 			RDD::CommandPoolID command_pool;
 			RDD::FenceID command_fence;
-			std::vector<RDD::TextureBarrier> texture_barriers;
+			Util::SmallVector<RDD::TextureBarrier> texture_barriers;
 			bool recording = false;
 			bool submitted = false;
 			std::mutex thread_mutex;
@@ -612,11 +613,11 @@ namespace Rendering
 			int vertex_count = 0;
 			uint32_t max_instances_allowed = 0;
 
-			std::vector<RDD::BufferID> buffers; // Not owned, just referenced.
-			//std::vector<RDG::ResourceTracker*> draw_trackers; // Not owned, just referenced.
-			std::vector<uint64_t> offsets;
-			std::vector<int32_t> transfer_worker_indices;
-			std::vector<uint64_t> transfer_worker_operations;
+			Util::SmallVector<RDD::BufferID> buffers; // Not owned, just referenced.
+			//Util::SmallVector<RDG::ResourceTracker*> draw_trackers; // Not owned, just referenced.
+			Util::SmallVector<uint64_t> offsets;
+			Util::SmallVector<int32_t> transfer_worker_indices;
+			Util::SmallVector<uint64_t> transfer_worker_operations;
 			std::unordered_set <RID> untracked_buffers;
 		};
 
@@ -654,12 +655,12 @@ namespace Rendering
 				RID texture;
 			};
 
-			std::vector<AttachableTexture> attachable_textures; // Used for validation.
-			//std::vector<RenderingDeviceCommons::ResourceTracker*> draw_trackers;
-			//std::vector<RenderingDeviceCommons::ResourceUsage> draw_trackers_usage;
+			Util::SmallVector<AttachableTexture> attachable_textures; // Used for validation.
+			//Util::SmallVector<RenderingDeviceCommons::ResourceTracker*> draw_trackers;
+			//Util::SmallVector<RenderingDeviceCommons::ResourceUsage> draw_trackers_usage;
 			//std::unordered_map<RID, RenderingDeviceCommons::ResourceUsage> untracked_usage;
-			std::vector<SharedTexture> shared_textures_to_update;
-			std::vector<RID> pending_clear_textures;
+			Util::SmallVector<SharedTexture> shared_textures_to_update;
+			Util::SmallVector<RID> pending_clear_textures;
 			InvalidationCallback invalidated_callback = nullptr;
 			void* invalidated_callback_userdata = nullptr;
 		};
@@ -673,7 +674,7 @@ namespace Rendering
 		};
 
 		struct StagingBuffers {
-			std::vector<StagingBufferBlock> blocks;
+			Util::SmallVector<StagingBufferBlock> blocks;
 			int current = 0;
 			uint32_t block_size = 0;
 			uint64_t max_size = 0;
@@ -718,7 +719,7 @@ namespace Rendering
 			uint32_t base_mipmap = 0;
 			uint32_t base_layer = 0;
 
-			std::vector<DataFormat> allowed_shared_formats;
+			Util::SmallVector<DataFormat> allowed_shared_formats;
 
 			bool is_resolve_buffer = false;
 			bool is_discardable = false;
@@ -769,8 +770,8 @@ namespace Rendering
 			RDD::CommandPoolID pool;
 
 			// Created internally by RenderingDeviceGraph.
-			std::vector<RDD::CommandBufferID> buffers;
-			std::vector<RDD::SemaphoreID> semaphores;
+			Util::SmallVector<RDD::CommandBufferID> buffers;
+			Util::SmallVector<RDD::SemaphoreID> semaphores;
 			uint32_t buffers_used = 0;
 		};
 
@@ -797,13 +798,13 @@ namespace Rendering
 			bool fence_signaled = false;
 
 			// Semaphores the frame must wait on before executing the command buffer.
-			std::vector<RenderingDeviceDriver::SemaphoreID> semaphores_to_wait_on;
+			Util::SmallVector<RenderingDeviceDriver::SemaphoreID> semaphores_to_wait_on;
 			//  Swap chains prepared for drawing during the frame that must be presented.
-			std::vector<RenderingDeviceDriver::SwapChainID> swap_chains_to_present;
+			Util::SmallVector<RenderingDeviceDriver::SwapChainID> swap_chains_to_present;
 
 			// Semaphores the transfer workers can use to wait before rendering the frame.
 			// This must have the same size of the transfer worker pool.
-			std::vector<RenderingDeviceDriver::SemaphoreID> transfer_worker_semaphores;
+			Util::SmallVector<RenderingDeviceDriver::SemaphoreID> transfer_worker_semaphores;
 
 			// Extra command buffer pool used for driver workarounds or to reduce GPU bubbles by
 			// splitting the final render pass to the swapchain into its own cmd buffer.
@@ -820,12 +821,12 @@ namespace Rendering
 
 			RDD::QueryPoolID timestamp_pool;
 
-			std::vector<std::string> timestamp_names;
-			std::vector<uint64_t> timestamp_cpu_values;
+			Util::SmallVector<std::string> timestamp_names;
+			Util::SmallVector<uint64_t> timestamp_cpu_values;
 			uint32_t timestamp_count = 0;
-			std::vector<std::string> timestamp_result_names;
-			std::vector<uint64_t> timestamp_cpu_result_values;
-			std::vector<uint64_t> timestamp_result_values;
+			Util::SmallVector<std::string> timestamp_result_names;
+			Util::SmallVector<uint64_t> timestamp_cpu_result_values;
+			Util::SmallVector<uint64_t> timestamp_result_values;
 			uint32_t timestamp_result_count = 0;
 			uint64_t index = 0;
 		};
@@ -866,16 +867,16 @@ namespace Rendering
 		void finalize();
 
 #pragma region Shader
-		RID create_program(const std::string& p_shader_name, const std::vector<std::string> programs);
+		RID create_program(const std::string& p_shader_name, const Util::SmallVector<std::string> programs);
 
 		RDShaderSPIRV* shader_compile_spirv_from_shader_source(const RDShaderSource* p_source, bool p_allow_cache = true);
 
 		RID shader_create_from_spirv(const RDShaderSPIRV* p_spirv, const std::string& p_shader_name = "");
 
 
-		std::vector<uint8_t> shader_compile_spirv_from_source_file(ShaderStage p_stage, const std::string& p_source_code_file,
+		Util::SmallVector<uint8_t> shader_compile_spirv_from_source_file(ShaderStage p_stage, const std::string& p_source_code_file,
 			ShaderLanguage p_language = SHADER_LANGUAGE_GLSL, std::string* r_error = nullptr, bool p_allow_cache = true);
-		RID shader_create_from_container_with_samplers(RenderingShaderContainer* shader_container, RID p_placeholder, const std::vector<PipelineImmutableSampler>& p_immutable_samplers);
+		RID shader_create_from_container_with_samplers(RenderingShaderContainer* shader_container, RID p_placeholder, const Util::SmallVector<PipelineImmutableSampler>& p_immutable_samplers);
 
 		void shader_destroy_modules(RID p_shader);
 
@@ -894,9 +895,9 @@ namespace Rendering
 			const PipelineMultisampleState& p_multisample_state, const PipelineDepthStencilState& p_depth_stencil_state,
 			const PipelineColorBlendState& p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags = 0,
 			uint32_t p_for_render_pass = 0,
-			const std::vector<PipelineSpecializationConstant>& p_specialization_constants = std::vector<PipelineSpecializationConstant>());
+			const Util::SmallVector<PipelineSpecializationConstant>& p_specialization_constants = Util::SmallVector<PipelineSpecializationConstant>());
 
-		RID render_pipeline_create_from_frame_buffer(RID p_shader, RID p_framebuffer, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, const PipelineRasterizationState& p_rasterization_state, const PipelineMultisampleState& p_multisample_state, const PipelineDepthStencilState& p_depth_stencil_state, const PipelineColorBlendState& p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags /*= 0*/, uint32_t p_for_render_pass /*= 0*/, const std::vector<PipelineSpecializationConstant>& p_specialization_constants /*= std::vector<PipelineSpecializationConstant>()*/);
+		RID render_pipeline_create_from_frame_buffer(RID p_shader, RID p_framebuffer, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, const PipelineRasterizationState& p_rasterization_state, const PipelineMultisampleState& p_multisample_state, const PipelineDepthStencilState& p_depth_stencil_state, const PipelineColorBlendState& p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags /*= 0*/, uint32_t p_for_render_pass /*= 0*/, const Util::SmallVector<PipelineSpecializationConstant>& p_specialization_constants /*= Util::SmallVector<PipelineSpecializationConstant>()*/);
 		bool render_pipeline_is_valid(RID p_pipeline);
 
 		void update_pipeline_cache(bool p_closing = false);
@@ -929,15 +930,15 @@ namespace Rendering
 
 #pragma region Framebuffer
 		// This ID is warranted to be unique for the same formats, does not need to be freed
-		FramebufferFormatID framebuffer_format_create(const std::vector<AttachmentFormat>& p_format, uint32_t p_view_count = 1, int32_t p_vrs_attachment = -1);
-		FramebufferFormatID framebuffer_format_create_multipass(const std::vector<AttachmentFormat>& p_attachments, const std::vector<FramebufferPass>& p_passes, 
+		FramebufferFormatID framebuffer_format_create(const Util::SmallVector<AttachmentFormat>& p_format, uint32_t p_view_count = 1, int32_t p_vrs_attachment = -1);
+		FramebufferFormatID framebuffer_format_create_multipass(const Util::SmallVector<AttachmentFormat>& p_attachments, const Util::SmallVector<FramebufferPass>& p_passes, 
 			uint32_t p_view_count = 1, int32_t p_vrs_attachment = -1);
 			
 		RenderingDevice::TextureSamples framebuffer_format_get_texture_samples(FramebufferFormatID p_format, uint32_t p_pass);
 		RID framebuffer_create_empty(const Size2i& p_size, TextureSamples p_samples, FramebufferFormatID p_format_check);
-		RID framebuffer_create(const std::vector<RID>& p_texture_attachments, FramebufferFormatID p_format_check = INVALID_ID, uint32_t p_view_count = 1);
-		RID framebuffer_create_load(const std::vector<RID>& p_texture_attachments);
-		RID framebuffer_create_multipass(const std::vector<RID>& p_texture_attachments, const std::vector<FramebufferPass>& p_passes, FramebufferFormatID p_format_check, uint32_t p_view_count);
+		RID framebuffer_create(const Util::SmallVector<RID>& p_texture_attachments, FramebufferFormatID p_format_check = INVALID_ID, uint32_t p_view_count = 1);
+		RID framebuffer_create_load(const Util::SmallVector<RID>& p_texture_attachments);
+		RID framebuffer_create_multipass(const Util::SmallVector<RID>& p_texture_attachments, const Util::SmallVector<FramebufferPass>& p_passes, FramebufferFormatID p_format_check, uint32_t p_view_count);
 FramebufferFormatID framebuffer_format_create_empty(TextureSamples p_samples = TEXTURE_SAMPLES_1);
 
 #pragma endregion
@@ -968,7 +969,7 @@ FramebufferFormatID framebuffer_format_create_empty(TextureSamples p_samples = T
 		Error buffer_clear(RID p_buffer, uint32_t p_offset, uint32_t p_size);
 		void buffer_flush(RID p_buffer);
 
-		RID vertex_array_create(uint32_t p_vertex_count, VertexFormatID p_vertex_format, const std::vector<RID>& p_src_buffers, const std::vector<uint64_t>& p_offsets = std::vector<uint64_t>());
+		RID vertex_array_create(uint32_t p_vertex_count, VertexFormatID p_vertex_format, const Util::SmallVector<RID>& p_src_buffers, const Util::SmallVector<uint64_t>& p_offsets = Util::SmallVector<uint64_t>());
 
 		RID index_buffer_create(uint32_t p_index_count, IndexBufferFormat p_format, std::span<uint8_t> p_data = {},
 			bool p_use_restart_indices = false, BitField<BufferCreationBits> p_creation_bits = 0);
@@ -990,17 +991,17 @@ FramebufferFormatID framebuffer_format_create_empty(TextureSamples p_samples = T
 #pragma region Texture
 
 		RID texture_buffer_create(uint32_t p_size_elements, DataFormat p_format, std::span<uint8_t> p_data = {});
-		RID acquire_texture(const RDD::TextureFormat& p_format, const RenderingDevice::TextureView& p_view, const std::vector<std::vector<uint8_t>>& p_data);
+		RID acquire_texture(const RDD::TextureFormat& p_format, const RenderingDevice::TextureView& p_view, const Util::SmallVector<Util::SmallVector<uint8_t>>& p_data);
 		void release_texture(RID p_texture);
-		RID texture_create(const TextureFormat& p_format, const TextureView& p_view, const std::vector<std::vector<uint8_t>>& p_data = std::vector<std::vector<uint8_t>>());
+		RID texture_create(const TextureFormat& p_format, const TextureView& p_view, const Util::SmallVector<Util::SmallVector<uint8_t>>& p_data = Util::SmallVector<Util::SmallVector<uint8_t>>());
 		RID texture_create_shared(const TextureView& p_view, RID p_with_texture);
 		RID texture_create_from_extension(TextureType p_type, DataFormat p_format, TextureSamples p_samples, BitField<RenderingDevice::TextureUsageBits> p_usage,
 			uint64_t p_image, uint64_t p_width, uint64_t p_height, uint64_t p_depth, uint64_t p_layers, uint64_t p_mipmaps = 1);
 
 		RID texture_create_shared_from_slice(const TextureView& p_view, RID p_with_texture, uint32_t p_layer, uint32_t p_mipmap, uint32_t p_mipmaps = 1,
 			TextureSliceType p_slice_type = TEXTURE_SLICE_2D, uint32_t p_layers = 0);
-		Error texture_update(RID p_texture, uint32_t p_layer, const std::vector<uint8_t>& p_data);
-		std::vector<uint8_t> texture_get_data(RID p_texture, uint32_t p_layer); // CPU textures will return immediately, while GPU textures will most likely force a flush
+		Error texture_update(RID p_texture, uint32_t p_layer, const Util::SmallVector<uint8_t>& p_data);
+		Util::SmallVector<uint8_t> texture_get_data(RID p_texture, uint32_t p_layer); // CPU textures will return immediately, while GPU textures will most likely force a flush
 		//Error texture_get_data_async(RID p_texture, uint32_t p_layer, const Callable& p_callback);
 		RDD::TextureID texture_id_from_rid(RID texture);
 
@@ -1029,8 +1030,8 @@ FramebufferFormatID framebuffer_format_create_empty(TextureSamples p_samples = T
 		bool end_for_screen(DisplayServerEnums::WindowID p_screen);
 		void free_framebuffer(RDD::FramebufferID p_frame_buffer);
 		RDD::FramebufferID create_framebuffer(RDD::RenderPassID p_render_pass, std::span<RDD::TextureID> p_attachments, uint32_t p_width, uint32_t p_height);
-		RDD::FramebufferID create_framebuffer_from_format_id(FramebufferFormatID p_format_id, std::vector<RID> p_attachments, uint32_t p_width, uint32_t p_height);
-		RDD::FramebufferID create_framebuffer_from_render_pass(RDD::RenderPassID p_render_pass, std::vector<RID> p_attachments, uint32_t p_width, uint32_t p_height, uint32_t p_layers = 1);
+		RDD::FramebufferID create_framebuffer_from_format_id(FramebufferFormatID p_format_id, Util::SmallVector<RID> p_attachments, uint32_t p_width, uint32_t p_height);
+		RDD::FramebufferID create_framebuffer_from_render_pass(RDD::RenderPassID p_render_pass, Util::SmallVector<RID> p_attachments, uint32_t p_width, uint32_t p_height, uint32_t p_layers = 1);
 		RDD::RenderPassID render_pass_from_format_id(FramebufferFormatID p_format_id);
 		bool begin_render_pass(RDD::RenderPassID p_render_pass, RDD::FramebufferID p_frame_buffer, Rect2i p_region, const Color& p_clear_color);
 		bool begin_render_pass_from_frame_buffer(RID p_frame_buffer, Rect2i p_region, const std::span<RenderingDeviceDriver::RenderPassClearValue>& p_clear_color);
@@ -1053,14 +1054,14 @@ FramebufferFormatID framebuffer_format_create_empty(TextureSamples p_samples = T
 
 		RenderingDevice* create_local_device();
 
-		VertexFormatID vertex_format_create(const std::vector<VertexAttribute>& p_vertex_descriptions);
+		VertexFormatID vertex_format_create(const Util::SmallVector<VertexAttribute>& p_vertex_descriptions);
 
 		RID create_swapchain_pipeline(DisplayServerEnums::WindowID window, RID p_shader, VertexFormatID p_vertex_format,
 			RenderPrimitive p_render_primitive, const PipelineRasterizationState& p_rasterization_state,
 			const PipelineMultisampleState& p_multisample_state, const PipelineDepthStencilState& p_depth_stencil_state,
 			const PipelineColorBlendState& p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags = 0,
 			uint32_t p_for_render_pass = 0,
-			const std::vector<PipelineSpecializationConstant>& p_specialization_constants = std::vector<PipelineSpecializationConstant>());
+			const Util::SmallVector<PipelineSpecializationConstant>& p_specialization_constants = Util::SmallVector<PipelineSpecializationConstant>());
 
 		/**
 		 * command buffer begin.
@@ -1102,11 +1103,11 @@ FramebufferFormatID framebuffer_format_create_empty(TextureSamples p_samples = T
 
 	private:
 		bool _buffer_make_mutable(Buffer* p_buffer, RID p_buffer_id);
-		RID _vertex_buffer_create(uint32_t p_size_bytes, std::vector<uint8_t>& p_data, BitField<BufferCreationBits> p_creation_bits = 0) {
+		RID _vertex_buffer_create(uint32_t p_size_bytes, Util::SmallVector<uint8_t>& p_data, BitField<BufferCreationBits> p_creation_bits = 0) {
 			return vertex_buffer_create(p_size_bytes, p_data, p_creation_bits);
 		}
 
-		RID _index_buffer_create(uint32_t p_index_count, IndexBufferFormat p_format, std::vector<uint8_t>& p_data,
+		RID _index_buffer_create(uint32_t p_index_count, IndexBufferFormat p_format, Util::SmallVector<uint8_t>& p_data,
 			bool p_use_restart_indices = false, BitField<BufferCreationBits> p_creation_bits = 0) {
 			return index_buffer_create(p_index_count, p_format, p_data, p_use_restart_indices, p_creation_bits);
 		}
@@ -1136,7 +1137,7 @@ FramebufferFormatID framebuffer_format_create_empty(TextureSamples p_samples = T
 #pragma region Texture
 		uint32_t _texture_layer_count(Texture* p_texture) const;
 		uint32_t _texture_alignment(Texture* p_texture) const;
-		Error _texture_initialize(RID p_texture, uint32_t p_layer, const std::vector<uint8_t>& p_data, RDD::TextureLayout p_dst_layout, bool p_immediate_flush);
+		Error _texture_initialize(RID p_texture, uint32_t p_layer, const Util::SmallVector<uint8_t>& p_data, RDD::TextureLayout p_dst_layout, bool p_immediate_flush);
 		void _texture_check_shared_fallback(Texture* p_texture);
 		void _texture_update_shared_fallback(RID p_texture_rid, Texture* p_texture, bool p_for_writing);
 		void _texture_free_shared_fallback(Texture* p_texture);
@@ -1149,7 +1150,7 @@ FramebufferFormatID framebuffer_format_create_empty(TextureSamples p_samples = T
 		void _texture_ensure_shareable_format(RID p_texture, const DataFormat& p_shareable_format);
 #pragma endregion
 
-		std::vector<uint8_t> _load_pipeline_cache();
+		Util::SmallVector<uint8_t> _load_pipeline_cache();
 		static void _save_pipeline_cache(void* p_data);
 		Error _staging_buffer_allocate(StagingBuffers& p_staging_buffers, uint32_t p_amount, uint32_t p_required_align,
 			uint32_t& r_alloc_offset, uint32_t& r_alloc_size, StagingRequiredAction& r_required_action, bool p_can_segment = true);
@@ -1157,10 +1158,10 @@ FramebufferFormatID framebuffer_format_create_empty(TextureSamples p_samples = T
 		Error _insert_staging_block(StagingBuffers& p_staging_buffers);
 		
 		static RDD::TextureLayout _vrs_layout_from_method(VRSMethod p_method);
-		static RDD::RenderPassID _render_pass_create(RenderingDeviceDriver* p_driver, const std::vector<AttachmentFormat>& p_attachments,
-			const std::vector<FramebufferPass>& p_passes, std::span<RDD::AttachmentLoadOp> p_load_ops,
+		static RDD::RenderPassID _render_pass_create(RenderingDeviceDriver* p_driver, const Util::SmallVector<AttachmentFormat>& p_attachments,
+			const Util::SmallVector<FramebufferPass>& p_passes, std::span<RDD::AttachmentLoadOp> p_load_ops,
 			std::span<RDD::AttachmentStoreOp> p_store_ops, uint32_t p_view_count = 1, VRSMethod p_vrs_method = VRS_METHOD_NONE,
-			int32_t p_vrs_attachment = -1, Size2i p_vrs_texel_size = Size2i(), std::vector<TextureSamples>* r_samples = nullptr);
+			int32_t p_vrs_attachment = -1, Size2i p_vrs_texel_size = Size2i(), Util::SmallVector<TextureSamples>* r_samples = nullptr);
 
 		void _free_internal(RID p_id);
 
@@ -1215,12 +1216,12 @@ FramebufferFormatID framebuffer_format_create_empty(TextureSamples p_samples = T
 
 		std::unique_ptr<FramebufferCache> fb_cache;
 		std::unique_ptr<TransientTextureCache> tex_cache;
-std::vector<TransferWorker*> transfer_worker_pool;
+Util::SmallVector<TransferWorker*> transfer_worker_pool;
 		uint32_t transfer_worker_pool_size = 0;
 		uint32_t transfer_worker_pool_max_size = 1;
-		std::vector<uint64_t> transfer_worker_operation_used_by_draw;
-		std::vector<uint32_t> transfer_worker_pool_available_list;
-		std::vector<RDD::TextureBarrier> transfer_worker_pool_texture_barriers;
+		Util::SmallVector<uint64_t> transfer_worker_operation_used_by_draw;
+		Util::SmallVector<uint32_t> transfer_worker_pool_available_list;
+		Util::SmallVector<RDD::TextureBarrier> transfer_worker_pool_texture_barriers;
 		std::mutex transfer_worker_pool_mutex;
 		std::mutex transfer_worker_pool_texture_barriers_mutex;
 		std::condition_variable transfer_worker_pool_condition;
@@ -1229,7 +1230,7 @@ std::vector<TransferWorker*> transfer_worker_pool;
 		DataFormat vrs_format = DATA_FORMAT_MAX;
 		Size2i vrs_texel_size;
 
-		std::vector<Frame> frames;
+		Util::SmallVector<Frame> frames;
 		int frame = 0;
 		uint64_t frames_drawn = 0;
 
@@ -1258,8 +1259,8 @@ std::vector<TransferWorker*> transfer_worker_pool;
 		uint32_t texture_upload_region_size_px = 0;
 		uint32_t texture_download_region_size_px = 0;
 
-		std::vector<UniformSet::AttachableTexture> attachable_textures;
-		std::vector<UniformSet::SharedTexture> shared_textures_to_update;
+		Util::SmallVector<UniformSet::AttachableTexture> attachable_textures;
+		Util::SmallVector<UniformSet::SharedTexture> shared_textures_to_update;
 
 		std::unordered_map<std::string, RID> shader_name_rid_map; // shader name to rid
 
@@ -1296,7 +1297,7 @@ std::vector<TransferWorker*> transfer_worker_pool;
 	template <typename T>
 	void Rendering::RenderingDevice::_free_rids(T& p_owner, const char* p_type)
 	{
-		std::vector<RID> owned = p_owner.get_owned_list();
+		Util::SmallVector<RID> owned = p_owner.get_owned_list();
 		if (owned.size()) {
 			if (owned.size() == 1) {
 				WARN_PRINT(std::format("1 RID of type '{}' was leaked.", p_type));

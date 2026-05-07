@@ -7,6 +7,7 @@
 #include "rendering/render_settings.h"
 #include "rendering/wsi.h"
 #include "entt/entt.hpp"
+#include "util/small_vector.h"
 
 struct UIContext {
     Camera*           camera     = nullptr;
@@ -31,5 +32,5 @@ public:
     }
 
 private:
-    std::vector<std::unique_ptr<IUIPanel>> panels;
+    Util::SmallVector<std::unique_ptr<IUIPanel>> panels;
 };

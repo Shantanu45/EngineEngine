@@ -2,6 +2,7 @@
 #include "rendering_device.h"
 #include "uniform_set_builder.h"
 #include "rid_handle.h"
+#include "util/small_vector.h"
 
 // Must match the GLSL Material struct in lib/lighting.glsl (std140 layout).
 struct alignas(16) Material_UBO {
@@ -129,8 +130,8 @@ namespace Rendering
 	private:
 		// materials (owns UBOs) must be declared before uniform_sets so that
 		// uniform_sets are destroyed first — preventing cascade double-free.
-		std::vector<Material>   materials;
-		std::vector<RIDHandle>  uniform_sets;
+		Util::SmallVector<Material>   materials;
+		Util::SmallVector<RIDHandle>  uniform_sets;
 	};
 }
 

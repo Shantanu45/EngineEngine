@@ -1,5 +1,6 @@
 #pragma once
 #include "rendering/rendering_device.h"
+#include "util/small_vector.h"
 
 namespace Rendering
 {
@@ -14,7 +15,7 @@ namespace Rendering
 		tf.usage_bits    = RDC::TEXTURE_USAGE_SAMPLING_BIT | RDC::TEXTURE_USAGE_CAN_UPDATE_BIT;
 		tf.format        = RDC::DATA_FORMAT_R8G8B8A8_UNORM;
 
-		std::vector<uint8_t> pixel = { r, g, b, a };
+		Util::SmallVector<uint8_t> pixel = { r, g, b, a };
 		RID rid = device->texture_create(tf, RD::TextureView(), { pixel });
 		device->set_resource_name(rid, name);
 		return rid;

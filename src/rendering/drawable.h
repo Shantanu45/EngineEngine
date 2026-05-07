@@ -5,6 +5,7 @@
 #include "rendering/rendering_device.h"
 #include "rendering/mesh_storage.h"
 #include "rendering/pipeline_builder.h"
+#include "util/small_vector.h"
 
 namespace Rendering
 {
@@ -37,15 +38,15 @@ namespace Rendering
 		Pipeline                       pipeline;
 		MeshHandle                     mesh;
 		PushConstantData               push_constants;
-		std::vector<UniformSetBinding> uniform_sets;
-		std::vector<RID>               material_sets; // per-primitive Set 2, indexed by primitive slot
+		Util::SmallVector<UniformSetBinding> uniform_sets;
+		Util::SmallVector<RID>               material_sets; // per-primitive Set 2, indexed by primitive slot
 
 		static Drawable make(
 			Pipeline pipeline,
 			MeshHandle mesh,
 			PushConstantData pc,
-			std::vector<UniformSetBinding> uniform_sets = {},
-			std::vector<RID> material_sets = {})
+			Util::SmallVector<UniformSetBinding> uniform_sets = {},
+			Util::SmallVector<RID> material_sets = {})
 		{
 			Drawable d;
 			d.pipeline = pipeline;

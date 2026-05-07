@@ -1,5 +1,6 @@
 #include "mesh_storage.h"
 #include "libassert/assert.hpp"
+#include "util/small_vector.h"
 
 namespace Rendering
 {
@@ -13,7 +14,7 @@ namespace Rendering
 	void MeshStorage::finalize()
 	{
 		// Collect handles first to avoid mutating the map while iterating
-		std::vector<MeshHandle> handles;
+		Util::SmallVector<MeshHandle> handles;
 		handles.reserve(meshes.size());
 		for (auto& [handle, _] : meshes)
 			handles.push_back(handle);
@@ -26,7 +27,7 @@ namespace Rendering
 	}
 
 	Rendering::MeshHandle MeshStorage::create_mesh( const std::string& name, std::span<uint8_t> vertex_data,
-		std::span<uint8_t> index_data, const std::vector<PrimitiveRange>& ranges,
+		std::span<uint8_t> index_data, const Util::SmallVector<PrimitiveRange>& ranges,
 		RenderingDevice::VertexFormatID vertex_format, RenderingDeviceCommons::IndexBufferFormat index_format)
 	{
 		DEBUG_ASSERT(rd != nullptr, "MeshStorage not initialized");
