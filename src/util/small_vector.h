@@ -29,6 +29,7 @@
 #include <algorithm>
 #include <initializer_list>
 #include <vector>
+#include "profiler.h"
 
 namespace Util
 {
@@ -204,7 +205,10 @@ public:
 		{
 			// Pilfer allocated pointer.
 			if (this->ptr != stack_storage.data())
+			{
+				TracyFreeN(this->ptr, "SmallVector");
 				free(this->ptr);
+			}
 			this->ptr = other.ptr;
 			this->buffer_size = other.buffer_size;
 			buffer_capacity = other.buffer_capacity;
@@ -253,7 +257,10 @@ public:
 	{
 		clear();
 		if (this->ptr != stack_storage.data())
+		{
+			TracyFreeN(this->ptr, "SmallVector");
 			free(this->ptr);
+		}
 	}
 
 	void clear()
@@ -312,6 +319,9 @@ public:
 			if (!new_buffer)
 				std::terminate();
 
+			if (new_buffer != stack_storage.data())
+				TracyAllocN(new_buffer, target_capacity * sizeof(T), "SmallVector");
+
 			// In case for some reason two allocations both come from same stack.
 			if (new_buffer != this->ptr)
 			{
@@ -324,7 +334,10 @@ public:
 			}
 
 			if (this->ptr != stack_storage.data())
+			{
+				TracyFreeN(this->ptr, "SmallVector");
 				free(this->ptr);
+			}
 			this->ptr = new_buffer;
 			buffer_capacity = target_capacity;
 		}
@@ -359,6 +372,9 @@ public:
 				if (!new_buffer)
 					std::terminate();
 
+				if (new_buffer != stack_storage.data())
+					TracyAllocN(new_buffer, target_capacity * sizeof(T), "SmallVector");
+
 				// First, move elements from source buffer to new buffer.
 				// We don't deal with types which can throw in move constructor.
 				auto *target_itr = new_buffer;
@@ -392,7 +408,10 @@ public:
 				}
 
 				if (this->ptr != stack_storage.data())
+				{
+					TracyFreeN(this->ptr, "SmallVector");
 					free(this->ptr);
+				}
 				this->ptr = new_buffer;
 				buffer_capacity = target_capacity;
 			}

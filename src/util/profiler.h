@@ -12,6 +12,8 @@
 // Allocations
 #define TracyAlloc(ptr, size)
 #define TracyFree(ptr)
+#define TracyAllocN(ptr, size, name)
+#define TracyFreeN(ptr, name)
 // Plots
 #define TracyPlot(name, val)
 // Vulkan GPU zones
