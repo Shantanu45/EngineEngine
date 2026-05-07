@@ -10,6 +10,7 @@
 #include "rendering/gltf_material_bridge.h"
 #include "rendering/render_settings.h"
 #include "rendering/utils.h"
+#include "rendering/texture_cache.h"
 #include "input/input.h"
 #include "util/timer.h"
 #include "util/profiler.h"
@@ -49,7 +50,10 @@ struct ForwardApplication : EE::Application
             wsi->get_default_vertex_attribute(),
             Rendering::VERTEX_FORMAT_VARIATIONS::DEFAULT);
 
-        auto fs = Services::get().get<FilesystemInterface>();
+        auto fs_ptr = Services::get().get<FilesystemInterface>();
+        auto& fs    = static_cast<FileSystem::Filesystem&>(*fs_ptr);
+
+        tex_cache_.init(device, fs);
         mesh_storage->initialize(device);
 
         grid_mesh        = Rendering::Shapes::upload_grid(*wsi, *mesh_storage, 10, 1, "object_grid");
@@ -67,22 +71,34 @@ struct ForwardApplication : EE::Application
             "assets://textures/skybox/front.jpg",
             "assets://textures/skybox/back.jpg",
         };
-        cubemap_uniform = Rendering::load_skybox_cubemap(device, *fs, faces);
+        cubemap_uniform = Rendering::load_skybox_cubemap(device, fs, faces);
 
         renderer.initialize(wsi, device, cubemap_uniform.get());
 
         // --- Load Sponza ---
         auto vfmt = wsi->get_vertex_format_by_type(Rendering::VERTEX_FORMAT_VARIATIONS::DEFAULT);
-        mesh_loader = std::make_unique<Rendering::MeshLoader>(*fs, device);
+        mesh_loader = std::make_unique<Rendering::MeshLoader>(fs, device);
         mesh_loader->load_file("assets://gltf/Sponza/glTF/Sponza.gltf");
 
         Rendering::GltfScene* gs = mesh_loader->get_scene();
 
-        // Upload all images — one RID per image, indexed by GltfScene::images
+        // Upload all images via TextureCache — BC7-compressed and disk-cached.
+        // raw() used since tinygltf already decoded pixels into GltfImageData::pixels.
+        // is_srgb=false matches original UNORM behaviour; adjust per-slot when needed.
+        const std::string gltf_key_base = "assets://gltf/Sponza/glTF/Sponza.gltf:";
         Util::SmallVector<RID> image_rids;
-        for (int i = 0; i < (int)gs->images.size(); i++)
-            image_rids.push_back(mesh_loader->upload_cached(
-                gs, i, "assets://models/sponza/Sponza.gltf"));
+        for (int i = 0; i < (int)gs->images.size(); i++) {
+            auto& gi = gs->images[i];
+            Rendering::ImageData img;
+            img.width            = gi.width;
+            img.height           = gi.height;
+            img.channels         = gi.channels;
+            img.desired_channels = 4;
+            img.format           = Rendering::Format::R8G8B8A8_UNORM;
+            img.pixels           = gi.pixels;
+            image_rids.push_back(tex_cache_.raw(gltf_key_base + std::to_string(i), img, /*is_srgb=*/false));
+            { auto _ = std::move(gi.pixels); } // free CPU copy after compression
+        }
 
         // Convert PBR materials -> MaterialRegistry entries
         for (const auto& pbr : gs->materials) {
@@ -212,6 +228,7 @@ struct ForwardApplication : EE::Application
     void teardown_application() override
     {
         material_registry.free_all(device);
+        tex_cache_.free_all(); // free BC7 texture RIDs (owned here, not by mesh_loader)
         if (mesh_loader)
             mesh_loader->free_owned_resources();
         mesh_storage->finalize();
@@ -273,6 +290,7 @@ private:
     // Textures — declared first so they outlive the renderer's uniform sets that reference them.
     RIDHandle fallback_texture;
     RIDHandle cubemap_uniform;
+    Rendering::TextureCache tex_cache_; // owns BC7 image RIDs; must outlive material_registry
 
     // Material registry — uniform sets reference texture RIDs, destroyed before mesh_loader.
     Rendering::MaterialRegistry material_registry;

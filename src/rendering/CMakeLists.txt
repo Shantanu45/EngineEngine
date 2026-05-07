@@ -1,3 +1,16 @@
+################################################################################
+# bc7enc_lib — BC7 block encoder (subset of bc7enc_rdo, no lodepng/miniz)
+################################################################################
+add_library(bc7enc_lib STATIC
+    ${PROJECT_SOURCE_DIR}/third_party/bc7enc_rdo/bc7enc.cpp
+)
+target_include_directories(bc7enc_lib PUBLIC
+    ${PROJECT_SOURCE_DIR}/third_party/bc7enc_rdo
+)
+if(MSVC)
+    target_compile_options(bc7enc_lib PRIVATE /W0 /wd4127)
+endif()
+
 set(PROJECT_NAME rendering)
 
 file(GLOB SOURCES CONFIGURE_DEPENDS "*.cpp")
@@ -89,6 +102,7 @@ set(ADDITIONAL_LIBRARY_DEPENDENCIES
 	event
 	EnTT::EnTT
 	Tracy::TracyClient
+	bc7enc_lib
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE ${ADDITIONAL_LIBRARY_DEPENDENCIES})
