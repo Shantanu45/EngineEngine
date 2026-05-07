@@ -127,6 +127,10 @@ namespace Rendering
 
 		// Expose the loaded scene so the caller can access materials,
 		// nodes, animations etc. after a load_gltf call
+		GltfScene* get_scene()
+		{
+			return &gltf_loader->scene();
+		}
 		const GltfScene* get_scene() const
 		{
 			return &gltf_loader->scene();
@@ -162,7 +166,7 @@ namespace Rendering
 			return ss;
 		}
 
-		RID upload_cached(const GltfScene* scene, int image_index, const std::string& file_path)
+		RID upload_cached(GltfScene* scene, int image_index, const std::string& file_path)
 		{
 			std::string key = file_path + ":" + std::to_string(image_index);
 
@@ -182,12 +186,13 @@ namespace Rendering
 			tf.format = RDC::DATA_FORMAT_R8G8B8A8_UNORM;
 
 			RID rid = device->texture_create(tf, RD::TextureView(), { img.pixels });
+			{ auto _ = std::move(img.pixels); }  // free CPU copy after GPU upload
 			image_cache[key] = rid;
 			return rid;
 		}
 
 		// upload_texture then just delegates to it:
-		RID upload_texture(const GltfScene* scene, const std::optional<TextureInfo>& tex_info, RID fallback, const std::string& file_path)
+		RID upload_texture(GltfScene* scene, const std::optional<TextureInfo>& tex_info, RID fallback, const std::string& file_path)
 		{
 			if (!tex_info.has_value())
 				return fallback;

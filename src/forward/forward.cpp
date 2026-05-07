@@ -76,7 +76,7 @@ struct ForwardApplication : EE::Application
         mesh_loader = std::make_unique<Rendering::MeshLoader>(*fs, device);
         mesh_loader->load_file("assets://gltf/Sponza/glTF/Sponza.gltf");
 
-        const Rendering::GltfScene* gs = mesh_loader->get_scene();
+        Rendering::GltfScene* gs = mesh_loader->get_scene();
 
         // Upload all images — one RID per image, indexed by GltfScene::images
         Util::SmallVector<RID> image_rids;

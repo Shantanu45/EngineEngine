@@ -164,6 +164,7 @@ namespace Rendering
 		GltfLoader(::FileSystem::FilesystemInterface& iface);
 
 		Error           load(const std::string& path);
+		GltfScene&       scene()       { return m_scene; }
 		const GltfScene& scene() const { return m_scene; }
 
 		// Compute world-space transform for a node by walking up the hierarchy
