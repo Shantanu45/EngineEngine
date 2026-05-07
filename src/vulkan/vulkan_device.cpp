@@ -283,6 +283,8 @@ namespace Vulkan
 			_get_vk_queue(p_queue_family, p_queue_index),
 			command_buffer->vk_command_buffer
 		);
+		TracyPlotConfig("GPU Buffer Bytes",  tracy::PlotFormatType::Memory, false, true, 0);
+		TracyPlotConfig("GPU Texture Bytes", tracy::PlotFormatType::Memory, false, true, 0);
 #endif
 		return OK;
 	}
@@ -851,10 +853,10 @@ namespace Vulkan
 	}
 
 	static void _vma_alloc_callback(VmaAllocator, uint32_t, VkDeviceMemory memory, VkDeviceSize size, void*) {
-		TracyAllocN(reinterpret_cast<void*>(static_cast<uintptr_t>(reinterpret_cast<uint64_t>(memory))), static_cast<size_t>(size), "GPU/VMA");
+		TracyAllocNS(reinterpret_cast<void*>(static_cast<uintptr_t>(reinterpret_cast<uint64_t>(memory))), static_cast<size_t>(size), 8, "GPU/VMA");
 	}
 	static void _vma_free_callback(VmaAllocator, uint32_t, VkDeviceMemory memory, VkDeviceSize, void*) {
-		TracyFreeN(reinterpret_cast<void*>(static_cast<uintptr_t>(reinterpret_cast<uint64_t>(memory))), "GPU/VMA");
+		TracyFreeNS(reinterpret_cast<void*>(static_cast<uintptr_t>(reinterpret_cast<uint64_t>(memory))), 8, "GPU/VMA");
 	}
 
 	Error RenderingDeviceDriverVulkan::_initialize_allocator() {
@@ -1185,11 +1187,13 @@ namespace Vulkan
 		buf_info->allocation.size = alloc_info.size;
 		buf_info->size = original_size;
 
+		TracyPlot("GPU Buffer Bytes", tracy_gpu_buffer_bytes += alloc_info.size);
 		return BufferID(buf_info);
 	}
 
 	void RenderingDeviceDriverVulkan::buffer_free(BufferID p_buffer) {
 		BufferInfo* buf_info = (BufferInfo*)p_buffer.id;
+		TracyPlot("GPU Buffer Bytes", tracy_gpu_buffer_bytes -= buf_info->allocation.size);
 		if (buf_info->vk_view) {
 			vkDestroyBufferView(vk_device, buf_info->vk_view, nullptr);
 		}
@@ -1555,6 +1559,7 @@ namespace Vulkan
 		tex_info->vk_create_info = create_info;
 		tex_info->vk_view_create_info = image_view_create_info;
 		tex_info->allocation.handle = allocation;
+		TracyPlot("GPU Texture Bytes", tracy_gpu_texture_bytes += alloc_info.size);
 #ifdef DEBUG_ENABLED
 		tex_info->transient = (p_format.usage_bits & TEXTURE_USAGE_TRANSIENT_BIT) != 0;
 #endif
@@ -1718,6 +1723,7 @@ namespace Vulkan
 		TextureInfo* tex_info = (TextureInfo*)p_texture.id;
 		vkDestroyImageView(vk_device, tex_info->vk_view, nullptr);
 		if (tex_info->allocation.handle) {
+			TracyPlot("GPU Texture Bytes", tracy_gpu_texture_bytes -= tex_info->allocation.info.size);
 			if (false/*!Engine::get_singleton()->is_extra_gpu_memory_tracking_enabled()*/) {
 				vmaDestroyImage(allocator, tex_info->vk_view_create_info.image, tex_info->allocation.handle);
 			}

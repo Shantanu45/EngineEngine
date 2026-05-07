@@ -9,6 +9,7 @@
 #include <mutex>
 #include <span>
 #include <map>
+#include <atomic>
 #include "vulkan_context.h"
 #include "vma/vk_mem_alloc.h"
 #include "util/typedefs.h"
@@ -133,6 +134,7 @@ namespace Vulkan
 
 		struct Fence;
 		struct CommandQueue {
+			TRACY_RESOURCE_OPERATORS("VkCommandQueue")
 			Util::SmallVector<VkSemaphore> image_semaphores;
 			Util::SmallVector<SwapChain*> image_semaphores_swap_chains;
 			Util::SmallVector<uint32_t> pending_semaphores_for_execute;
@@ -144,6 +146,7 @@ namespace Vulkan
 		};
 
 		struct Fence {
+			TRACY_RESOURCE_OPERATORS("VkFence")
 			VkFence vk_fence = VK_NULL_HANDLE;
 			CommandQueue* queue_signaled_from = nullptr;
 		};
@@ -151,6 +154,7 @@ namespace Vulkan
 		//TODO: temporrily public
 		private:
 		struct SwapChain {
+			TRACY_RESOURCE_OPERATORS("VkSwapChain")
 			VkSwapchainKHR vk_swapchain = VK_NULL_HANDLE;
 			RenderingContextDriverVulkan::SurfaceID surface = RenderingContextDriverVulkan::SurfaceID();
 			VkFormat format = VK_FORMAT_UNDEFINED;
@@ -169,11 +173,13 @@ namespace Vulkan
 
 		};
 		struct RenderPassInfo {
+			TRACY_RESOURCE_OPERATORS("VkRenderPass")
 			VkRenderPass vk_render_pass = VK_NULL_HANDLE;
 			bool uses_fragment_density_map = false;
 		};
 
 		struct Framebuffer {
+			TRACY_RESOURCE_OPERATORS("VkFramebuffer")
 			VkFramebuffer vk_framebuffer = VK_NULL_HANDLE;
 
 			// Only filled in if the framebuffer uses a fragment density map with offsets. Unused otherwise.
@@ -188,8 +194,14 @@ namespace Vulkan
 		VmaAllocator allocator = nullptr;
 		std::unordered_map<uint32_t, VmaPool> small_allocs_pools;
 
+#ifdef TRACY_ENABLE
+		std::atomic<int64_t> tracy_gpu_buffer_bytes{ 0 };
+		std::atomic<int64_t> tracy_gpu_texture_bytes{ 0 };
+#endif
+
 
 		struct BufferInfo {
+			TRACY_RESOURCE_OPERATORS("VkBuffer")
 			VkBuffer vk_buffer = VK_NULL_HANDLE;
 			struct {
 				VmaAllocation handle = nullptr;
@@ -214,6 +226,7 @@ namespace Vulkan
 
 		
 		struct TextureInfo {
+			TRACY_RESOURCE_OPERATORS("VkTexture")
 			VkImage vk_image = VK_NULL_HANDLE;
 			VkImageView vk_view = VK_NULL_HANDLE;
 			DataFormat rd_format = DATA_FORMAT_MAX;
@@ -236,18 +249,21 @@ namespace Vulkan
 		};
 
 		struct CommandBufferInfo {
+			TRACY_RESOURCE_OPERATORS("VkCommandBuffer")
 			VkCommandBuffer vk_command_buffer = VK_NULL_HANDLE;
 			Framebuffer* active_framebuffer = nullptr;
 			RenderPassInfo* active_render_pass = nullptr;
 		};
 
 		struct CommandPool {
+			TRACY_RESOURCE_OPERATORS("VkCommandPool")
 			VkCommandPool vk_command_pool = VK_NULL_HANDLE;
 			CommandBufferType buffer_type = COMMAND_BUFFER_TYPE_PRIMARY;
 			Util::SmallVector<CommandBufferInfo*> command_buffers_created;
 		};
 
 		struct ShaderInfo {
+			TRACY_RESOURCE_OPERATORS("VkShader")
 			std::string name;
 			VkShaderStageFlags vk_push_constant_stages = 0;
 			Util::SmallVector<VkPipelineShaderStageCreateInfo> vk_stages_create_info;
@@ -262,6 +278,7 @@ namespace Vulkan
 		};
 
 		struct VertexFormatInfo {
+			TRACY_RESOURCE_OPERATORS("VkVertexFormat")
 			Util::SmallVector<VkVertexInputBindingDescription> vk_bindings;
 			Util::SmallVector<VkVertexInputAttributeDescription> vk_attributes;
 			VkPipelineVertexInputStateCreateInfo vk_create_info = {};
@@ -278,6 +295,7 @@ namespace Vulkan
 		using DescriptorSetPools = std::map<DescriptorSetPoolKey, std::unordered_map<VkDescriptorPool, uint32_t>>;
 
 		struct UniformSetInfo {
+			TRACY_RESOURCE_OPERATORS("VkUniformSet")
 			VkDescriptorSet vk_descriptor_set = VK_NULL_HANDLE;
 			VkDescriptorPool vk_descriptor_pool = VK_NULL_HANDLE;
 			VkDescriptorPool vk_linear_descriptor_pool = VK_NULL_HANDLE;
