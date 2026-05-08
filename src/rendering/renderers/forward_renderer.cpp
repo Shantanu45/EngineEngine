@@ -20,7 +20,7 @@ void ForwardRenderer::initialize(WSI* wsi, RenderingDevice* dev, RID cubemap) {
     // --- Framebuffer formats ---
 
     RD::AttachmentFormat color_att;
-    color_att.format      = RD::DATA_FORMAT_R8G8B8A8_UNORM;
+    color_att.format      = RD::DATA_FORMAT_R16G16B16A16_SFLOAT;
     color_att.usage_flags = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT;
 
     RD::AttachmentFormat depth_att;
@@ -360,7 +360,7 @@ void ForwardRenderer::setup_passes(FrameGraph& fg, FrameGraphBlackboard& bb,
                 tf.width        = view.extent.x;
                 tf.height       = view.extent.y;
                 tf.usage_bits   = RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT;
-                tf.format       = RD::DATA_FORMAT_R8G8B8A8_UNORM;
+                tf.format       = RD::DATA_FORMAT_R16G16B16A16_SFLOAT;
                 data.scene = builder.create<FrameGraphTexture>("scene texture", { tf, RD::TextureView(), "scene texture" });
 
                 RD::TextureFormat tf_depth;

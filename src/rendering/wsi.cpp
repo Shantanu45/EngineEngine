@@ -96,6 +96,8 @@ namespace Rendering
             Rendering::BlitToScreen blit;
             blit.render_target = p_scene_texture;
             blit.ui = p_imgui_ui_tex;
+            blit.exposure = render_settings.exposure;
+            blit.tone_mapper = static_cast<uint32_t>(render_settings.tone_mapper);
             rd->blit_render_targets_to_screen(&blit);
         }
     }

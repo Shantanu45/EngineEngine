@@ -22,6 +22,11 @@ struct MenuBarPanel : IUIPanel {
                 ImGui::MenuItem("Skybox",          nullptr, &ctx.settings->draw_skybox);
                 ImGui::MenuItem("PBR Lighting",    nullptr, &ctx.settings->use_pbr_lighting);
                 ImGui::MenuItem("Debug AABBs",     nullptr, &ctx.settings->draw_debug_aabbs);
+                ImGui::Separator();
+                ImGui::SliderFloat("Exposure", &ctx.settings->exposure, 0.0f, 8.0f, "%.2f");
+                int tone_mapper = static_cast<int>(ctx.settings->tone_mapper);
+                if (ImGui::Combo("Tone Mapper", &tone_mapper, "None\0Reinhard\0ACES\0"))
+                    ctx.settings->tone_mapper = static_cast<ToneMapper>(tone_mapper);
                 ImGui::EndMenu();
             }
 

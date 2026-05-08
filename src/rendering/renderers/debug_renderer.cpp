@@ -32,7 +32,7 @@ void DebugRenderer::initialize(RenderingDevice* dev) {
 
     // Framebuffer format with LOAD ops (same color/depth formats as main scene pass)
     RD::AttachmentFormat color_att;
-    color_att.format      = RD::DATA_FORMAT_R8G8B8A8_UNORM;
+    color_att.format      = RD::DATA_FORMAT_R16G16B16A16_SFLOAT;
     color_att.usage_flags = RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT;
     color_att.load_op     = RDD::ATTACHMENT_LOAD_OP_LOAD;
 

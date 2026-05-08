@@ -1,13 +1,20 @@
 #pragma  once
 #include "wsi.h"
 #include "rid_handle.h"
+#include "uniform_buffer.h"
 #include "util/small_vector.h"
 
 namespace Rendering
 {
+	struct BlitSettingsUBO {
+		glm::vec4 tone_mapping = glm::vec4(1.0f, 2.0f, 0.0f, 0.0f);
+	};
+
 	struct BlitToScreen {
 		RID render_target;
 		RID ui;
+		float exposure = 1.0f;
+		uint32_t tone_mapper = 2;
 		Rect2 src_rect = Rect2(0.0, 0.0, 1.0, 1.0);
 		Rect2i dst_rect;
 
@@ -25,6 +32,7 @@ namespace Rendering
 			RIDHandle index_buffer;
 			RIDHandle array;
 			RIDHandle sampler;
+			UniformBuffer<BlitSettingsUBO> settings_ubo;
 		} blit;
 
 	public:

@@ -13,6 +13,7 @@
 #include "math/rect2.h"
 #include "rendering/mesh_storage.h"
 #include "rendering/mesh_loader.h"
+#include "rendering/render_settings.h"
 #include "rendering/utils.h"
 #include "application/application_events.h"
 #include "util/small_vector.h"
@@ -61,6 +62,7 @@ namespace Rendering
         void poll(void* e);
 
         void blit_render_target_to_screen(RID p_scene_texture, RID p_imgui_ui_tex);
+        void set_render_settings(const RenderSettings& p_settings) { render_settings = p_settings; }
 
         bool pre_frame_loop();
         bool pre_begin_frame();
@@ -142,6 +144,8 @@ namespace Rendering
 
         std::unordered_map<std::string, float> gpu_profile_task_time;
         std::unordered_map<std::string, float> cpu_profile_task_time;
+
+        RenderSettings render_settings;
     };
 
 } // namespace Rendering

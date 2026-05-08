@@ -60,6 +60,7 @@ void ForwardRuntime::render_frame(double frame_time, double elapsed_time)
 	const Rendering::SceneView& view = extracted_scene.view;
 
 	TracyPlot("Draw Calls", (int64_t)render_stats.draw_count);
+	wsi->set_render_settings(render_settings);
 	render_pipeline.render(view, resources.meshes(), render_imgui);
 }
 

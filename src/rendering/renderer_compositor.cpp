@@ -11,6 +11,14 @@ namespace Rendering
 
 	void RendererCompositor::blit_render_targets_to_screen(const BlitToScreen* p_render_targets)
 	{
+		blit.settings_ubo.upload(rendering_device, BlitSettingsUBO{
+			.tone_mapping = glm::vec4(
+				p_render_targets[0].exposure,
+				static_cast<float>(p_render_targets[0].tone_mapper),
+				0.0f,
+				0.0f),
+		});
+
 		rendering_device->screen_prepare_for_drawing(screen);
 		rendering_device->begin_for_screen(screen);
 
@@ -32,6 +40,8 @@ namespace Rendering
 			u_ui.append_id(blit.sampler);
 			u_ui.append_id(rd_texture_ui);
 			uniforms.push_back(u_ui);
+
+			uniforms.push_back(blit.settings_ubo.as_uniform(2));
 
 			uniform_set = rendering_device->uniform_set_create(uniforms, blit.shader, 0);
 
@@ -101,6 +111,7 @@ namespace Rendering
 		blit.index_buffer = RIDHandle(rendering_device->index_buffer_create(6, RenderingDevice::INDEX_BUFFER_FORMAT_UINT32, pv));
 		blit.array        = RIDHandle(rendering_device->index_array_create(blit.index_buffer, 0, 6));
 		blit.sampler      = rendering_device->sampler_create(RenderingDevice::SamplerState());
+		blit.settings_ubo.create(rendering_device, "Blit Settings UBO");
 
 		rendering_device->_submit_transfer_workers();
 		initialized = true;
