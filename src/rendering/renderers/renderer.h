@@ -29,6 +29,7 @@ struct SceneView {
     Util::SmallVector<MeshInstance> instances;
     Util::SmallVector<Light>        lights;
     Size2i                    extent{};
+    bool                      use_pbr_lighting = false;
 };
 
 struct IRenderer {

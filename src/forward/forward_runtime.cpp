@@ -120,6 +120,7 @@ void ForwardRuntime::load_scene(FileSystem::Filesystem& filesystem, const std::s
 		.resources         = resources,
 		.fallback_texture  = resources.default_white_texture(),
 		.shader_rid        = render_pipeline.color_pipeline().shader_rid,
+		.pbr_shader_rid    = render_pipeline.pbr_color_pipeline().shader_rid,
 		.vertex_format     = vfmt,
 		.path              = path,
 		.name_prefix       = name_prefix,

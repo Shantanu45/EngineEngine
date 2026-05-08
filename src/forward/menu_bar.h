@@ -20,6 +20,7 @@ struct MenuBarPanel : IUIPanel {
                 ImGui::MenuItem("Wireframe",       nullptr, &ctx.settings->wireframe);
                 ImGui::MenuItem("Grid",            nullptr, &ctx.settings->draw_grid);
                 ImGui::MenuItem("Skybox",          nullptr, &ctx.settings->draw_skybox);
+                ImGui::MenuItem("PBR Lighting",    nullptr, &ctx.settings->use_pbr_lighting);
                 ImGui::MenuItem("Debug AABBs",     nullptr, &ctx.settings->draw_debug_aabbs);
                 ImGui::EndMenu();
             }

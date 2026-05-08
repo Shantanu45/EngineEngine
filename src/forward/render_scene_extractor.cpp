@@ -57,6 +57,7 @@ RenderSceneExtractResult RenderSceneExtractor::extract(RenderSceneExtractInput i
 	view.camera.cameraPos = input.camera.get_position();
 	view.elapsed     = input.elapsed;
 	view.extent      = input.extent;
+	view.use_pbr_lighting = input.settings.use_pbr_lighting;
 	view.skybox_mesh = input.settings.draw_skybox ? input.skybox_mesh : Rendering::INVALID_MESH;
 	view.grid_mesh   = input.settings.draw_grid ? input.grid_mesh : Rendering::INVALID_MESH;
 
@@ -79,7 +80,7 @@ RenderSceneExtractResult RenderSceneExtractor::extract(RenderSceneExtractInput i
 				auto h = input.asset_registry.resolve_material(asset);
 				inst.material_sets.push_back(
 					h != Rendering::INVALID_MATERIAL
-						? input.material_registry.get_uniform_set(h)
+						? input.material_registry.get_uniform_set(h, input.settings.use_pbr_lighting)
 						: RID());
 			}
 			view.instances.push_back(std::move(inst));

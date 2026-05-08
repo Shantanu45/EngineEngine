@@ -26,6 +26,7 @@ struct ForwardGltfSceneRequest {
 	Rendering::RenderResourceStore& resources;
 	RID fallback_texture;
 	RID shader_rid;
+	RID pbr_shader_rid;
 	Rendering::RenderingDevice::VertexFormatID vertex_format = 0;
 	std::string path;
 	std::string name_prefix;

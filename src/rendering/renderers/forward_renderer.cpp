@@ -48,6 +48,13 @@ void ForwardRenderer::initialize(WSI* wsi, RenderingDevice* dev, RID cubemap) {
         .set_depth_stencil_state(ds_standard)
         .build(main_fb_format);
 
+    pipeline_pbr = PipelineBuilder{}
+        .set_shader({ "assets://shaders/pbr/forward.vert",
+                      "assets://shaders/pbr/forward.frag" }, "pbr_light_map")
+        .set_vertex_format(vertex_format)
+        .set_depth_stencil_state(ds_standard)
+        .build(main_fb_format);
+
     pipeline_light = PipelineBuilder{}
         .set_shader({ "assets://shaders/light_cube.vert",
                       "assets://shaders/light_cube.frag" }, "cube_shader")
@@ -143,6 +150,15 @@ void ForwardRenderer::initialize(WSI* wsi, RenderingDevice* dev, RID cubemap) {
         .add_sampler(5, point_shadow_sampler)
         .build(device, pipeline_color.shader_rid, 0);
 
+    uniform_set_0_pbr = UniformSetBuilder{}
+        .add(frame_ubo.as_uniform(0))
+        .add(shadow_ubo.as_uniform(1))
+        .add(light_ubo.as_uniform(2))
+        .add_sampler(3, sampler)
+        .add_sampler(4, shadow_sampler)
+        .add_sampler(5, point_shadow_sampler)
+        .build(device, pipeline_pbr.shader_rid, 0);
+
     uniform_set_0_light = UniformSetBuilder{}
         .add(frame_ubo.as_uniform(0))
         .build(device, pipeline_light.shader_rid, 0);
@@ -171,6 +187,7 @@ void ForwardRenderer::shutdown()
     uniform_set_0_point_shadow.reset();
     uniform_set_0_shadow.reset();
     uniform_set_0_light.reset();
+    uniform_set_0_pbr.reset();
     uniform_set_0.reset();
 
     point_shadow_sampler.reset();
@@ -270,8 +287,12 @@ std::vector<Drawable> ForwardRenderer::build_main_drawables(const SceneView& vie
 
     for (const auto& inst : view.instances) {
         bool opaque = inst.category == MeshCategory::Opaque;
-        Pipeline p    = opaque ? pipeline_color : pipeline_light;
-        RID      set0 = opaque ? (RID)uniform_set_0 : (RID)uniform_set_0_light;
+        Pipeline p    = opaque
+            ? (view.use_pbr_lighting ? pipeline_pbr : pipeline_color)
+            : pipeline_light;
+        RID      set0 = opaque
+            ? (view.use_pbr_lighting ? (RID)uniform_set_0_pbr : (RID)uniform_set_0)
+            : (RID)uniform_set_0_light;
         out.push_back(Drawable::make(
             p, inst.mesh,
             PushConstantData::from(ObjectData_UBO{ inst.model, inst.normal_matrix }),
@@ -322,7 +343,8 @@ void ForwardRenderer::setup_passes(FrameGraph& fg, FrameGraphBlackboard& bb,
     add_point_shadow_pass(fg, bb, 1024, point_shadow_draws, storage);
     add_shadow_pass(fg, bb, { 2048, 2048 }, shadow_draws, storage);
 
-    auto color_pipeline_rid = pipeline_color.pipeline_rid;
+    auto active_color_pipeline = view.use_pbr_lighting ? pipeline_pbr : pipeline_color;
+    auto color_pipeline_rid = active_color_pipeline.pipeline_rid;
 
     bb.add<forward_pass_resource>() =
         fg.add_callback_pass<forward_pass_resource>(
@@ -357,7 +379,7 @@ void ForwardRenderer::setup_passes(FrameGraph& fg, FrameGraphBlackboard& bb,
                     "shadow uniform set",
                     {
                         .build = [&fg,
-                                  shader_rid = pipeline_color.shader_rid,
+                                  shader_rid = active_color_pipeline.shader_rid,
                                   shadow_id  = shadow_res.shadow_map,
                                   point_id   = point_shadow_res.shadow_cubemap]
                                  (RenderContext& rc) -> RID {

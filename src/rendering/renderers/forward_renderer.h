@@ -46,6 +46,7 @@ namespace Rendering {
 
         // Expose the color pipeline so callers can obtain shader_rid for material creation.
         Pipeline color_pipeline() const { return pipeline_color; }
+        Pipeline pbr_color_pipeline() const { return pipeline_pbr; }
 
     private:
         std::vector<Drawable> build_shadow_drawables(const SceneView& view) const;
@@ -72,6 +73,7 @@ namespace Rendering {
 
         // Pipelines
         Pipeline pipeline_color;
+        Pipeline pipeline_pbr;
         Pipeline pipeline_light;
         Pipeline pipeline_grid;
         Pipeline pipeline_shadow;
@@ -80,6 +82,7 @@ namespace Rendering {
 
         // Uniform sets — declared last so they are destroyed first.
         RIDHandle uniform_set_0;
+        RIDHandle uniform_set_0_pbr;
         RIDHandle uniform_set_0_light;
         RIDHandle uniform_set_0_shadow;
         RIDHandle uniform_set_0_point_shadow;
