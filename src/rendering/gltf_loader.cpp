@@ -6,6 +6,8 @@
 #include "gltf_loader.h"
 #include "util/small_vector.h"
 
+#include <cmath>
+
 namespace Rendering
 {
 	GltfLoader::GltfLoader(::FileSystem::FilesystemInterface& iface) : fs_iface(iface) {}
@@ -88,6 +90,8 @@ namespace Rendering
 		_copy_attrib(prim, "NORMAL", out.vertices, offsetof(Vertex, normal), 3);
 		_copy_attrib(prim, "TEXCOORD_0", out.vertices, offsetof(Vertex, texcoord), 2);
 		_copy_attrib(prim, "TANGENT", out.vertices, offsetof(Vertex, tangent), 4);
+		const bool has_tangents = prim.attributes.find("TANGENT") != prim.attributes.end();
+		const bool has_uvs = prim.attributes.find("TEXCOORD_0") != prim.attributes.end();
 
 		if (prim.indices >= 0) {
 			auto& idxAcc = m_model.accessors[prim.indices];
@@ -115,7 +119,72 @@ namespace Rendering
 				out.indices[i] = (uint32_t)i;
 		}
 
+		if (!has_tangents && has_uvs)
+			_generate_tangents(out);
+
 		return out;
+	}
+
+	void GltfLoader::_generate_tangents(MeshPrimitive& primitive)
+	{
+		Util::SmallVector<glm::vec3> tangents;
+		Util::SmallVector<glm::vec3> bitangents;
+		tangents.resize(primitive.vertices.size(), glm::vec3(0.0f));
+		bitangents.resize(primitive.vertices.size(), glm::vec3(0.0f));
+
+		for (size_t i = 0; i + 2 < primitive.indices.size(); i += 3) {
+			uint32_t i0 = primitive.indices[i + 0];
+			uint32_t i1 = primitive.indices[i + 1];
+			uint32_t i2 = primitive.indices[i + 2];
+			if (i0 >= primitive.vertices.size() ||
+				i1 >= primitive.vertices.size() ||
+				i2 >= primitive.vertices.size())
+				continue;
+
+			const Vertex& v0 = primitive.vertices[i0];
+			const Vertex& v1 = primitive.vertices[i1];
+			const Vertex& v2 = primitive.vertices[i2];
+
+			glm::vec3 edge1 = v1.position - v0.position;
+			glm::vec3 edge2 = v2.position - v0.position;
+			glm::vec2 duv1 = v1.texcoord - v0.texcoord;
+			glm::vec2 duv2 = v2.texcoord - v0.texcoord;
+
+			float det = duv1.x * duv2.y - duv2.x * duv1.y;
+			if (std::abs(det) < 1e-8f)
+				continue;
+
+			float inv_det = 1.0f / det;
+			glm::vec3 tangent = (edge1 * duv2.y - edge2 * duv1.y) * inv_det;
+			glm::vec3 bitangent = (edge2 * duv1.x - edge1 * duv2.x) * inv_det;
+
+			tangents[i0] += tangent;
+			tangents[i1] += tangent;
+			tangents[i2] += tangent;
+			bitangents[i0] += bitangent;
+			bitangents[i1] += bitangent;
+			bitangents[i2] += bitangent;
+		}
+
+		for (size_t i = 0; i < primitive.vertices.size(); ++i) {
+			Vertex& vertex = primitive.vertices[i];
+			if (glm::dot(vertex.normal, vertex.normal) < 1e-8f) {
+				vertex.tangent = glm::vec4(0.0f);
+				continue;
+			}
+
+			glm::vec3 normal = glm::normalize(vertex.normal);
+			glm::vec3 tangent = tangents[i] - normal * glm::dot(normal, tangents[i]);
+
+			if (glm::dot(tangent, tangent) < 1e-8f) {
+				vertex.tangent = glm::vec4(0.0f);
+				continue;
+			}
+
+			tangent = glm::normalize(tangent);
+			float handedness = glm::dot(glm::cross(normal, tangent), bitangents[i]) < 0.0f ? -1.0f : 1.0f;
+			vertex.tangent = glm::vec4(tangent, handedness);
+		}
 	}
 
 	// ----------------------------------------------------------------

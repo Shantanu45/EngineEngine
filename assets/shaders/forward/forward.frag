@@ -132,16 +132,23 @@ float samplePointShadow(vec3 fragPos, vec3 lightPos, float farPlane, vec3 normal
 
 void main()
 {
-    mat3 TBN    = mat3(normalize(Tangent), normalize(Bitangent), normalize(Normal));
     vec3 viewDir = normalize(frame.camera.cameraPos - FragPos);
+    vec3 normal = normalize(Normal);
+    bool hasTangentBasis = dot(Tangent, Tangent) > 0.000001 &&
+                           dot(Bitangent, Bitangent) > 0.000001;
 
-    // Transform view direction to tangent space for parallax mapping
-    vec3 tangentViewDir = normalize(transpose(TBN) * viewDir);
-    vec2 uv = ParallaxMapping(TexCoords, tangentViewDir);
+    vec2 uv = TexCoords;
+    if (hasTangentBasis) {
+        mat3 TBN = mat3(normalize(Tangent), normalize(Bitangent), normal);
 
-    vec3 tangentNormal = texture(sampler2D(normal_tex, texSampler), uv).rgb * 2.0 - 1.0;
-    tangentNormal.xy  *= mat.material.emissive_and_normal.w;  // normal_scale
-    vec3 normal = normalize(TBN * tangentNormal);
+        // Transform view direction to tangent space for parallax mapping
+        vec3 tangentViewDir = normalize(transpose(TBN) * viewDir);
+        uv = ParallaxMapping(TexCoords, tangentViewDir);
+
+        vec3 tangentNormal = texture(sampler2D(normal_tex, texSampler), uv).rgb * 2.0 - 1.0;
+        tangentNormal.xy  *= mat.material.emissive_and_normal.w;  // normal_scale
+        normal = normalize(TBN * tangentNormal);
+    }
 
     vec4 baseColorSample = texture(sampler2D(diffuse_tex, texSampler), uv);
     vec4 baseColor = baseColorSample * mat.material.base_color_factor;

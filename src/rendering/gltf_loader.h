@@ -178,6 +178,7 @@ namespace Rendering
 		// Extraction helpers
 		Mesh         _extract_mesh(const tinygltf::Mesh& mesh);
 		MeshPrimitive _extract_primitive(const tinygltf::Primitive& prim);
+		void         _generate_tangents(MeshPrimitive& primitive);
 		PBRMaterial  _extract_material(const tinygltf::Material& mat);
 		GltfImageData    _extract_image(const tinygltf::Image& img);
 		SamplerInfo  _extract_sampler(const tinygltf::Sampler& smp);

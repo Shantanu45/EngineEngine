@@ -42,13 +42,25 @@ void main()
 
     mat3 nm  = mat3(object.normalMatrix);
     vec3 N   = normalize(nm * inNormal);
-    vec3 T   = normalize(nm * inTangent.xyz);
-    T        = normalize(T - dot(T, N) * N);
-    vec3 B   = normalize(cross(N, T)) * inTangent.w;
+    vec3 T   = nm * inTangent.xyz;
+    if (dot(T, T) > 0.000001) {
+        T = normalize(T);
+        T = T - dot(T, N) * N;
+        if (dot(T, T) > 0.000001) {
+            T = normalize(T);
+            vec3 B = normalize(cross(N, T)) * inTangent.w;
+            Tangent = T;
+            Bitangent = B;
+        } else {
+            Tangent = vec3(0.0);
+            Bitangent = vec3(0.0);
+        }
+    } else {
+        Tangent = vec3(0.0);
+        Bitangent = vec3(0.0);
+    }
 
     Normal    = N;
-    Tangent   = T;
-    Bitangent = B;
 
     gl_Position = frame.camera.proj * frame.camera.view * worldPos;
 }
