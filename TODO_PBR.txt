@@ -1,114 +1,84 @@
 Forward Renderer PBR Plan
 =========================
 
-Current State
--------------
-- CPU material data already follows the glTF metallic-roughness shape:
-  - base color factor/texture
-  - metallic factor
-  - roughness factor
-  - metallic-roughness texture
-  - normal texture/scale
-  - occlusion texture/strength
-  - emissive texture/factor
-  - alpha mode/cutoff
-- GLTF material import already maps `PBRMaterial` into `Rendering::Material`.
-- The forward shader samples PBR inputs, but lighting is currently a
-  metallic-roughness Blinn approximation rather than a Cook-Torrance BRDF.
-- The forward shader has a simple ambient term and no image-based lighting.
+Status
+------
+- Current forward lighting is preserved as the default path.
+- PBR direct lighting lives in separate shaders under `assets/shaders/pbr`.
+- PBR can be enabled at runtime with `Render -> PBR Lighting`.
+- Ambient/AO placeholder cleanup is applied to both forward paths.
+- Alpha mask discard is implemented for forward, PBR forward, directional
+  shadow, and point shadow passes.
+- Missing glTF tangents are generated during import when UVs are available.
+- Forward shaders fall back to vertex normals when no valid tangent basis is
+  available.
+- Image-based lighting is intentionally postponed.
 
 
-Milestone 1: Direct-Lighting PBR
---------------------------------
-Replace the current Blinn-style BRDF in `assets/shaders/lib/lighting.glsl`
-with a Cook-Torrance metallic-roughness BRDF.
-
-Tasks:
-- Add GGX / Trowbridge-Reitz normal distribution.
-- Add Smith geometry term.
-- Add Schlick Fresnel.
-- Use Lambert diffuse scaled by `(1 - metallic)`.
-- Keep existing light structs, material UBO layout, texture bindings, and
-  forward renderer pipeline unchanged.
-- Preserve current directional, point, and spot light dispatch.
-- Clamp roughness to a safe minimum to avoid unstable highlights.
-
-Validation:
-- Compare roughness changes on a material sphere or known glTF PBR sample.
-- Check Sponza still renders without shader or descriptor regressions.
-
-
-Milestone 2: Alpha Mask Support
--------------------------------
-The material system carries alpha mode and cutoff, but the shader does not yet
-apply alpha behavior.
-
-Tasks:
-- Sample base color alpha.
-- Multiply by `base_color_factor.a`.
-- Discard fragments for masked materials below `alpha_cutoff`.
-- Leave blended transparency for a later transparent pass.
-
-Notes:
-- This likely needs a material flag or shader-side value that exposes alpha mode
-  to GLSL. Do not build a full transparent renderer in this milestone.
+Completed Work
+--------------
+- Direct-light Cook-Torrance PBR path:
+  - GGX / Trowbridge-Reitz normal distribution.
+  - Smith geometry term.
+  - Schlick Fresnel.
+  - Lambert diffuse scaled by `(1 - metallic)`.
+  - Roughness clamping for stable highlights.
+  - Existing light structs and dispatch preserved.
+- Renderer integration:
+  - Existing forward pipeline remains default.
+  - Added separate PBR forward pipeline.
+  - Added material descriptor sets for current, PBR, shadow, and point-shadow
+    shader layouts.
+- Ambient/AO cleanup:
+  - Ambient placeholder uses `baseColor * ambient_strength`.
+  - AO uses `mix(1.0, ao, occlusion_strength)`.
+- Alpha mask support:
+  - Uses base color texture alpha multiplied by `base_color_factor.a`.
+  - Discards masked fragments below `alpha_cutoff`.
+  - Shadow passes now alpha-test masked materials too.
+- Normal/tangent robustness:
+  - Missing tangents are generated when possible.
+  - Invalid tangent bases skip normal/parallax mapping safely.
 
 
-Milestone 3: Ambient And AO Cleanup
------------------------------------
-Replace the current hardcoded ambient approximation with a PBR-safe placeholder
-until image-based lighting exists.
-
-Tasks:
-- Apply ambient as `baseColor * ambient_strength`.
-- Apply occlusion through `mix(1.0, ao, occlusion_strength)`.
-- Avoid double-applying base color between ambient and direct lighting.
-- Keep ambient simple and deterministic.
-
-
-Milestone 4: Image-Based Lighting
----------------------------------
-Add environment lighting after direct PBR is stable.
-
-Tasks:
-- Generate or load diffuse irradiance cubemap.
-- Generate or load prefiltered specular environment cubemap.
-- Add BRDF LUT texture.
-- Extend `RenderResourceStore` or a small environment resource helper to own
-  these resources.
-- Add bindings to the forward material/global descriptor layout.
-- Integrate diffuse IBL and specular IBL in the PBR shader.
-
-Notes:
-- Do not start here. IBL changes resource ownership, shader descriptors, and
-  preprocessing/loading policy.
-
-
-Milestone 5: Normal/Tangent Robustness
---------------------------------------
-The forward vertex shader assumes valid tangents.
-
-Tasks:
-- Detect missing tangents during GLTF import.
-- Either generate tangents or mark meshes/materials to skip normal mapping.
-- Add shader fallback for invalid tangent basis if needed.
-
-
-Milestone 6: Transparent Materials
-----------------------------------
-Handle glTF `BLEND` materials after opaque and masked PBR are correct.
+Remaining Milestone: Transparent Materials
+------------------------------------------
+Handle glTF `BLEND` materials after opaque and masked rendering are stable.
 
 Tasks:
 - Split opaque/masked and transparent render instances.
 - Add transparent forward pass ordering.
 - Add blend pipeline state variants.
 - Decide sorting policy.
+- Keep alpha mask materials in the opaque/masked pass.
+- Leave depth writes enabled for opaque/masked, disabled or carefully managed
+  for transparent materials.
 
 
-Suggested Implementation Order
-------------------------------
-1. Implement Cook-Torrance direct lighting in `lighting.glsl`.
-2. Fix forward shader ambient/AO handling enough for direct PBR.
-3. Add alpha mask support.
-4. Validate with a known glTF PBR asset.
-5. Plan IBL resource ownership and descriptor changes.
+Postponed Milestone: Image-Based Lighting
+-----------------------------------------
+Add environment lighting after the direct-light PBR path is stable enough to
+justify resource and descriptor changes.
+
+Tasks:
+- Generate or load diffuse irradiance cubemap.
+- Generate or load prefiltered specular environment cubemap.
+- Add or generate BRDF LUT texture.
+- Extend `RenderResourceStore` or add a small environment resource helper to
+  own these resources.
+- Add PBR-only bindings for IBL resources.
+- Integrate diffuse IBL and specular IBL in the PBR shader.
+
+Notes:
+- Runtime generation is possible, but requires cubemap face/mip render passes,
+  offscreen framebuffer setup, and IBL preprocessing shaders.
+- Keep the deterministic ambient placeholder until IBL resources exist.
+
+
+Validation Still To Do
+----------------------
+- Validate PBR roughness/metallic response with a known glTF PBR sample.
+- Validate masked materials with alpha-tested shadows, e.g. leaves/fences.
+- Validate a glTF asset without tangents but with normal maps.
+- Validate that Sponza and current non-PBR rendering still work unchanged.
+- Run a full C++ build after shader/resource wiring changes.

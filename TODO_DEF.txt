@@ -1,0 +1,195 @@
+Deferred Renderer Visual Parity Plan
+====================================
+
+Goal
+----
+Bring the deferred renderer up to the same practical visual state as the
+forward renderer.
+
+Current State
+-------------
+- Forward has the more complete path:
+  - GLTF scene loading through `ForwardRuntime`.
+  - ECS scene extraction into `Rendering::SceneView`.
+  - default lights.
+  - skybox and grid helper rendering.
+  - Blinn-style and PBR lighting paths.
+  - alpha mask handling.
+  - directional and point shadow passes.
+  - debug renderer pass.
+  - ImGui and final blit scheduling through `ForwardRenderPipeline`.
+- Deferred is still closer to a sample app:
+  - `src/deferred/deferred_renderer.cpp` builds a 3x3 cube scene directly.
+  - `DeferredRenderer` schedules only G-buffer and deferred lighting passes.
+  - G-buffer stores position, normal, and albedo only.
+  - deferred lighting uses the older non-PBR lighting helper.
+  - shadows, skybox, grid, debug draw, light visualizers, GLTF scene parity,
+    and transparent overlays are not wired yet.
+
+
+Milestone 1: Feed Deferred The Same Scene Data
+----------------------------------------------
+Deferred should stop being a separate cube demo before deeper visual work.
+
+Tasks:
+- Make deferred consume the same `Rendering::SceneView` shape as forward.
+- Reuse `RenderSceneExtractor`, or move it out of `src/forward` once deferred
+  needs it directly.
+- Load the same GLTF/Sponza scene for deferred.
+- Add the same default lights.
+- Add the same camera defaults.
+- Carry over render settings that affect visual output, especially PBR mode.
+
+
+Milestone 2: Add A Deferred Render Pipeline Wrapper
+---------------------------------------------------
+Forward has `ForwardRenderPipeline`; deferred currently schedules frame graph
+passes manually in the application.
+
+Tasks:
+- Add `DeferredRenderPipeline`.
+- Let it own frame graph, blackboard, pass scheduling, compile, and execute.
+- Add optional ImGui pass support.
+- Add final blit scheduling inside the pipeline.
+- Keep the deferred application thin, similar to `forward.cpp` and
+  `ForwardRuntime`.
+
+
+Milestone 3: Fix The G-Buffer Layout
+------------------------------------
+The current G-buffer is not rich enough to reproduce forward PBR output.
+
+Current G-buffer:
+- world position.
+- world normal.
+- albedo.
+
+Tasks:
+- Prefer reconstructing world position from depth instead of storing a world
+  position texture, if practical.
+- Store all material inputs needed by the lighting pass:
+  - packed normal.
+  - albedo.
+  - metallic.
+  - roughness.
+  - ambient occlusion.
+  - emissive.
+  - material flags.
+- Choose formats intentionally:
+  - albedo/emissive in UNORM or a consistent sRGB-aware path.
+  - normals in a signed or packed normal format.
+  - metallic/roughness/AO in compact channels.
+- Avoid `R16G16B16A16_UNORM` for world positions/normals long term.
+
+
+Milestone 4: Port Forward Material Logic Into The G-Buffer Pass
+---------------------------------------------------------------
+`assets/shaders/deferred/mrt.frag` should encode the same material decisions
+that forward makes before lighting.
+
+Tasks:
+- Apply `base_color_factor`.
+- Support alpha mask discard.
+- Support `normal_scale`.
+- Handle missing or invalid tangent basis safely, matching the forward shader.
+- Store metallic and roughness from the glTF metallic-roughness texture.
+- Store occlusion strength and sampled AO.
+- Store emissive factor and emissive texture contribution.
+- Keep masked materials in the deferred opaque/masked path.
+
+
+Milestone 5: Port PBR Lighting To Deferred
+------------------------------------------
+Deferred currently uses the older Blinn-style lighting helper. Forward has a
+Cook-Torrance PBR path.
+
+Tasks:
+- Make deferred lighting use the same Cook-Torrance PBR logic as
+  `assets/shaders/pbr/lighting.glsl`.
+- Read metallic, roughness, AO, and emissive from the G-buffer.
+- Match forward ambient placeholder behavior.
+- Add a deferred equivalent of the `Render -> PBR Lighting` toggle, or make
+  deferred always use PBR once stable.
+- Validate roughness and metallic response against the forward PBR path.
+
+
+Milestone 6: Add Shadows To Deferred Lighting
+---------------------------------------------
+Forward schedules directional and point shadow passes before the lit scene pass.
+Deferred does not currently use shadows.
+
+Tasks:
+- Reuse `add_shadow_pass`.
+- Reuse `add_point_shadow_pass`.
+- Build shadow drawables from deferred scene instances.
+- Upload `ShadowBuffer_UBO` using the same logic as forward.
+- Bind directional shadow map and point shadow cubemap into the deferred
+  lighting pass.
+- Port directional `shadow_factor()` logic to deferred lighting.
+- Port point-light `samplePointShadow()` logic to deferred lighting.
+- Ensure alpha-masked materials discard correctly in shadow passes.
+
+
+Milestone 7: Render Skybox, Grid, Debug Draws, And Light Visualizers
+--------------------------------------------------------------------
+Forward draws more than opaque scene meshes.
+
+Tasks:
+- Add skybox rendering with depth behavior matching forward.
+- Add grid rendering if deferred should match the forward sample view.
+- Add light visualization meshes as a forward-style overlay after deferred
+  lighting.
+- Add debug renderer pass using deferred scene color/depth, matching forward.
+- Confirm overlay draw order is stable:
+  - deferred opaque/masked lighting.
+  - skybox/grid/debug/light helpers as appropriate.
+  - transparent forward overlay later.
+  - ImGui.
+
+
+Milestone 8: Handle Transparent Materials Separately
+----------------------------------------------------
+Do not try to solve true blended transparency inside the G-buffer.
+
+Tasks:
+- Split render instances into opaque/masked and transparent.
+- Render opaque/masked materials through deferred.
+- Render transparent materials in a forward pass after deferred lighting.
+- Add blend pipeline state variants.
+- Sort transparent drawables back-to-front.
+- Keep alpha mask materials in the G-buffer path.
+- Leave depth writes enabled for opaque/masked and disabled or carefully
+  controlled for transparent materials.
+
+
+Milestone 9: Match Post And Presentation Behavior
+-------------------------------------------------
+Visual parity also depends on final color handling.
+
+Tasks:
+- Confirm forward and deferred use the same output format.
+- Confirm gamma/sRGB behavior is identical.
+- Add tonemapping only if both paths use it.
+- Match ImGui composition order.
+- Match final blit behavior.
+
+
+Milestone 10: Validation Scenes
+-------------------------------
+Use focused validation assets instead of relying only on Sponza.
+
+Tasks:
+- Validate a basic lit scene with directional and point lights.
+- Validate a known glTF PBR material sample.
+- Validate an asset with normal maps but missing tangents.
+- Validate alpha-masked geometry, such as leaves or fences.
+- Validate emissive materials.
+- Validate transparent materials after the forward overlay exists.
+- Compare forward and deferred screenshots under the same camera/light setup.
+
+
+Suggested First Step
+--------------------
+Stop treating deferred as a standalone cube demo. Make it consume the same
+extracted `SceneView` as forward, then bring the G-buffer and deferred lighting
+up to parity feature by feature.
