@@ -82,6 +82,14 @@ RenderSceneExtractResult RenderSceneExtractor::extract(RenderSceneExtractInput i
 					h != Rendering::INVALID_MATERIAL
 						? input.material_registry.get_uniform_set(h, input.settings.use_pbr_lighting)
 						: RID());
+				inst.shadow_material_sets.push_back(
+					h != Rendering::INVALID_MATERIAL
+						? input.material_registry.get_shadow_uniform_set(h)
+						: RID());
+				inst.point_shadow_material_sets.push_back(
+					h != Rendering::INVALID_MATERIAL
+						? input.material_registry.get_point_shadow_uniform_set(h)
+						: RID());
 			}
 			view.instances.push_back(std::move(inst));
 			result.stats.draw_count++;

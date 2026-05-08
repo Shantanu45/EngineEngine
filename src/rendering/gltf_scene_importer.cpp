@@ -36,7 +36,9 @@ ImportedGltfScene GltfSceneImporter::import(const GltfSceneImportContext& contex
 			std::move(mat),
 			context.fallback_texture,
 			context.shader_rid,
-			context.pbr_shader_rid));
+			context.pbr_shader_rid,
+			context.shadow_shader_rid,
+			context.point_shadow_shader_rid));
 	}
 
 	Util::SmallVector<Util::SmallVector<MeshHandle>> primitive_handles(scene->meshes.size());

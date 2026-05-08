@@ -107,21 +107,37 @@ namespace Rendering
 			materials.push_back(std::move(mat));
 			uniform_sets.push_back(std::move(us));
 			pbr_uniform_sets.push_back(RIDHandle());
+			shadow_uniform_sets.push_back(RIDHandle());
+			point_shadow_uniform_sets.push_back(RIDHandle());
 			return h;
 		}
 
 		MaterialHandle create(RenderingDevice* device, Material mat, RID fallback, RID shader_rid, RID pbr_shader_rid)
+		{
+			return create(device, std::move(mat), fallback, shader_rid, pbr_shader_rid, RID(), RID());
+		}
+
+		MaterialHandle create(RenderingDevice* device, Material mat, RID fallback, RID shader_rid,
+			RID pbr_shader_rid, RID shadow_shader_rid, RID point_shadow_shader_rid)
 		{
 			mat.create(device);
 			RIDHandle us(mat.build_uniform_set(device, fallback, shader_rid));
 			RIDHandle pbr_us(pbr_shader_rid.is_valid()
 				? mat.build_uniform_set(device, fallback, pbr_shader_rid)
 				: RID());
+			RIDHandle shadow_us(shadow_shader_rid.is_valid()
+				? mat.build_uniform_set(device, fallback, shadow_shader_rid)
+				: RID());
+			RIDHandle point_shadow_us(point_shadow_shader_rid.is_valid()
+				? mat.build_uniform_set(device, fallback, point_shadow_shader_rid)
+				: RID());
 
 			MaterialHandle h = static_cast<MaterialHandle>(materials.size());
 			materials.push_back(std::move(mat));
 			uniform_sets.push_back(std::move(us));
 			pbr_uniform_sets.push_back(std::move(pbr_us));
+			shadow_uniform_sets.push_back(std::move(shadow_us));
+			point_shadow_uniform_sets.push_back(std::move(point_shadow_us));
 			return h;
 		}
 
@@ -130,6 +146,16 @@ namespace Rendering
 		RID       get_uniform_set(MaterialHandle h, bool use_pbr_lighting) {
 			if (use_pbr_lighting && pbr_uniform_sets[h].is_valid())
 				return pbr_uniform_sets[h];
+			return uniform_sets[h];
+		}
+		RID       get_shadow_uniform_set(MaterialHandle h) {
+			if (shadow_uniform_sets[h].is_valid())
+				return shadow_uniform_sets[h];
+			return uniform_sets[h];
+		}
+		RID       get_point_shadow_uniform_set(MaterialHandle h) {
+			if (point_shadow_uniform_sets[h].is_valid())
+				return point_shadow_uniform_sets[h];
 			return uniform_sets[h];
 		}
 
@@ -146,6 +172,10 @@ namespace Rendering
 		void free_all(RenderingDevice* device) {
 			// Uniform sets must be freed before their dependency UBOs.
 			// Destroy in reverse order: uniform_sets first, then materials (which own the UBOs).
+			for (int i = (int)point_shadow_uniform_sets.size() - 1; i >= 0; --i)
+				point_shadow_uniform_sets[i].reset();
+			for (int i = (int)shadow_uniform_sets.size() - 1; i >= 0; --i)
+				shadow_uniform_sets[i].reset();
 			for (int i = (int)pbr_uniform_sets.size() - 1; i >= 0; --i)
 				pbr_uniform_sets[i].reset();
 			for (int i = (int)uniform_sets.size() - 1; i >= 0; --i)
@@ -160,6 +190,8 @@ namespace Rendering
 		Util::SmallVector<Material>   materials;
 		Util::SmallVector<RIDHandle>  uniform_sets;
 		Util::SmallVector<RIDHandle>  pbr_uniform_sets;
+		Util::SmallVector<RIDHandle>  shadow_uniform_sets;
+		Util::SmallVector<RIDHandle>  point_shadow_uniform_sets;
 	};
 }
 

@@ -18,6 +18,8 @@ struct MeshInstance {
     glm::mat4           model;
     glm::mat4           normal_matrix;
     Util::SmallVector<RID>    material_sets; // pre-resolved from MaterialRegistry, one per primitive
+    Util::SmallVector<RID>    shadow_material_sets;
+    Util::SmallVector<RID>    point_shadow_material_sets;
     MeshCategory        category = MeshCategory::Opaque;
 };
 

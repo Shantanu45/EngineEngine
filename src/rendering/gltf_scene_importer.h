@@ -34,6 +34,8 @@ struct GltfSceneImportContext {
 	RID fallback_texture;
 	RID shader_rid;
 	RID pbr_shader_rid;
+	RID shadow_shader_rid;
+	RID point_shadow_shader_rid;
 	RenderingDevice::VertexFormatID vertex_format = 0;
 	std::string source_path;
 	std::string name_prefix;

@@ -47,6 +47,8 @@ namespace Rendering {
         // Expose the color pipeline so callers can obtain shader_rid for material creation.
         Pipeline color_pipeline() const { return pipeline_color; }
         Pipeline pbr_color_pipeline() const { return pipeline_pbr; }
+        Pipeline shadow_pipeline() const { return pipeline_shadow; }
+        Pipeline point_shadow_pipeline() const { return pipeline_point_shadow; }
 
     private:
         std::vector<Drawable> build_shadow_drawables(const SceneView& view) const;

@@ -21,8 +21,10 @@ layout(push_constant) uniform PC {
 } pc;
 
 layout(location = 0) out vec4 FragPos;
+layout(location = 1) out vec2 TexCoords;
 
 void main() {
     FragPos = pc.model * vec4(inPosition, 1.0);
+    TexCoords = inTexcoord;
     gl_Position = FragPos; // overwritten by geometry shader
 }

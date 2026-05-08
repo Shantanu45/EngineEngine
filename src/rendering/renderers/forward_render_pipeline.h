@@ -15,6 +15,8 @@ public:
 
 	Pipeline color_pipeline() const { return renderer.color_pipeline(); }
 	Pipeline pbr_color_pipeline() const { return renderer.pbr_color_pipeline(); }
+	Pipeline shadow_pipeline() const { return renderer.shadow_pipeline(); }
+	Pipeline point_shadow_pipeline() const { return renderer.point_shadow_pipeline(); }
 
 private:
 	void schedule_passes(const SceneView& view, MeshStorage& storage, bool include_imgui_pass);

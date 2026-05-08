@@ -167,12 +167,14 @@ void ForwardRenderer::initialize(WSI* wsi, RenderingDevice* dev, RID cubemap) {
     uniform_set_0_shadow = UniformSetBuilder{}
         .add(frame_ubo.as_uniform(0))
         .add(shadow_ubo.as_uniform(1))
+        .add_sampler(3, sampler)
         .build(device, pipeline_shadow.shader_rid, 0);
 
     // Point shadow pass: frame + shadow buffer (geom shader reads cubemap matrices from shadow buffer)
     uniform_set_0_point_shadow = UniformSetBuilder{}
         .add(frame_ubo.as_uniform(0))
         .add(shadow_ubo.as_uniform(1))
+        .add_sampler(3, sampler)
         .build(device, pipeline_point_shadow.shader_rid, 0);
 
     uniform_set_skybox = UniformSetBuilder{}
@@ -252,7 +254,8 @@ std::vector<Drawable> ForwardRenderer::build_shadow_drawables(const SceneView& v
         out.push_back(Drawable::make(
             pipeline_shadow, inst.mesh,
             PushConstantData::from(ObjectData_UBO{ inst.model, inst.normal_matrix }),
-            { { (RID)uniform_set_0_shadow, 0 } }
+            { { (RID)uniform_set_0_shadow, 0 } },
+            inst.shadow_material_sets
         ));
     }
     return out;
@@ -265,7 +268,8 @@ std::vector<Drawable> ForwardRenderer::build_point_shadow_drawables(const SceneV
         out.push_back(Drawable::make(
             pipeline_point_shadow, inst.mesh,
             PushConstantData::from(ObjectData_UBO{ inst.model, inst.normal_matrix }),
-            { { (RID)uniform_set_0_point_shadow, 0 } }
+            { { (RID)uniform_set_0_point_shadow, 0 } },
+            inst.point_shadow_material_sets
         ));
     }
     return out;

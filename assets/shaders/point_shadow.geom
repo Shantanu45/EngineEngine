@@ -22,13 +22,16 @@ layout(set = 0, binding = 1) uniform ShadowBuffer {
 } shadowBuf;
 
 layout(location = 0) in  vec4 InFragPos[];
+layout(location = 1) in  vec2 InTexCoords[];
 layout(location = 0) out vec4 FragPos;
+layout(location = 1) out vec2 TexCoords;
 
 void main() {
     for (int face = 0; face < 6; ++face) {
         gl_Layer = face;
         for (int v = 0; v < 3; ++v) {
             FragPos = InFragPos[v];
+            TexCoords = InTexCoords[v];
             gl_Position = shadowBuf.shadows[frame.ptShadowIdx].matrices[face] * InFragPos[v];
             EmitVertex();
         }

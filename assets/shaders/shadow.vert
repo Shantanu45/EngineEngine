@@ -27,6 +27,9 @@ layout(push_constant) uniform PC {
     mat4 normalMatrix;
 } pc;
 
+layout(location = 0) out vec2 TexCoords;
+
 void main() {
+    TexCoords = inTexcoord;
     gl_Position = shadowBuf.shadows[frame.dirShadowIdx].matrices[0] * pc.model * vec4(inPosition, 1.0);
 }
