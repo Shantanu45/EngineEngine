@@ -35,7 +35,7 @@ struct Material {
     float alpha_cutoff;         // offset 28
     vec4  emissive_and_normal;  // offset 32  xyz=emissive_factor, w=normal_scale
     float occlusion_strength;   // offset 48
-    float _pad0;                // offset 52
+    uint  alpha_mode;           // offset 52
     float _pad1;                // offset 56
     float _pad2;                // offset 60
 };

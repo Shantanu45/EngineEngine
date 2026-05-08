@@ -4,6 +4,8 @@
 #include "rid_handle.h"
 #include "util/small_vector.h"
 
+#include <cstdint>
+
 // Must match the GLSL Material struct in lib/lighting.glsl (std140 layout).
 struct alignas(16) Material_UBO {
 	glm::vec4 base_color_factor;     // offset  0
@@ -13,7 +15,8 @@ struct alignas(16) Material_UBO {
 	float     alpha_cutoff;          // offset 28
 	glm::vec4 emissive_and_normal;   // offset 32  xyz=emissive_factor, w=normal_scale
 	float     occlusion_strength;    // offset 48
-	float     _pad0, _pad1, _pad2;   // offset 52-60  (pad to 64 bytes)
+	uint32_t  alpha_mode;            // offset 52  Rendering::AlphaMode
+	float     _pad1, _pad2;          // offset 56-60  (pad to 64 bytes)
 };
 
 namespace Rendering
@@ -59,6 +62,7 @@ namespace Rendering
 				.alpha_cutoff        = alpha_cutoff,
 				.emissive_and_normal = glm::vec4(emissive_factor, normal_scale),
 				.occlusion_strength  = occlusion_strength,
+				.alpha_mode          = static_cast<uint32_t>(alpha_mode),
 				});
 			dirty = false;
 		}

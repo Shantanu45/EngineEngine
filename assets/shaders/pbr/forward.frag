@@ -45,6 +45,8 @@ layout(set = 2, binding = 4) uniform texture2D displacement_tex;
 layout(set = 2, binding = 5) uniform texture2D emissive_tex;
 layout(set = 2, binding = 6) uniform texture2D occlusion_tex;
 
+#define ALPHA_MODE_MASK 1u
+
 vec2 ParallaxMapping(vec2 texCoords, vec3 tangentViewDir) {
     const float heightScale = 0.05;
     const int   maxLayers   = 32;
@@ -130,11 +132,15 @@ void main()
     tangentNormal.xy  *= mat.material.emissive_and_normal.w;
     vec3 normal = normalize(TBN * tangentNormal);
 
-    vec3 baseColor = vec3(texture(sampler2D(diffuse_tex, texSampler), uv))
-                     * mat.material.base_color_factor.rgb;
+    vec4 baseColorSample = texture(sampler2D(diffuse_tex, texSampler), uv);
+    vec4 baseColor = baseColorSample * mat.material.base_color_factor;
+    if (mat.material.alpha_mode == ALPHA_MODE_MASK &&
+        baseColor.a < mat.material.alpha_cutoff)
+        discard;
+
     float ao = texture(sampler2D(occlusion_tex, texSampler), uv).r;
     float ambientOcclusion = mix(1.0, ao, mat.material.occlusion_strength);
-    vec3 color = baseColor * 0.05 * ambientOcclusion;
+    vec3 color = baseColor.rgb * 0.05 * ambientOcclusion;
 
     for (uint i = 0u; i < lightData.lightCount; i++) {
         float shadow = 1.0;
