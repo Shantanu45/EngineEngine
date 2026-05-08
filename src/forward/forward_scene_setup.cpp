@@ -16,15 +16,15 @@ void add_default_forward_lights(entt::registry& world, ForwardDemoLightMeshes me
 		.scale    = glm::vec3(0.2f) });
 	world.emplace<MeshComponent>(dir_light, MeshComponent{
 		.mesh     = meshes.directional,
-		.category = Rendering::MeshCategory::LightVisualization,
+		.category = SceneMeshCategory::LightVisualization,
 	});
-	world.emplace<LightComponent>(dir_light, LightComponent{ .data = {
-		.position    = glm::vec4(5.0f, 10.0f, 5.0f, 15.0f),
-		.direction   = glm::vec4(0.0f, -1.0f, -0.5f, 0.0f),
-		.color       = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f),
-		.type        = static_cast<uint32_t>(LightType::Directional),
-		.outer_angle = 0.0f,
-	} });
+	world.emplace<LightComponent>(dir_light, LightComponent{
+		.type      = SceneLightType::Directional,
+		.direction = glm::vec3(0.0f, -1.0f, -0.5f),
+		.color     = glm::vec3(1.0f),
+		.range     = 15.0f,
+		.intensity = 1.0f,
+	});
 
 	auto pt_light = world.create();
 	world.emplace<LocalTransform>(pt_light, LocalTransform{
@@ -32,24 +32,24 @@ void add_default_forward_lights(entt::registry& world, ForwardDemoLightMeshes me
 		.scale    = glm::vec3(0.1f) });
 	world.emplace<MeshComponent>(pt_light, MeshComponent{
 		.mesh     = meshes.point,
-		.category = Rendering::MeshCategory::LightVisualization,
+		.category = SceneMeshCategory::LightVisualization,
 	});
-	world.emplace<LightComponent>(pt_light, LightComponent{ .data = {
-		.position    = glm::vec4(1.0f, 1.0f, 1.0f, 15.0f),
-		.direction   = glm::vec4(-0.5f, -1.0f, -0.5f, 0.0f),
-		.color       = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f),
-		.type        = static_cast<uint32_t>(LightType::Point),
-		.outer_angle = 0.0f,
-	} });
+	world.emplace<LightComponent>(pt_light, LightComponent{
+		.type      = SceneLightType::Point,
+		.direction = glm::vec3(-0.5f, -1.0f, -0.5f),
+		.color     = glm::vec3(1.0f, 0.0f, 0.0f),
+		.range     = 15.0f,
+		.intensity = 1.0f,
+	});
 }
 
-ForwardSceneHandle load_forward_gltf_scene(const ForwardGltfSceneRequest& request)
+ForwardSceneHandle instantiate_forward_gltf_scene(const ForwardGltfSceneRequest& request)
 {
 	ForwardSceneHandle handle;
 
 	Rendering::MeshLoader mesh_loader(request.filesystem, request.device);
 	if (!mesh_loader.load_file(request.path)) {
-		LOGE("load_forward_gltf_scene: failed to load '{}'", request.path);
+		LOGE("instantiate_forward_gltf_scene: failed to load '{}'", request.path);
 		return handle;
 	}
 
@@ -102,7 +102,7 @@ ForwardSceneHandle load_forward_gltf_scene(const ForwardGltfSceneRequest& reques
 			request.world.emplace<Parent>(entity, Parent{ .entity = node_entity });
 			request.world.get<Children>(node_entity).entities.push_back(entity);
 		}
-		Util::SmallVector<Rendering::MaterialAssetHandle> materials;
+		Util::SmallVector<SceneMaterialAssetHandle> materials;
 		for (auto material : primitive.materials)
 			materials.push_back(request.resources.assets().register_material(material));
 		request.world.emplace<MeshComponent>(entity, MeshComponent{

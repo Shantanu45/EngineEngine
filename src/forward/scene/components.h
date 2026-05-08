@@ -4,9 +4,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-#include "rendering/render_asset_registry.h"
-#include "rendering/light.h"
-#include "rendering/mesh_category.h"
+#include "forward/scene/scene_asset_handles.h"
 #include "rendering/aabb.h"
 #include "util/small_vector.h"
 
@@ -38,13 +36,30 @@ struct Children {
 	Util::SmallVector<entt::entity> entities;
 };
 
+enum class SceneMeshCategory {
+	Opaque,
+	LightVisualization,
+};
+
+enum class SceneLightType {
+	Directional,
+	Point,
+	Spot,
+};
+
 struct MeshComponent {
-	Rendering::MeshAssetHandle             mesh;
-	Util::SmallVector<Rendering::MaterialAssetHandle> materials;
-	Rendering::MeshCategory                category   = Rendering::MeshCategory::Opaque;
+	SceneMeshAssetHandle                   mesh;
+	Util::SmallVector<SceneMaterialAssetHandle> materials;
+	SceneMeshCategory                       category   = SceneMeshCategory::Opaque;
 	Rendering::AABB                        local_aabb;  // local-space; invalid by default (valid() == false)
 };
 
 struct LightComponent {
-	Light data;
+	SceneLightType type = SceneLightType::Point;
+	glm::vec3 direction = glm::vec3(0.0f, -1.0f, 0.0f);
+	glm::vec3 color = glm::vec3(1.0f);
+	float range = 15.0f;
+	float intensity = 1.0f;
+	float inner_angle = 0.0f;
+	float outer_angle = 0.0f;
 };

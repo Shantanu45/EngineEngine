@@ -4,15 +4,15 @@
 
 #include "entt/entt.hpp"
 #include "filesystem/filesystem.h"
-#include "rendering/render_asset_registry.h"
+#include "forward/scene/scene_asset_handles.h"
 #include "rendering/render_resource_store.h"
 #include "rendering/mesh_storage.h"
 #include "rendering/rendering_device.h"
 #include "util/small_vector.h"
 
 struct ForwardDemoLightMeshes {
-	Rendering::MeshAssetHandle directional = Rendering::INVALID_MESH_ASSET;
-	Rendering::MeshAssetHandle point = Rendering::INVALID_MESH_ASSET;
+	SceneMeshAssetHandle directional = INVALID_SCENE_MESH_ASSET;
+	SceneMeshAssetHandle point = INVALID_SCENE_MESH_ASSET;
 };
 
 struct ForwardSceneHandle {
@@ -32,4 +32,4 @@ struct ForwardGltfSceneRequest {
 };
 
 void add_default_forward_lights(entt::registry& world, ForwardDemoLightMeshes meshes);
-ForwardSceneHandle load_forward_gltf_scene(const ForwardGltfSceneRequest& request);
+ForwardSceneHandle instantiate_forward_gltf_scene(const ForwardGltfSceneRequest& request);

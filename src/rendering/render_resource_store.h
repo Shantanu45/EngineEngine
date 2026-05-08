@@ -1,5 +1,8 @@
 #pragma once
 
+#include <array>
+#include <string>
+
 #include "filesystem/filesystem.h"
 #include "rendering/material.h"
 #include "rendering/mesh_storage.h"
@@ -13,12 +16,14 @@ class RenderResourceStore {
 public:
 	void initialize(RenderingDevice* device, FileSystem::Filesystem& filesystem);
 	void shutdown();
+	RID load_skybox_cubemap(const std::array<std::string, 6>& faces);
 
 	TextureCache& textures() { return texture_cache; }
 	RenderAssetRegistry& assets() { return asset_registry; }
 	MaterialRegistry& materials() { return material_registry; }
 	MeshStorage& meshes() { return mesh_storage; }
 	RID default_white_texture() const { return white_texture; }
+	RID skybox_cubemap() const { return skybox_texture; }
 
 	const TextureCache& textures() const { return texture_cache; }
 	const RenderAssetRegistry& assets() const { return asset_registry; }
@@ -27,7 +32,9 @@ public:
 
 private:
 	RenderingDevice* device = nullptr;
+	FileSystem::FilesystemInterface* filesystem = nullptr;
 	RIDHandle white_texture;
+	RIDHandle skybox_texture;
 	TextureCache texture_cache;
 	RenderAssetRegistry asset_registry;
 	MaterialRegistry material_registry;

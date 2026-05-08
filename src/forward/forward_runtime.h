@@ -7,6 +7,7 @@
 #include "entt/entt.hpp"
 #include "filesystem/filesystem.h"
 #include "forward/render_scene_extractor.h"
+#include "forward/scene/scene_asset_handles.h"
 #include "forward/ui_layer.h"
 #include "input/input.h"
 #include "rendering/camera.h"
@@ -16,6 +17,17 @@
 #include "rendering/renderers/forward_render_pipeline.h"
 #include "rendering/rid_handle.h"
 #include "rendering/wsi.h"
+
+struct ForwardCameraConfig {
+	float fov_degrees = 60.0f;
+	float aspect = 16.0f / 9.0f;
+	float near_plane = 0.1f;
+	float far_plane = 1000.0f;
+	CameraMode mode = CameraMode::Fly;
+	bool reset_aspect_on_resize = true;
+	glm::vec3 position = glm::vec3(0.0f, 0.0f, 3.0f);
+	glm::vec3 euler_degrees = glm::vec3(0.0f);
+};
 
 struct ForwardRuntimeConfig {
 	Rendering::WSI* wsi = nullptr;
@@ -31,6 +43,9 @@ struct ForwardRuntimeConfig {
 		"assets://textures/skybox/front.jpg",
 		"assets://textures/skybox/back.jpg",
 	};
+	ForwardCameraConfig camera;
+	bool enable_default_lights = true;
+	bool enable_default_ui = true;
 };
 
 class ForwardRuntime {
@@ -40,21 +55,23 @@ public:
 	void shutdown();
 
 private:
-	void configure_camera();
+	void configure_camera(const ForwardCameraConfig& camera_config);
 	void configure_wsi();
 	void create_default_resources(FileSystem::Filesystem& filesystem, const std::array<std::string, 6>& skybox_faces);
-	void load_scene(FileSystem::Filesystem& filesystem, const std::string& path, const std::string& name_prefix);
+	void load_scene(FileSystem::Filesystem& filesystem, const std::string& path, const std::string& name_prefix, bool add_default_lights);
 	void register_default_ui();
 
-	RIDHandle cubemap_uniform;
 	Rendering::RenderResourceStore resources;
 
 	entt::registry world;
 
 	Rendering::MeshHandle light_mesh = Rendering::INVALID_MESH;
 	Rendering::MeshHandle point_light_mesh = Rendering::INVALID_MESH;
+	// Grid and skybox are render-pass helpers, not ECS scene objects, so they stay as renderer handles.
 	Rendering::MeshHandle grid_mesh = Rendering::INVALID_MESH;
 	Rendering::MeshHandle skybox_mesh = Rendering::INVALID_MESH;
+	SceneMeshAssetHandle light_mesh_asset = INVALID_SCENE_MESH_ASSET;
+	SceneMeshAssetHandle point_light_mesh_asset = INVALID_SCENE_MESH_ASSET;
 
 	Camera camera;
 	std::shared_ptr<EE::InputSystemInterface> input_system;
@@ -64,6 +81,7 @@ private:
 
 	RenderSettings render_settings;
 	Rendering::RenderStats render_stats;
+	bool render_imgui = true;
 	RenderSceneExtractor scene_extractor;
 	UIContext ui_ctx;
 	UILayer ui_layer;

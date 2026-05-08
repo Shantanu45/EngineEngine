@@ -38,6 +38,7 @@ namespace Rendering {
     class ForwardRenderer : public IRenderer {
     public:
         void initialize(WSI* wsi, RenderingDevice* device, RID cubemap);
+        void shutdown();
 
         // IRenderer — uploads per-frame UBOs and schedules all passes.
         void setup_passes(FrameGraph& fg, FrameGraphBlackboard& bb,

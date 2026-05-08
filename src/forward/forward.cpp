@@ -26,6 +26,16 @@ struct ForwardApplication : EE::Application
 				"assets://textures/skybox/front.jpg",
 				"assets://textures/skybox/back.jpg",
 			},
+			.camera = ForwardCameraConfig{
+				.fov_degrees = 60.0f,
+				.aspect = 16.0f / 9.0f,
+				.near_plane = 0.1f,
+				.far_plane = 1000.0f,
+				.mode = CameraMode::Fly,
+				.reset_aspect_on_resize = true,
+			},
+			.enable_default_lights = true,
+			.enable_default_ui = true,
 		});
 	}
 

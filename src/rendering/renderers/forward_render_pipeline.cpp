@@ -13,12 +13,21 @@ void ForwardRenderPipeline::initialize(WSI* wsi_, RenderingDevice* device_, RID 
 	renderer.initialize(wsi, device, cubemap);
 }
 
-void ForwardRenderPipeline::render(const SceneView& view, MeshStorage& storage)
+void ForwardRenderPipeline::shutdown()
+{
+	frame_graph.reset();
+	blackboard.reset();
+	renderer.shutdown();
+	wsi = nullptr;
+	device = nullptr;
+}
+
+void ForwardRenderPipeline::render(const SceneView& view, MeshStorage& storage, bool include_imgui_pass)
 {
 	frame_graph.reset();
 	blackboard.reset();
 
-	schedule_passes(view, storage);
+	schedule_passes(view, storage, include_imgui_pass);
 
 	frame_graph.compile();
 
@@ -31,10 +40,11 @@ void ForwardRenderPipeline::render(const SceneView& view, MeshStorage& storage)
 	RENDER_TIMESTAMP("Frame End");
 }
 
-void ForwardRenderPipeline::schedule_passes(const SceneView& view, MeshStorage& storage)
+void ForwardRenderPipeline::schedule_passes(const SceneView& view, MeshStorage& storage, bool include_imgui_pass)
 {
 	renderer.setup_passes(frame_graph, blackboard, view, storage);
-	add_imgui_pass(frame_graph, blackboard, view.extent);
+	if (include_imgui_pass)
+		add_imgui_pass(frame_graph, blackboard, view.extent);
 	add_blit_pass(frame_graph, blackboard, blackboard.get<forward_pass_resource>());
 }
 

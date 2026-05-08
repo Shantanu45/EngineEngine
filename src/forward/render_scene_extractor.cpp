@@ -4,6 +4,47 @@
 #include "rendering/debug_draw.h"
 #include "util/profiler.h"
 
+#include <cstdint>
+
+namespace {
+
+Rendering::MeshCategory to_render_mesh_category(SceneMeshCategory category)
+{
+	switch (category) {
+	case SceneMeshCategory::Opaque:
+		return Rendering::MeshCategory::Opaque;
+	case SceneMeshCategory::LightVisualization:
+		return Rendering::MeshCategory::LightVisualization;
+	}
+	return Rendering::MeshCategory::Opaque;
+}
+
+uint32_t to_render_light_type(SceneLightType type)
+{
+	switch (type) {
+	case SceneLightType::Directional:
+		return static_cast<uint32_t>(LightType::Directional);
+	case SceneLightType::Point:
+		return static_cast<uint32_t>(LightType::Point);
+	case SceneLightType::Spot:
+		return static_cast<uint32_t>(LightType::Spot);
+	}
+	return static_cast<uint32_t>(LightType::Point);
+}
+
+Light to_render_light(const LightComponent& light, const glm::mat4& transform)
+{
+	return Light{
+		.position    = glm::vec4(glm::vec3(transform[3]), light.range),
+		.direction   = glm::vec4(light.direction, light.inner_angle),
+		.color       = glm::vec4(light.color, light.intensity),
+		.type        = to_render_light_type(light.type),
+		.outer_angle = light.outer_angle,
+	};
+}
+
+} // namespace
+
 RenderSceneExtractResult RenderSceneExtractor::extract(RenderSceneExtractInput input) const
 {
 	ZoneScoped;
@@ -33,7 +74,7 @@ RenderSceneExtractResult RenderSceneExtractor::extract(RenderSceneExtractInput i
 			inst.mesh          = input.asset_registry.resolve_mesh(m.mesh);
 			inst.model         = model;
 			inst.normal_matrix = normal_matrix;
-			inst.category      = m.category;
+			inst.category      = to_render_mesh_category(m.category);
 			for (auto asset : m.materials) {
 				auto h = input.asset_registry.resolve_material(asset);
 				inst.material_sets.push_back(
@@ -53,9 +94,7 @@ RenderSceneExtractResult RenderSceneExtractor::extract(RenderSceneExtractInput i
 
 	input.world.view<WorldTransform, LightComponent>().each(
 		[&](auto, WorldTransform& t, LightComponent& l) {
-			Light gl = l.data;
-			gl.position = glm::vec4(glm::vec3(t.matrix[3]), l.data.position.w);
-			view.lights.push_back(gl);
+			view.lights.push_back(to_render_light(l, t.matrix));
 		});
 
 	return result;

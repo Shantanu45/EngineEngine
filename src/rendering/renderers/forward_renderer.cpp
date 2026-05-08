@@ -165,6 +165,26 @@ void ForwardRenderer::initialize(WSI* wsi, RenderingDevice* dev, RID cubemap) {
         .build(device, pipeline_skybox.shader_rid, 0);
 }
 
+void ForwardRenderer::shutdown()
+{
+    uniform_set_skybox.reset();
+    uniform_set_0_point_shadow.reset();
+    uniform_set_0_shadow.reset();
+    uniform_set_0_light.reset();
+    uniform_set_0.reset();
+
+    point_shadow_sampler.reset();
+    shadow_sampler.reset();
+    sampler_cube.reset();
+    sampler.reset();
+
+    shadow_ubo.free();
+    light_ubo.free();
+    frame_ubo.free();
+
+    device = nullptr;
+}
+
 // ---------------------------------------------------------------------------
 // Private — per-frame helpers
 // ---------------------------------------------------------------------------
