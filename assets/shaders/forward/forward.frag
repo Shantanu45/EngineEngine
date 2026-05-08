@@ -141,9 +141,11 @@ void main()
     tangentNormal.xy  *= mat.material.emissive_and_normal.w;  // normal_scale
     vec3 normal = normalize(TBN * tangentNormal);
 
-    float ao    = texture(sampler2D(occlusion_tex, texSampler), uv).r;
-    vec3 color  = vec3(0.05) * vec3(texture(sampler2D(diffuse_tex, texSampler), uv))
-                  * mix(1.0, ao, mat.material.occlusion_strength);
+    vec3 baseColor = vec3(texture(sampler2D(diffuse_tex, texSampler), uv))
+                     * mat.material.base_color_factor.rgb;
+    float ao = texture(sampler2D(occlusion_tex, texSampler), uv).r;
+    float ambientOcclusion = mix(1.0, ao, mat.material.occlusion_strength);
+    vec3 color = baseColor * 0.05 * ambientOcclusion;
 
     for (uint i = 0u; i < lightData.lightCount; i++) {
         float shadow = 1.0;
