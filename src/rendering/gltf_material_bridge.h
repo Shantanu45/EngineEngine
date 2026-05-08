@@ -9,13 +9,22 @@
 namespace Rendering
 {
 	// Convert a loaded PBRMaterial to a runtime Material.
-	// image_rids must be indexed by GltfScene::images — one RID per uploaded image.
-	inline Material material_from_pbr(const PBRMaterial& pbr, const Util::SmallVector<RID>& image_rids)
+	// glTF color textures are authored in sRGB; data textures are linear.
+	// Both RID arrays must be indexed by GltfScene::images.
+	inline Material material_from_pbr(
+		const PBRMaterial& pbr,
+		const Util::SmallVector<RID>& color_image_rids,
+		const Util::SmallVector<RID>& linear_image_rids)
 	{
-		auto get_rid = [&](const std::optional<TextureInfo>& ti) -> RID {
-			if (!ti || ti->image_index < 0 || ti->image_index >= (int)image_rids.size())
+		auto get_color_rid = [&](const std::optional<TextureInfo>& ti) -> RID {
+			if (!ti || ti->image_index < 0 || ti->image_index >= (int)color_image_rids.size())
 				return RID{};
-			return image_rids[ti->image_index];
+			return color_image_rids[ti->image_index];
+		};
+		auto get_linear_rid = [&](const std::optional<TextureInfo>& ti) -> RID {
+			if (!ti || ti->image_index < 0 || ti->image_index >= (int)linear_image_rids.size())
+				return RID{};
+			return linear_image_rids[ti->image_index];
 		};
 
 		Material mat;
@@ -32,11 +41,11 @@ namespace Rendering
 		else if (pbr.alpha_mode == "BLEND") mat.alpha_mode = AlphaMode::Blend;
 		else                                mat.alpha_mode = AlphaMode::Opaque;
 
-		mat.diffuse            = get_rid(pbr.base_color_texture);
-		mat.metallic_roughness = get_rid(pbr.metallic_roughness_texture);
-		mat.normal             = get_rid(pbr.normal_texture);
-		mat.occlusion          = get_rid(pbr.occlusion_texture);
-		mat.emissive           = get_rid(pbr.emissive_texture);
+		mat.diffuse            = get_color_rid(pbr.base_color_texture);
+		mat.metallic_roughness = get_linear_rid(pbr.metallic_roughness_texture);
+		mat.normal             = get_linear_rid(pbr.normal_texture);
+		mat.occlusion          = get_linear_rid(pbr.occlusion_texture);
+		mat.emissive           = get_color_rid(pbr.emissive_texture);
 		mat.dirty = true;
 		return mat;
 	}
