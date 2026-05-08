@@ -17,5 +17,6 @@ namespace EE
 		unsigned height = 0;     // 0 = use application default
 		bool fullscreen = false;
 		bool vsync      = true;
+		std::string render_mode = "pbr"; // "regular" or "pbr"
 	};
 }

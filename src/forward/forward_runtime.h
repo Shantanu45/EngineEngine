@@ -46,6 +46,7 @@ struct ForwardRuntimeConfig {
 	ForwardCameraConfig camera;
 	bool enable_default_lights = true;
 	bool enable_default_ui = true;
+	bool use_pbr_lighting = true;
 };
 
 class ForwardRuntime {

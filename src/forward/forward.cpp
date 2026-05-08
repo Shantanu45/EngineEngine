@@ -1,5 +1,6 @@
 #include "application/common.h"
 
+#include "application/application_options.h"
 #include "filesystem/filesystem.h"
 #include "forward/forward_runtime.h"
 #include "input/input.h"
@@ -11,6 +12,11 @@ struct ForwardApplication : EE::Application
 		auto input_system = Services::get().get<EE::InputSystemInterface>();
 		auto fs_ptr = Services::get().get<FileSystem::FilesystemInterface>();
 		auto& filesystem = static_cast<FileSystem::Filesystem&>(*fs_ptr);
+		bool use_pbr_lighting = true;
+		if (Services::get().has<EE::AppOptions>()) {
+			auto options = Services::get().get<EE::AppOptions>();
+			use_pbr_lighting = options->render_mode == "pbr";
+		}
 
 		return runtime.initialize(ForwardRuntimeConfig{
 			.wsi = get_wsi(),
@@ -36,6 +42,7 @@ struct ForwardApplication : EE::Application
 			},
 			.enable_default_lights = true,
 			.enable_default_ui = true,
+			.use_pbr_lighting = use_pbr_lighting,
 		});
 	}
 

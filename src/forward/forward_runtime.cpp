@@ -17,6 +17,7 @@ bool ForwardRuntime::initialize(const ForwardRuntimeConfig& config)
 	device = wsi->get_rendering_device();
 	input_system = config.input_system;
 	render_imgui = config.enable_default_ui;
+	render_settings.use_pbr_lighting = config.use_pbr_lighting;
 
 	RenderUtilities::capturing_timestamps = false;
 

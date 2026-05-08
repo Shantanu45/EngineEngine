@@ -337,6 +337,9 @@ namespace EE
 		cli.add_option("--height", opts.height, "Window height (default: application default)");
 		cli.add_flag  ("--fullscreen", opts.fullscreen,  "Fullscreen mode");
 		cli.add_flag  ("--no-vsync{false}", opts.vsync,  "Disable vsync");
+		cli.add_option("--render-mode,--lighting-model", opts.render_mode,
+			"Initial lighting model: regular or pbr")
+			->check(CLI::IsMember({ "regular", "pbr" }));
 		CLI11_PARSE(cli, argc, argv);
 
 		WSIPlatformSDL::Options wsi_options;
@@ -348,6 +351,7 @@ namespace EE
 		Locator::ServiceLocator& locator = Services::get();
 
 		// Register real implementations
+		locator.provide<AppOptions>(std::make_shared<AppOptions>(opts));
 		locator.provide<InputSystemInterface>(std::make_shared<InputSystem>());
 
 		locator.provide<FilesystemInterface>(std::make_shared<Filesystem>());
