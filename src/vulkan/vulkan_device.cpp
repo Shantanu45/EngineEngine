@@ -1057,7 +1057,7 @@ namespace Vulkan
 		pci.memoryTypeIndex = p_mem_type_index;
 		pci.flags = 0;
 		pci.blockSize = 0;
-		pci.minBlockCount = 0;
+		pci.minBlockCount = 1;
 		pci.maxBlockCount = SIZE_MAX;
 		pci.priority = 0.5f;
 		pci.minAllocationAlignment = 0;
