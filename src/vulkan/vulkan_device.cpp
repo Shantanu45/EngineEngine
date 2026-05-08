@@ -2122,6 +2122,7 @@ namespace Vulkan
 		Fence* fence = (Fence*)(p_fence.id);
 		VkResult fence_status = vkGetFenceStatus(vk_device, fence->vk_fence);
 		if (fence_status == VK_NOT_READY) {		// fence is unsignaled (GPU still working)
+			ZoneScopedN("WaitForFence");
 			VkResult err = vkWaitForFences(vk_device, 1, &fence->vk_fence, VK_TRUE, UINT64_MAX);
 			ERR_FAIL_COND_V(err != VK_SUCCESS, FAILED);
 		}
@@ -2328,6 +2329,7 @@ namespace Vulkan
 			submit_info.pSignalSemaphores = signal_semaphores.data();
 
 			device_queue.submit_mutex.lock();
+			ZoneScopedN("QueueSubmit");
 			err = vkQueueSubmit(device_queue.queue, 1, &submit_info, vk_fence);
 			device_queue.submit_mutex.unlock();
 
@@ -2381,6 +2383,7 @@ namespace Vulkan
 
 			device_queue.submit_mutex.lock();
 
+			ZoneScopedN("QueuePresent");
 			err = vkQueuePresentKHR(device_queue.queue, &present_info);
 
 			device_queue.submit_mutex.unlock();
@@ -3023,6 +3026,7 @@ namespace Vulkan
 		swap_chain->command_queues_acquired.push_back(command_queue);
 		swap_chain->command_queues_acquired_semaphores.push_back(semaphore_index);
 
+		ZoneScopedN("AcquireNextImage");
 		err = vkAcquireNextImageKHR(vk_device, swap_chain->vk_swapchain, UINT64_MAX, semaphore, VK_NULL_HANDLE, &swap_chain->image_index);
 		if (err == VK_ERROR_OUT_OF_DATE_KHR) {
 			// Out of date leaves the semaphore in a signaled state that will never finish, so it's necessary to recreate it.
