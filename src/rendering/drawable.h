@@ -7,6 +7,7 @@
 #include "rendering/rendering_device.h"
 #include "rendering/mesh_storage.h"
 #include "rendering/pipeline_builder.h"
+#include "rendering/render_passes/framegraph_resources.h"
 #include "util/small_vector.h"
 
 namespace Rendering

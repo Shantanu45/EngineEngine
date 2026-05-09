@@ -4,9 +4,9 @@
 #include "rendering/uniform_set_builder.h"
 #include "rendering/render_passes/common.h"
 #include "rendering/render_passes/shadow_passes.h"
+#include "rendering/shadow_system.h"
 #include "math/rect2.h"
 
-#include <glm/gtc/matrix_transform.hpp>
 #include "util/profiler.h"
 #include "util/small_vector.h"
 
@@ -211,77 +211,6 @@ void ForwardRenderer::shutdown()
 // Private — per-frame helpers
 // ---------------------------------------------------------------------------
 
-ShadowBuffer_UBO ForwardRenderer::build_shadow_buffer(const Util::SmallVector<Light>& lights,
-                                                       uint32_t& out_dir_idx,
-                                                       uint32_t& out_pt_idx) const {
-    constexpr float ps_near = 0.1f;
-    ShadowBuffer_UBO buf{};
-    out_dir_idx = 0;
-    out_pt_idx  = 0;
-
-    for (const auto& l : lights) {
-        if (buf.count >= MAX_LIGHTS) break;
-        ShadowData& sd = buf.shadows[buf.count];
-        sd.light_index = buf.count;
-
-        if (l.type == static_cast<uint32_t>(LightType::Directional)) {
-            out_dir_idx    = buf.count;
-            glm::vec3 pos  = glm::vec3(l.position);
-            glm::mat4 proj = glm::orthoRH_ZO(-8.0f, 8.0f, -8.0f, 8.0f, 1.0f, 30.0f);
-            glm::mat4 v    = glm::lookAt(pos, pos + glm::vec3(l.direction), glm::vec3(0, 1, 0));
-            sd.matrices[0] = proj * v;
-        } else if (l.type == static_cast<uint32_t>(LightType::Point)) {
-            out_pt_idx     = buf.count;
-            glm::vec3 lp   = glm::vec3(l.position);
-            float ps_far   = l.position.w;
-            glm::mat4 proj = glm::perspectiveRH_ZO(glm::radians(90.0f), 1.0f, ps_near, ps_far);
-            sd.matrices[0] = proj * glm::lookAt(lp, lp + glm::vec3( 1, 0, 0), glm::vec3(0,-1, 0));
-            sd.matrices[1] = proj * glm::lookAt(lp, lp + glm::vec3(-1, 0, 0), glm::vec3(0,-1, 0));
-            sd.matrices[2] = proj * glm::lookAt(lp, lp + glm::vec3( 0, 1, 0), glm::vec3(0, 0, 1));
-            sd.matrices[3] = proj * glm::lookAt(lp, lp + glm::vec3( 0,-1, 0), glm::vec3(0, 0,-1));
-            sd.matrices[4] = proj * glm::lookAt(lp, lp + glm::vec3( 0, 0, 1), glm::vec3(0,-1, 0));
-            sd.matrices[5] = proj * glm::lookAt(lp, lp + glm::vec3( 0, 0,-1), glm::vec3(0,-1, 0));
-            sd.light_pos   = glm::vec4(lp, ps_far);
-        }
-
-        buf.count++;
-    }
-
-    return buf;
-}
-
-std::vector<Drawable> ForwardRenderer::build_shadow_drawables(const SceneView& view) const {
-    std::vector<Drawable> out;
-    out.reserve(view.instances.size());
-    for (const auto& inst : view.instances) {
-        if (inst.category != MeshCategory::Opaque) continue;
-        out.push_back(Drawable::make(
-            pipeline_shadow, inst.mesh,
-            PushConstantData::from(ObjectData_UBO{ inst.model, inst.normal_matrix }),
-            { { (RID)uniform_set_0_shadow, 0 } },
-            inst.shadow_material_sets
-        ));
-    }
-    sort_drawables_for_state_reuse(out);
-    return out;
-}
-
-std::vector<Drawable> ForwardRenderer::build_point_shadow_drawables(const SceneView& view) const {
-    std::vector<Drawable> out;
-    out.reserve(view.instances.size());
-    for (const auto& inst : view.instances) {
-        if (inst.category != MeshCategory::Opaque) continue;
-        out.push_back(Drawable::make(
-            pipeline_point_shadow, inst.mesh,
-            PushConstantData::from(ObjectData_UBO{ inst.model, inst.normal_matrix }),
-            { { (RID)uniform_set_0_point_shadow, 0 } },
-            inst.point_shadow_material_sets
-        ));
-    }
-    sort_drawables_for_state_reuse(out);
-    return out;
-}
-
 std::vector<Drawable> ForwardRenderer::build_main_drawables(const SceneView& view) const {
     std::vector<Drawable> out;
     out.reserve(view.instances.size() + 2);
@@ -342,16 +271,16 @@ void ForwardRenderer::setup_passes(FrameGraph& fg, FrameGraphBlackboard& bb,
                                    const SceneView& view, MeshStorage& storage) {
     ZoneScoped;
     // Upload shadow buffer first — frame UBO references shadow indices from it.
-    uint32_t dir_idx = 0, pt_idx = 0;
-    shadow_ubo.upload(device, build_shadow_buffer(view.lights, dir_idx, pt_idx));
+    const ShadowBuildResult shadow_build = ShadowSystem::build_shadow_buffer(view.lights);
+    shadow_ubo.upload(device, shadow_build.buffer);
 
     // Upload frame UBO
     {
         FrameData_UBO frame{};
         frame.camera                   = view.camera;
         frame.time                     = static_cast<float>(view.elapsed);
-        frame.directional_shadow_index = dir_idx;
-        frame.point_shadow_index       = pt_idx;
+        frame.directional_shadow_index = shadow_build.directional_shadow_index;
+        frame.point_shadow_index       = shadow_build.point_shadow_index;
         frame.material_debug_view      = static_cast<uint32_t>(view.material_debug_view);
         frame_ubo.upload(device, frame);
     }
@@ -367,9 +296,13 @@ void ForwardRenderer::setup_passes(FrameGraph& fg, FrameGraphBlackboard& bb,
     }
 
     // Build drawable lists
-    auto shadow_draws       = build_shadow_drawables(view);
-    auto point_shadow_draws = build_point_shadow_drawables(view);
-    auto main_draws         = build_main_drawables(view);
+    auto shadow_draws = ShadowSystem::build_shadow_drawables(
+        view,
+        { ShadowProjection::Directional2D, pipeline_shadow, (RID)uniform_set_0_shadow });
+    auto point_shadow_draws = ShadowSystem::build_shadow_drawables(
+        view,
+        { ShadowProjection::PointCube, pipeline_point_shadow, (RID)uniform_set_0_point_shadow });
+    auto main_draws = build_main_drawables(view);
 
     add_point_shadow_pass(fg, bb, 1024, point_shadow_draws, storage);
     add_shadow_pass(fg, bb, { 2048, 2048 }, shadow_draws, storage);

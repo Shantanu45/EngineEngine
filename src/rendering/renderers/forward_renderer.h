@@ -51,13 +51,7 @@ namespace Rendering {
         Pipeline point_shadow_pipeline() const { return pipeline_point_shadow; }
 
     private:
-        std::vector<Drawable> build_shadow_drawables(const SceneView& view) const;
-        std::vector<Drawable> build_point_shadow_drawables(const SceneView& view) const;
         std::vector<Drawable> build_main_drawables(const SceneView& view) const;
-
-        ShadowBuffer_UBO build_shadow_buffer(const Util::SmallVector<Light>& lights,
-                                             uint32_t& out_dir_idx,
-                                             uint32_t& out_pt_idx) const;
 
         RenderingDevice* device = nullptr;
         DebugRenderer debug_renderer;
