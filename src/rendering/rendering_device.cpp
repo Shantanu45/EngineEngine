@@ -88,6 +88,8 @@ namespace Rendering
 		return (a / greatest_common_denominator(a, b)) * b;
 	}
 
+#pragma region Lifecycle
+
 	Error RenderingDevice::_initialize_queues(RenderingContextDriver::SurfaceID p_main_surface)
 	{
 		BitField<RDD::CommandQueueFamilyBits> main_queue_bits = {};
@@ -498,6 +500,8 @@ namespace Rendering
 		//ERR_FAIL_COND(reverse_dependency_map.size());
 	}
 
+#pragma endregion
+
 #pragma region Shader
 
 	RID RenderingDevice::create_program(const std::string& p_shader_name, const Util::SmallVector<std::string> programs)
@@ -705,6 +709,8 @@ namespace Rendering
 	}
 
 #pragma endregion
+
+#pragma region Pipeline
 
 	RID RenderingDevice::render_pipeline_create(RID p_shader, FramebufferFormatID p_framebuffer_format,
 		VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, 
@@ -1080,6 +1086,10 @@ namespace Rendering
 
 	}
 
+#pragma endregion
+
+#pragma region Screen
+
 	Error RenderingDevice::screen_create(DisplayServerEnums::WindowID p_screen)
 	{
 		RenderingContextDriver::SurfaceID surface = context->surface_get_from_window(p_screen);
@@ -1227,6 +1237,10 @@ namespace Rendering
 
 		return OK;
 	}
+
+#pragma endregion
+
+#pragma region Framebuffer
 
 	Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_format_create(const Util::SmallVector<AttachmentFormat>& p_format,
 		uint32_t p_view_count /*= 1*/, int32_t p_fragment_density_map_attachment /*= -1*/)
@@ -1588,6 +1602,10 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 
 		return id;
 	}
+
+#pragma endregion
+
+#pragma region Buffer
 
 	RID RenderingDevice::vertex_buffer_create(uint32_t p_size_bytes, std::span<uint8_t> p_data /*= {}*/, BitField<BufferCreationBits> p_creation_bits /*= 0*/)
 	{
@@ -2581,6 +2599,10 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 		driver->command_bind_render_uniform_sets(get_current_command_buffer(), p_uniform_sets, p_shader, p_first_index, p_set_count, driver->uniform_sets_get_dynamic_offsets(p_uniform_sets, p_shader, p_first_index, p_set_count));
 	}
 
+#pragma endregion
+
+#pragma region Texture
+
 	RID RenderingDevice::texture_buffer_create(uint32_t p_size_elements, DataFormat p_format, std::span<uint8_t> p_data /*= {}*/)
 	{
 		uint32_t element_size = get_format_vertex_size(p_format);
@@ -3157,6 +3179,10 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 		driver->command_pipeline_barrier(p_cmd_buffer, p_src_stages, p_dst_stages, {}, {}, p_texture_barriers, {});
 	}
 
+#pragma endregion
+
+#pragma region Frame
+
 	void RenderingDevice::execute_chained_cmds(bool p_present_swap_chain, RenderingDeviceDriver::FenceID p_draw_fence, RenderingDeviceDriver::SemaphoreID p_dst_draw_semaphore_to_signal)
 	{
 		uint32_t command_buffer_count = 1;
@@ -3657,6 +3683,10 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 		}
 	}
 
+#pragma endregion
+
+#pragma region ImGui
+
 	Error RenderingDevice::iniitialize_imgui_device(WindowPlatformData p_platfform_data, uint32_t p_devince_index /*=0*/, uint32_t swapchain_index/*=0*/)
 	{
 		imgui_device = std::make_unique<Vulkan::ImGuiDevice>(p_platfform_data, context, driver);
@@ -3700,6 +3730,10 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 	{
 		return imgui_device.get();
 	}
+
+#pragma endregion
+
+#pragma region Debug
 
 	// The full list of resources that can be named is in the VkObjectType enum.
 	// We just expose the resources that are owned and can be accessed easily.
@@ -3818,6 +3852,8 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 		ERR_FAIL_UNSIGNED_INDEX_V(p_index, frames[frame].timestamp_result_count, "");
 		return frames[frame].timestamp_result_names[p_index];
 	}
+
+#pragma endregion
 
 #pragma region Transfer worker
 
@@ -4137,6 +4173,8 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 
 #pragma endregion
 
+#pragma region Resource lifetime
+
 	void RenderingDevice::_free_dependencies_of(RID p_id) {
 		auto RE = reverse_dependency_map.find(p_id);
 		if (RE == reverse_dependency_map.end()) {
@@ -4226,6 +4264,10 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 
 		return OK;
 	}
+
+#pragma endregion
+
+#pragma region Texture helpers
 
 	uint32_t RenderingDevice::_texture_layer_count(Texture* p_texture) const
 	{
@@ -4666,6 +4708,10 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 		}
 	}
 
+#pragma endregion
+
+#pragma region Pipeline cache
+
 	Util::SmallVector<uint8_t> RenderingDevice::_load_pipeline_cache()
 	{
 		// TODO
@@ -4676,6 +4722,10 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 	{
 
 	}
+
+#pragma endregion
+
+#pragma region Staging
 
 	Error RenderingDevice::_staging_buffer_allocate(StagingBuffers& p_staging_buffers, uint32_t p_amount, uint32_t p_required_align, uint32_t& r_alloc_offset, uint32_t& r_alloc_size, StagingRequiredAction& r_required_action, bool p_can_segment /*= true*/)
 	{
@@ -4836,6 +4886,10 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 		// current now points to the newly inserted (empty) block
 		return OK;
 	}
+
+#pragma endregion
+
+#pragma region Render pass
 
 	RDD::TextureLayout RenderingDevice::_vrs_layout_from_method(VRSMethod p_method) {
 		switch (p_method) {
@@ -5118,6 +5172,10 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 
 		return render_pass;
 	}	
+
+#pragma endregion
+
+#pragma region Resource cleanup
 
 	void RenderingDevice::_free_internal(RID p_id)
 	{
@@ -5420,6 +5478,8 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 	RenderingDevice::~RenderingDevice() {
 		//finalize();
 	}
+
+#pragma endregion
 
 }
 

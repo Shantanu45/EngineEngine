@@ -1036,6 +1036,8 @@ FramebufferFormatID framebuffer_format_create_empty(TextureSamples p_samples = T
 
 #pragma endregion
 
+#pragma region Frame
+
 		void execute_chained_cmds(bool p_present_swap_chain,
 			RenderingDeviceDriver::FenceID p_draw_fence,
 			RenderingDeviceDriver::SemaphoreID p_dst_draw_semaphore_to_signal);
@@ -1101,12 +1103,21 @@ FramebufferFormatID framebuffer_format_create_empty(TextureSamples p_samples = T
 		void end_render_pass(RDD::CommandBufferID cmd);
 		void execute_frame(bool p_present);
 
+#pragma endregion
+
+#pragma region ImGui
+
 		Error iniitialize_imgui_device(WindowPlatformData p_platfform_data, uint32_t p_devince_index = 0, uint32_t swapchain_index = 0);
 
 		void imgui_begin_frame();
 		RID get_imgui_texture();
 		void imgui_execute(void* p_draw_data, RDD::CommandBufferID p_command_buffer, RID p_frame_buffer, RDD::PipelineID p_pipeline = RDD::PipelineID());
 		Vulkan::ImGuiDevice* get_imgui_device();
+
+#pragma endregion
+
+#pragma region Debug
+
 		void set_resource_name(RID p_id, const std::string& p_name);
 		void capture_timestamp(const std::string& p_name);
 		uint32_t get_captured_timestamps_count() const;
@@ -1118,6 +1129,11 @@ FramebufferFormatID framebuffer_format_create_empty(TextureSamples p_samples = T
 		{
 			return *driver;
 		}
+
+#pragma endregion
+
+#pragma region Resource lifetime
+
 		// TODO: #temp
 		void _submit_transfer_workers(RDD::CommandBufferID p_draw_command_buffer = RDD::CommandBufferID());
 		void _submit_transfer_barriers(RDD::CommandBufferID p_draw_command_buffer);
@@ -1125,7 +1141,12 @@ FramebufferFormatID framebuffer_format_create_empty(TextureSamples p_samples = T
 
 		void free_rid(RID p_rid);
 
+#pragma endregion
+
 	private:
+
+#pragma region Buffer helpers
+
 		bool _buffer_make_mutable(Buffer* p_buffer, RID p_buffer_id);
 		RID _vertex_buffer_create(uint32_t p_size_bytes, Util::SmallVector<uint8_t>& p_data, BitField<BufferCreationBits> p_creation_bits = 0) {
 			return vertex_buffer_create(p_size_bytes, p_data, p_creation_bits);
@@ -1139,6 +1160,11 @@ FramebufferFormatID framebuffer_format_create_empty(TextureSamples p_samples = T
 		uint32_t _get_swap_chain_desired_count() const;
 		Buffer* _get_buffer_from_owner(RID p_buffer);
 		Error _buffer_initialize(Buffer* p_buffer, std::span<uint8_t> p_data, uint32_t p_required_align = 32);
+
+#pragma endregion
+
+#pragma region Lifecycle helpers
+
 		Error _initialize_queues(RenderingContextDriver::SurfaceID p_main_surface);
 		Error _initialize_frame_data(uint32_t p_frame_count);
 		void _initialize_tracy();
@@ -1151,6 +1177,8 @@ FramebufferFormatID framebuffer_format_create_empty(TextureSamples p_samples = T
 		void _finalize_swap_chains();
 		void _finalize_queues();
 		void _finalize_driver();
+
+#pragma endregion
 
 #pragma region Transfer Worker
 
@@ -1186,18 +1214,33 @@ FramebufferFormatID framebuffer_format_create_empty(TextureSamples p_samples = T
 		void _texture_ensure_shareable_format(RID p_texture, const DataFormat& p_shareable_format);
 #pragma endregion
 
+#pragma region Pipeline cache
+
 		Util::SmallVector<uint8_t> _load_pipeline_cache();
 		static void _save_pipeline_cache(void* p_data);
+
+#pragma endregion
+
+#pragma region Staging
+
 		Error _staging_buffer_allocate(StagingBuffers& p_staging_buffers, uint32_t p_amount, uint32_t p_required_align,
 			uint32_t& r_alloc_offset, uint32_t& r_alloc_size, StagingRequiredAction& r_required_action, bool p_can_segment = true);
 		void _staging_buffer_execute_required_action(StagingBuffers& p_staging_buffers, StagingRequiredAction p_required_action);
 		Error _insert_staging_block(StagingBuffers& p_staging_buffers);
+
+#pragma endregion
 		
+#pragma region Render pass
+
 		static RDD::TextureLayout _vrs_layout_from_method(VRSMethod p_method);
 		static RDD::RenderPassID _render_pass_create(RenderingDeviceDriver* p_driver, const Util::SmallVector<AttachmentFormat>& p_attachments,
 			const Util::SmallVector<FramebufferPass>& p_passes, std::span<RDD::AttachmentLoadOp> p_load_ops,
 			std::span<RDD::AttachmentStoreOp> p_store_ops, uint32_t p_view_count = 1, VRSMethod p_vrs_method = VRS_METHOD_NONE,
 			int32_t p_vrs_attachment = -1, Size2i p_vrs_texel_size = Size2i(), Util::SmallVector<TextureSamples>* r_samples = nullptr);
+
+#pragma endregion
+
+#pragma region Resource cleanup
 
 		void _free_internal(RID p_id);
 
@@ -1213,6 +1256,8 @@ FramebufferFormatID framebuffer_format_create_empty(TextureSamples p_samples = T
 		void _free_rids(T& p_owner, const char* p_type);
 
 		void _free_pending_resources(int p_frame);
+
+#pragma endregion
 
 		RenderingDevice();
 		~RenderingDevice();
