@@ -160,7 +160,7 @@ namespace Rendering
 			ID_TYPE_RAYTRACING_LIST = 5,
 			ID_TYPE_MAX,
 			ID_BASE_SHIFT = 58, // 5 bits for ID types.
-			ID_MASK = (ID_BASE_SHIFT - 1),
+			ID_MASK = ((int64_t(1) << ID_BASE_SHIFT) - 1),
 		};
 
 		enum MemoryType {
@@ -440,9 +440,10 @@ namespace Rendering
 
 			bool operator<(const FramebufferFormatKey& p_key) const {
 				if (vrs_texel_size != p_key.vrs_texel_size) {
-
-					auto r = glm::lessThan(vrs_texel_size, p_key.vrs_texel_size);
-					return glm::all(r);
+					if (vrs_texel_size.x != p_key.vrs_texel_size.x) {
+						return vrs_texel_size.x < p_key.vrs_texel_size.x;
+					}
+					return vrs_texel_size.y < p_key.vrs_texel_size.y;
 				}
 
 				if (vrs_attachment != p_key.vrs_attachment) {
@@ -528,6 +529,9 @@ namespace Rendering
 					}
 					if (pass_ptr[i].depth_attachment != key_pass_ptr[i].depth_attachment) {
 						return pass_ptr[i].depth_attachment < key_pass_ptr[i].depth_attachment;
+					}
+					if (pass_ptr[i].depth_resolve_attachment != key_pass_ptr[i].depth_resolve_attachment) {
+						return pass_ptr[i].depth_resolve_attachment < key_pass_ptr[i].depth_resolve_attachment;
 					}
 				}
 

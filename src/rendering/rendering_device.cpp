@@ -278,18 +278,15 @@ namespace Rendering
 
 		}
 
+#ifdef TRACY_ENABLE
 		{
 			RDD::CommandPoolID tracy_pool = driver->command_pool_create(main_queue_family, RDD::COMMAND_BUFFER_TYPE_PRIMARY);
 			RDD::CommandBufferID tracy_cmd = driver->command_buffer_create(tracy_pool);
 			// TracyVkContext calls vkBeginCommandBuffer/vkEndCommandBuffer internally — do not begin/end here.
 			driver->initialize_tracy(static_cast<uint32_t>(main_queue_family.id - 1), 0, tracy_cmd);
-			//RDD::FenceID tracy_fence = driver->fence_create();
-			//RDD::CommandBufferID tracy_cmds[] = { tracy_cmd };
-			//driver->command_queue_execute_and_present(main_queue, {}, tracy_cmds, {}, tracy_fence, {});
-			//driver->fence_wait(tracy_fence);
-			//driver->fence_free(tracy_fence);
 			driver->command_pool_free(tracy_pool);
 		}
+#endif
 
 		// Convert block size from KB.
 		//upload_staging_buffers.block_size = GLOBAL_GET("rendering/rendering_device/staging_buffer/block_size_kb");
@@ -364,8 +361,12 @@ namespace Rendering
 		}
 		shader_cache.clear();
 
-		tex_cache->flush(this);
-		fb_cache->clear();
+		if (tex_cache) {
+			tex_cache->flush(this);
+		}
+		if (fb_cache) {
+			fb_cache->clear();
+		}
 
 		// Free all resources.
 		_free_rids(render_pipeline_owner, "Pipeline");
@@ -482,11 +483,15 @@ namespace Rendering
 		auto hash = hash_xxhash_strings_32(programs);
 		if (shader_cache.contains(hash))
 		{
-			return shader_cache[hash];
+			RID shader_rid = shader_cache[hash];
+			if (shader_owner.owns(shader_rid)) {
+				return shader_rid;
+			}
+			shader_cache.erase(hash);
 		}
-		else
+
 		{
-			RDShaderSource* shaders = new RDShaderSource();
+			auto shaders = std::make_unique<RDShaderSource>();
 			shaders->set_language(RenderingDeviceCommons::SHADER_LANGUAGE_GLSL);
 			for (auto shader_path : programs)
 			{
@@ -494,7 +499,8 @@ namespace Rendering
 				ERR_FAIL_COND_V_MSG(stage == RenderingDeviceCommons::SHADER_STAGE_MAX, RID(), "could not evaluate shader stage from path!!");
 				shaders->set_stage_source(stage, shader_path);
 			}
-			auto shader_rid =  shader_create_from_spirv(shader_compile_spirv_from_shader_source(shaders), p_shader_name);
+			std::unique_ptr<RDShaderSPIRV> spirv(shader_compile_spirv_from_shader_source(shaders.get()));
+			auto shader_rid =  shader_create_from_spirv(spirv.get(), p_shader_name);
 
 			shader_cache[hash] = shader_rid;
 			return shader_rid;
