@@ -4,7 +4,7 @@
 
 #include "entt/entt.hpp"
 #include "filesystem/filesystem.h"
-#include "forward/scene/scene_asset_handles.h"
+#include "rendering/scene/scene_asset_handles.h"
 #include "rendering/render_resource_store.h"
 #include "rendering/mesh_storage.h"
 #include "rendering/rendering_device.h"

@@ -3,12 +3,9 @@ set(PROJECT_NAME forward)
 file(GLOB SOURCES CONFIGURE_DEPENDS "*.cpp")
 file(GLOB HEADERS CONFIGURE_DEPENDS "*.h")
 
-file(GLOB Scene CONFIGURE_DEPENDS "scene/*.cpp" "scene/*.h")
-
 add_executable(${PROJECT_NAME} WIN32 
 ${SOURCES} 
 ${HEADERS}
-${Scene}
 )
 
 setup_msvc_options(${PROJECT_NAME})
@@ -47,6 +44,7 @@ set(ADDITIONAL_LIBRARY_DEPENDENCIES
 	application_entry
 	event
 	input
+	rendering
 	vulkan
 	GPUOpen::VulkanMemoryAllocator
 	glm::glm

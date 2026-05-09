@@ -1,6 +1,6 @@
-#include "forward/render_scene_extractor.h"
+#include "rendering/scene/render_scene_extractor.h"
 
-#include "forward/scene/components.h"
+#include "rendering/scene/components.h"
 #include "rendering/debug_draw.h"
 #include "util/profiler.h"
 

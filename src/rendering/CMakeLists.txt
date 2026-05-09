@@ -48,12 +48,23 @@ set(RENDERERS
 
 source_group("renderers" FILES ${RENDERERS})
 
+file(GLOB SceneCpp CONFIGURE_DEPENDS "scene/*.cpp")
+file(GLOB SceneHeader CONFIGURE_DEPENDS "scene/*.h")
+
+set(SCENE
+    ${SceneCpp}
+    ${SceneHeader}
+)
+
+source_group("scene" FILES ${SCENE})
+
 add_library(${PROJECT_NAME} STATIC
 ${SOURCES}
 ${HEADERS}
 ${FG}
 ${RP}
 ${RENDERERS}
+${SCENE}
 )
 
 setup_msvc_options(${PROJECT_NAME})

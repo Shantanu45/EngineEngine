@@ -1,6 +1,6 @@
-#include "forward/scene/transform_system.h"
+#include "rendering/scene/transform_system.h"
 
-#include "forward/scene/components.h"
+#include "rendering/scene/components.h"
 #include "util/logger.h"
 
 #include <cstdint>

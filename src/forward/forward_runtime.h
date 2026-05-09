@@ -6,8 +6,8 @@
 
 #include "entt/entt.hpp"
 #include "filesystem/filesystem.h"
-#include "forward/render_scene_extractor.h"
-#include "forward/scene/scene_asset_handles.h"
+#include "rendering/scene/render_scene_extractor.h"
+#include "rendering/scene/scene_asset_handles.h"
 #include "forward/ui_layer.h"
 #include "input/input.h"
 #include "rendering/camera.h"

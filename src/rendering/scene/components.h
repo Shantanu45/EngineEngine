@@ -4,7 +4,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-#include "forward/scene/scene_asset_handles.h"
+#include "rendering/scene/scene_asset_handles.h"
 #include "rendering/aabb.h"
 #include "util/small_vector.h"
 

@@ -1,7 +1,7 @@
 #include "forward/forward_scene_setup.h"
 
-#include "forward/scene/components.h"
-#include "forward/scene/transform_system.h"
+#include "rendering/scene/components.h"
+#include "rendering/scene/transform_system.h"
 #include "rendering/gltf_scene_importer.h"
 #include "rendering/mesh_loader.h"
 #include "util/logger.h"

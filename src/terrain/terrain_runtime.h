@@ -157,10 +157,10 @@ private:
 	float water_level = 0.0f;
 
 	/** Additional chunks used to size water beyond the visible terrain window. */
-	int32_t water_padding_chunks = 8;
+	int32_t water_padding_chunks = 0;
 
 	/** Moves the water plane forward from the camera to keep it under the view. */
-	float water_forward_bias = 0.35f;
+	float water_forward_bias = 0.f;
 
 	/** Minimum world-space width of the water plane. */
 	float water_min_diameter = 480.0f;
