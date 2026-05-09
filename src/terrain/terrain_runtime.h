@@ -38,6 +38,7 @@ private:
 	void regenerate_terrain_chunks();
 	void rebuild_chunk_window(bool discard_existing);
 	void update_streaming_chunks();
+	void prune_chunk_cache();
 	Rendering::MeshHandle create_chunk_mesh(int32_t x, int32_t z);
 	void draw_ui();
 
@@ -51,6 +52,7 @@ private:
 	RenderSettings render_settings;
 	TerrainSettings terrain_settings;
 	int32_t chunk_radius = 2;
+	int32_t chunk_cache_margin = 2;
 	bool stream_chunks = false;
 	glm::ivec2 chunk_center = glm::ivec2(0);
 

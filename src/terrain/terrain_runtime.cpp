@@ -21,6 +21,13 @@ uint64_t chunk_key(int32_t x, int32_t z)
 	return (static_cast<uint64_t>(ux) << 32u) | static_cast<uint64_t>(uz);
 }
 
+glm::ivec2 decode_chunk_key(uint64_t key)
+{
+	return glm::ivec2(
+		static_cast<int32_t>(static_cast<uint32_t>(key >> 32u)),
+		static_cast<int32_t>(static_cast<uint32_t>(key & 0xffffffffu)));
+}
+
 const char* material_debug_view_name(MaterialDebugView view)
 {
 	switch (view) {
@@ -235,6 +242,22 @@ void TerrainRuntime::update_streaming_chunks()
 
 	chunk_center = camera_chunk;
 	rebuild_chunk_window(false);
+	prune_chunk_cache();
+}
+
+void TerrainRuntime::prune_chunk_cache()
+{
+	const int32_t keep_radius = std::clamp(chunk_radius + chunk_cache_margin, chunk_radius, 16);
+	for (auto it = chunk_cache.begin(); it != chunk_cache.end();) {
+		const glm::ivec2 coord = decode_chunk_key(it->first);
+		const glm::ivec2 delta = glm::abs(coord - chunk_center);
+		if (delta.x > keep_radius || delta.y > keep_radius) {
+			it = chunk_cache.erase(it);
+		}
+		else {
+			++it;
+		}
+	}
 }
 
 void TerrainRuntime::draw_ui()
@@ -253,6 +276,7 @@ void TerrainRuntime::draw_ui()
 	int radius = chunk_radius;
 	if (ImGui::SliderInt("Chunk Radius", &radius, 0, 8))
 		chunk_radius = radius;
+	ImGui::SliderInt("Cache Margin", &chunk_cache_margin, 0, 8);
 	if (ImGui::Checkbox("Stream Chunks", &stream_chunks)) {
 		if (!stream_chunks) {
 			chunk_center = glm::ivec2(0);
