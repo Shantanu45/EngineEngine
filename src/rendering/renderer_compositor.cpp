@@ -43,7 +43,7 @@ namespace Rendering
 
 			uniforms.push_back(blit.settings_ubo.as_uniform(2));
 
-			uniform_set = rendering_device->uniform_set_create(uniforms, blit.shader, 0);
+			uniform_set = rendering_device->uniform_set_get_or_create(uniforms, blit.shader, 0);
 
 			render_target_descriptors.insert({ rd_texture,    uniform_set });
 			render_target_descriptors.insert({ rd_texture_ui, uniform_set });

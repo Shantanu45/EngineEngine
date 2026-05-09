@@ -54,6 +54,10 @@ namespace Rendering {
 			return device->uniform_set_create(uniforms, shader, set_index);
 		}
 
+		RID build_cached(RenderingDevice* device, RID shader, uint32_t set_index = 0) {
+			return device->uniform_set_get_or_create(uniforms, shader, set_index);
+		}
+
 	private:
 		Util::SmallVector<RD::Uniform> uniforms;
 	};

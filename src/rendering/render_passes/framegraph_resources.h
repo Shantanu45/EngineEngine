@@ -211,18 +211,21 @@ namespace Rendering
 		struct Desc {
 			std::function<RID(RenderContext&)> build;
 			std::string name;
+			bool owns_rid = true;
 		};
 
 		RID uniform_set_rid;
+		bool owns_rid = true;
 
 		void create(const Desc& desc, void* ctx) {
 			auto& rc = *static_cast<RenderContext*>(ctx);
 			uniform_set_rid = desc.build(rc);
+			owns_rid = desc.owns_rid;
 		}
 
 		void destroy(const Desc& desc, void* ctx) {
 			auto& rc = *static_cast<RenderContext*>(ctx);
-			if (uniform_set_rid.is_valid()) {
+			if (owns_rid && uniform_set_rid.is_valid()) {
 				rc.device->free_rid(uniform_set_rid);
 				uniform_set_rid = RID();
 			}

@@ -208,9 +208,10 @@ namespace Rendering
 									.add_texture_only(2, normal_tex.texture_rid)
 									.add_texture_only(3, material_tex.texture_rid)
 									.add_texture_only(4, emissive_tex.texture_rid)
-									.build(rc.device, shader_rid, 1);
+									.build_cached(rc.device, shader_rid, 1);
 							},
-							.name = "offscreen uniform set"
+							.name = "offscreen uniform set",
+							.owns_rid = false
 						});
 					data.offscreen_tex_resources = builder.write(data.offscreen_tex_resources, FrameGraph::kFlagsIgnored);
 

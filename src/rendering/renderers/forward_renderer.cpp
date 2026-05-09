@@ -393,9 +393,10 @@ void ForwardRenderer::setup_passes(FrameGraph& fg, FrameGraphBlackboard& bb,
                             return UniformSetBuilder{}
                                 .add_texture_only(0, shadow_tex.texture_rid)
                                 .add_texture_only(1, point_shadow_tex.texture_rid)
-                                .build(rc.device, shader_rid, 1);
+                                .build_cached(rc.device, shader_rid, 1);
                         },
-                        .name = "shadow uniform set"
+                        .name = "shadow uniform set",
+                        .owns_rid = false
                     });
                 data.shadow_uniform_set = builder.write(data.shadow_uniform_set, FrameGraph::kFlagsIgnored);
 

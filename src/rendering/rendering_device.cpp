@@ -16,6 +16,8 @@
 #include "util/small_vector.h"
 #include "cache.h"
 
+#include <algorithm>
+
 
 namespace Rendering
 {
@@ -2097,6 +2099,70 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 		return id;
 	}
 
+	size_t RenderingDevice::UniformSetCacheKeyHash::operator()(const UniformSetCacheKey& key) const
+	{
+		auto hash_combine = [](size_t& seed, size_t value) {
+			seed ^= value + 0x9e3779b97f4a7c15ull + (seed << 6) + (seed >> 2);
+		};
+
+		size_t seed = 0;
+		hash_combine(seed, std::hash<uint64_t>{}(key.shader.get_id()));
+		hash_combine(seed, std::hash<uint32_t>{}(key.set));
+
+		for (const UniformSetCacheKey::Binding& binding : key.bindings) {
+			hash_combine(seed, std::hash<uint32_t>{}(binding.binding));
+			hash_combine(seed, std::hash<uint32_t>{}(binding.type));
+			for (RID id : binding.ids)
+				hash_combine(seed, std::hash<uint64_t>{}(id.get_id()));
+		}
+
+		return seed;
+	}
+
+	RID RenderingDevice::uniform_set_get_or_create(const std::span<Uniform>& p_uniforms, RID p_shader, uint32_t p_shader_set, bool p_linear_pool /*= false*/)
+	{
+		if (p_linear_pool)
+			return uniform_set_create(p_uniforms, p_shader, p_shader_set, true);
+
+		UniformSetCacheKey key;
+		key.shader = p_shader;
+		key.set = p_shader_set;
+		key.bindings.reserve(p_uniforms.size());
+
+		for (const Uniform& uniform : p_uniforms) {
+			UniformSetCacheKey::Binding binding;
+			binding.binding = uniform.binding;
+			binding.type = static_cast<uint32_t>(uniform.uniform_type);
+			binding.ids.reserve(uniform.get_id_count());
+			for (uint32_t i = 0; i < uniform.get_id_count(); i++)
+				binding.ids.push_back(uniform.get_id(i));
+			key.bindings.push_back(std::move(binding));
+		}
+
+		std::sort(key.bindings.begin(), key.bindings.end(),
+			[](const UniformSetCacheKey::Binding& a, const UniformSetCacheKey::Binding& b) {
+				return a.binding < b.binding;
+			});
+
+		auto it = uniform_set_cache.find(key);
+		if (it != uniform_set_cache.end()) {
+			if (uniform_set_is_valid(it->second.rid)) {
+				it->second.last_used_frame = frames_drawn;
+				return it->second.rid;
+			}
+			uniform_set_cache.erase(it);
+		}
+
+		RID rid = uniform_set_create(p_uniforms, p_shader, p_shader_set, false);
+		if (rid.is_valid()) {
+			uniform_set_cache.emplace(std::move(key), UniformSetCacheEntry{
+				.rid = rid,
+				.last_used_frame = frames_drawn,
+			});
+		}
+		return rid;
+	}
+
 	bool RenderingDevice::uniform_set_is_valid(RID p_uniform_set)
 	{
 		return uniform_set_owner.owns(p_uniform_set);
@@ -2461,6 +2527,8 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 	void RenderingDevice::bind_uniform_set(RID p_shader_id, RID p_uniform_set_id, uint32_t set_index) {
 		auto shader = shader_owner.get_or_null(p_shader_id);
 		auto uniform_set = uniform_set_owner.get_or_null(p_uniform_set_id);
+		ERR_FAIL_NULL_MSG(shader, "bind_uniform_set: invalid shader RID.");
+		ERR_FAIL_NULL_MSG(uniform_set, "bind_uniform_set: invalid uniform set RID.");
 		add_draw_list_bind_uniform_sets(shader->driver_id, { &uniform_set->driver_id, 1 }, set_index, 1);
 	}
 
@@ -5217,6 +5285,23 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 				G->second.erase(p_id);
 			}
 			reverse_dependency_map.erase(RE);
+		}
+	}
+
+	void RenderingDevice::_uniform_set_cache_tick(uint32_t p_max_age /*= 8*/)
+	{
+		for (auto it = uniform_set_cache.begin(); it != uniform_set_cache.end();) {
+			const bool expired = frames_drawn - it->second.last_used_frame > p_max_age;
+			const bool invalid = !uniform_set_is_valid(it->second.rid);
+			if (expired || invalid) {
+				RID rid = it->second.rid;
+				it = uniform_set_cache.erase(it);
+				if (!invalid && rid.is_valid())
+					free_rid(rid);
+			}
+			else {
+				++it;
+			}
 		}
 	}
 

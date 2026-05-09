@@ -949,6 +949,7 @@ FramebufferFormatID framebuffer_format_create_empty(TextureSamples p_samples = T
 
 		RID uniform_buffer_create(uint32_t p_size_bytes, std::span<uint8_t> p_data = {}, BitField<BufferCreationBits> p_creation_bits = 0);
 		RID uniform_set_create(const std::span<Uniform>& p_uniforms, RID p_shader, uint32_t p_shader_set, bool p_linear_pool = false);
+		RID uniform_set_get_or_create(const std::span<Uniform>& p_uniforms, RID p_shader, uint32_t p_shader_set, bool p_linear_pool = false);
 		bool uniform_set_is_valid(RID p_uniform_set);
 
 		Error buffer_copy(RID p_src_buffer, RID p_dst_buffer, uint32_t p_src_offset, uint32_t p_dst_offset, uint32_t p_size);
@@ -1171,6 +1172,7 @@ FramebufferFormatID framebuffer_format_create_empty(TextureSamples p_samples = T
 
 		void _add_dependency(RID p_id, RID p_depends_on);
 		void _free_dependencies(RID p_id);
+		void _uniform_set_cache_tick(uint32_t p_max_age = 8);
 
 		template <typename T>
 		void _free_rids(T& p_owner, const char* p_type);
@@ -1206,6 +1208,41 @@ FramebufferFormatID framebuffer_format_create_empty(TextureSamples p_samples = T
 		std::unordered_map<VertexFormatID, VertexDescriptionCache> vertex_formats;
 
 		std::map<UniformSetFormat, uint32_t> uniform_set_format_cache;
+
+		struct UniformSetCacheKey {
+			struct Binding {
+				uint32_t binding = 0;
+				uint32_t type = 0;
+				Util::SmallVector<RID> ids;
+
+				bool operator==(const Binding& other) const {
+					return binding == other.binding &&
+						type == other.type &&
+						ids == other.ids;
+				}
+			};
+
+			RID shader;
+			uint32_t set = 0;
+			Util::SmallVector<Binding> bindings;
+
+			bool operator==(const UniformSetCacheKey& other) const {
+				return shader == other.shader &&
+					set == other.set &&
+					bindings == other.bindings;
+			}
+		};
+
+		struct UniformSetCacheKeyHash {
+			size_t operator()(const UniformSetCacheKey& key) const;
+		};
+
+		struct UniformSetCacheEntry {
+			RID rid;
+			uint64_t last_used_frame = 0;
+		};
+
+		std::unordered_map<UniformSetCacheKey, UniformSetCacheEntry, UniformSetCacheKeyHash> uniform_set_cache;
 
 		std::map<FramebufferFormatKey, FramebufferFormatID> framebuffer_format_cache;
 		std::unordered_map<FramebufferFormatID, FramebufferFormat> framebuffer_formats;
