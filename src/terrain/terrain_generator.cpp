@@ -64,9 +64,9 @@ float fractal_noise(float x, float y, const TerrainSettings& settings)
 	return norm > 0.0f ? value / norm : 0.0f;
 }
 
-float height_at(uint32_t x, uint32_t z, const TerrainSettings& settings)
+float height_at(float x, float z, const TerrainSettings& settings)
 {
-	const float h = fractal_noise(static_cast<float>(x), static_cast<float>(z), settings);
+	const float h = fractal_noise(x, z, settings);
 	const float shaped = h * 0.75f + h * h * h * 0.25f;
 	return shaped * settings.height_scale;
 }
@@ -75,25 +75,32 @@ float height_at(uint32_t x, uint32_t z, const TerrainSettings& settings)
 
 Rendering::Shapes::ShapeData generate_terrain_mesh(const TerrainSettings& settings)
 {
+	return generate_terrain_chunk_mesh(settings, 0, 0);
+}
+
+Rendering::Shapes::ShapeData generate_terrain_chunk_mesh(const TerrainSettings& settings, int32_t chunk_x, int32_t chunk_z)
+{
 	Rendering::Shapes::ShapeData mesh;
-	const uint32_t resolution = glm::max(settings.resolution, 1u);
+	const uint32_t resolution = glm::max(settings.chunk_resolution, 1u);
 	const uint32_t verts_per_side = resolution + 1u;
-	const float step = settings.size / static_cast<float>(resolution);
-	const float half_size = settings.size * 0.5f;
+	const float step = settings.chunk_size / static_cast<float>(resolution);
+	const float half_chunk = settings.chunk_size * 0.5f;
+	const float origin_x = static_cast<float>(chunk_x) * settings.chunk_size - half_chunk;
+	const float origin_z = static_cast<float>(chunk_z) * settings.chunk_size - half_chunk;
 
 	mesh.vertices.reserve(static_cast<size_t>(verts_per_side) * static_cast<size_t>(verts_per_side));
 	mesh.indices.reserve(static_cast<size_t>(resolution) * static_cast<size_t>(resolution) * 6u);
 
 	for (uint32_t z = 0; z < verts_per_side; ++z) {
 		for (uint32_t x = 0; x < verts_per_side; ++x) {
-			const float world_x = static_cast<float>(x) * step - half_size;
-			const float world_z = static_cast<float>(z) * step - half_size;
-			const float y = height_at(x, z, settings);
+			const float world_x = origin_x + static_cast<float>(x) * step;
+			const float world_z = origin_z + static_cast<float>(z) * step;
+			const float y = height_at(world_x, world_z, settings);
 
-			const float h_l = height_at(x > 0 ? x - 1u : x, z, settings);
-			const float h_r = height_at(x < resolution ? x + 1u : x, z, settings);
-			const float h_d = height_at(x, z > 0 ? z - 1u : z, settings);
-			const float h_u = height_at(x, z < resolution ? z + 1u : z, settings);
+			const float h_l = height_at(world_x - step, world_z, settings);
+			const float h_r = height_at(world_x + step, world_z, settings);
+			const float h_d = height_at(world_x, world_z - step, settings);
+			const float h_u = height_at(world_x, world_z + step, settings);
 			const glm::vec3 normal = glm::normalize(glm::vec3(h_l - h_r, step * 2.0f, h_d - h_u));
 
 			mesh.vertices.push_back(Rendering::Vertex{

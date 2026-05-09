@@ -95,15 +95,17 @@ void TerrainRuntime::render_frame(double frame_time, double elapsed_time)
 	view.grid_mesh = render_settings.draw_grid ? grid_mesh : Rendering::INVALID_MESH;
 
 	const glm::mat4 model(1.0f);
-	view.instances.push_back(Rendering::MeshInstance{
-		.mesh = terrain_mesh,
-		.model = model,
-		.normal_matrix = glm::transpose(glm::inverse(model)),
-		.material_sets = { resources.materials().get_uniform_set(terrain_material, render_settings.use_pbr_lighting) },
-		.shadow_material_sets = { resources.materials().get_shadow_uniform_set(terrain_material) },
-		.point_shadow_material_sets = { resources.materials().get_point_shadow_uniform_set(terrain_material) },
-		.category = Rendering::MeshCategory::Opaque,
-	});
+	for (const auto& chunk : chunks) {
+		view.instances.push_back(Rendering::MeshInstance{
+			.mesh = chunk.mesh,
+			.model = model,
+			.normal_matrix = glm::transpose(glm::inverse(model)),
+			.material_sets = { resources.materials().get_uniform_set(terrain_material, render_settings.use_pbr_lighting) },
+			.shadow_material_sets = { resources.materials().get_shadow_uniform_set(terrain_material) },
+			.point_shadow_material_sets = { resources.materials().get_point_shadow_uniform_set(terrain_material) },
+			.category = Rendering::MeshCategory::Opaque,
+		});
+	}
 
 	view.lights.push_back(Light{
 		.position = glm::vec4(35.0f, 45.0f, 20.0f, 60.0f),
@@ -135,7 +137,7 @@ void TerrainRuntime::configure_wsi()
 
 void TerrainRuntime::create_scene_resources()
 {
-	regenerate_terrain_mesh();
+	regenerate_terrain_chunks();
 	create_terrain_material();
 }
 
@@ -155,14 +157,32 @@ void TerrainRuntime::create_terrain_material()
 		render_pipeline.point_shadow_pipeline().shader_rid);
 }
 
-void TerrainRuntime::regenerate_terrain_mesh()
+void TerrainRuntime::regenerate_terrain_chunks()
 {
-	const auto terrain_data = generate_terrain_mesh(terrain_settings);
-	terrain_mesh = Rendering::Shapes::upload(
-		resources.meshes(),
-		"terrain_preview_mesh_" + std::to_string(terrain_mesh_generation++),
-		terrain_data,
-		wsi->get_vertex_format_by_type(Rendering::VERTEX_FORMAT_VARIATIONS::DEFAULT));
+	chunks.clear();
+	const int32_t radius = std::clamp(chunk_radius, 0, 8);
+	const auto vertex_format = wsi->get_vertex_format_by_type(Rendering::VERTEX_FORMAT_VARIATIONS::DEFAULT);
+
+	for (int32_t z = -radius; z <= radius; ++z) {
+		for (int32_t x = -radius; x <= radius; ++x) {
+			const auto terrain_data = generate_terrain_chunk_mesh(terrain_settings, x, z);
+			const std::string mesh_name =
+				"terrain_chunk_" + std::to_string(terrain_mesh_generation) +
+				"_" + std::to_string(x) + "_" + std::to_string(z);
+			const auto mesh = Rendering::Shapes::upload(
+				resources.meshes(),
+				mesh_name,
+				terrain_data,
+				vertex_format);
+			chunks.push_back(TerrainChunk{
+				.x = x,
+				.z = z,
+				.mesh = mesh,
+			});
+		}
+	}
+
+	terrain_mesh_generation++;
 	wsi->submit_transfer_workers();
 }
 
@@ -174,11 +194,14 @@ void TerrainRuntime::draw_ui()
 	if (ImGui::InputInt("Seed", &seed))
 		terrain_settings.seed = static_cast<uint32_t>(std::max(seed, 0));
 
-	int resolution = static_cast<int>(terrain_settings.resolution);
+	int resolution = static_cast<int>(terrain_settings.chunk_resolution);
 	if (ImGui::SliderInt("Resolution", &resolution, 8, 256))
-		terrain_settings.resolution = static_cast<uint32_t>(resolution);
+		terrain_settings.chunk_resolution = static_cast<uint32_t>(resolution);
 
-	ImGui::DragFloat("Size", &terrain_settings.size, 0.25f, 8.0f, 400.0f);
+	ImGui::DragFloat("Chunk Size", &terrain_settings.chunk_size, 0.25f, 8.0f, 400.0f);
+	int radius = chunk_radius;
+	if (ImGui::SliderInt("Chunk Radius", &radius, 0, 8))
+		chunk_radius = radius;
 	ImGui::DragFloat("Height", &terrain_settings.height_scale, 0.1f, 0.0f, 80.0f);
 	ImGui::DragFloat("Frequency", &terrain_settings.base_frequency, 0.001f, 0.001f, 0.25f, "%.3f");
 
@@ -190,7 +213,7 @@ void TerrainRuntime::draw_ui()
 	ImGui::DragFloat("Persistence", &terrain_settings.persistence, 0.01f, 0.0f, 1.0f);
 
 	if (ImGui::Button("Regenerate"))
-		regenerate_terrain_mesh();
+		regenerate_terrain_chunks();
 
 	ImGui::Separator();
 	ImGui::Checkbox("PBR", &render_settings.use_pbr_lighting);
