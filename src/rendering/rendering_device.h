@@ -1139,6 +1139,18 @@ FramebufferFormatID framebuffer_format_create_empty(TextureSamples p_samples = T
 		uint32_t _get_swap_chain_desired_count() const;
 		Buffer* _get_buffer_from_owner(RID p_buffer);
 		Error _buffer_initialize(Buffer* p_buffer, std::span<uint8_t> p_data, uint32_t p_required_align = 32);
+		Error _initialize_queues(RenderingContextDriver::SurfaceID p_main_surface);
+		Error _initialize_frame_data(uint32_t p_frame_count);
+		void _initialize_tracy();
+		Error _initialize_staging_buffers();
+		void _finalize_cached_resources();
+		void _finalize_owned_rids();
+		void _finalize_frame_data();
+		void _finalize_staging_buffers();
+		void _finalize_format_caches();
+		void _finalize_swap_chains();
+		void _finalize_queues();
+		void _finalize_driver();
 
 #pragma region Transfer Worker
 

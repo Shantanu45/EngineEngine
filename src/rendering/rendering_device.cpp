@@ -88,6 +88,191 @@ namespace Rendering
 		return (a / greatest_common_denominator(a, b)) * b;
 	}
 
+	Error RenderingDevice::_initialize_queues(RenderingContextDriver::SurfaceID p_main_surface)
+	{
+		BitField<RDD::CommandQueueFamilyBits> main_queue_bits = {};
+		main_queue_bits.set_flag(RDD::COMMAND_QUEUE_FAMILY_GRAPHICS_BIT);
+		main_queue_bits.set_flag(RDD::COMMAND_QUEUE_FAMILY_COMPUTE_BIT);
+
+#if !FORCE_SEPARATE_PRESENT_QUEUE
+		// Needing to use a separate queue for presentation is an edge case that remains to be seen what hardware triggers it at all.
+		main_queue_family = driver->command_queue_family_get(main_queue_bits, p_main_surface);
+		if (!main_queue_family && (p_main_surface != 0))
+#endif
+		{
+			// If it was not possible to find a main queue that supports the surface, we attempt to get two different queues instead.
+			main_queue_family = driver->command_queue_family_get(main_queue_bits);
+			present_queue_family = driver->command_queue_family_get(BitField<RDD::CommandQueueFamilyBits>(), p_main_surface);
+			ERR_FAIL_COND_V(!present_queue_family, FAILED);
+		}
+
+		ERR_FAIL_COND_V(!main_queue_family, FAILED);
+
+		main_queue = driver->command_queue_create(main_queue_family, true);
+		ERR_FAIL_COND_V(!main_queue, FAILED);
+
+		transfer_queue_family = driver->command_queue_family_get(RDD::COMMAND_QUEUE_FAMILY_TRANSFER_BIT);
+		if (!transfer_queue_family) {
+			transfer_queue_family = main_queue_family;
+		}
+
+		transfer_queue = driver->command_queue_create(transfer_queue_family);
+		ERR_FAIL_COND_V(!transfer_queue, FAILED);
+
+		if (present_queue_family) {
+			present_queue = driver->command_queue_create(present_queue_family);
+			ERR_FAIL_COND_V(!present_queue, FAILED);
+		}
+		else {
+			present_queue = main_queue;
+			present_queue_family = main_queue_family;
+		}
+
+		return OK;
+	}
+
+	Error RenderingDevice::_initialize_frame_data(uint32_t p_frame_count)
+	{
+		// Use the processor count as the max amount of transfer workers that can be created.
+		transfer_worker_pool_max_size = 1;//TODO: OS::get_singleton()->get_processor_count();
+
+		// Pre-allocate to avoid locking a mutex when indexing into them.
+		transfer_worker_pool.resize(transfer_worker_pool_max_size);
+		transfer_worker_operation_used_by_draw.resize(transfer_worker_pool_max_size);
+
+		frames.resize(p_frame_count);
+
+		max_timestamp_query_elements = 256;
+
+		bool frame_failed = false;
+		for (uint32_t i = 0; i < frames.size(); i++) {
+			frames[i].index = 0;
+			frames[i].command_pool = driver->command_pool_create(main_queue_family, RDD::COMMAND_BUFFER_TYPE_PRIMARY);
+			if (!frames[i].command_pool) {
+				frame_failed = true;
+				break;
+			}
+			frames[i].command_buffer = driver->command_buffer_create(frames[i].command_pool);
+			if (!frames[i].command_buffer) {
+				frame_failed = true;
+				break;
+			}
+			frames[i].semaphore = driver->semaphore_create();
+			if (!frames[i].semaphore) {
+				frame_failed = true;
+				break;
+			}
+			frames[i].fence = driver->fence_create();
+			if (!frames[i].fence) {
+				frame_failed = true;
+				break;
+			}
+			frames[i].fence_signaled = false;
+
+			frames[i].timestamp_pool = driver->timestamp_query_pool_create(max_timestamp_query_elements);
+			frames[i].timestamp_names.resize(max_timestamp_query_elements);
+			frames[i].timestamp_cpu_values.resize(max_timestamp_query_elements);
+			frames[i].timestamp_count = 0;
+			frames[i].timestamp_result_names.resize(max_timestamp_query_elements);
+			frames[i].timestamp_cpu_result_values.resize(max_timestamp_query_elements);
+			frames[i].timestamp_result_values.resize(max_timestamp_query_elements);
+			frames[i].timestamp_result_count = 0;
+
+			frames[i].transfer_worker_semaphores.resize(transfer_worker_pool_max_size);
+			for (uint32_t j = 0; j < transfer_worker_pool_max_size; j++) {
+				frames[i].transfer_worker_semaphores[j] = driver->semaphore_create();
+				if (!frames[i].transfer_worker_semaphores[j]) {
+					frame_failed = true;
+					break;
+				}
+			}
+
+			frames[i].command_buffer_pool.pool = frames[i].command_pool;
+		}
+
+		if (frame_failed) {
+			for (uint32_t i = 0; i < frames.size(); i++) {
+				if (frames[i].command_pool) {
+					driver->command_pool_free(frames[i].command_pool);
+				}
+				if (frames[i].semaphore) {
+					driver->semaphore_free(frames[i].semaphore);
+				}
+				if (frames[i].fence) {
+					driver->fence_free(frames[i].fence);
+				}
+				if (frames[i].timestamp_pool) {
+					driver->timestamp_query_pool_free(frames[i].timestamp_pool);
+				}
+				for (uint32_t j = 0; j < frames[i].transfer_worker_semaphores.size(); j++) {
+					if (frames[i].transfer_worker_semaphores[j]) {
+						driver->semaphore_free(frames[i].transfer_worker_semaphores[j]);
+					}
+				}
+			}
+			frames.clear();
+			ERR_FAIL_V_MSG(FAILED, "Failed to create frame data.");
+		}
+
+		frames_drawn = frames.size();
+		frames_drawn++;
+		for (uint32_t i = 0; i < frames.size(); i++) {
+			driver->command_buffer_begin(frames[i].command_buffer);
+			driver->command_timestamp_query_pool_reset(frames[i].command_buffer, frames[i].timestamp_pool, max_timestamp_query_elements);
+			driver->command_buffer_end(frames[i].command_buffer);
+		}
+
+		return OK;
+	}
+
+	void RenderingDevice::_initialize_tracy()
+	{
+#ifdef TRACY_ENABLE
+		RDD::CommandPoolID tracy_pool = driver->command_pool_create(main_queue_family, RDD::COMMAND_BUFFER_TYPE_PRIMARY);
+		RDD::CommandBufferID tracy_cmd = driver->command_buffer_create(tracy_pool);
+		// TracyVkContext calls vkBeginCommandBuffer/vkEndCommandBuffer internally - do not begin/end here.
+		driver->initialize_tracy(static_cast<uint32_t>(main_queue_family.id - 1), 0, tracy_cmd);
+		driver->command_pool_free(tracy_pool);
+#endif
+	}
+
+	Error RenderingDevice::_initialize_staging_buffers()
+	{
+		upload_staging_buffers.block_size = MAX(4u, upload_staging_buffers.block_size);
+		upload_staging_buffers.block_size *= 1024;
+
+		upload_staging_buffers.max_size = MAX(1u, upload_staging_buffers.max_size);
+		upload_staging_buffers.max_size *= 1024 * 1024;
+		upload_staging_buffers.max_size = MAX(upload_staging_buffers.max_size, upload_staging_buffers.block_size * 4);
+
+		download_staging_buffers.block_size = upload_staging_buffers.block_size;
+		download_staging_buffers.max_size = upload_staging_buffers.max_size;
+
+		texture_upload_region_size_px = math_helpers::nearest_power_of_two(texture_upload_region_size_px);
+		texture_download_region_size_px = math_helpers::nearest_power_of_two(texture_download_region_size_px);
+
+		upload_staging_buffers.current = 0;
+		upload_staging_buffers.used = false;
+		upload_staging_buffers.usage_bits = RDD::BUFFER_USAGE_TRANSFER_FROM_BIT;
+
+		download_staging_buffers.current = 0;
+		download_staging_buffers.used = false;
+		download_staging_buffers.usage_bits = RDD::BUFFER_USAGE_TRANSFER_TO_BIT;
+
+		for (uint32_t i = 0; i < frames.size(); i++) {
+			Error err = _insert_staging_block(upload_staging_buffers);
+			ERR_FAIL_COND_V(err, FAILED);
+
+			err = _insert_staging_block(download_staging_buffers);
+			ERR_FAIL_COND_V(err, FAILED);
+		}
+
+		upload_staging_buffers.current = 0;
+		download_staging_buffers.current = 0;
+
+		return OK;
+	}
+
 	Error RenderingDevice::initialize(RenderingContextDriver* p_context, DisplayServerEnums::WindowID p_main_window)
 	{
 		Error err;
@@ -133,204 +318,15 @@ namespace Rendering
 		//device = context->device_get(device_index);
 		err = driver->initialize(0/*device_index*/, frame_count);
 
-		BitField<RDD::CommandQueueFamilyBits> main_queue_bits = {};
-		main_queue_bits.set_flag(RDD::COMMAND_QUEUE_FAMILY_GRAPHICS_BIT);
-		main_queue_bits.set_flag(RDD::COMMAND_QUEUE_FAMILY_COMPUTE_BIT);
+		err = _initialize_queues(main_surface);
+		ERR_FAIL_COND_V(err, FAILED);
 
-#if !FORCE_SEPARATE_PRESENT_QUEUE
-		// Needing to use a separate queue for presentation is an edge case that remains to be seen what hardware triggers it at all.
-		main_queue_family = driver->command_queue_family_get(main_queue_bits, main_surface);
-		if (!main_queue_family && (main_surface != 0))
-#endif
-		{
-			// If it was not possible to find a main queue that supports the surface, we attempt to get two different queues instead.
-			main_queue_family = driver->command_queue_family_get(main_queue_bits);
-			present_queue_family = driver->command_queue_family_get(BitField<RDD::CommandQueueFamilyBits>(), main_surface);
-			ERR_FAIL_COND_V(!present_queue_family, FAILED);
-		}
+		err = _initialize_frame_data(frame_count);
+		ERR_FAIL_COND_V(err, FAILED);
 
-		ERR_FAIL_COND_V(!main_queue_family, FAILED);
-
-		// Create the main queue.
-		main_queue = driver->command_queue_create(main_queue_family, true);
-		ERR_FAIL_COND_V(!main_queue, FAILED);
-		
-		// Create the transfer queue.
-		transfer_queue_family = driver->command_queue_family_get(RDD::COMMAND_QUEUE_FAMILY_TRANSFER_BIT);
-		if (!transfer_queue_family) {
-			// Use main queue family if transfer queue family is not supported.
-			transfer_queue_family = main_queue_family;
-		}
-
-		// Create the transfer queue.
-		transfer_queue = driver->command_queue_create(transfer_queue_family);
-		ERR_FAIL_COND_V(!transfer_queue, FAILED);
-
-		if (present_queue_family) {
-			// Create the present queue.
-			present_queue = driver->command_queue_create(present_queue_family);
-			ERR_FAIL_COND_V(!present_queue, FAILED);
-		}
-		else {
-			// Use main queue as the present queue.
-			present_queue = main_queue;
-			present_queue_family = main_queue_family;
-		}
-
-		// Use the processor count as the max amount of transfer workers that can be created.
-		transfer_worker_pool_max_size = 1;//TODO: OS::get_singleton()->get_processor_count();
-
-		// Pre-allocate to avoid locking a mutex when indexing into them.
-		transfer_worker_pool.resize(transfer_worker_pool_max_size);
-		transfer_worker_operation_used_by_draw.resize(transfer_worker_pool_max_size);
-
-		frames.resize(frame_count);
-
-		max_timestamp_query_elements = 256;
-
-		bool frame_failed = false;
-		for (uint32_t i = 0; i < frames.size(); i++) {
-			frames[i].index = 0;
-			frames[i].command_pool = driver->command_pool_create(main_queue_family, RDD::COMMAND_BUFFER_TYPE_PRIMARY);
-			if (!frames[i].command_pool) {
-				frame_failed = true;
-				break;
-			}
-			frames[i].command_buffer = driver->command_buffer_create(frames[i].command_pool);
-			if (!frames[i].command_buffer) {
-				frame_failed = true;
-				break;
-			}
-			frames[i].semaphore = driver->semaphore_create();
-			if (!frames[i].semaphore) {
-				frame_failed = true;
-				break;
-			}
-			frames[i].fence = driver->fence_create();
-			if (!frames[i].fence) {
-				frame_failed = true;
-				break;
-			}
-			frames[i].fence_signaled = false;
-
-			frames[i].timestamp_pool = driver->timestamp_query_pool_create(max_timestamp_query_elements);
-			frames[i].timestamp_names.resize(max_timestamp_query_elements);
-			frames[i].timestamp_cpu_values.resize(max_timestamp_query_elements);
-			frames[i].timestamp_count = 0;
-			frames[i].timestamp_result_names.resize(max_timestamp_query_elements);
-			frames[i].timestamp_cpu_result_values.resize(max_timestamp_query_elements);
-			frames[i].timestamp_result_values.resize(max_timestamp_query_elements);
-			frames[i].timestamp_result_count = 0;
-
-			// Create the semaphores for the transfer workers.
-			frames[i].transfer_worker_semaphores.resize(transfer_worker_pool_max_size);
-			for (uint32_t j = 0; j < transfer_worker_pool_max_size; j++) {
-				frames[i].transfer_worker_semaphores[j] = driver->semaphore_create();
-				if (!frames[i].transfer_worker_semaphores[j]) {
-					frame_failed = true;
-					break;
-				}
-			}
-
-			frames[i].command_buffer_pool.pool = frames[i].command_pool;
-		}
-		if (frame_failed) {
-			// Clean up created data.
-			for (uint32_t i = 0; i < frames.size(); i++) {
-				if (frames[i].command_pool) {
-					driver->command_pool_free(frames[i].command_pool);
-				}
-				if (frames[i].semaphore) {
-					driver->semaphore_free(frames[i].semaphore);
-				}
-				if (frames[i].fence) {
-					driver->fence_free(frames[i].fence);
-				}
-				if (frames[i].timestamp_pool) {
-					driver->timestamp_query_pool_free(frames[i].timestamp_pool);
-				}
-				for (uint32_t j = 0; j < frames[i].transfer_worker_semaphores.size(); j++) {
-					if (frames[i].transfer_worker_semaphores[j]) {
-						driver->semaphore_free(frames[i].transfer_worker_semaphores[j]);
-					}
-				}
-				//if (frames[i].timestamp_pool) {
-				//	device_ptr->timestamp_query_pool_free(frames[i].timestamp_pool);
-				//}
-				//for (uint32_t j = 0; j < frames[i].transfer_worker_semaphores.size(); j++) {
-				//	if (frames[i].transfer_worker_semaphores[j]) {
-				//		device_ptr->semaphore_free(frames[i].transfer_worker_semaphores[j]);
-				//	}
-				//}
-			}
-			frames.clear();
-			ERR_FAIL_V_MSG(FAILED, "Failed to create frame data.");
-		}
-
-		frames_drawn = frames.size();
-		frames_drawn++;
-		for (uint32_t i = 0; i < frames.size(); i++) {
-			driver->command_buffer_begin(frames[i].command_buffer);
-
-			// Reset all queries in a query pool before doing any operations with them..
-			driver->command_timestamp_query_pool_reset(frames[i].command_buffer, frames[i].timestamp_pool, max_timestamp_query_elements);
-			driver->command_buffer_end(frames[i].command_buffer);
-
-		}
-
-#ifdef TRACY_ENABLE
-		{
-			RDD::CommandPoolID tracy_pool = driver->command_pool_create(main_queue_family, RDD::COMMAND_BUFFER_TYPE_PRIMARY);
-			RDD::CommandBufferID tracy_cmd = driver->command_buffer_create(tracy_pool);
-			// TracyVkContext calls vkBeginCommandBuffer/vkEndCommandBuffer internally — do not begin/end here.
-			driver->initialize_tracy(static_cast<uint32_t>(main_queue_family.id - 1), 0, tracy_cmd);
-			driver->command_pool_free(tracy_pool);
-		}
-#endif
-
-		// Convert block size from KB.
-		//upload_staging_buffers.block_size = GLOBAL_GET("rendering/rendering_device/staging_buffer/block_size_kb");
-		upload_staging_buffers.block_size = MAX(4u, upload_staging_buffers.block_size);			// SHAN: revisit to configure block size.
-		upload_staging_buffers.block_size *= 1024;
-
-		// Convert staging buffer size from MB.
-		//upload_staging_buffers.max_size = GLOBAL_GET("rendering/rendering_device/staging_buffer/max_size_mb");
-		upload_staging_buffers.max_size = MAX(1u, upload_staging_buffers.max_size);
-		upload_staging_buffers.max_size *= 1024 * 1024;
-		upload_staging_buffers.max_size = MAX(upload_staging_buffers.max_size, upload_staging_buffers.block_size * 4);
-
-		// Copy the sizes to the download staging buffers.
-		download_staging_buffers.block_size = upload_staging_buffers.block_size;
-		download_staging_buffers.max_size = upload_staging_buffers.max_size;
-
-		//texture_upload_region_size_px = GLOBAL_GET("rendering/rendering_device/staging_buffer/texture_upload_region_size_px");
-		texture_upload_region_size_px = math_helpers::nearest_power_of_two(texture_upload_region_size_px);
-
-		//texture_download_region_size_px = GLOBAL_GET("rendering/rendering_device/staging_buffer/texture_download_region_size_px");
-		texture_download_region_size_px = math_helpers::nearest_power_of_two(texture_download_region_size_px);
-
-		// Ensure current staging block is valid and at least one per frame exists.
-		upload_staging_buffers.current = 0;
-		upload_staging_buffers.used = false;
-		upload_staging_buffers.usage_bits = RDD::BUFFER_USAGE_TRANSFER_FROM_BIT;
-
-		download_staging_buffers.current = 0;
-		download_staging_buffers.used = false;
-		download_staging_buffers.usage_bits = RDD::BUFFER_USAGE_TRANSFER_TO_BIT;
-
-		for (uint32_t i = 0; i < frames.size(); i++) {
-			// Staging was never used, create the blocks.
-			err = _insert_staging_block(upload_staging_buffers);
-			ERR_FAIL_COND_V(err, FAILED);
-
-			err = _insert_staging_block(download_staging_buffers);
-			ERR_FAIL_COND_V(err, FAILED);
-			//download_staging_buffers.current++;
-			//upload_staging_buffers.current++;
-		}
-		upload_staging_buffers.current = 0;
-
-		download_staging_buffers.current = 0;
+		_initialize_tracy();
+		err = _initialize_staging_buffers();
+		ERR_FAIL_COND_V(err, FAILED);
 
 		fb_cache = std::make_unique<FramebufferCache>(this);
 		tex_cache = std::make_unique<TransientTextureCache>(this);
@@ -343,20 +339,9 @@ namespace Rendering
 			imgui_device->poll_event(e);
 	}
 
-	void RenderingDevice::finalize() {
-
-		if (!frames.empty()) {
-			// Wait for all frames to have finished rendering.
-			_flush_and_stall_for_all_frames(false);
-		}
-		_submit_transfer_workers();
-		_wait_for_transfer_workers();
-
-		if (imgui_device)
-			imgui_device->finalize();
-		// Delete all shader modules in cache;
-		for (auto s: shader_cache)
-		{
+	void RenderingDevice::_finalize_cached_resources()
+	{
+		for (auto s : shader_cache) {
 			free_rid(s.second);
 		}
 		shader_cache.clear();
@@ -367,8 +352,10 @@ namespace Rendering
 		if (fb_cache) {
 			fb_cache->clear();
 		}
+	}
 
-		// Free all resources.
+	void RenderingDevice::_finalize_owned_rids()
+	{
 		_free_rids(render_pipeline_owner, "Pipeline");
 		//_free_rids(compute_pipeline_owner, "Compute");
 		_free_rids(uniform_set_owner, "UniformSet");
@@ -383,11 +370,10 @@ namespace Rendering
 		_free_rids(vertex_buffer_owner, "VertexBuffer");
 		_free_rids(framebuffer_owner, "Framebuffer");
 		_free_rids(sampler_owner, "Sampler");
+	}
 
-
-		_free_transfer_workers();
-
-		// Free everything pending.
+	void RenderingDevice::_finalize_frame_data()
+	{
 		for (uint32_t i = 0; i < frames.size(); i++) {
 			int f = (frame + i) % frames.size();
 			_free_pending_resources(f);
@@ -406,13 +392,11 @@ namespace Rendering
 			}
 		}
 
-		if (pipeline_cache_enabled) {
-			update_pipeline_cache(true);
-			driver->pipeline_cache_free();
-		}
-
 		frames.clear();
+	}
 
+	void RenderingDevice::_finalize_staging_buffers()
+	{
 		for (int i = 0; i < upload_staging_buffers.blocks.size(); i++) {
 			driver->buffer_unmap(upload_staging_buffers.blocks[i].driver_id);
 			driver->buffer_free(upload_staging_buffers.blocks[i].driver_id);
@@ -422,7 +406,10 @@ namespace Rendering
 			driver->buffer_unmap(download_staging_buffers.blocks[i].driver_id);
 			driver->buffer_free(download_staging_buffers.blocks[i].driver_id);
 		}
+	}
 
+	void RenderingDevice::_finalize_format_caches()
+	{
 		while (vertex_formats.size()) {
 			std::unordered_map<VertexFormatID, VertexDescriptionCache>::iterator temp = vertex_formats.begin();
 			driver->vertex_format_free(temp->second.driver_id);
@@ -433,18 +420,21 @@ namespace Rendering
 			driver->render_pass_free(E.second.render_pass);
 		}
 		framebuffer_formats.clear();
+	}
 
-		// Delete the swap chains created for the screens.
+	void RenderingDevice::_finalize_swap_chains()
+	{
 		for (const std::pair<DisplayServerEnums::WindowID, RDD::SwapChainID> it : screen_swap_chains) {
 			driver->swap_chain_free(it.second);
 		}
 
 		screen_swap_chains.clear();
+	}
 
-		// Delete the command queues.
+	void RenderingDevice::_finalize_queues()
+	{
 		if (present_queue) {
 			if (main_queue != present_queue) {
-				// Only delete the present queue if it's unique.
 				driver->command_queue_free(present_queue);
 			}
 
@@ -453,7 +443,6 @@ namespace Rendering
 
 		if (transfer_queue) {
 			if (main_queue != transfer_queue) {
-				// Only delete the transfer queue if it's unique.
 				driver->command_queue_free(transfer_queue);
 			}
 
@@ -464,12 +453,45 @@ namespace Rendering
 			driver->command_queue_free(main_queue);
 			main_queue = RDD::CommandQueueID();
 		}
+	}
 
-		// Delete the driver once everything else has been deleted.
+	void RenderingDevice::_finalize_driver()
+	{
 		if (driver != nullptr) {
 			context->driver_free(driver);
 			driver = nullptr;
 		}
+	}
+
+	void RenderingDevice::finalize() {
+
+		if (!frames.empty()) {
+			// Wait for all frames to have finished rendering.
+			_flush_and_stall_for_all_frames(false);
+		}
+		_submit_transfer_workers();
+		_wait_for_transfer_workers();
+
+		if (imgui_device)
+			imgui_device->finalize();
+
+		_finalize_cached_resources();
+		_finalize_owned_rids();
+
+		_free_transfer_workers();
+
+		_finalize_frame_data();
+
+		if (pipeline_cache_enabled) {
+			update_pipeline_cache(true);
+			driver->pipeline_cache_free();
+		}
+
+		_finalize_staging_buffers();
+		_finalize_format_caches();
+		_finalize_swap_chains();
+		_finalize_queues();
+		_finalize_driver();
 
 		// All these should be clear at this point.
 		//ERR_FAIL_COND(dependency_map.size());
