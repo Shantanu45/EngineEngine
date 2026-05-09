@@ -14,6 +14,13 @@
 namespace Terrain {
 namespace {
 
+uint64_t chunk_key(int32_t x, int32_t z)
+{
+	const auto ux = static_cast<uint32_t>(x);
+	const auto uz = static_cast<uint32_t>(z);
+	return (static_cast<uint64_t>(ux) << 32u) | static_cast<uint64_t>(uz);
+}
+
 const char* material_debug_view_name(MaterialDebugView view)
 {
 	switch (view) {
@@ -161,23 +168,30 @@ void TerrainRuntime::create_terrain_material()
 
 void TerrainRuntime::regenerate_terrain_chunks()
 {
+	chunk_cache.clear();
+	rebuild_chunk_window(true);
+}
+
+void TerrainRuntime::rebuild_chunk_window(bool discard_existing)
+{
 	chunks.clear();
 	const int32_t radius = std::clamp(chunk_radius, 0, 8);
-	const auto vertex_format = wsi->get_vertex_format_by_type(Rendering::VERTEX_FORMAT_VARIATIONS::DEFAULT);
 
 	for (int32_t z = -radius; z <= radius; ++z) {
 		for (int32_t x = -radius; x <= radius; ++x) {
 			const int32_t chunk_x = chunk_center.x + x;
 			const int32_t chunk_z = chunk_center.y + z;
-			const auto terrain_data = generate_terrain_chunk_mesh(terrain_settings, chunk_x, chunk_z);
-			const std::string mesh_name =
-				"terrain_chunk_" + std::to_string(terrain_mesh_generation) +
-				"_" + std::to_string(chunk_x) + "_" + std::to_string(chunk_z);
-			const auto mesh = Rendering::Shapes::upload(
-				resources.meshes(),
-				mesh_name,
-				terrain_data,
-				vertex_format);
+			const uint64_t key = chunk_key(chunk_x, chunk_z);
+			Rendering::MeshHandle mesh = Rendering::INVALID_MESH;
+			if (!discard_existing) {
+				auto it = chunk_cache.find(key);
+				if (it != chunk_cache.end())
+					mesh = it->second;
+			}
+			if (mesh == Rendering::INVALID_MESH) {
+				mesh = create_chunk_mesh(chunk_x, chunk_z);
+				chunk_cache[key] = mesh;
+			}
 			chunks.push_back(TerrainChunk{
 				.x = chunk_x,
 				.z = chunk_z,
@@ -186,8 +200,20 @@ void TerrainRuntime::regenerate_terrain_chunks()
 		}
 	}
 
-	terrain_mesh_generation++;
 	wsi->submit_transfer_workers();
+}
+
+Rendering::MeshHandle TerrainRuntime::create_chunk_mesh(int32_t x, int32_t z)
+{
+	const auto terrain_data = generate_terrain_chunk_mesh(terrain_settings, x, z);
+	const std::string mesh_name =
+		"terrain_chunk_" + std::to_string(terrain_mesh_generation++) +
+		"_" + std::to_string(x) + "_" + std::to_string(z);
+	return Rendering::Shapes::upload(
+		resources.meshes(),
+		mesh_name,
+		terrain_data,
+		wsi->get_vertex_format_by_type(Rendering::VERTEX_FORMAT_VARIATIONS::DEFAULT));
 }
 
 void TerrainRuntime::update_streaming_chunks()
@@ -208,7 +234,7 @@ void TerrainRuntime::update_streaming_chunks()
 		return;
 
 	chunk_center = camera_chunk;
-	regenerate_terrain_chunks();
+	rebuild_chunk_window(false);
 }
 
 void TerrainRuntime::draw_ui()

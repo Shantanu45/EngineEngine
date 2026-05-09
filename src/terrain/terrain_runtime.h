@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <unordered_map>
 #include <vector>
 
 #include "filesystem/filesystem.h"
@@ -35,7 +36,9 @@ private:
 	void create_scene_resources();
 	void create_terrain_material();
 	void regenerate_terrain_chunks();
+	void rebuild_chunk_window(bool discard_existing);
 	void update_streaming_chunks();
+	Rendering::MeshHandle create_chunk_mesh(int32_t x, int32_t z);
 	void draw_ui();
 
 	Rendering::WSI* wsi = nullptr;
@@ -52,6 +55,7 @@ private:
 	glm::ivec2 chunk_center = glm::ivec2(0);
 
 	std::vector<TerrainChunk> chunks;
+	std::unordered_map<uint64_t, Rendering::MeshHandle> chunk_cache;
 	Rendering::MeshHandle grid_mesh = Rendering::INVALID_MESH;
 	Rendering::MeshHandle skybox_mesh = Rendering::INVALID_MESH;
 	Rendering::MaterialHandle terrain_material = Rendering::INVALID_MATERIAL;
