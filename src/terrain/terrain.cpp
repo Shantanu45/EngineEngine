@@ -48,8 +48,9 @@ struct TerrainRuntime {
 		camera.set_perspective(60.0f, 16.0f / 9.0f, 0.1f, 1000.0f);
 		camera.set_reset_on_resize(true);
 		camera.set_mode(CameraMode::Fly);
-		camera.set_position(glm::vec3(0.0f, 20.0f, 55.0f));
-		camera.set_euler_degrees(-20.0f, 180.0f, 0.0f);
+		camera.set_position(glm::vec3(0.0f, 28.0f, 70.0f));
+		camera.set_euler_degrees(22.0f, 180.0f, 0.0f);
+		camera.set_move_speed(24.0f);
 
 		wsi->submit_transfer_workers();
 		return wsi->pre_frame_loop();
@@ -60,6 +61,7 @@ struct TerrainRuntime {
 		ZoneScoped;
 		camera.update_from_input(input_system.get(), frame_time);
 		device->imgui_begin_frame();
+		resources.materials().upload_dirty(device);
 
 		Rendering::SceneView view;
 		view.camera.view = camera.get_view();

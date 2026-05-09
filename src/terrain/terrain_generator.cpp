@@ -102,7 +102,7 @@ Rendering::Shapes::ShapeData generate_terrain_mesh(const TerrainSettings& settin
 				.texcoord = glm::vec2(
 					static_cast<float>(x) / static_cast<float>(resolution),
 					static_cast<float>(z) / static_cast<float>(resolution)),
-				.tangent = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f),
+				.tangent = glm::vec4(0.0f),
 			});
 		}
 	}

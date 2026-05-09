@@ -87,6 +87,7 @@ public:
 		_recalculate_on_resize = p_val;
 	}
 	CameraMode get_mode() const { return _mode; }
+	void set_move_speed(float speed) { controls.speed = speed; }
 
 	// --- Transform -----------------------------------------------------------
 
