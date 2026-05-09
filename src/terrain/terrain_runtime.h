@@ -35,6 +35,7 @@ private:
 	void create_scene_resources();
 	void create_terrain_material();
 	void regenerate_terrain_chunks();
+	void update_streaming_chunks();
 	void draw_ui();
 
 	Rendering::WSI* wsi = nullptr;
@@ -47,6 +48,8 @@ private:
 	RenderSettings render_settings;
 	TerrainSettings terrain_settings;
 	int32_t chunk_radius = 2;
+	bool stream_chunks = false;
+	glm::ivec2 chunk_center = glm::ivec2(0);
 
 	std::vector<TerrainChunk> chunks;
 	Rendering::MeshHandle grid_mesh = Rendering::INVALID_MESH;

@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <string>
 #include <utility>
 
@@ -79,6 +80,7 @@ void TerrainRuntime::render_frame(double frame_time, double elapsed_time)
 {
 	ZoneScoped;
 	camera.update_from_input(input_system.get(), frame_time);
+	update_streaming_chunks();
 	device->imgui_begin_frame();
 	draw_ui();
 	resources.materials().upload_dirty(device);
@@ -165,18 +167,20 @@ void TerrainRuntime::regenerate_terrain_chunks()
 
 	for (int32_t z = -radius; z <= radius; ++z) {
 		for (int32_t x = -radius; x <= radius; ++x) {
-			const auto terrain_data = generate_terrain_chunk_mesh(terrain_settings, x, z);
+			const int32_t chunk_x = chunk_center.x + x;
+			const int32_t chunk_z = chunk_center.y + z;
+			const auto terrain_data = generate_terrain_chunk_mesh(terrain_settings, chunk_x, chunk_z);
 			const std::string mesh_name =
 				"terrain_chunk_" + std::to_string(terrain_mesh_generation) +
-				"_" + std::to_string(x) + "_" + std::to_string(z);
+				"_" + std::to_string(chunk_x) + "_" + std::to_string(chunk_z);
 			const auto mesh = Rendering::Shapes::upload(
 				resources.meshes(),
 				mesh_name,
 				terrain_data,
 				vertex_format);
 			chunks.push_back(TerrainChunk{
-				.x = x,
-				.z = z,
+				.x = chunk_x,
+				.z = chunk_z,
 				.mesh = mesh,
 			});
 		}
@@ -184,6 +188,27 @@ void TerrainRuntime::regenerate_terrain_chunks()
 
 	terrain_mesh_generation++;
 	wsi->submit_transfer_workers();
+}
+
+void TerrainRuntime::update_streaming_chunks()
+{
+	if (!stream_chunks)
+		return;
+
+	const float chunk_size = terrain_settings.chunk_size;
+	if (chunk_size <= 0.0f)
+		return;
+
+	const auto position = camera.get_position();
+	const glm::ivec2 camera_chunk(
+		static_cast<int32_t>(std::floor(position.x / chunk_size)),
+		static_cast<int32_t>(std::floor(position.z / chunk_size)));
+
+	if (camera_chunk == chunk_center)
+		return;
+
+	chunk_center = camera_chunk;
+	regenerate_terrain_chunks();
 }
 
 void TerrainRuntime::draw_ui()
@@ -202,6 +227,18 @@ void TerrainRuntime::draw_ui()
 	int radius = chunk_radius;
 	if (ImGui::SliderInt("Chunk Radius", &radius, 0, 8))
 		chunk_radius = radius;
+	if (ImGui::Checkbox("Stream Chunks", &stream_chunks)) {
+		if (!stream_chunks) {
+			chunk_center = glm::ivec2(0);
+		}
+		else if (terrain_settings.chunk_size > 0.0f) {
+			const auto position = camera.get_position();
+			chunk_center = glm::ivec2(
+				static_cast<int32_t>(std::floor(position.x / terrain_settings.chunk_size)),
+				static_cast<int32_t>(std::floor(position.z / terrain_settings.chunk_size)));
+		}
+		regenerate_terrain_chunks();
+	}
 	ImGui::DragFloat("Height", &terrain_settings.height_scale, 0.1f, 0.0f, 80.0f);
 	ImGui::DragFloat("Frequency", &terrain_settings.base_frequency, 0.001f, 0.001f, 0.25f, "%.3f");
 
