@@ -34,6 +34,8 @@ set(PROJECT_NAME terrain)
 
 add_executable(${PROJECT_NAME} WIN32
 	terrain.cpp
+	terrain_runtime.cpp
+	terrain_runtime.h
 )
 
 setup_msvc_options(${PROJECT_NAME})
