@@ -32,6 +32,11 @@ private:
 		Rendering::MeshHandle mesh = Rendering::INVALID_MESH;
 	};
 
+	struct PendingMeshDestroy {
+		Rendering::MeshHandle mesh = Rendering::INVALID_MESH;
+		uint32_t frames_left = 0;
+	};
+
 	void configure_wsi();
 	void create_scene_resources();
 	void create_terrain_material();
@@ -39,6 +44,8 @@ private:
 	void rebuild_chunk_window(bool discard_existing);
 	void update_streaming_chunks();
 	void prune_chunk_cache();
+	void queue_mesh_destroy(Rendering::MeshHandle mesh);
+	void process_pending_mesh_destroys();
 	Rendering::MeshHandle create_chunk_mesh(int32_t x, int32_t z);
 	void draw_ui();
 
@@ -57,6 +64,7 @@ private:
 	glm::ivec2 chunk_center = glm::ivec2(0);
 
 	std::vector<TerrainChunk> chunks;
+	std::vector<PendingMeshDestroy> pending_mesh_destroys;
 	std::unordered_map<uint64_t, Rendering::MeshHandle> chunk_cache;
 	Rendering::MeshHandle grid_mesh = Rendering::INVALID_MESH;
 	Rendering::MeshHandle skybox_mesh = Rendering::INVALID_MESH;

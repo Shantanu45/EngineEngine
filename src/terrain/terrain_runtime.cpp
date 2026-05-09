@@ -95,6 +95,7 @@ void TerrainRuntime::render_frame(double frame_time, double elapsed_time)
 	ZoneScoped;
 	camera.update_from_input(input_system.get(), frame_time);
 	update_streaming_chunks();
+	process_pending_mesh_destroys();
 	device->imgui_begin_frame();
 	draw_ui();
 	resources.materials().upload_dirty(device);
@@ -137,6 +138,9 @@ void TerrainRuntime::render_frame(double frame_time, double elapsed_time)
 
 void TerrainRuntime::shutdown()
 {
+	for (auto& pending : pending_mesh_destroys)
+		resources.meshes().destroy_mesh(pending.mesh);
+	pending_mesh_destroys.clear();
 	render_pipeline.shutdown();
 	resources.shutdown();
 }
@@ -175,6 +179,8 @@ void TerrainRuntime::create_terrain_material()
 
 void TerrainRuntime::regenerate_terrain_chunks()
 {
+	for (const auto& [_, mesh] : chunk_cache)
+		queue_mesh_destroy(mesh);
 	chunk_cache.clear();
 	rebuild_chunk_window(true);
 }
@@ -252,11 +258,37 @@ void TerrainRuntime::prune_chunk_cache()
 		const glm::ivec2 coord = decode_chunk_key(it->first);
 		const glm::ivec2 delta = glm::abs(coord - chunk_center);
 		if (delta.x > keep_radius || delta.y > keep_radius) {
+			queue_mesh_destroy(it->second);
 			it = chunk_cache.erase(it);
 		}
 		else {
 			++it;
 		}
+	}
+}
+
+void TerrainRuntime::queue_mesh_destroy(Rendering::MeshHandle mesh)
+{
+	if (mesh == Rendering::INVALID_MESH)
+		return;
+
+	pending_mesh_destroys.push_back(PendingMeshDestroy{
+		.mesh = mesh,
+		.frames_left = 5,
+	});
+}
+
+void TerrainRuntime::process_pending_mesh_destroys()
+{
+	for (auto it = pending_mesh_destroys.begin(); it != pending_mesh_destroys.end();) {
+		if (it->frames_left > 0) {
+			--it->frames_left;
+			++it;
+			continue;
+		}
+
+		resources.meshes().destroy_mesh(it->mesh);
+		it = pending_mesh_destroys.erase(it);
 	}
 }
 
