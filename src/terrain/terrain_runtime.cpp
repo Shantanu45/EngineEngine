@@ -5,6 +5,8 @@
 #include "rendering/utils.h"
 #include "util/profiler.h"
 
+#include <glm/gtc/matrix_transform.hpp>
+
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -78,6 +80,7 @@ bool TerrainRuntime::initialize(
 
 	render_pipeline.initialize(wsi, device, resources.skybox_cubemap());
 	create_scene_resources();
+	create_water_resources();
 
 	camera.set_perspective(60.0f, 16.0f / 9.0f, 0.1f, 1000.0f);
 	camera.set_reset_on_resize(true);
@@ -121,6 +124,36 @@ void TerrainRuntime::render_frame(double frame_time, double elapsed_time)
 			.material_sets = { resources.materials().get_uniform_set(chunk.material, render_settings.use_pbr_lighting) },
 			.shadow_material_sets = { resources.materials().get_shadow_uniform_set(chunk.material) },
 			.point_shadow_material_sets = { resources.materials().get_point_shadow_uniform_set(chunk.material) },
+			.category = Rendering::MeshCategory::Opaque,
+		});
+	}
+
+	if (water_enabled && water_mesh != Rendering::INVALID_MESH && water_material != Rendering::INVALID_MATERIAL) {
+		const auto camera_position = camera.get_position();
+		glm::vec3 forward = camera.get_forward();
+		forward.y = 0.0f;
+		if (glm::length(forward) > 0.001f)
+			forward = glm::normalize(forward);
+		else
+			forward = glm::vec3(0.0f, 0.0f, -1.0f);
+		const int32_t padded_radius = std::max(chunk_radius + water_padding_chunks, chunk_radius);
+		const float chunk_window_diameter = static_cast<float>(padded_radius * 2 + 1) * terrain_settings.chunk_size;
+		const float width = std::max(chunk_window_diameter, water_min_diameter);
+		const float depth = width * water_depth_scale;
+		const glm::vec3 water_center = camera_position + forward * depth * water_forward_bias;
+		const float display_water_level = water_level + 0.02f;
+		const float yaw = std::atan2(forward.x, forward.z);
+		const glm::mat4 water_model =
+			glm::translate(glm::mat4(1.0f), glm::vec3(water_center.x, display_water_level, water_center.z)) *
+			glm::rotate(glm::mat4(1.0f), yaw, glm::vec3(0.0f, 1.0f, 0.0f)) *
+			glm::scale(glm::mat4(1.0f), glm::vec3(width, 1.0f, depth));
+		view.instances.push_back(Rendering::MeshInstance{
+			.mesh = water_mesh,
+			.model = water_model,
+			.normal_matrix = glm::transpose(glm::inverse(water_model)),
+			.material_sets = { resources.materials().get_uniform_set(water_material, render_settings.use_pbr_lighting) },
+			.shadow_material_sets = { resources.materials().get_shadow_uniform_set(water_material) },
+			.point_shadow_material_sets = { resources.materials().get_point_shadow_uniform_set(water_material) },
 			.category = Rendering::MeshCategory::Opaque,
 		});
 	}
@@ -298,6 +331,28 @@ RID TerrainRuntime::create_chunk_color_texture(int32_t chunk_x, int32_t chunk_z)
 	return texture;
 }
 
+void TerrainRuntime::create_water_resources()
+{
+	water_mesh = Rendering::Shapes::upload_plane(
+		*wsi,
+		resources.meshes(),
+		1,
+		"terrain_water_plane");
+
+	Rendering::Material material;
+	material.base_color_factor = glm::vec4(0.12f, 0.32f, 0.46f, 1.0f);
+	material.roughness_factor = 0.18f;
+	material.metallic_factor = 0.0f;
+	water_material = resources.materials().create(
+		device,
+		std::move(material),
+		resources.default_white_texture(),
+		render_pipeline.color_pipeline().shader_rid,
+		render_pipeline.pbr_color_pipeline().shader_rid,
+		render_pipeline.shadow_pipeline().shader_rid,
+		render_pipeline.point_shadow_pipeline().shader_rid);
+}
+
 void TerrainRuntime::update_streaming_chunks()
 {
 	if (!stream_chunks)
@@ -425,6 +480,12 @@ void TerrainRuntime::draw_ui()
 	ImGui::Checkbox("PBR", &render_settings.use_pbr_lighting);
 	ImGui::Checkbox("Grid", &render_settings.draw_grid);
 	ImGui::Checkbox("Skybox", &render_settings.draw_skybox);
+	ImGui::Checkbox("Water", &water_enabled);
+	ImGui::DragFloat("Water Level", &water_level, 0.1f, -40.0f, 80.0f);
+	ImGui::SliderInt("Water Padding", &water_padding_chunks, 0, 64);
+	ImGui::SliderFloat("Water Forward Bias", &water_forward_bias, 0.0f, 0.8f);
+	ImGui::DragFloat("Water Min Size", &water_min_diameter, 10.0f, 80.0f, 2000.0f);
+	ImGui::SliderFloat("Water Depth Scale", &water_depth_scale, 1.0f, 6.0f);
 
 	int debug_view = static_cast<int>(render_settings.material_debug_view);
 	if (ImGui::BeginCombo("Debug", material_debug_view_name(render_settings.material_debug_view))) {

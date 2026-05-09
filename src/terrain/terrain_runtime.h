@@ -51,6 +51,7 @@ private:
 	TerrainChunk create_chunk(int32_t x, int32_t z);
 	Rendering::MaterialHandle create_chunk_material(int32_t x, int32_t z);
 	RID create_chunk_color_texture(int32_t x, int32_t z);
+	void create_water_resources();
 	void draw_ui();
 
 	Rendering::WSI* wsi = nullptr;
@@ -65,6 +66,12 @@ private:
 	int32_t chunk_radius = 2;
 	int32_t chunk_cache_margin = 2;
 	bool stream_chunks = false;
+	bool water_enabled = true;
+	float water_level = 0.0f;
+	int32_t water_padding_chunks = 8;
+	float water_forward_bias = 0.35f;
+	float water_min_diameter = 480.0f;
+	float water_depth_scale = 2.5f;
 	bool regenerate_requested = false;
 	bool pending_chunks_ready = false;
 	uint32_t pending_chunk_frames_left = 0;
@@ -77,6 +84,8 @@ private:
 	std::unordered_map<uint64_t, TerrainChunk> chunk_cache;
 	Rendering::MeshHandle grid_mesh = Rendering::INVALID_MESH;
 	Rendering::MeshHandle skybox_mesh = Rendering::INVALID_MESH;
+	Rendering::MeshHandle water_mesh = Rendering::INVALID_MESH;
+	Rendering::MaterialHandle water_material = Rendering::INVALID_MATERIAL;
 	uint32_t terrain_mesh_generation = 0;
 	uint32_t terrain_texture_generation = 0;
 };
