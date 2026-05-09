@@ -93,6 +93,7 @@ bool TerrainRuntime::initialize(
 void TerrainRuntime::render_frame(double frame_time, double elapsed_time)
 {
 	ZoneScoped;
+	process_deferred_requests();
 	camera.update_from_input(input_system.get(), frame_time);
 	update_streaming_chunks();
 	process_pending_mesh_destroys();
@@ -117,9 +118,9 @@ void TerrainRuntime::render_frame(double frame_time, double elapsed_time)
 			.mesh = chunk.mesh,
 			.model = model,
 			.normal_matrix = glm::transpose(glm::inverse(model)),
-			.material_sets = { resources.materials().get_uniform_set(terrain_material, render_settings.use_pbr_lighting) },
-			.shadow_material_sets = { resources.materials().get_shadow_uniform_set(terrain_material) },
-			.point_shadow_material_sets = { resources.materials().get_point_shadow_uniform_set(terrain_material) },
+			.material_sets = { resources.materials().get_uniform_set(chunk.material, render_settings.use_pbr_lighting) },
+			.shadow_material_sets = { resources.materials().get_shadow_uniform_set(chunk.material) },
+			.point_shadow_material_sets = { resources.materials().get_point_shadow_uniform_set(chunk.material) },
 			.category = Rendering::MeshCategory::Opaque,
 		});
 	}
@@ -158,16 +159,72 @@ void TerrainRuntime::configure_wsi()
 void TerrainRuntime::create_scene_resources()
 {
 	regenerate_terrain_chunks();
-	create_terrain_material();
 }
 
-void TerrainRuntime::create_terrain_material()
+void TerrainRuntime::regenerate_terrain_chunks()
+{
+	for (const auto& [_, chunk] : chunk_cache)
+		queue_mesh_destroy(chunk.mesh);
+	chunk_cache.clear();
+	rebuild_chunk_window(true);
+}
+
+void TerrainRuntime::rebuild_chunk_window(bool discard_existing)
+{
+	std::vector<TerrainChunk> rebuilt_chunks;
+	const int32_t radius = std::clamp(chunk_radius, 0, 8);
+
+	for (int32_t z = -radius; z <= radius; ++z) {
+		for (int32_t x = -radius; x <= radius; ++x) {
+			const int32_t chunk_x = chunk_center.x + x;
+			const int32_t chunk_z = chunk_center.y + z;
+			const uint64_t key = chunk_key(chunk_x, chunk_z);
+			TerrainChunk chunk;
+			if (!discard_existing) {
+				auto it = chunk_cache.find(key);
+				if (it != chunk_cache.end())
+					chunk = it->second;
+			}
+			if (chunk.mesh == Rendering::INVALID_MESH) {
+				chunk = create_chunk(chunk_x, chunk_z);
+				chunk_cache[key] = chunk;
+			}
+			rebuilt_chunks.push_back(chunk);
+		}
+	}
+
+	pending_chunks = std::move(rebuilt_chunks);
+	pending_chunks_ready = true;
+	pending_chunk_frames_left = 1;
+}
+
+TerrainRuntime::TerrainChunk TerrainRuntime::create_chunk(int32_t x, int32_t z)
+{
+	const auto terrain_data = generate_terrain_chunk_mesh(terrain_settings, x, z);
+	const std::string mesh_name =
+		"terrain_chunk_" + std::to_string(terrain_mesh_generation++) +
+		"_" + std::to_string(x) + "_" + std::to_string(z);
+	const auto mesh = Rendering::Shapes::upload(
+		resources.meshes(),
+		mesh_name,
+		terrain_data,
+		wsi->get_vertex_format_by_type(Rendering::VERTEX_FORMAT_VARIATIONS::DEFAULT));
+	return TerrainChunk{
+		.x = x,
+		.z = z,
+		.mesh = mesh,
+		.material = create_chunk_material(x, z),
+	};
+}
+
+Rendering::MaterialHandle TerrainRuntime::create_chunk_material(int32_t x, int32_t z)
 {
 	Rendering::Material material;
-	material.base_color_factor = glm::vec4(0.32f, 0.58f, 0.28f, 1.0f);
-	material.roughness_factor = 0.85f;
+	material.base_color_factor = glm::vec4(1.0f);
+	material.roughness_factor = 0.95f;
 	material.metallic_factor = 0.0f;
-	terrain_material = resources.materials().create(
+	material.diffuse = create_chunk_color_texture(x, z);
+	return resources.materials().create(
 		device,
 		std::move(material),
 		resources.default_white_texture(),
@@ -177,56 +234,68 @@ void TerrainRuntime::create_terrain_material()
 		render_pipeline.point_shadow_pipeline().shader_rid);
 }
 
-void TerrainRuntime::regenerate_terrain_chunks()
+RID TerrainRuntime::create_chunk_color_texture(int32_t chunk_x, int32_t chunk_z)
 {
-	for (const auto& [_, mesh] : chunk_cache)
-		queue_mesh_destroy(mesh);
-	chunk_cache.clear();
-	rebuild_chunk_window(true);
-}
+	constexpr uint32_t texture_size = 128;
+	const float step = terrain_settings.chunk_size / static_cast<float>(texture_size - 1u);
+	const float half_chunk = terrain_settings.chunk_size * 0.5f;
+	const float origin_x = static_cast<float>(chunk_x) * terrain_settings.chunk_size - half_chunk;
+	const float origin_z = static_cast<float>(chunk_z) * terrain_settings.chunk_size - half_chunk;
+	const float normal_sample_step = terrain_settings.chunk_size / static_cast<float>(terrain_settings.chunk_resolution);
 
-void TerrainRuntime::rebuild_chunk_window(bool discard_existing)
-{
-	chunks.clear();
-	const int32_t radius = std::clamp(chunk_radius, 0, 8);
+	const glm::vec3 low_grass(0.10f, 0.23f, 0.11f);
+	const glm::vec3 grass(0.26f, 0.45f, 0.18f);
+	const glm::vec3 dry_grass(0.48f, 0.42f, 0.22f);
+	const glm::vec3 rock(0.42f, 0.40f, 0.36f);
+	const glm::vec3 snow(0.86f, 0.88f, 0.84f);
 
-	for (int32_t z = -radius; z <= radius; ++z) {
-		for (int32_t x = -radius; x <= radius; ++x) {
-			const int32_t chunk_x = chunk_center.x + x;
-			const int32_t chunk_z = chunk_center.y + z;
-			const uint64_t key = chunk_key(chunk_x, chunk_z);
-			Rendering::MeshHandle mesh = Rendering::INVALID_MESH;
-			if (!discard_existing) {
-				auto it = chunk_cache.find(key);
-				if (it != chunk_cache.end())
-					mesh = it->second;
-			}
-			if (mesh == Rendering::INVALID_MESH) {
-				mesh = create_chunk_mesh(chunk_x, chunk_z);
-				chunk_cache[key] = mesh;
-			}
-			chunks.push_back(TerrainChunk{
-				.x = chunk_x,
-				.z = chunk_z,
-				.mesh = mesh,
-			});
+	Util::SmallVector<uint8_t> pixels;
+	pixels.resize(static_cast<size_t>(texture_size) * static_cast<size_t>(texture_size) * 4u);
+
+	for (uint32_t z = 0; z < texture_size; ++z) {
+		for (uint32_t x = 0; x < texture_size; ++x) {
+			const float world_x = origin_x + static_cast<float>(x) * step;
+			const float world_z = origin_z + static_cast<float>(z) * step;
+			const float h = sample_terrain_height(terrain_settings, world_x, world_z);
+
+			const float h_l = sample_terrain_height(terrain_settings, world_x - normal_sample_step, world_z);
+			const float h_r = sample_terrain_height(terrain_settings, world_x + normal_sample_step, world_z);
+			const float h_d = sample_terrain_height(terrain_settings, world_x, world_z - normal_sample_step);
+			const float h_u = sample_terrain_height(terrain_settings, world_x, world_z + normal_sample_step);
+			const glm::vec3 normal = glm::normalize(glm::vec3(h_l - h_r, normal_sample_step * 2.0f, h_d - h_u));
+			const float slope = 1.0f - glm::clamp(normal.y, 0.0f, 1.0f);
+
+			const float height01 = glm::clamp((h / glm::max(terrain_settings.height_scale, 0.001f) + 1.0f) * 0.5f, 0.0f, 1.0f);
+			glm::vec3 color = glm::mix(low_grass, grass, glm::smoothstep(0.18f, 0.42f, height01));
+			color = glm::mix(color, dry_grass, glm::smoothstep(0.45f, 0.68f, height01) * 0.35f);
+			color = glm::mix(color, rock, glm::smoothstep(0.22f, 0.55f, slope));
+			color = glm::mix(color, snow, glm::smoothstep(0.76f, 0.92f, height01));
+
+			const size_t offset = (static_cast<size_t>(z) * texture_size + x) * 4u;
+			pixels[offset + 0u] = static_cast<uint8_t>(glm::clamp(color.r, 0.0f, 1.0f) * 255.0f);
+			pixels[offset + 1u] = static_cast<uint8_t>(glm::clamp(color.g, 0.0f, 1.0f) * 255.0f);
+			pixels[offset + 2u] = static_cast<uint8_t>(glm::clamp(color.b, 0.0f, 1.0f) * 255.0f);
+			pixels[offset + 3u] = 255u;
 		}
 	}
 
-	wsi->submit_transfer_workers();
-}
+	Rendering::RenderingDeviceCommons::TextureFormat texture_format;
+	texture_format.texture_type = Rendering::RenderingDeviceCommons::TEXTURE_TYPE_2D;
+	texture_format.width = texture_size;
+	texture_format.height = texture_size;
+	texture_format.array_layers = 1;
+	texture_format.usage_bits =
+		Rendering::RenderingDeviceCommons::TEXTURE_USAGE_SAMPLING_BIT |
+		Rendering::RenderingDeviceCommons::TEXTURE_USAGE_CAN_UPDATE_BIT;
+	texture_format.format = Rendering::RenderingDeviceCommons::DATA_FORMAT_R8G8B8A8_SRGB;
 
-Rendering::MeshHandle TerrainRuntime::create_chunk_mesh(int32_t x, int32_t z)
-{
-	const auto terrain_data = generate_terrain_chunk_mesh(terrain_settings, x, z);
-	const std::string mesh_name =
-		"terrain_chunk_" + std::to_string(terrain_mesh_generation++) +
-		"_" + std::to_string(x) + "_" + std::to_string(z);
-	return Rendering::Shapes::upload(
-		resources.meshes(),
-		mesh_name,
-		terrain_data,
-		wsi->get_vertex_format_by_type(Rendering::VERTEX_FORMAT_VARIATIONS::DEFAULT));
+	RID texture = device->texture_create(texture_format, Rendering::RenderingDevice::TextureView(), { pixels });
+	device->set_resource_name(
+		texture,
+		"terrain_color_" + std::to_string(terrain_texture_generation++) +
+		"_" + std::to_string(chunk_x) + "_" + std::to_string(chunk_z));
+	terrain_color_textures.emplace_back(texture);
+	return texture;
 }
 
 void TerrainRuntime::update_streaming_chunks()
@@ -258,7 +327,7 @@ void TerrainRuntime::prune_chunk_cache()
 		const glm::ivec2 coord = decode_chunk_key(it->first);
 		const glm::ivec2 delta = glm::abs(coord - chunk_center);
 		if (delta.x > keep_radius || delta.y > keep_radius) {
-			queue_mesh_destroy(it->second);
+			queue_mesh_destroy(it->second.mesh);
 			it = chunk_cache.erase(it);
 		}
 		else {
@@ -289,6 +358,24 @@ void TerrainRuntime::process_pending_mesh_destroys()
 
 		resources.meshes().destroy_mesh(it->mesh);
 		it = pending_mesh_destroys.erase(it);
+	}
+}
+
+void TerrainRuntime::process_deferred_requests()
+{
+	if (pending_chunks_ready) {
+		if (pending_chunk_frames_left > 0) {
+			--pending_chunk_frames_left;
+			return;
+		}
+		chunks = std::move(pending_chunks);
+		pending_chunks.clear();
+		pending_chunks_ready = false;
+	}
+
+	if (regenerate_requested) {
+		regenerate_requested = false;
+		regenerate_terrain_chunks();
 	}
 }
 
@@ -332,7 +419,7 @@ void TerrainRuntime::draw_ui()
 	ImGui::DragFloat("Persistence", &terrain_settings.persistence, 0.01f, 0.0f, 1.0f);
 
 	if (ImGui::Button("Regenerate"))
-		regenerate_terrain_chunks();
+		regenerate_requested = true;
 
 	ImGui::Separator();
 	ImGui::Checkbox("PBR", &render_settings.use_pbr_lighting);
@@ -354,16 +441,7 @@ void TerrainRuntime::draw_ui()
 		ImGui::EndCombo();
 	}
 
-	if (terrain_material != Rendering::INVALID_MATERIAL) {
-		auto& material = resources.materials().get(terrain_material);
-		glm::vec3 color = glm::vec3(material.base_color_factor);
-		if (ImGui::ColorEdit3("Color", &color.x)) {
-			material.base_color_factor = glm::vec4(color, material.base_color_factor.a);
-			material.dirty = true;
-		}
-		if (ImGui::SliderFloat("Roughness", &material.roughness_factor, 0.04f, 1.0f))
-			material.dirty = true;
-	}
+	ImGui::Text("Palette: height + slope");
 
 	ImGui::End();
 }

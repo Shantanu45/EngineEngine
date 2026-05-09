@@ -64,14 +64,14 @@ float fractal_noise(float x, float y, const TerrainSettings& settings)
 	return norm > 0.0f ? value / norm : 0.0f;
 }
 
-float height_at(float x, float z, const TerrainSettings& settings)
+} // namespace
+
+float sample_terrain_height(const TerrainSettings& settings, float x, float z)
 {
 	const float h = fractal_noise(x, z, settings);
 	const float shaped = h * 0.75f + h * h * h * 0.25f;
 	return shaped * settings.height_scale;
 }
-
-} // namespace
 
 Rendering::Shapes::ShapeData generate_terrain_mesh(const TerrainSettings& settings)
 {
@@ -95,12 +95,12 @@ Rendering::Shapes::ShapeData generate_terrain_chunk_mesh(const TerrainSettings& 
 		for (uint32_t x = 0; x < verts_per_side; ++x) {
 			const float world_x = origin_x + static_cast<float>(x) * step;
 			const float world_z = origin_z + static_cast<float>(z) * step;
-			const float y = height_at(world_x, world_z, settings);
+			const float y = sample_terrain_height(settings, world_x, world_z);
 
-			const float h_l = height_at(world_x - step, world_z, settings);
-			const float h_r = height_at(world_x + step, world_z, settings);
-			const float h_d = height_at(world_x, world_z - step, settings);
-			const float h_u = height_at(world_x, world_z + step, settings);
+			const float h_l = sample_terrain_height(settings, world_x - step, world_z);
+			const float h_r = sample_terrain_height(settings, world_x + step, world_z);
+			const float h_d = sample_terrain_height(settings, world_x, world_z - step);
+			const float h_u = sample_terrain_height(settings, world_x, world_z + step);
 			const glm::vec3 normal = glm::normalize(glm::vec3(h_l - h_r, step * 2.0f, h_d - h_u));
 
 			mesh.vertices.push_back(Rendering::Vertex{

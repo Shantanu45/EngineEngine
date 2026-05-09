@@ -11,6 +11,7 @@
 #include "rendering/render_resource_store.h"
 #include "rendering/render_settings.h"
 #include "rendering/renderers/forward_render_pipeline.h"
+#include "rendering/rid_handle.h"
 #include "rendering/wsi.h"
 #include "terrain/terrain_generator.h"
 
@@ -30,6 +31,7 @@ private:
 		int32_t x = 0;
 		int32_t z = 0;
 		Rendering::MeshHandle mesh = Rendering::INVALID_MESH;
+		Rendering::MaterialHandle material = Rendering::INVALID_MATERIAL;
 	};
 
 	struct PendingMeshDestroy {
@@ -39,14 +41,16 @@ private:
 
 	void configure_wsi();
 	void create_scene_resources();
-	void create_terrain_material();
 	void regenerate_terrain_chunks();
 	void rebuild_chunk_window(bool discard_existing);
 	void update_streaming_chunks();
 	void prune_chunk_cache();
 	void queue_mesh_destroy(Rendering::MeshHandle mesh);
 	void process_pending_mesh_destroys();
-	Rendering::MeshHandle create_chunk_mesh(int32_t x, int32_t z);
+	void process_deferred_requests();
+	TerrainChunk create_chunk(int32_t x, int32_t z);
+	Rendering::MaterialHandle create_chunk_material(int32_t x, int32_t z);
+	RID create_chunk_color_texture(int32_t x, int32_t z);
 	void draw_ui();
 
 	Rendering::WSI* wsi = nullptr;
@@ -61,15 +65,20 @@ private:
 	int32_t chunk_radius = 2;
 	int32_t chunk_cache_margin = 2;
 	bool stream_chunks = false;
+	bool regenerate_requested = false;
+	bool pending_chunks_ready = false;
+	uint32_t pending_chunk_frames_left = 0;
 	glm::ivec2 chunk_center = glm::ivec2(0);
 
 	std::vector<TerrainChunk> chunks;
+	std::vector<TerrainChunk> pending_chunks;
 	std::vector<PendingMeshDestroy> pending_mesh_destroys;
-	std::unordered_map<uint64_t, Rendering::MeshHandle> chunk_cache;
+	std::vector<RIDHandle> terrain_color_textures;
+	std::unordered_map<uint64_t, TerrainChunk> chunk_cache;
 	Rendering::MeshHandle grid_mesh = Rendering::INVALID_MESH;
 	Rendering::MeshHandle skybox_mesh = Rendering::INVALID_MESH;
-	Rendering::MaterialHandle terrain_material = Rendering::INVALID_MATERIAL;
 	uint32_t terrain_mesh_generation = 0;
+	uint32_t terrain_texture_generation = 0;
 };
 
 } // namespace Terrain

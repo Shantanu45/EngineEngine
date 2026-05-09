@@ -17,6 +17,7 @@ struct TerrainSettings {
 	float persistence = 0.5f;
 };
 
+float sample_terrain_height(const TerrainSettings& settings, float x, float z);
 Rendering::Shapes::ShapeData generate_terrain_mesh(const TerrainSettings& settings);
 Rendering::Shapes::ShapeData generate_terrain_chunk_mesh(const TerrainSettings& settings, int32_t chunk_x, int32_t chunk_z);
 
