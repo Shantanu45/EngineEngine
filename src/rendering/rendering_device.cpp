@@ -511,7 +511,7 @@ namespace Rendering
 	{
 		//ERR_FAIL_COND_V(p_source == nullptr, &RDShaderSPIRV());
 
-		RDShaderSPIRV* bytecode = new RDShaderSPIRV;
+		auto bytecode = std::make_unique<RDShaderSPIRV>();
 		for (int i = 0; i < RenderingDeviceCommons::SHADER_STAGE_MAX; i++) {
 			std::string error;
 
@@ -524,7 +524,7 @@ namespace Rendering
 				bytecode->set_stage_compile_error(stage, error);
 			}
 		}
-		return bytecode;
+		return bytecode.release();
 	}
 
 	RID RenderingDevice::shader_create_from_spirv(const RDShaderSPIRV* p_spirv, const std::string& p_shader_name /*= ""*/)
@@ -3928,12 +3928,13 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 				uint32_t transfer_worker_index = transfer_worker_pool_size;
 				++transfer_worker_pool_size;
 
-				transfer_worker = new TransferWorker;
+				auto new_transfer_worker = std::make_unique<TransferWorker>();
+				transfer_worker = new_transfer_worker.get();
 				transfer_worker->command_fence = driver->fence_create();
 				transfer_worker->command_pool = driver->command_pool_create(transfer_queue_family, RDD::COMMAND_BUFFER_TYPE_PRIMARY);
 				transfer_worker->command_buffer = driver->command_buffer_create(transfer_worker->command_pool);
 				transfer_worker->index = transfer_worker_index;
-				transfer_worker_pool[transfer_worker_index] = transfer_worker;
+				transfer_worker_pool[transfer_worker_index] = new_transfer_worker.release();
 				transfer_worker_operation_used_by_draw[transfer_worker_index] = 0;
 				transfer_worker->thread_mutex.lock();
 			}

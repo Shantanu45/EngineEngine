@@ -438,129 +438,148 @@ namespace Rendering
 			int32_t vrs_attachment = ATTACHMENT_UNUSED;
 			Size2i vrs_texel_size;
 
+			template <typename T>
+			static int _compare_scalar(const T& p_a, const T& p_b) {
+				if (p_a < p_b) {
+					return -1;
+				}
+				if (p_b < p_a) {
+					return 1;
+				}
+				return 0;
+			}
+
+			template <typename T>
+			static int _compare_vector(const Util::SmallVector<T>& p_a, const Util::SmallVector<T>& p_b) {
+				if (p_a.size() != p_b.size()) {
+					return p_a.size() < p_b.size() ? -1 : 1;
+				}
+
+				for (uint32_t i = 0; i < p_a.size(); i++) {
+					int cmp = _compare_scalar(p_a[i], p_b[i]);
+					if (cmp != 0) {
+						return cmp;
+					}
+				}
+
+				return 0;
+			}
+
+			static int _compare_pass(const FramebufferPass& p_a, const FramebufferPass& p_b) {
+				int cmp = _compare_vector(p_a.color_attachments, p_b.color_attachments);
+				if (cmp != 0) {
+					return cmp;
+				}
+
+				cmp = _compare_vector(p_a.input_attachments, p_b.input_attachments);
+				if (cmp != 0) {
+					return cmp;
+				}
+
+				cmp = _compare_vector(p_a.resolve_attachments, p_b.resolve_attachments);
+				if (cmp != 0) {
+					return cmp;
+				}
+
+				cmp = _compare_vector(p_a.preserve_attachments, p_b.preserve_attachments);
+				if (cmp != 0) {
+					return cmp;
+				}
+
+				cmp = _compare_scalar(p_a.depth_attachment, p_b.depth_attachment);
+				if (cmp != 0) {
+					return cmp;
+				}
+
+				return _compare_scalar(p_a.depth_resolve_attachment, p_b.depth_resolve_attachment);
+			}
+
+			static int _compare_attachment(const AttachmentFormat& p_a, const AttachmentFormat& p_b) {
+				int cmp = _compare_scalar(p_a.format, p_b.format);
+				if (cmp != 0) {
+					return cmp;
+				}
+
+				cmp = _compare_scalar(p_a.samples, p_b.samples);
+				if (cmp != 0) {
+					return cmp;
+				}
+
+				cmp = _compare_scalar(p_a.usage_flags, p_b.usage_flags);
+				if (cmp != 0) {
+					return cmp;
+				}
+
+				return _compare_scalar(p_a.load_op, p_b.load_op);
+			}
+
+			static int _compare_pass_vector(const Util::SmallVector<FramebufferPass>& p_a, const Util::SmallVector<FramebufferPass>& p_b) {
+				if (p_a.size() != p_b.size()) {
+					return p_a.size() < p_b.size() ? -1 : 1;
+				}
+
+				for (uint32_t i = 0; i < p_a.size(); i++) {
+					int cmp = _compare_pass(p_a[i], p_b[i]);
+					if (cmp != 0) {
+						return cmp;
+					}
+				}
+
+				return 0;
+			}
+
+			static int _compare_attachment_vector(const Util::SmallVector<AttachmentFormat>& p_a, const Util::SmallVector<AttachmentFormat>& p_b) {
+				if (p_a.size() != p_b.size()) {
+					return p_a.size() < p_b.size() ? -1 : 1;
+				}
+
+				for (uint32_t i = 0; i < p_a.size(); i++) {
+					int cmp = _compare_attachment(p_a[i], p_b[i]);
+					if (cmp != 0) {
+						return cmp;
+					}
+				}
+
+				return 0;
+			}
+
 			bool operator<(const FramebufferFormatKey& p_key) const {
-				if (vrs_texel_size != p_key.vrs_texel_size) {
-					if (vrs_texel_size.x != p_key.vrs_texel_size.x) {
-						return vrs_texel_size.x < p_key.vrs_texel_size.x;
-					}
-					return vrs_texel_size.y < p_key.vrs_texel_size.y;
+				int cmp = _compare_scalar(vrs_texel_size.x, p_key.vrs_texel_size.x);
+				if (cmp != 0) {
+					return cmp < 0;
 				}
 
-				if (vrs_attachment != p_key.vrs_attachment) {
-					return vrs_attachment < p_key.vrs_attachment;
+				cmp = _compare_scalar(vrs_texel_size.y, p_key.vrs_texel_size.y);
+				if (cmp != 0) {
+					return cmp < 0;
 				}
 
-				if (vrs_method != p_key.vrs_method) {
-					return vrs_method < p_key.vrs_method;
+				cmp = _compare_scalar(vrs_attachment, p_key.vrs_attachment);
+				if (cmp != 0) {
+					return cmp < 0;
 				}
 
-				if (view_count != p_key.view_count) {
-					return view_count < p_key.view_count;
+				cmp = _compare_scalar(vrs_method, p_key.vrs_method);
+				if (cmp != 0) {
+					return cmp < 0;
 				}
 
-				uint32_t pass_size = passes.size();
-				uint32_t key_pass_size = p_key.passes.size();
-				if (pass_size != key_pass_size) {
-					return pass_size < key_pass_size;
-				}
-				const FramebufferPass* pass_ptr = passes.data();
-				const FramebufferPass* key_pass_ptr = p_key.passes.data();
-
-				for (uint32_t i = 0; i < pass_size; i++) {
-					{ // Compare color attachments.
-						uint32_t attachment_size = pass_ptr[i].color_attachments.size();
-						uint32_t key_attachment_size = key_pass_ptr[i].color_attachments.size();
-						if (attachment_size != key_attachment_size) {
-							return attachment_size < key_attachment_size;
-						}
-						const int32_t* pass_attachment_ptr = pass_ptr[i].color_attachments.data();
-						const int32_t* key_pass_attachment_ptr = key_pass_ptr[i].color_attachments.data();
-
-						for (uint32_t j = 0; j < attachment_size; j++) {
-							if (pass_attachment_ptr[j] != key_pass_attachment_ptr[j]) {
-								return pass_attachment_ptr[j] < key_pass_attachment_ptr[j];
-							}
-						}
-					}
-					{ // Compare input attachments.
-						uint32_t attachment_size = pass_ptr[i].input_attachments.size();
-						uint32_t key_attachment_size = key_pass_ptr[i].input_attachments.size();
-						if (attachment_size != key_attachment_size) {
-							return attachment_size < key_attachment_size;
-						}
-						const int32_t* pass_attachment_ptr = pass_ptr[i].input_attachments.data();
-						const int32_t* key_pass_attachment_ptr = key_pass_ptr[i].input_attachments.data();
-
-						for (uint32_t j = 0; j < attachment_size; j++) {
-							if (pass_attachment_ptr[j] != key_pass_attachment_ptr[j]) {
-								return pass_attachment_ptr[j] < key_pass_attachment_ptr[j];
-							}
-						}
-					}
-					{ // Compare resolve attachments.
-						uint32_t attachment_size = pass_ptr[i].resolve_attachments.size();
-						uint32_t key_attachment_size = key_pass_ptr[i].resolve_attachments.size();
-						if (attachment_size != key_attachment_size) {
-							return attachment_size < key_attachment_size;
-						}
-						const int32_t* pass_attachment_ptr = pass_ptr[i].resolve_attachments.data();
-						const int32_t* key_pass_attachment_ptr = key_pass_ptr[i].resolve_attachments.data();
-
-						for (uint32_t j = 0; j < attachment_size; j++) {
-							if (pass_attachment_ptr[j] != key_pass_attachment_ptr[j]) {
-								return pass_attachment_ptr[j] < key_pass_attachment_ptr[j];
-							}
-						}
-					}
-					{ // Compare preserve attachments.
-						uint32_t attachment_size = pass_ptr[i].preserve_attachments.size();
-						uint32_t key_attachment_size = key_pass_ptr[i].preserve_attachments.size();
-						if (attachment_size != key_attachment_size) {
-							return attachment_size < key_attachment_size;
-						}
-						const int32_t* pass_attachment_ptr = pass_ptr[i].preserve_attachments.data();
-						const int32_t* key_pass_attachment_ptr = key_pass_ptr[i].preserve_attachments.data();
-
-						for (uint32_t j = 0; j < attachment_size; j++) {
-							if (pass_attachment_ptr[j] != key_pass_attachment_ptr[j]) {
-								return pass_attachment_ptr[j] < key_pass_attachment_ptr[j];
-							}
-						}
-					}
-					if (pass_ptr[i].depth_attachment != key_pass_ptr[i].depth_attachment) {
-						return pass_ptr[i].depth_attachment < key_pass_ptr[i].depth_attachment;
-					}
-					if (pass_ptr[i].depth_resolve_attachment != key_pass_ptr[i].depth_resolve_attachment) {
-						return pass_ptr[i].depth_resolve_attachment < key_pass_ptr[i].depth_resolve_attachment;
-					}
+				cmp = _compare_scalar(view_count, p_key.view_count);
+				if (cmp != 0) {
+					return cmp < 0;
 				}
 
-				int as = attachments.size();
-				int bs = p_key.attachments.size();
-				if (as != bs) {
-					return as < bs;
+				cmp = _compare_pass_vector(passes, p_key.passes);
+				if (cmp != 0) {
+					return cmp < 0;
 				}
 
-				const AttachmentFormat* af_a = attachments.data();
-				const AttachmentFormat* af_b = p_key.attachments.data();
-				for (int i = 0; i < as; i++) {
-					const AttachmentFormat& a = af_a[i];
-					const AttachmentFormat& b = af_b[i];
-					if (a.format != b.format) {
-						return a.format < b.format;
-					}
-					if (a.samples != b.samples) {
-						return a.samples < b.samples;
-					}
-					if (a.usage_flags != b.usage_flags) {
-						return a.usage_flags < b.usage_flags;
-					}
-					if (a.load_op != b.load_op) {
-						return a.load_op < b.load_op;
-					}
+				cmp = _compare_attachment_vector(attachments, p_key.attachments);
+				if (cmp != 0) {
+					return cmp < 0;
 				}
 
-				return false; // Equal.
+				return false;
 			}
 		};
 
