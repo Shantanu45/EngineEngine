@@ -39,6 +39,8 @@ float value_noise(float x, float y, uint32_t seed)
 	const float tx = fade(x - static_cast<float>(x0));
 	const float ty = fade(y - static_cast<float>(y0));
 
+	// Hash the four integer lattice corners and smoothly interpolate between them.
+	// This gives deterministic, continuous value noise without storing a noise table.
 	const float a = random_unit(static_cast<uint32_t>(x0), static_cast<uint32_t>(y0), seed);
 	const float b = random_unit(static_cast<uint32_t>(x1), static_cast<uint32_t>(y0), seed);
 	const float c = random_unit(static_cast<uint32_t>(x0), static_cast<uint32_t>(y1), seed);
@@ -55,6 +57,8 @@ float fractal_noise(float x, float y, const TerrainSettings& settings)
 	float norm = 0.0f;
 
 	for (uint32_t octave = 0; octave < settings.octaves; ++octave) {
+		// Each octave samples the same continuous world-space point at a higher
+		// frequency and lower amplitude. The normalized sum stays roughly [-1, 1].
 		value += value_noise(x * frequency, y * frequency, settings.seed + octave * 1013u) * amplitude;
 		norm += amplitude;
 		frequency *= settings.lacunarity;
@@ -69,6 +73,7 @@ float fractal_noise(float x, float y, const TerrainSettings& settings)
 float sample_terrain_height(const TerrainSettings& settings, float x, float z)
 {
 	const float h = fractal_noise(x, z, settings);
+	// Blend linear and cubic noise to keep broad hills while making peaks/valleys less uniform.
 	const float shaped = h * 0.75f + h * h * h * 0.25f;
 	return shaped * settings.height_scale;
 }
@@ -101,6 +106,7 @@ Rendering::Shapes::ShapeData generate_terrain_chunk_mesh(const TerrainSettings& 
 			const float h_r = sample_terrain_height(settings, world_x + step, world_z);
 			const float h_d = sample_terrain_height(settings, world_x, world_z - step);
 			const float h_u = sample_terrain_height(settings, world_x, world_z + step);
+			// Estimate the normal from neighboring height samples so lighting follows the same height field.
 			const glm::vec3 normal = glm::normalize(glm::vec3(h_l - h_r, step * 2.0f, h_d - h_u));
 
 			mesh.vertices.push_back(Rendering::Vertex{
@@ -120,6 +126,7 @@ Rendering::Shapes::ShapeData generate_terrain_chunk_mesh(const TerrainSettings& 
 			const uint32_t i1 = i0 + 1u;
 			const uint32_t i2 = i0 + verts_per_side;
 			const uint32_t i3 = i2 + 1u;
+			// Two triangles per grid cell, sharing vertices with neighboring cells/chunks.
 			mesh.indices.insert(mesh.indices.end(), { i0, i2, i1, i1, i2, i3 });
 		}
 	}

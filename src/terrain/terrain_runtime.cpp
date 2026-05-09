@@ -18,6 +18,7 @@ namespace {
 
 uint64_t chunk_key(int32_t x, int32_t z)
 {
+	// Pack signed chunk coordinates through their uint32_t representation so the key is stable and reversible.
 	const auto ux = static_cast<uint32_t>(x);
 	const auto uz = static_cast<uint32_t>(z);
 	return (static_cast<uint64_t>(ux) << 32u) | static_cast<uint64_t>(uz);
@@ -140,6 +141,8 @@ void TerrainRuntime::render_frame(double frame_time, double elapsed_time)
 		const float chunk_window_diameter = static_cast<float>(padded_radius * 2 + 1) * terrain_settings.chunk_size;
 		const float width = std::max(chunk_window_diameter, water_min_diameter);
 		const float depth = width * water_depth_scale;
+		// The water plane is a camera-relative rectangle, not a world ocean mesh.
+		// Biasing it forward keeps the visible region covered without requiring huge terrain-sized water geometry.
 		const glm::vec3 water_center = camera_position + forward * depth * water_forward_bias;
 		const float display_water_level = water_level + 0.02f;
 		const float yaw = std::atan2(forward.x, forward.z);
@@ -207,6 +210,8 @@ void TerrainRuntime::rebuild_chunk_window(bool discard_existing)
 	std::vector<TerrainChunk> rebuilt_chunks;
 	const int32_t radius = std::clamp(chunk_radius, 0, 8);
 
+	// Build a square window centered on chunk_center. Reusing chunk_cache avoids regenerating/uploading
+	// chunks that remain visible as the camera crosses chunk boundaries.
 	for (int32_t z = -radius; z <= radius; ++z) {
 		for (int32_t x = -radius; x <= radius; ++x) {
 			const int32_t chunk_x = chunk_center.x + x;
@@ -227,6 +232,8 @@ void TerrainRuntime::rebuild_chunk_window(bool discard_existing)
 	}
 
 	pending_chunks = std::move(rebuilt_chunks);
+	// Defer making the rebuilt chunk list visible for a frame so uploads and descriptor updates
+	// have a chance to settle before render_frame starts submitting the new meshes.
 	pending_chunks_ready = true;
 	pending_chunk_frames_left = 1;
 }
@@ -298,6 +305,8 @@ RID TerrainRuntime::create_chunk_color_texture(int32_t chunk_x, int32_t chunk_z)
 			const glm::vec3 normal = glm::normalize(glm::vec3(h_l - h_r, normal_sample_step * 2.0f, h_d - h_u));
 			const float slope = 1.0f - glm::clamp(normal.y, 0.0f, 1.0f);
 
+			// Derive an albedo palette from height and slope: low/flat areas are greener,
+			// steep areas become rockier, and high elevations pick up snow.
 			const float height01 = glm::clamp((h / glm::max(terrain_settings.height_scale, 0.001f) + 1.0f) * 0.5f, 0.0f, 1.0f);
 			glm::vec3 color = glm::mix(low_grass, grass, glm::smoothstep(0.18f, 0.42f, height01));
 			color = glm::mix(color, dry_grass, glm::smoothstep(0.45f, 0.68f, height01) * 0.35f);
@@ -382,6 +391,7 @@ void TerrainRuntime::prune_chunk_cache()
 		const glm::ivec2 coord = decode_chunk_key(it->first);
 		const glm::ivec2 delta = glm::abs(coord - chunk_center);
 		if (delta.x > keep_radius || delta.y > keep_radius) {
+			// Mesh destruction is delayed because the previous visible chunk list may still be referenced by GPU work.
 			queue_mesh_destroy(it->second.mesh);
 			it = chunk_cache.erase(it);
 		}
@@ -423,6 +433,7 @@ void TerrainRuntime::process_deferred_requests()
 			--pending_chunk_frames_left;
 			return;
 		}
+		// Swap the entire visible chunk list at once so render_frame never sees a partially rebuilt window.
 		chunks = std::move(pending_chunks);
 		pending_chunks.clear();
 		pending_chunks_ready = false;
