@@ -5,6 +5,7 @@
 #include "rendering/light.h"
 #include "rendering/frame_data.h"
 #include "rendering/mesh_category.h"
+#include "rendering/render_settings.h"
 #include "math/math_common.h"
 
 #include <glm/glm.hpp>
@@ -32,6 +33,7 @@ struct SceneView {
     Util::SmallVector<Light>        lights;
     Size2i                    extent{};
     bool                      use_pbr_lighting = false;
+    MaterialDebugView         material_debug_view = MaterialDebugView::Lit;
 };
 
 struct IRenderer {

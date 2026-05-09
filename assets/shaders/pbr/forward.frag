@@ -16,7 +16,7 @@ layout(set = 0, binding = 0) uniform FrameUBO {
     float time;
     uint dirShadowIdx;
     uint ptShadowIdx;
-    float _pad;
+    uint materialDebugView;
 } frame;
 
 layout(set = 1, binding = 0) uniform texture2D shadowMap;
@@ -48,6 +48,16 @@ layout(set = 2, binding = 6) uniform texture2D occlusion_tex;
 #include "../lib/shadows.glsl"
 
 #define ALPHA_MODE_MASK 1u
+#define DEBUG_VIEW_LIT 0u
+#define DEBUG_VIEW_ALBEDO 1u
+#define DEBUG_VIEW_NORMAL 2u
+#define DEBUG_VIEW_ROUGHNESS 3u
+#define DEBUG_VIEW_METALLIC 4u
+#define DEBUG_VIEW_AO 5u
+#define DEBUG_VIEW_EMISSIVE 6u
+#define DEBUG_VIEW_SHADOW 7u
+#define DEBUG_VIEW_LIGHT_COUNT 8u
+#define DEBUG_VIEW_DEPTH 9u
 
 vec2 ParallaxMapping(vec2 texCoords, vec3 tangentViewDir) {
     const float heightScale = 0.05;
@@ -104,7 +114,47 @@ void main()
 
     float ao = texture(sampler2D(occlusion_tex, texSampler), uv).r;
     float ambientOcclusion = mix(1.0, ao, mat.material.occlusion_strength);
+    vec3 metallicRoughnessSample = texture(sampler2D(metallic_roughness, texSampler), uv).rgb;
+    float roughness = clamp(metallicRoughnessSample.g * mat.material.roughness_factor, 0.04, 1.0);
+    float metallic = clamp(metallicRoughnessSample.b * mat.material.metallic_factor, 0.0, 1.0);
+    vec3 emissive = mat.material.emissive_and_normal.xyz
+                    * vec3(texture(sampler2D(emissive_tex, texSampler), uv));
+
+    if (frame.materialDebugView == DEBUG_VIEW_ALBEDO) {
+        FragColor = vec4(baseColor.rgb, 1.0);
+        return;
+    }
+    if (frame.materialDebugView == DEBUG_VIEW_NORMAL) {
+        FragColor = vec4(normal * 0.5 + 0.5, 1.0);
+        return;
+    }
+    if (frame.materialDebugView == DEBUG_VIEW_ROUGHNESS) {
+        FragColor = vec4(vec3(roughness), 1.0);
+        return;
+    }
+    if (frame.materialDebugView == DEBUG_VIEW_METALLIC) {
+        FragColor = vec4(vec3(metallic), 1.0);
+        return;
+    }
+    if (frame.materialDebugView == DEBUG_VIEW_AO) {
+        FragColor = vec4(vec3(ambientOcclusion), 1.0);
+        return;
+    }
+    if (frame.materialDebugView == DEBUG_VIEW_EMISSIVE) {
+        FragColor = vec4(emissive, 1.0);
+        return;
+    }
+    if (frame.materialDebugView == DEBUG_VIEW_LIGHT_COUNT) {
+        FragColor = vec4(vec3(min(float(lightData.lightCount) / float(MAX_LIGHTS), 1.0)), 1.0);
+        return;
+    }
+    if (frame.materialDebugView == DEBUG_VIEW_DEPTH) {
+        FragColor = vec4(vec3(gl_FragCoord.z), 1.0);
+        return;
+    }
+
     vec3 color = baseColor.rgb * 0.05 * ambientOcclusion;
+    float minShadow = 1.0;
 
     for (uint i = 0u; i < lightData.lightCount; i++) {
         float shadow = 1.0;
@@ -119,13 +169,17 @@ void main()
                 normal
             );
         }
+        minShadow = min(minShadow, shadow);
         color += shadow * CalcLight(
             lightData.lights[i], mat.material,
             diffuse_tex, metallic_roughness, texSampler,
             uv, normal, FragPos, viewDir);
     }
 
-    vec3 emissive = mat.material.emissive_and_normal.xyz
-                    * vec3(texture(sampler2D(emissive_tex, texSampler), uv));
+    if (frame.materialDebugView == DEBUG_VIEW_SHADOW) {
+        FragColor = vec4(vec3(minShadow), 1.0);
+        return;
+    }
+
     FragColor = vec4(color + emissive, 1.0);
 }

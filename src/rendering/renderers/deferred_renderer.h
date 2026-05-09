@@ -17,6 +17,8 @@ struct offscreen_pass_resource
 	FrameGraphResource position_resource;
 	FrameGraphResource albedo_resource;
 	FrameGraphResource normal_resource;
+	FrameGraphResource material_resource;
+	FrameGraphResource emissive_resource;
 	FrameGraphResource depth_resource;
 };
 

@@ -58,6 +58,7 @@ RenderSceneExtractResult RenderSceneExtractor::extract(RenderSceneExtractInput i
 	view.elapsed     = input.elapsed;
 	view.extent      = input.extent;
 	view.use_pbr_lighting = input.settings.use_pbr_lighting;
+	view.material_debug_view = input.settings.material_debug_view;
 	view.skybox_mesh = input.settings.draw_skybox ? input.skybox_mesh : Rendering::INVALID_MESH;
 	view.grid_mesh   = input.settings.draw_grid ? input.grid_mesh : Rendering::INVALID_MESH;
 

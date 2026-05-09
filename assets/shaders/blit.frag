@@ -7,7 +7,7 @@ layout(binding = 0) uniform sampler2D src_rt;
 layout(binding = 1) uniform sampler2D ui_rt;
 
 layout(std140, binding = 2) uniform BlitSettings {
-    vec4 toneMapping; // x=exposure, y=tone mapper: 0 none, 1 Reinhard, 2 ACES
+    vec4 toneMapping; // x=exposure, y=tone mapper: 0 none, 1 Reinhard, 2 ACES, z=material debug view
 } settings;
 
 vec4 linearToSRGB(vec4 c) {
@@ -45,7 +45,8 @@ void main()
     vec4 scene = texture(src_rt, uv);      // linear
 
     float exposure = max(settings.toneMapping.x, 0.0);
-    scene.rgb = toneMap(scene.rgb * exposure);
+    bool materialDebug = int(settings.toneMapping.z + 0.5) != 0;
+    scene.rgb = materialDebug ? clamp(scene.rgb, 0.0, 1.0) : toneMap(scene.rgb * exposure);
     scene = linearToSRGB(scene);
 
     color = ui + scene * (1.0 - ui.a);

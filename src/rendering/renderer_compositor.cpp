@@ -15,9 +15,9 @@ namespace Rendering
 			.tone_mapping = glm::vec4(
 				p_render_targets[0].exposure,
 				static_cast<float>(p_render_targets[0].tone_mapper),
-				0.0f,
+				static_cast<float>(p_render_targets[0].material_debug_view),
 				0.0f),
-		});
+			});
 
 		rendering_device->screen_prepare_for_drawing(screen);
 		rendering_device->begin_for_screen(screen);

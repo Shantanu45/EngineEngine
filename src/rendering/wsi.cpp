@@ -98,6 +98,7 @@ namespace Rendering
             blit.ui = p_imgui_ui_tex;
             blit.exposure = render_settings.exposure;
             blit.tone_mapper = static_cast<uint32_t>(render_settings.tone_mapper);
+            blit.material_debug_view = static_cast<uint32_t>(render_settings.material_debug_view);
             rd->blit_render_targets_to_screen(&blit);
         }
     }

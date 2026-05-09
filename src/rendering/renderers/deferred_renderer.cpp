@@ -25,6 +25,7 @@ namespace Rendering
 			frame.time                     = static_cast<float>(view.elapsed);
 			frame.directional_shadow_index = 0;
 			frame.point_shadow_index       = 0;
+			frame.material_debug_view      = static_cast<uint32_t>(view.material_debug_view);
 			frame_ubo.upload(device, frame);
 		}
 		{
@@ -92,17 +93,31 @@ namespace Rendering
 					data.normal_resource = builder.write(data.normal_resource, TEXTURE_WRITE_FLAGS::WRITE_COLOR);
 					data.position_resource = builder.create<FrameGraphTexture>("position texture", { tf_data, RD::TextureView(), "position texture" });
 					data.position_resource = builder.write(data.position_resource, TEXTURE_WRITE_FLAGS::WRITE_COLOR);
+					data.material_resource = builder.create<FrameGraphTexture>("material texture", { tf_color, RD::TextureView(), "material texture" });
+					data.material_resource = builder.write(data.material_resource, TEXTURE_WRITE_FLAGS::WRITE_COLOR);
+					data.emissive_resource = builder.create<FrameGraphTexture>("emissive texture", { tf_color, RD::TextureView(), "emissive texture" });
+					data.emissive_resource = builder.write(data.emissive_resource, TEXTURE_WRITE_FLAGS::WRITE_COLOR);
 
 					// framebuffer setup
 					data.framebuffer_resource = builder.create<FrameGraphFramebuffer>(
 						"offscreen framebuffer",
 						{
-							.build = [&fg, albedo = data.albedo_resource, normal = data.normal_resource, position = data.position_resource, depth_id = data.depth_resource](RenderContext& rc) -> RID {
+							.build = [&fg, albedo = data.albedo_resource, normal = data.normal_resource,
+							          position = data.position_resource, material = data.material_resource,
+							          emissive = data.emissive_resource, depth_id = data.depth_resource](RenderContext& rc) -> RID {
 								auto& position_tex = fg.get_resource<FrameGraphTexture>(position);
 								auto& normal_tex = fg.get_resource<FrameGraphTexture>(normal);
 								auto& albedo_tex = fg.get_resource<FrameGraphTexture>(albedo);
+								auto& material_tex = fg.get_resource<FrameGraphTexture>(material);
+								auto& emissive_tex = fg.get_resource<FrameGraphTexture>(emissive);
 								auto& depth_tex = fg.get_resource<FrameGraphTexture>(depth_id);
-								return rc.device->framebuffer_create({ position_tex.texture_rid, normal_tex.texture_rid, albedo_tex.texture_rid, depth_tex.texture_rid });
+								return rc.device->framebuffer_create({
+									position_tex.texture_rid,
+									normal_tex.texture_rid,
+									albedo_tex.texture_rid,
+									material_tex.texture_rid,
+									emissive_tex.texture_rid,
+									depth_tex.texture_rid });
 							},
 							.name = "offscreen framebuffer"
 						});
@@ -119,12 +134,14 @@ namespace Rendering
 					uint32_t h = rc.device->screen_get_height();
 
 					GPU_SCOPE(cmd, "Offscreen Pass", Color(1.0f, 0.0f, 0.0f, 1.0f));
-					std::array<RDD::RenderPassClearValue, 4> clear_values;
+					std::array<RDD::RenderPassClearValue, 6> clear_values;
 					clear_values[0].color = Color(); // position
 					clear_values[1].color = Color(); // normal
 					clear_values[2].color = Color(); // albedo
-					clear_values[3].depth = 1.0f;
-					clear_values[3].stencil = 0;
+					clear_values[3].color = Color(); // material
+					clear_values[4].color = Color(); // emissive
+					clear_values[5].depth = 1.0f;
+					clear_values[5].stencil = 0;
 
 					RID frame_buffer = resources.get<FrameGraphFramebuffer>(data.framebuffer_resource).framebuffer_rid;
 
@@ -162,6 +179,8 @@ namespace Rendering
 					builder.read(offscreen_resource.position_resource, TEXTURE_READ_FLAGS::READ_COLOR);
 					builder.read(offscreen_resource.normal_resource, TEXTURE_READ_FLAGS::READ_COLOR);
 					builder.read(offscreen_resource.albedo_resource, TEXTURE_READ_FLAGS::READ_COLOR);
+					builder.read(offscreen_resource.material_resource, TEXTURE_READ_FLAGS::READ_COLOR);
+					builder.read(offscreen_resource.emissive_resource, TEXTURE_READ_FLAGS::READ_COLOR);
 
 					data.scene = builder.write(data.scene, TEXTURE_WRITE_FLAGS::WRITE_COLOR);
 					data.depth = builder.write(data.depth, TEXTURE_WRITE_FLAGS::WRITE_DEPTH);
@@ -173,16 +192,22 @@ namespace Rendering
 										shader_rid = deferred_pipeline.shader_rid,
 										albedo = offscreen_resource.albedo_resource,
 										position = offscreen_resource.position_resource,
-										normal = offscreen_resource.normal_resource]
+										normal = offscreen_resource.normal_resource,
+										material = offscreen_resource.material_resource,
+										emissive = offscreen_resource.emissive_resource]
 									 (RenderContext& rc) -> RID {
 								auto& albedo_tex = fg.get_resource<FrameGraphTexture>(albedo);
 								auto& position_tex = fg.get_resource<FrameGraphTexture>(position);
 								auto& normal_tex = fg.get_resource<FrameGraphTexture>(normal);
+								auto& material_tex = fg.get_resource<FrameGraphTexture>(material);
+								auto& emissive_tex = fg.get_resource<FrameGraphTexture>(emissive);
 
 								return UniformSetBuilder{}
 									.add_texture_only(0, albedo_tex.texture_rid)
 									.add_texture_only(1, position_tex.texture_rid)
 									.add_texture_only(2, normal_tex.texture_rid)
+									.add_texture_only(3, material_tex.texture_rid)
+									.add_texture_only(4, emissive_tex.texture_rid)
 									.build(rc.device, shader_rid, 1);
 							},
 							.name = "offscreen uniform set"
@@ -258,7 +283,7 @@ namespace Rendering
 		depth_att.usage_flags = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 
 		auto main_fb_format = RD::get_singleton()->framebuffer_format_create({ position_att,
-			normal_att, albedo_att, depth_att });
+			normal_att, albedo_att, albedo_att, albedo_att, depth_att });
 
 		RD::PipelineDepthStencilState depth_state;
 		depth_state.enable_depth_test = true;
@@ -270,7 +295,7 @@ namespace Rendering
 				"offscreen_shader")
 			.set_vertex_format(vertex_format)
 			.set_depth_stencil_state(depth_state)
-			.set_blend_state(RDC::PipelineColorBlendState::create_disabled(3))
+			.set_blend_state(RDC::PipelineColorBlendState::create_disabled(5))
 			.build(main_fb_format);
 
 		sampler = RIDHandle(dev->sampler_create({}));

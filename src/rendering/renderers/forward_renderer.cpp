@@ -326,6 +326,7 @@ void ForwardRenderer::setup_passes(FrameGraph& fg, FrameGraphBlackboard& bb,
         frame.time                     = static_cast<float>(view.elapsed);
         frame.directional_shadow_index = dir_idx;
         frame.point_shadow_index       = pt_idx;
+        frame.material_debug_view      = static_cast<uint32_t>(view.material_debug_view);
         frame_ubo.upload(device, frame);
     }
 

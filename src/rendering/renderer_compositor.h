@@ -4,6 +4,8 @@
 #include "uniform_buffer.h"
 #include "util/small_vector.h"
 
+#include <glm/glm.hpp>
+
 namespace Rendering
 {
 	struct BlitSettingsUBO {
@@ -15,6 +17,7 @@ namespace Rendering
 		RID ui;
 		float exposure = 1.0f;
 		uint32_t tone_mapper = 2;
+		uint32_t material_debug_view = 0;
 		Rect2 src_rect = Rect2(0.0, 0.0, 1.0, 1.0);
 		Rect2i dst_rect;
 

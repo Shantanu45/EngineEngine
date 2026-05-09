@@ -6,6 +6,19 @@ enum class ToneMapper : int {
     ACES = 2,
 };
 
+enum class MaterialDebugView : int {
+    Lit = 0,
+    Albedo = 1,
+    Normal = 2,
+    Roughness = 3,
+    Metallic = 4,
+    AmbientOcclusion = 5,
+    Emissive = 6,
+    ShadowFactor = 7,
+    LightCount = 8,
+    Depth = 9,
+};
+
 struct RenderSettings {
     bool frustum_culling = true;
     bool wireframe       = false;
@@ -17,4 +30,5 @@ struct RenderSettings {
     bool draw_debug_aabbs = false;
     float exposure = 1.0f;
     ToneMapper tone_mapper = ToneMapper::ACES;
+    MaterialDebugView material_debug_view = MaterialDebugView::Lit;
 };

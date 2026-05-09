@@ -15,7 +15,7 @@ struct alignas(16) FrameData_UBO {
     float      time;
     uint32_t   directional_shadow_index; // index into ShadowBuffer_UBO
     uint32_t   point_shadow_index;       // index into ShadowBuffer_UBO
-    float      _pad;
+    uint32_t   material_debug_view;
 };
 
 struct alignas(16) ObjectData_UBO {
