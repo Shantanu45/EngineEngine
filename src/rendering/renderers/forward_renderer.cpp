@@ -10,6 +10,9 @@
 #include "util/profiler.h"
 #include "util/small_vector.h"
 
+#include <iterator>
+#include <utility>
+
 namespace Rendering {
 
 void ForwardRenderer::initialize(WSI* wsi, RenderingDevice* dev, RID cubemap) {
@@ -249,6 +252,7 @@ ShadowBuffer_UBO ForwardRenderer::build_shadow_buffer(const Util::SmallVector<Li
 
 std::vector<Drawable> ForwardRenderer::build_shadow_drawables(const SceneView& view) const {
     std::vector<Drawable> out;
+    out.reserve(view.instances.size());
     for (const auto& inst : view.instances) {
         if (inst.category != MeshCategory::Opaque) continue;
         out.push_back(Drawable::make(
@@ -258,11 +262,13 @@ std::vector<Drawable> ForwardRenderer::build_shadow_drawables(const SceneView& v
             inst.shadow_material_sets
         ));
     }
+    sort_drawables_for_state_reuse(out);
     return out;
 }
 
 std::vector<Drawable> ForwardRenderer::build_point_shadow_drawables(const SceneView& view) const {
     std::vector<Drawable> out;
+    out.reserve(view.instances.size());
     for (const auto& inst : view.instances) {
         if (inst.category != MeshCategory::Opaque) continue;
         out.push_back(Drawable::make(
@@ -272,11 +278,18 @@ std::vector<Drawable> ForwardRenderer::build_point_shadow_drawables(const SceneV
             inst.point_shadow_material_sets
         ));
     }
+    sort_drawables_for_state_reuse(out);
     return out;
 }
 
 std::vector<Drawable> ForwardRenderer::build_main_drawables(const SceneView& view) const {
     std::vector<Drawable> out;
+    out.reserve(view.instances.size() + 2);
+    std::vector<Drawable> opaque_drawables;
+    opaque_drawables.reserve(view.instances.size());
+    std::vector<Drawable> ordered_non_opaque_drawables;
+    ordered_non_opaque_drawables.reserve(view.instances.size());
+
     glm::mat4 identity = glm::mat4(1.0f);
 
     if (view.skybox_mesh != INVALID_MESH)
@@ -297,13 +310,26 @@ std::vector<Drawable> ForwardRenderer::build_main_drawables(const SceneView& vie
         RID      set0 = opaque
             ? (view.use_pbr_lighting ? (RID)uniform_set_0_pbr : (RID)uniform_set_0)
             : (RID)uniform_set_0_light;
-        out.push_back(Drawable::make(
+        auto drawable = Drawable::make(
             p, inst.mesh,
             PushConstantData::from(ObjectData_UBO{ inst.model, inst.normal_matrix }),
             { { set0, 0 } },
             inst.material_sets
-        ));
+        );
+        if (opaque) {
+            opaque_drawables.push_back(std::move(drawable));
+        } else {
+            ordered_non_opaque_drawables.push_back(std::move(drawable));
+        }
     }
+
+    sort_drawables_for_state_reuse(opaque_drawables);
+    out.insert(out.end(),
+               std::make_move_iterator(opaque_drawables.begin()),
+               std::make_move_iterator(opaque_drawables.end()));
+    out.insert(out.end(),
+               std::make_move_iterator(ordered_non_opaque_drawables.begin()),
+               std::make_move_iterator(ordered_non_opaque_drawables.end()));
 
     return out;
 }

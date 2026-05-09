@@ -45,6 +45,7 @@ namespace Rendering
 	{
 		// Build drawables from instances — only opaque geometry goes into the G-buffer.
 		std::vector<Drawable> drawables;
+		drawables.reserve(view.instances.size());
 		for (const auto& inst : view.instances) {
 			if (inst.category != MeshCategory::Opaque) continue;
 			drawables.push_back(Drawable::make(
@@ -54,6 +55,7 @@ namespace Rendering
 				inst.material_sets
 			));
 		}
+		sort_drawables_for_state_reuse(drawables);
 
 		auto pipeline_rid = offscreen_pipeline.pipeline_rid;
 

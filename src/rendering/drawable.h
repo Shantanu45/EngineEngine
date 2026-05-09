@@ -1,6 +1,8 @@
 #pragma once
+#include <algorithm>
 #include <array>
 #include <cstring>
+#include <cstdint>
 #include <vector>
 #include "rendering/rendering_device.h"
 #include "rendering/mesh_storage.h"
@@ -62,6 +64,40 @@ namespace Rendering
 			uniform_sets.push_back(uniform_set);
 		}
 	};
+
+	inline uint64_t drawable_rid_sort_key(RID rid) {
+		return rid.is_valid() ? rid.get_id() : 0;
+	}
+
+	inline uint64_t drawable_first_material_sort_key(const Drawable& drawable) {
+		return drawable.material_sets.empty() ? 0 : drawable_rid_sort_key(drawable.material_sets[0]);
+	}
+
+	inline uint64_t drawable_first_uniform_sort_key(const Drawable& drawable) {
+		return drawable.uniform_sets.empty() ? 0 : drawable_rid_sort_key(drawable.uniform_sets[0].set);
+	}
+
+	inline void sort_drawables_for_state_reuse(std::vector<Drawable>& drawables) {
+		std::sort(drawables.begin(), drawables.end(), [](const Drawable& a, const Drawable& b) {
+			const uint64_t a_pipeline = drawable_rid_sort_key(a.pipeline.pipeline_rid);
+			const uint64_t b_pipeline = drawable_rid_sort_key(b.pipeline.pipeline_rid);
+			if (a_pipeline != b_pipeline) return a_pipeline < b_pipeline;
+
+			const uint64_t a_shader = drawable_rid_sort_key(a.pipeline.shader_rid);
+			const uint64_t b_shader = drawable_rid_sort_key(b.pipeline.shader_rid);
+			if (a_shader != b_shader) return a_shader < b_shader;
+
+			const uint64_t a_uniform = drawable_first_uniform_sort_key(a);
+			const uint64_t b_uniform = drawable_first_uniform_sort_key(b);
+			if (a_uniform != b_uniform) return a_uniform < b_uniform;
+
+			const uint64_t a_material = drawable_first_material_sort_key(a);
+			const uint64_t b_material = drawable_first_material_sort_key(b);
+			if (a_material != b_material) return a_material < b_material;
+
+			return a.mesh < b.mesh;
+		});
+	}
 
 	// ----------------------------------------------------------------
 	// Submit
