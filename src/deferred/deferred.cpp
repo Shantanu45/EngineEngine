@@ -10,7 +10,7 @@
 #include "rendering/render_passes/common.h"
 #include "input/input.h"
 #include "util/timer.h"
-#include "tutorial/scene/components.h"
+#include "rendering/scene/components.h"
 #include "entt/entt.hpp"
 #include "util/small_vector.h"
 
