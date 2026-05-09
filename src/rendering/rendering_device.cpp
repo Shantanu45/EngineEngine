@@ -10,14 +10,12 @@
 #include "application/service_locator.h"
 #include <set>
 #include "math\helpers.h"
- //TODO: add abstraction for imgui
 #include "vulkan/imgui_vulkan_device.h"
 #include "util/timer.h"
 #include "util/small_vector.h"
 #include "cache.h"
 
 #include <algorithm>
-
 
 namespace Rendering
 {
