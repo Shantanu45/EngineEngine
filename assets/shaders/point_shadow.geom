@@ -12,7 +12,9 @@ layout(set = 0, binding = 0) uniform FrameData {
     float time;
     uint dirShadowIdx;
     uint ptShadowIdx;
-    float _pad;
+    uint materialDebugView;
+    float _pad0;
+    vec4 shadowBias;
 } frame;
 
 layout(set = 0, binding = 1) uniform ShadowBuffer {

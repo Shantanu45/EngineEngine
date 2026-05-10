@@ -17,6 +17,8 @@ enum class MaterialDebugView : int {
     ShadowFactor = 7,
     LightCount = 8,
     Depth = 9,
+    DirectionalShadowMap = 10,
+    LightSpaceCoords = 11,
 };
 
 struct RenderSettings {
@@ -29,6 +31,10 @@ struct RenderSettings {
     bool show_timing_graphs = false;
     bool draw_debug_aabbs = false;
     float exposure = 1.0f;
+    float directional_shadow_bias_scale = 0.002f;
+    float directional_shadow_bias_min = 0.0005f;
+    float point_shadow_bias_max = 0.005f;
+    float point_shadow_bias_min = 0.0001f;
     ToneMapper tone_mapper = ToneMapper::ACES;
     MaterialDebugView material_debug_view = MaterialDebugView::Lit;
 };

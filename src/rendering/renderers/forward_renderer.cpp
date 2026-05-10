@@ -282,6 +282,7 @@ void ForwardRenderer::setup_passes(FrameGraph& fg, FrameGraphBlackboard& bb,
         frame.directional_shadow_index = shadow_build.directional_shadow_index;
         frame.point_shadow_index       = shadow_build.point_shadow_index;
         frame.material_debug_view      = static_cast<uint32_t>(view.material_debug_view);
+        frame.shadow_bias              = view.shadow_bias;
         frame_ubo.upload(device, frame);
     }
 

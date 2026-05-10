@@ -17,6 +17,8 @@ layout(set = 0, binding = 0) uniform FrameUBO {
     uint dirShadowIdx;
     uint ptShadowIdx;
     uint materialDebugView;
+    float _pad0;
+    vec4 shadowBias;
 } frame;
 
 layout(set = 1, binding = 0) uniform texture2D shadowMap;
@@ -58,6 +60,8 @@ layout(set = 2, binding = 6) uniform texture2D occlusion_tex;
 #define DEBUG_VIEW_SHADOW 7u
 #define DEBUG_VIEW_LIGHT_COUNT 8u
 #define DEBUG_VIEW_DEPTH 9u
+#define DEBUG_VIEW_DIR_SHADOW_MAP 10u
+#define DEBUG_VIEW_LIGHT_SPACE_COORDS 11u
 
 vec2 ParallaxMapping(vec2 texCoords, vec3 tangentViewDir) {
     const float heightScale = 0.05;
@@ -152,6 +156,20 @@ void main()
         FragColor = vec4(vec3(gl_FragCoord.z), 1.0);
         return;
     }
+    vec3 shadowProj = fragPosLightSpace.xyz / fragPosLightSpace.w;
+    shadowProj.xy = shadowProj.xy * 0.5 + 0.5;
+    if (frame.materialDebugView == DEBUG_VIEW_DIR_SHADOW_MAP) {
+        if (any(lessThan(shadowProj.xy, vec2(0.0))) || any(greaterThan(shadowProj.xy, vec2(1.0)))) {
+            FragColor = vec4(1.0, 0.0, 1.0, 1.0);
+        } else {
+            FragColor = vec4(vec3(texture(sampler2D(shadowMap, texSampler), shadowProj.xy).r), 1.0);
+        }
+        return;
+    }
+    if (frame.materialDebugView == DEBUG_VIEW_LIGHT_SPACE_COORDS) {
+        FragColor = vec4(clamp(shadowProj, 0.0, 1.0), 1.0);
+        return;
+    }
 
     vec3 color = baseColor.rgb * 0.05 * ambientOcclusion;
     float minShadow = 1.0;
@@ -160,13 +178,15 @@ void main()
         float shadow = 1.0;
         if (lightData.lights[i].type == LIGHT_DIRECTIONAL) {
             vec3 ld = normalize(-vec3(lightData.lights[i].direction));
-            shadow = shadow_factor(fragPosLightSpace, normal, ld);
+            shadow = shadow_factor(fragPosLightSpace, normal, ld, frame.shadowBias.x, frame.shadowBias.y);
         } else if (lightData.lights[i].type == LIGHT_POINT) {
             shadow = sample_point_shadow(
                 FragPos,
                 lightData.lights[i].position.xyz,
                 lightData.lights[i].position.w,
-                normal
+                normal,
+                frame.shadowBias.z,
+                frame.shadowBias.w
             );
         }
         minShadow = min(minShadow, shadow);

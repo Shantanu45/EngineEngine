@@ -16,6 +16,8 @@ struct alignas(16) FrameData_UBO {
     uint32_t   directional_shadow_index; // index into ShadowBuffer_UBO
     uint32_t   point_shadow_index;       // index into ShadowBuffer_UBO
     uint32_t   material_debug_view;
+    float      _pad0 = 0.0f;
+    glm::vec4  shadow_bias = glm::vec4(0.002f, 0.0005f, 0.005f, 0.0001f);
 };
 
 struct alignas(16) ObjectData_UBO {
