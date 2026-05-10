@@ -61,12 +61,14 @@ namespace Rendering {
 		                          const SceneView& view, MeshStorage& storage);
 		void setup_deferred_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
 		                         const SceneView& view, MeshStorage& storage);
+		void setup_overlay_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
+		                        const SceneView& view, MeshStorage& storage);
 
 		void create_offscreen_pipeline(WSI* wsi, RenderingDevice* device);
-		void create_deferred_pipeline(WSI* wsi, RenderingDevice* device);
+		void create_deferred_pipeline(WSI* wsi, RenderingDevice* device, RID cubemap);
 
 	private:
-		std::vector<Drawable> build_main_drawables(const SceneView& view) const;
+		std::vector<Drawable> build_overlay_drawables(const SceneView& view) const;
 
 		RenderingDevice* device = nullptr;
 		DebugRenderer debug_renderer;

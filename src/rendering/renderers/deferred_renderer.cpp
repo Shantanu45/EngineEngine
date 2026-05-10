@@ -8,13 +8,16 @@
 #include "math/rect2.h"
 #include "util/small_vector.h"
 
+#include <iterator>
+
 namespace Rendering
 {
 	void DeferredRenderer::initialize(WSI* wsi, RenderingDevice* dev, RID cubemap)
 	{
 		device = dev;
 		create_offscreen_pipeline(wsi, dev);
-		create_deferred_pipeline(wsi, dev);
+		create_deferred_pipeline(wsi, dev, cubemap);
+		debug_renderer.initialize(dev);
 	}
 
 	void DeferredRenderer::shutdown()
@@ -75,6 +78,49 @@ namespace Rendering
 		add_shadow_pass(fg, bb, { 2048, 2048 }, shadow_draws, storage);
 		setup_offscreen_pass(fg, bb, view, storage);
 		setup_deferred_pass(fg, bb, view, storage);
+		setup_overlay_pass(fg, bb, view, storage);
+
+		auto& deferred = bb.get<deferred_pass_resource>();
+		debug_renderer.add_pass(fg, bb, deferred.scene, deferred.depth, view.camera, view.extent);
+	}
+
+	std::vector<Drawable> DeferredRenderer::build_overlay_drawables(const SceneView& view) const
+	{
+		std::vector<Drawable> out;
+		out.reserve(view.instances.size() + 2);
+		std::vector<Drawable> visualizer_drawables;
+		visualizer_drawables.reserve(view.instances.size());
+
+		glm::mat4 identity = glm::mat4(1.0f);
+
+		if (view.skybox_mesh != INVALID_MESH)
+			out.push_back(Drawable::make(pipeline_skybox, view.skybox_mesh,
+				PushConstantData::from(ObjectData_UBO{ identity, identity }),
+				{ { (RID)uniform_set_skybox, 0 } }));
+
+		if (view.grid_mesh != INVALID_MESH)
+			out.push_back(Drawable::make(pipeline_grid, view.grid_mesh,
+				PushConstantData::from(ObjectData_UBO{ identity, glm::transpose(glm::inverse(identity)) }),
+				{ { (RID)uniform_set_0_light, 0 } }));
+
+		for (const auto& inst : view.instances) {
+			if (inst.category == MeshCategory::Opaque)
+				continue;
+
+			visualizer_drawables.push_back(Drawable::make(
+				pipeline_light, inst.mesh,
+				PushConstantData::from(ObjectData_UBO{ inst.model, inst.normal_matrix }),
+				{ { (RID)uniform_set_0_light, 0 } },
+				inst.material_sets
+			));
+		}
+
+		sort_drawables_for_state_reuse(visualizer_drawables);
+		out.insert(out.end(),
+			std::make_move_iterator(visualizer_drawables.begin()),
+			std::make_move_iterator(visualizer_drawables.end()));
+
+		return out;
 	}
 
 	void DeferredRenderer::setup_offscreen_pass(FrameGraph& fg, FrameGraphBlackboard& bb, const SceneView& view, MeshStorage& storage)
@@ -323,6 +369,65 @@ namespace Rendering
 				});
 	}
 
+	void DeferredRenderer::setup_overlay_pass(FrameGraph& fg, FrameGraphBlackboard& bb, const SceneView& view, MeshStorage& storage)
+	{
+		auto drawables = build_overlay_drawables(view);
+		if (drawables.empty())
+			return;
+
+		struct OverlayPassData {
+			FrameGraphResource scene;
+			FrameGraphResource depth;
+			FrameGraphResource framebuffer_resource;
+		};
+
+		fg.add_callback_pass<OverlayPassData>(
+			"Deferred Overlay Pass",
+			[&](FrameGraph::Builder& builder, OverlayPassData& data)
+			{
+				auto& deferred = bb.get<deferred_pass_resource>();
+				data.scene = builder.write(deferred.scene, TEXTURE_WRITE_FLAGS::WRITE_COLOR_LOAD);
+				data.depth = builder.write(deferred.depth, TEXTURE_WRITE_FLAGS::WRITE_DEPTH_LOAD);
+
+				deferred.scene = data.scene;
+				deferred.depth = data.depth;
+
+				data.framebuffer_resource = builder.create<FrameGraphFramebuffer>(
+					"deferred overlay framebuffer",
+					{
+						.build = [&fg, scene_id = data.scene, depth_id = data.depth](RenderContext& rc) -> RID {
+							auto& scene_tex = fg.get_resource<FrameGraphTexture>(scene_id);
+							auto& depth_tex = fg.get_resource<FrameGraphTexture>(depth_id);
+							return rc.device->framebuffer_create_load({ scene_tex.texture_rid, depth_tex.texture_rid });
+						},
+						.name = "deferred overlay framebuffer"
+					});
+				data.framebuffer_resource = builder.write(data.framebuffer_resource, FrameGraph::kFlagsIgnored);
+			},
+			[drawables = std::move(drawables), &storage, extent = view.extent](
+				const OverlayPassData& data, FrameGraphPassResources& resources, void* ctx)
+			{
+				auto& rc = *static_cast<RenderContext*>(ctx);
+				auto  cmd = rc.command_buffer;
+
+				RID frame_buffer = resources.get<FrameGraphFramebuffer>(data.framebuffer_resource).framebuffer_rid;
+
+				GPU_SCOPE(cmd, "Deferred Overlay Pass", Color(0.2f, 0.7f, 1.0f, 1.0f));
+				std::array<RDD::RenderPassClearValue, 2> clear_values;
+				clear_values[0].color = Color();
+				clear_values[1].depth = 1.0f;
+				clear_values[1].stencil = 0;
+
+				rc.device->begin_render_pass_from_frame_buffer(frame_buffer, Rect2i(0, 0, extent.x, extent.y), clear_values);
+
+				for (const auto& drawable : drawables) {
+					submit_drawable(rc, cmd, drawable, storage);
+				}
+
+				rc.wsi->end_render_pass(cmd);
+			});
+	}
+
 	void DeferredRenderer::create_offscreen_pipeline(WSI* wsi, RenderingDevice* dev)
 	{
 		auto vertex_format = wsi->get_vertex_format_by_type(VERTEX_FORMAT_VARIATIONS::DEFAULT);
@@ -426,8 +531,10 @@ namespace Rendering
 			.build(dev, pipeline_point_shadow.shader_rid, 0);
 	}
 
-	void DeferredRenderer::create_deferred_pipeline(WSI* wsi, RenderingDevice* dev)
+	void DeferredRenderer::create_deferred_pipeline(WSI* wsi, RenderingDevice* dev, RID cubemap)
 	{
+		auto vertex_format = wsi->get_vertex_format_by_type(VERTEX_FORMAT_VARIATIONS::DEFAULT);
+
 		// --- Framebuffer formats ---
 
 		RD::AttachmentFormat color_att;
@@ -453,8 +560,45 @@ namespace Rendering
 			.set_blend_state(RDC::PipelineColorBlendState::create_disabled())
 			.build(main_fb_format);
 
+		RDC::PipelineDepthStencilState ds_overlay;
+		ds_overlay.enable_depth_test      = true;
+		ds_overlay.enable_depth_write     = true;
+		ds_overlay.depth_compare_operator = RDC::COMPARE_OP_LESS;
+
+		pipeline_light = PipelineBuilder{}
+			.set_shader({ "assets://shaders/light_cube.vert",
+			              "assets://shaders/light_cube.frag" }, "deferred_light_cube_shader")
+			.set_vertex_format(vertex_format)
+			.set_depth_stencil_state(ds_overlay)
+			.build(main_fb_format);
+
+		pipeline_grid = PipelineBuilder{}
+			.set_shader({ "assets://shaders/grid.vert",
+			              "assets://shaders/grid.frag" }, "deferred_grid_shader")
+			.set_vertex_format(vertex_format)
+			.set_render_primitive(RDC::RENDER_PRIMITIVE_LINES)
+			.set_depth_stencil_state(ds_overlay)
+			.build(main_fb_format);
+
+		{
+			RDC::PipelineDepthStencilState ds_skybox;
+			ds_skybox.enable_depth_test      = true;
+			ds_skybox.enable_depth_write     = false;
+			ds_skybox.depth_compare_operator = RDC::COMPARE_OP_LESS_OR_EQUAL;
+			RDC::PipelineRasterizationState rs_skybox;
+			rs_skybox.cull_mode = RDC::POLYGON_CULL_DISABLED;
+			pipeline_skybox = PipelineBuilder{}
+				.set_shader({ "assets://shaders/skybox.vert",
+				              "assets://shaders/skybox.frag" }, "deferred_skybox_shader")
+				.set_vertex_format(vertex_format)
+				.set_depth_stencil_state(ds_skybox)
+				.set_rasterization_state(rs_skybox)
+				.build(main_fb_format);
+		}
+
 		// --- UBOs ---
 		light_ubo.create(dev, "Light UBO");
+		sampler_cube = RIDHandle(dev->sampler_create({}));
 
 		// --- Uniform sets (set 0) ---
 		uniform_set_0_deferred = UniformSetBuilder{}
@@ -465,6 +609,15 @@ namespace Rendering
 			.add_sampler(4, shadow_sampler)
 			.add_sampler(5, point_shadow_sampler)
 			.build(dev, deferred_pipeline.shader_rid, 0);
+
+		uniform_set_0_light = UniformSetBuilder{}
+			.add(frame_ubo.as_uniform(0))
+			.build(dev, pipeline_light.shader_rid, 0);
+
+		uniform_set_skybox = UniformSetBuilder{}
+			.add(frame_ubo.as_uniform(0))
+			.add_texture(1, sampler_cube, cubemap)
+			.build(dev, pipeline_skybox.shader_rid, 0);
 	}
 
 }
