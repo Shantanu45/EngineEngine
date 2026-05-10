@@ -24,6 +24,8 @@ public:
 
   template <typename T> [[nodiscard]] bool has() const;
 
+  void reset() { m_storage.clear(); }
+
 private:
   std::unordered_map<std::type_index, std::any> m_storage;
 };

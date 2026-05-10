@@ -1,4 +1,5 @@
 #include "graphviz_writer.h"
+#include "util/small_vector.h"
 #include <sstream>
 #if __cplusplus >= 202002L
 #  include <format>
@@ -299,26 +300,27 @@ Graph::Graph(Style style_) : style{std::move(style_)} {
 //
 
 void Writer::operator()(const PassNode &node,
-                        const std::vector<ResourceNode> &resourceNodes) {
+                        const Util::SmallVector<ResourceNode> &resourceNodes) {
   auto key = makeKey(node);
-  auto &vertex = graph.vertices.emplace_back(Graph::Vertex{
+  graph.vertices.emplace_back(Graph::Vertex{
     key,
     stringify(node),
     node.canExecute() ? colors.pass.executed : colors.pass.culled,
   });
+  auto &vertex = graph.vertices.back();
   for (const auto id : node.each(PassNode::Create{})) {
     vertex.cluster.emplace_back(makeKey(resourceNodes[id]));
   }
 
-  auto &edge =
-    graph.edges.emplace_back(Graph::Edge{std::move(key), colors.edge.write});
+  graph.edges.emplace_back(Graph::Edge{std::move(key), colors.edge.write});
+  auto &edge = graph.edges.back();
   for (const auto [id, _] : node.each(PassNode::Write{})) {
     edge.vertices.emplace_back(makeKey(resourceNodes[id]));
   }
 }
 
 void Writer::operator()(const ResourceNode &node, const ResourceEntry &entry,
-                        const std::vector<PassNode> &passNodes) {
+                        const Util::SmallVector<PassNode> &passNodes) {
   auto key = makeKey(node);
   graph.vertices.emplace_back(Graph::Vertex{
     key,
@@ -326,8 +328,8 @@ void Writer::operator()(const ResourceNode &node, const ResourceEntry &entry,
     entry.is_imported() ? colors.resource.imported : colors.resource.transient,
   });
 
-  auto &edge =
-    graph.edges.emplace_back(Graph::Edge{std::move(key), colors.edge.read});
+  graph.edges.emplace_back(Graph::Edge{std::move(key), colors.edge.read});
+  auto &edge = graph.edges.back();
   for (const auto &pass : passNodes) {
     if (pass.reads(node.getId())) {
       edge.vertices.emplace_back(makeKey(pass));

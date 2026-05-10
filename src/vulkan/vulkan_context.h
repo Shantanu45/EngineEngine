@@ -11,6 +11,7 @@
 #include <string>
 #include "vulkan_common.h"
 #include "util/error_list.h"
+#include "util/small_vector.h"
 #include "rendering/rendering_context_driver.h"
 #include "libassert/assert.hpp"
 #define VULKAN_DEBUG
@@ -51,7 +52,7 @@ namespace Vulkan
 		virtual void surface_destroy(SurfaceID p_surface) override;
 		virtual bool is_debug_utils_enabled() const override;
 		virtual RenderingDeviceDriver* driver_create() override;
-		virtual void set_platform_surface_extension(std::vector<const char*> ext) override { surface_extension = ext; }
+		virtual void set_platform_surface_extension(Util::SmallVector<const char*> ext) override { surface_extension = ext; }
 
 		virtual void driver_free(RenderingDeviceDriver* p_driver) override;
 
@@ -92,22 +93,22 @@ namespace Vulkan
 	protected:
 		virtual Error _create_vulkan_instance(const VkInstanceCreateInfo* p_create_info, VkInstance* r_instance);
 		virtual bool _use_validation_layers() const;
-		virtual std::vector<const char*> _get_platform_surface_extension() const { return surface_extension; }
+		virtual Util::SmallVector<const char*> _get_platform_surface_extension() const { return surface_extension; }
 	private:
 		Error _initialize_instance_extensions();
 		void _register_requested_instance_extension(const std::string& p_extension_name, bool p_required);
 		Error _initialize_instance();
 		Error _initialize_devices();
 		Error _initialize_vulkan_version();
-		Error _find_validation_layers(std::vector<const char*>& r_layer_names) const;
+		Error _find_validation_layers(Util::SmallVector<const char*>& r_layer_names) const;
 
 		static VKAPI_ATTR VkBool32 VKAPI_CALL _debug_messenger_callback(VkDebugUtilsMessageSeverityFlagBitsEXT p_message_severity, VkDebugUtilsMessageTypeFlagsEXT p_message_type, const VkDebugUtilsMessengerCallbackDataEXT* p_callback_data, void* p_user_data);
 		static VKAPI_ATTR VkBool32 VKAPI_CALL _debug_report_callback(VkDebugReportFlagsEXT p_flags, VkDebugReportObjectTypeEXT p_object_type, uint64_t p_object, size_t p_location, int32_t p_message_code, const char* p_layer_prefix, const char* p_message, void* p_user_data);
 
 	private:
-		std::vector<const char*> surface_extension;
+		Util::SmallVector<const char*> surface_extension;
 		struct DeviceQueueFamilies {
-			std::vector<VkQueueFamilyProperties> properties;
+			Util::SmallVector<VkQueueFamilyProperties> properties;
 		};
 
 		std::unordered_map<std::string, bool> requested_instance_extensions;
@@ -119,9 +120,9 @@ namespace Vulkan
 		VkDebugUtilsMessengerEXT debug_messenger = VK_NULL_HANDLE;
 		VkDebugReportCallbackEXT debug_report = VK_NULL_HANDLE;
 
-		std::vector<Device> driver_devices;
-		std::vector<VkPhysicalDevice> physical_devices;
-		std::vector<DeviceQueueFamilies> device_queue_families;
+		Util::SmallVector<Device> driver_devices;
+		Util::SmallVector<VkPhysicalDevice> physical_devices;
+		Util::SmallVector<DeviceQueueFamilies> device_queue_families;
 
 	public:
 

@@ -9,6 +9,7 @@
 #include "rendering_device_commons.h";
 #include "rendering_context_driver.h"
 #include "math/rect2i.h"
+#include "util/small_vector.h"
 
 
 namespace Rendering
@@ -77,6 +78,8 @@ namespace Rendering
 		/*****************/
 
 		virtual Error initialize(uint32_t p_device_index, uint32_t p_frame_count) = 0;
+
+		virtual Error initialize_tracy(const uint32_t p_queue_family, const uint32_t p_queue_index, CommandBufferID p_cmd_buffer) = 0;
 
 		/****************/
 		/**** MEMORY ****/
@@ -216,7 +219,7 @@ namespace Rendering
 		// you are responsible for correctly aligning the start offset for every buffer region. See API_TRAIT_TEXTURE_TRANSFER_ALIGNMENT.
 		virtual void texture_get_copyable_layout(TextureID p_texture, const TextureSubresource& p_subresource, TextureCopyableLayout* r_layout) = 0;
 		// Returns the data of a texture layer for a CPU texture that was created with TEXTURE_USAGE_CPU_READ_BIT.
-		virtual std::vector<uint8_t> texture_get_data(TextureID p_texture, uint32_t p_layer) = 0;
+		virtual Util::SmallVector<uint8_t> texture_get_data(TextureID p_texture, uint32_t p_layer) = 0;
 		virtual BitField<TextureUsageBits> texture_get_usages_supported_by_format(DataFormat p_format, bool p_cpu_readable) = 0;
 		virtual bool texture_can_make_shared_with_format(TextureID p_texture, DataFormat p_format, bool& r_raw_reinterpretation) = 0;
 
@@ -423,7 +426,7 @@ namespace Rendering
 		/**** FRAMEBUFFER ****/
 		/*********************/
 
-		virtual FramebufferID framebuffer_create(RenderPassID p_render_pass, std::span<TextureID> p_attachments, uint32_t p_width, uint32_t p_height) = 0;
+		virtual FramebufferID framebuffer_create(RenderPassID p_render_pass, std::span<TextureID> p_attachments, uint32_t p_width, uint32_t p_height, uint32_t p_layers = 1) = 0;
 		virtual void framebuffer_free(FramebufferID p_framebuffer) = 0;
 
 		/****************/
@@ -433,13 +436,13 @@ namespace Rendering
 		struct ImmutableSampler {
 			UniformType type = UNIFORM_TYPE_MAX;
 			uint32_t binding = 0xffffffff; // Binding index as specified in shader.
-			std::vector<ID> ids;
+			Util::SmallVector<ID> ids;
 		};
 
 		// Creates a Pipeline State Object (PSO) out of the shader and all the input data it needs.
 		// Immutable samplers can be embedded when creating the pipeline layout on the condition they remain valid and unchanged, so they don't need to be
 		// specified when creating uniform sets PSO resource for binding.
-		virtual ShaderID shader_create_from_container(const RenderingShaderContainer* p_shader_container, const std::vector<ImmutableSampler>& p_immutable_samplers) = 0;
+		virtual ShaderID shader_create_from_container(const RenderingShaderContainer* p_shader_container, const Util::SmallVector<ImmutableSampler>& p_immutable_samplers) = 0;
 		// Only meaningful if API_TRAIT_SHADER_CHANGE_INVALIDATION is SHADER_CHANGE_INVALIDATION_ALL_OR_NONE_ACCORDING_TO_LAYOUT_HASH.
 		virtual uint32_t shader_get_layout_hash(ShaderID p_shader) { return 0; }
 		virtual void shader_free(ShaderID p_shader) = 0;
@@ -453,10 +456,11 @@ namespace Rendering
 		struct BoundUniform {
 			UniformType type = UNIFORM_TYPE_MAX;
 			uint32_t binding = 0xffffffff; // Binding index as specified in shader.
-			std::vector<ID> ids;
+			Util::SmallVector<ID> ids;
 			// Flag to indicate  that this is an immutable sampler so it is skipped when creating uniform
 			// sets, as it would be set previously when creating the pipeline layout.
 			bool immutable_sampler = false;
+			bool is_depth = false;
 
 			_FORCE_INLINE_ bool is_dynamic() const {
 				return type == UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC || type == UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC;
@@ -522,10 +526,10 @@ namespace Rendering
 
 		// ----- CACHE -----
 
-		virtual bool pipeline_cache_create(const std::vector<uint8_t>& p_data) = 0;
+		virtual bool pipeline_cache_create(const Util::SmallVector<uint8_t>& p_data) = 0;
 		virtual void pipeline_cache_free() = 0;
 		virtual size_t pipeline_cache_query_size() = 0;
-		virtual std::vector<uint8_t> pipeline_cache_serialize() = 0;
+		virtual Util::SmallVector<uint8_t> pipeline_cache_serialize() = 0;
 
 		/*******************/
 		/**** RENDERING ****/
@@ -563,12 +567,12 @@ namespace Rendering
 		};
 
 		struct Subpass {
-			std::vector<AttachmentReference> input_references;
-			std::vector<AttachmentReference> color_references;
+			Util::SmallVector<AttachmentReference> input_references;
+			Util::SmallVector<AttachmentReference> color_references;
 			AttachmentReference depth_stencil_reference;
 			AttachmentReference depth_resolve_reference;
-			std::vector<AttachmentReference> resolve_references;
-			std::vector<uint32_t> preserve_attachments;
+			Util::SmallVector<AttachmentReference> resolve_references;
+			Util::SmallVector<uint32_t> preserve_attachments;
 			AttachmentReference fragment_shading_rate_reference;
 			Size2i fragment_shading_rate_texel_size;
 		};
@@ -728,6 +732,10 @@ namespace Rendering
 
 		virtual void command_begin_label(CommandBufferID p_cmd_buffer, const char* p_label_name, const Color& p_color) = 0;
 		virtual void command_end_label(CommandBufferID p_cmd_buffer) = 0;
+		virtual void tracy_collect(CommandBufferID p_cmd_buffer, const uint32_t p_frame_index) = 0;
+		virtual void* tracy_get_context() { return nullptr; }
+		virtual void* command_buffer_get_native(CommandBufferID p_cmd_buffer) { return nullptr; }
+
 
 		/****************/
 		/**** DEBUG *****/
@@ -825,7 +833,7 @@ namespace Rendering
 		virtual uint64_t limit_get(Limit p_limit) = 0;
 		virtual uint64_t api_trait_get(ApiTrait p_trait);
 		virtual bool has_feature(Features p_feature) = 0;
-		//virtual const MultiviewCapabilities& get_multiview_capabilities() = 0;
+		virtual const MultiviewCapabilities& get_multiview_capabilities() = 0;
 		//virtual const FragmentShadingRateCapabilities& get_fragment_shading_rate_capabilities() = 0;
 		//virtual const FragmentDensityMapCapabilities& get_fragment_density_map_capabilities() = 0;
 		//virtual std::string get_api_name() const = 0;

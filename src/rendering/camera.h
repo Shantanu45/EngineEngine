@@ -70,6 +70,9 @@ public:
 
 	void set_perspective(float p_fov_degrees, float p_aspect, float p_near, float p_far);
 
+	float get_near_clip() const;
+	float get_far_clip() const;
+
 	void set_orthographic(float p_left, float p_right, float p_bottom, float p_top,
 		float p_near, float p_far);
 
@@ -87,6 +90,7 @@ public:
 		_recalculate_on_resize = p_val;
 	}
 	CameraMode get_mode() const { return _mode; }
+	void set_move_speed(float speed) { controls.speed = speed; }
 
 	// --- Transform -----------------------------------------------------------
 
@@ -190,7 +194,7 @@ private:
 
 		void _recalculate_projection() {
 			if (_projection_type == CameraProjection::Perspective) {
-				_projection = glm::perspective(_fov, _aspect, _near, _far);
+				_projection = glm::perspectiveRH_ZO(_fov, _aspect, _near, _far);
 			}
 			else {
 				_projection = glm::ortho(_ortho_left, _ortho_right, _ortho_bottom, _ortho_top, _near, _far);

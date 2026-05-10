@@ -14,6 +14,7 @@
 #include <utility>
 #include "libassert/assert.hpp"
 #include "util/compile_time_hash.h"
+#include "util/small_vector.h"
 
 #define EE_MANAGER_REGISTER(clazz, member, event) \
 	EE_EVENT_MANAGER()->register_handler<clazz, event, &clazz::member>(this)
@@ -215,9 +216,9 @@ static inline constexpr ::EE::EventType get_type_id() { \
 
 		struct EventTypeData
 		{
-			std::vector<std::unique_ptr<Event>> queued_events;
-			std::vector<Handler> handlers;
-			std::vector<Handler> recursive_handlers;
+			Util::SmallVector<std::unique_ptr<Event>> queued_events;
+			Util::SmallVector<Handler> handlers;
+			Util::SmallVector<Handler> recursive_handlers;
 			bool enqueueing = false;
 			bool dispatching = false;
 
@@ -226,18 +227,18 @@ static inline constexpr ::EE::EventType get_type_id() { \
 
 		struct LatchEventTypeData
 		{
-			std::vector<std::unique_ptr<Event>> queued_events;
-			std::vector<LatchHandler> handlers;
-			std::vector<LatchHandler> recursive_handlers;
+			Util::SmallVector<std::unique_ptr<Event>> queued_events;
+			Util::SmallVector<LatchHandler> handlers;
+			Util::SmallVector<LatchHandler> recursive_handlers;
 			bool enqueueing = false;
 			bool dispatching = false;
 
 			void flush_recursive_handlers();
 		};
 
-		void dispatch_event(std::vector<Handler>& handlers, const Event& e);
-		void dispatch_up_events(std::vector<std::unique_ptr<Event>>& events, const LatchHandler& handler);
-		void dispatch_down_events(std::vector<std::unique_ptr<Event>>& events, const LatchHandler& handler);
+		void dispatch_event(Util::SmallVector<Handler>& handlers, const Event& e);
+		void dispatch_up_events(Util::SmallVector<std::unique_ptr<Event>>& events, const LatchHandler& handler);
+		void dispatch_down_events(Util::SmallVector<std::unique_ptr<Event>>& events, const LatchHandler& handler);
 		void dispatch_up_event(LatchEventTypeData& event_type, const Event& event);
 		void dispatch_down_event(LatchEventTypeData& event_type, const Event& event);
 

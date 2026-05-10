@@ -12,7 +12,7 @@ namespace math_helpers
     }
 
     template<typename T>
-    bool is_equal_approx(const T& a, const T& b)
+    _FORCE_INLINE_ bool is_equal_approx(const T& a, const T& b)
     {
         if constexpr (std::is_floating_point_v<T>) {
             return glm::epsilonEqual(a, b, (T)CMP_EPSILON);
@@ -24,13 +24,13 @@ namespace math_helpers
     }
 
     template<typename T>
-    bool is_finite(T val)
+    _FORCE_INLINE_ bool is_finite(T val)
     {
         return glm::all(glm::isinf(std::forward<T>(val))) || glm::all(glm::isnan(std::forward<T>(val)));
     }
 
     template<typename Vec>
-    std::string vec_to_string(const Vec& v) {
+    _FORCE_INLINE_ std::string vec_to_string(const Vec& v) {
         std::ostringstream oss;
         oss << "(";
         for (int i = 0; i < Vec::length(); ++i) {
@@ -43,11 +43,18 @@ namespace math_helpers
 
 
 	template<typename T>
-	T nearest_power_of_two(T v)
+    _FORCE_INLINE_ T nearest_power_of_two(T v)
 	{
 		T lower = glm::floorPowerOfTwo(v);
 		T upper = glm::ceilPowerOfTwo(v);
 
 		return (v - lower < upper - v) ? lower : upper;
+	}
+
+    _FORCE_INLINE_ glm::vec3 srgb_to_linear(glm::vec3 c) {
+		auto convert = [](float x) {
+			return x <= 0.04045f ? x / 12.92f : std::pow((x + 0.055f) / 1.055f, 2.4f);
+			};
+		return glm::vec3(convert(c.r), convert(c.g), convert(c.b));
 	}
 }

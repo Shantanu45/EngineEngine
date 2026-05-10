@@ -1,3 +1,16 @@
+################################################################################
+# bc7enc_lib — BC7 block encoder (subset of bc7enc_rdo, no lodepng/miniz)
+################################################################################
+add_library(bc7enc_lib STATIC
+    ${PROJECT_SOURCE_DIR}/third_party/bc7enc_rdo/bc7enc.cpp
+)
+target_include_directories(bc7enc_lib PUBLIC
+    ${PROJECT_SOURCE_DIR}/third_party/bc7enc_rdo
+)
+if(MSVC)
+    target_compile_options(bc7enc_lib PRIVATE /W0 /wd4127)
+endif()
+
 set(PROJECT_NAME rendering)
 
 file(GLOB SOURCES CONFIGURE_DEPENDS "*.cpp")
@@ -25,14 +38,38 @@ set(RP
 
 source_group("render_passes" FILES ${RP})
 
-add_library(${PROJECT_NAME} STATIC 
-${SOURCES} 
+file(GLOB RenderersCpp CONFIGURE_DEPENDS "renderers/*.cpp")
+file(GLOB RenderersHeader CONFIGURE_DEPENDS "renderers/*.h")
+
+set(RENDERERS
+    ${RenderersCpp}
+    ${RenderersHeader}
+)
+
+source_group("renderers" FILES ${RENDERERS})
+
+file(GLOB SceneCpp CONFIGURE_DEPENDS "scene/*.cpp")
+file(GLOB SceneHeader CONFIGURE_DEPENDS "scene/*.h")
+
+set(SCENE
+    ${SceneCpp}
+    ${SceneHeader}
+)
+
+source_group("scene" FILES ${SCENE})
+
+add_library(${PROJECT_NAME} STATIC
+${SOURCES}
 ${HEADERS}
 ${FG}
 ${RP}
+${RENDERERS}
+${SCENE}
 )
 
 setup_msvc_options(${PROJECT_NAME})
+
+target_compile_definitions(${PROJECT_NAME} PRIVATE TRACY_ENABLE)
 
 add_definitions(-DNOMINMAX) 
 
@@ -45,6 +82,8 @@ find_package(spirv-reflect-static REQUIRED)
 find_package(TinyGLTF REQUIRED)
 find_package(stb REQUIRED)
 find_package(imgui REQUIRED)
+find_package(EnTT REQUIRED)
+find_package(Tracy REQUIRED)
 
 
 set(INCLUDES 
@@ -72,6 +111,9 @@ set(ADDITIONAL_LIBRARY_DEPENDENCIES
 	imgui::imgui
 	util
 	event
+	EnTT::EnTT
+	Tracy::TracyClient
+	bc7enc_lib
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE ${ADDITIONAL_LIBRARY_DEPENDENCIES})

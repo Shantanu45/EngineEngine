@@ -1,4 +1,4 @@
-set(TEST_PROJECT_NAME Test)
+set(TEST_PROJECT_NAME _test)
 
 file(GLOB SOURCES CONFIGURE_DEPENDS "*.cpp")
 file(GLOB HEADERS CONFIGURE_DEPENDS "*.h")
@@ -13,12 +13,14 @@ find_package(SDL3 REQUIRED)
 find_package(glm REQUIRED)
 find_package(VulkanMemoryAllocator REQUIRED)
 find_package(xxHash REQUIRED)
+find_package(TinyGLTF REQUIRED)
 
 
 # For Windows: Prevent overriding the parent project's compiler/linker settings
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 
 setup_msvc_options(${TEST_PROJECT_NAME})
+add_definitions(-DNOMINMAX)
 
 set(TEST_INCLUDE 
 	"${PROJECT_SOURCE_DIR}/src"
@@ -44,6 +46,7 @@ set(ADDITIONAL_LIBRARY_DEPENDENCIES
 	application
 	application_entry
 	xxHash::xxhash
+	TinyGLTF::TinyGLTF
 
 )
 

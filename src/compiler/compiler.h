@@ -14,6 +14,7 @@
 #include "filesystem/filesystem.h"
 #include "xxhash.h"
 #include "filesystem/path_utils.h"
+#include "util/small_vector.h"
 
 using namespace FileSystem;
 namespace Compiler
@@ -85,14 +86,14 @@ namespace Compiler
 			source_path = std::move(path);
 		}
 
-		void set_include_directories(const std::vector<std::string>* include_directories);
+		void set_include_directories(const Util::SmallVector<std::string>* include_directories);
 
 		bool set_source_from_file(const std::string& path, Stage stage = Stage::Unknown);
 		bool set_source_from_file_multistage(const std::string& path);
 		bool preprocess();
 		uint64_t get_source_hash() const;
 
-		std::vector<uint32_t> compile(std::string& error_message, const std::vector<std::pair<std::string, int>>* defines = nullptr) const;
+		Util::SmallVector<uint32_t> compile(std::string& error_message, const Util::SmallVector<std::pair<std::string, int>>* defines = nullptr) const;
 
 		const std::unordered_set<std::string>& get_dependencies() const
 		{
@@ -116,7 +117,7 @@ namespace Compiler
 			strip = strip_;
 		}
 
-		const std::vector<std::string>& get_user_pragmas() const
+		const Util::SmallVector<std::string>& get_user_pragmas() const
 		{
 			return pragmas;
 		}
@@ -125,7 +126,7 @@ namespace Compiler
 		FilesystemInterface& iface;
 		std::string source;
 		std::string source_path;
-		const std::vector<std::string>* include_directories = nullptr;
+		const Util::SmallVector<std::string>* include_directories = nullptr;
 		Stage stage = Stage::Unknown;
 
 		std::unordered_set<std::string> dependencies;
@@ -134,12 +135,12 @@ namespace Compiler
 			Stage stage;
 			std::string source;
 		};
-		std::vector<Section> preprocessed_sections;
+		Util::SmallVector<Section> preprocessed_sections;
 		std::string preprocessed_source;
 		Stage preprocessing_active_stage = Stage::Unknown;
 
-		std::vector<std::pair<size_t, size_t>> preprocessed_lines;
-		std::vector<std::string> pragmas;
+		Util::SmallVector<std::pair<size_t, size_t>> preprocessed_lines;
+		Util::SmallVector<std::string> pragmas;
 
 		Target target = Target::Vulkan11;
 

@@ -6,6 +6,7 @@
  * \date   March 2026
  *********************************************************************/
 #include "compiler.h"
+#include "util/small_vector.h"
 #include "shaderc/shaderc.hpp"
 
 namespace Compiler
@@ -57,7 +58,7 @@ namespace Compiler
 
 	bool GLSLCompiler::set_source_from_file_multistage(const std::string& path)
 	{
-		if (iface.load_text_file(path, source))
+		if (!iface.load_text_file(path, source))
 		{
 			LOGE("Failed to load shader: %s\n", path.c_str());
 			return false;
@@ -68,7 +69,7 @@ namespace Compiler
 		return true;
 	}
 
-	void GLSLCompiler::set_include_directories(const std::vector<std::string>* include_directories_)
+	void GLSLCompiler::set_include_directories(const Util::SmallVector<std::string>* include_directories_)
 	{
 		include_directories = include_directories_;
 	}
@@ -115,7 +116,13 @@ namespace Compiler
 
 			if ((offset = line.find("#include \"")) != std::string::npos)
 			{
-				auto include_path = line.substr(offset + 10);
+				/*auto include_path = line.substr(offset + 10);*/
+				size_t start = offset + 10;
+				size_t end = line.find('"', start);
+				if (end == std::string::npos) { 
+					/* error */ 
+				}
+				auto include_path = line.substr(start, end - start);
 				if (!include_path.empty() && include_path.back() == '"')
 					include_path.pop_back();
 
@@ -126,10 +133,10 @@ namespace Compiler
 					return false;
 				}
 
-				preprocessed_source += std::string("#line " + 1 + ' \"' + include_path + "\"\n");
+				preprocessed_source += "#line " + std::to_string(line_index + 1) + " \"" + include_path + "\"\n";
 				if (!parse_variants(included_source, include_path))
 					return false;
-				preprocessed_source += std::string("#line " + line_index + 1 + ' \"' + path + "\"\n");
+				preprocessed_source += "#line " + std::to_string(line_index + 1) + " \"" + path + "\"\n";
 
 				dependencies.insert(include_path);
 			}
@@ -152,8 +159,11 @@ namespace Compiler
 					preprocessed_sections.push_back({ preprocessing_active_stage, std::move(preprocessed_source) });
 					preprocessed_source = {};
 				}
-				preprocessing_active_stage = convert_stage(line.substr(14));
-				preprocessed_source += std::string("#line "+ line_index + 1 + ' \"' + path + "\"\n");
+				auto stage_name = line.substr(14);
+				stage_name.erase(stage_name.find_last_not_of(" \t\r\n") + 1);
+				preprocessing_active_stage = convert_stage(stage_name);
+				//preprocessing_active_stage = convert_stage(line.substr(14));
+				preprocessed_source += "#line " + std::to_string(line_index + 1) + " \"" + path + "\"\n";
 			}
 			else if (line.find("#pragma ") == 0)
 			{
@@ -175,7 +185,7 @@ namespace Compiler
 					{
 						auto& word = keywords.front();
 						if (word == "endif")
-							preprocessed_source += std::string("#line " + line_index + 1 + ' \"' + path + "\"\n");
+							preprocessed_source += "#line " + std::to_string(line_index + 1) + " \"" + path + "\"\n";
 					}
 				}
 			}
@@ -226,7 +236,7 @@ namespace Compiler
 		return hash;
 	}
 
-	std::vector<uint32_t> GLSLCompiler::compile(std::string& error_message, const std::vector<std::pair<std::string, int>>* defines) const
+	Util::SmallVector<uint32_t> GLSLCompiler::compile(std::string& error_message, const Util::SmallVector<std::pair<std::string, int>>* defines) const
 	{
 		shaderc::Compiler compiler;
 		shaderc::CompileOptions options;
@@ -342,7 +352,7 @@ namespace Compiler
 			return {};
 		}
 
-		std::vector<uint32_t> compiled_spirv(result.cbegin(), result.cend());
+		Util::SmallVector<uint32_t> compiled_spirv(result.cbegin(), result.cend());
 
 #if 0
 		spvtools::SpirvTools core(target == Target::Vulkan13 ? SPV_ENV_VULKAN_1_3 : SPV_ENV_VULKAN_1_1);

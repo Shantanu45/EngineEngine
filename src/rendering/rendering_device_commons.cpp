@@ -956,6 +956,7 @@ namespace Rendering
 		"Fragment",
 		"TesselationControl",
 		"TesselationEvaluation",
+		"Geometry",
 		"Compute",
 	};
 

@@ -14,10 +14,13 @@
 #include "util/bit_field.h"
 #include "math/math_common.h"
 #include "util/error_macros.h"
+#include "xxhash.h"
+#include "util/small_vector.h"
+#include <algorithm>
 
 #define STEPIFY(m_number, m_alignment) ((((m_number) + ((m_alignment) - 1)) / (m_alignment)) * (m_alignment))
 
-using PackedByteArray = std::vector<uint8_t>;
+using PackedByteArray = Util::SmallVector<uint8_t>;
 
 namespace Rendering
 {
@@ -416,7 +419,7 @@ namespace Rendering
 			TextureType texture_type = TEXTURE_TYPE_2D;
 			TextureSamples samples = TEXTURE_SAMPLES_1;
 			uint32_t usage_bits = 0;
-			std::vector<DataFormat> shareable_formats;
+			Util::SmallVector<DataFormat> shareable_formats;
 			bool is_resolve_buffer = false;
 			bool is_discardable = false;
 
@@ -448,7 +451,8 @@ namespace Rendering
 				else if (usage_bits != b.usage_bits) {
 					return false;
 				}
-				else if (shareable_formats != b.shareable_formats) {
+				else if (shareable_formats.size() != b.shareable_formats.size() ||
+					!std::equal(shareable_formats.begin(), shareable_formats.end(), b.shareable_formats.begin())) {
 					return false;
 				}
 				else if (is_resolve_buffer != b.is_resolve_buffer) {
@@ -526,6 +530,48 @@ namespace Rendering
 			float max_lod = 1e20; // Something very large should do.
 			SamplerBorderColor border_color = SAMPLER_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
 			bool unnormalized_uvw = false;
+
+			bool operator==(const SamplerState& o) const {
+				return mag_filter      == o.mag_filter
+					&& min_filter      == o.min_filter
+					&& mip_filter      == o.mip_filter
+					&& repeat_u        == o.repeat_u
+					&& repeat_v        == o.repeat_v
+					&& repeat_w        == o.repeat_w
+					&& lod_bias        == o.lod_bias
+					&& use_anisotropy  == o.use_anisotropy
+					&& anisotropy_max  == o.anisotropy_max
+					&& enable_compare  == o.enable_compare
+					&& compare_op      == o.compare_op
+					&& min_lod         == o.min_lod
+					&& max_lod         == o.max_lod
+					&& border_color    == o.border_color
+					&& unnormalized_uvw == o.unnormalized_uvw;
+			}
+		};
+
+		struct SamplerStateHasher {
+			size_t operator()(const SamplerState& s) const {
+				// Hash each field individually to avoid padding byte noise.
+				XXH64_state_t* state = XXH64_createState();
+				XXH64_reset(state, 0);
+				XXH64_update(state, &s.mag_filter,      sizeof(s.mag_filter));
+				XXH64_update(state, &s.min_filter,      sizeof(s.min_filter));
+				XXH64_update(state, &s.mip_filter,      sizeof(s.mip_filter));
+				XXH64_update(state, &s.repeat_u,        sizeof(s.repeat_u));
+				XXH64_update(state, &s.repeat_v,        sizeof(s.repeat_v));
+				XXH64_update(state, &s.repeat_w,        sizeof(s.repeat_w));
+				XXH64_update(state, &s.lod_bias,        sizeof(s.lod_bias));
+				XXH64_update(state, &s.use_anisotropy,  sizeof(s.use_anisotropy));
+				XXH64_update(state, &s.anisotropy_max,  sizeof(s.anisotropy_max));
+				XXH64_update(state, &s.enable_compare,  sizeof(s.enable_compare));
+				XXH64_update(state, &s.compare_op,      sizeof(s.compare_op));
+				XXH64_update(state, &s.min_lod,         sizeof(s.min_lod));
+				XXH64_update(state, &s.max_lod,         sizeof(s.max_lod));
+				XXH64_update(state, &s.border_color,    sizeof(s.border_color));
+				XXH64_update(state, &s.unnormalized_uvw, sizeof(s.unnormalized_uvw));
+				return static_cast<size_t>(XXH64_digest(state));
+			}
 		};
 
 		/**********************/
@@ -579,6 +625,7 @@ namespace Rendering
 			SHADER_STAGE_FRAGMENT,
 			SHADER_STAGE_TESSELATION_CONTROL,
 			SHADER_STAGE_TESSELATION_EVALUATION,
+			SHADER_STAGE_GEOMETRY,
 			SHADER_STAGE_COMPUTE,
 			SHADER_STAGE_RAYGEN,
 			SHADER_STAGE_ANY_HIT,
@@ -624,8 +671,8 @@ namespace Rendering
 
 		struct ShaderStageSPIRVData {
 			ShaderStage shader_stage = SHADER_STAGE_MAX;
-			std::vector<uint8_t> spirv;
-			std::vector<uint64_t> dynamic_buffers;
+			Util::SmallVector<uint8_t> spirv;
+			Util::SmallVector<uint64_t> dynamic_buffers;
 		};
 
 		/*********************/
@@ -794,7 +841,7 @@ namespace Rendering
 			TextureSamples sample_count = TEXTURE_SAMPLES_1;
 			bool enable_sample_shading = false;
 			float min_sample_shading = 0.0f;
-			std::vector<uint32_t> sample_mask;
+			Util::SmallVector<uint32_t> sample_mask;
 			bool enable_alpha_to_coverage = false;
 			bool enable_alpha_to_one = false;
 		};
@@ -863,7 +910,7 @@ namespace Rendering
 				return bs;
 			}
 
-			std::vector<Attachment> attachments; // One per render target texture.
+			Util::SmallVector<Attachment> attachments; // One per render target texture.
 			Color blend_constant;
 		};
 
@@ -1091,9 +1138,9 @@ namespace Rendering
 			uint32_t compute_local_size[3] = {};
 			uint32_t push_constant_size = 0;
 
-			std::vector<std::vector<ShaderUniform>> uniform_sets;
-			std::vector<ShaderSpecializationConstant> specialization_constants;
-			std::vector<ShaderStage> stages_vector;
+			Util::SmallVector<Util::SmallVector<ShaderUniform>> uniform_sets;
+			Util::SmallVector<ShaderSpecializationConstant> specialization_constants;
+			Util::SmallVector<ShaderStage> stages_vector;
 			BitField<ShaderStage> stages_bits = {};
 			BitField<ShaderStage> push_constant_stages = {};
 		};

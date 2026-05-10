@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
+#include "util/small_vector.h"
 
 namespace FileSystem
 {
@@ -57,10 +58,10 @@ namespace FileSystem
 
 #pragma region Filesystem Backend
 
-	std::vector<ListEntry> FilesystemBackend::walk(const std::string& path)
+	Util::SmallVector<ListEntry> FilesystemBackend::walk(const std::string& path)
 	{
 		auto entries = list(path);
-		std::vector<ListEntry> final_entries;
+		Util::SmallVector<ListEntry> final_entries;
 		for (auto& e : entries)
 		{
 			if (e.type == PathType::Directory)
@@ -185,7 +186,7 @@ namespace FileSystem
 			return nullptr;
 	}
 
-	std::vector<ListEntry> Filesystem::walk(const std::string& path)
+	Util::SmallVector<ListEntry> Filesystem::walk(const std::string& path)
 	{
 		auto paths = Path::protocol_split(path);
 		auto* backend = get_backend(paths.first);
@@ -195,7 +196,7 @@ namespace FileSystem
 		return backend->walk(paths.second);
 	}
 
-	std::vector<ListEntry> Filesystem::list(const std::string& path)
+	Util::SmallVector<ListEntry> Filesystem::list(const std::string& path)
 	{
 		auto paths = Path::protocol_split(path);
 		auto* backend = get_backend(paths.first);
@@ -368,7 +369,7 @@ namespace FileSystem
 		return true;
 	}
 
-	std::vector<ListEntry> ScratchFilesystem::list(const std::string&)
+	Util::SmallVector<ListEntry> ScratchFilesystem::list(const std::string&)
 	{
 		return {};
 	}
@@ -546,11 +547,11 @@ namespace FileSystem
 			return nullptr;
 	}
 
-	std::vector<ListEntry> BlobFilesystem::list(const std::string& path)
+	Util::SmallVector<ListEntry> BlobFilesystem::list(const std::string& path)
 	{
 		auto canon_path = Path::canonicalize_path(path);
 
-		std::vector<ListEntry> entries;
+		Util::SmallVector<ListEntry> entries;
 		if (const auto* zip_dir = find_directory(canon_path))
 		{
 			entries.reserve(zip_dir->dirs.size() + zip_dir->files.size());

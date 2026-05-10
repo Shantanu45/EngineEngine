@@ -12,8 +12,10 @@
 #include <cstdint>
 #include <stdexcept>
 #include "util/error_macros.h"
+#include "util/small_vector.h"
 #include "filesystem/filesystem.h"
 #include "filesystem/path_utils.h"
+#include "rendering_device.h"
 
 //// stb_image
 //#ifndef STB_IMAGE_IMPLEMENTATION
@@ -41,7 +43,7 @@ namespace Rendering
 
 		Format format = Format::Unknown;
 
-		std::vector<uint8_t> pixels;
+		Util::SmallVector<uint8_t> pixels;
 
 		bool is_valid() const
 		{
@@ -60,6 +62,28 @@ namespace Rendering
 				get_pixel_size();
 		}
 	};
+	// Upload an ImageData as a plain 2D sampled texture.
+	// format is the only thing that varies per-texture (SRGB for colour, UNORM for normal/spec maps).
+	inline RID upload_texture_2d(
+		RenderingDevice* device,
+		const ImageData& img,
+		RenderingDeviceCommons::DataFormat format,
+		const std::string& name = "")
+	{
+		RenderingDeviceCommons::TextureFormat tf;
+		tf.width        = img.width;
+		tf.height       = img.height;
+		tf.format       = format;
+		tf.texture_type = RenderingDeviceCommons::TEXTURE_TYPE_2D;
+		tf.usage_bits   = RenderingDeviceCommons::TEXTURE_USAGE_SAMPLING_BIT
+		                | RenderingDeviceCommons::TEXTURE_USAGE_CAN_UPDATE_BIT;
+
+		RID rid = device->texture_create(tf, RenderingDevice::TextureView(), { img.pixels });
+		if (!name.empty())
+			device->set_resource_name(rid, name);
+		return rid;
+	}
+
 	class ImageLoader {
 	public:
 		ImageLoader(::FileSystem::FilesystemInterface& iface);

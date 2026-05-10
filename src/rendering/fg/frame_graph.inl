@@ -29,6 +29,11 @@ FrameGraph::get_descriptor(FrameGraphResource id) const {
 }
 
 template <_VIRTUALIZABLE_CONCEPT_IMPL(T)>
+inline T &FrameGraph::get_resource(FrameGraphResource id) {
+  return _get_resource_entry(id).get<T>();
+}
+
+template <_VIRTUALIZABLE_CONCEPT_IMPL(T)>
 inline FrameGraphResource FrameGraph::import(const std::string_view name,
                                              const typename T::Desc &desc,
                                              T &&resource) {
@@ -71,7 +76,8 @@ inline FrameGraphResource
 FrameGraph::Builder::create(const std::string_view name,
                             const typename T::Desc &desc) {
   const auto id = m_frameGraph._create<T>(ResourceEntry::Type::Transient, name, desc, T{});
-  return m_passNode.m_creates.emplace_back(id);
+  m_passNode.m_creates.emplace_back(id);
+  return m_passNode.m_creates.back();
 }
 
 //

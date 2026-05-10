@@ -7,6 +7,7 @@
  *********************************************************************/
 #include "rendering_shader_container.h"
 #include "spirv_reflect.h"
+#include "util/small_vector.h"
 
 namespace Rendering
 {
@@ -200,7 +201,7 @@ namespace Rendering
 		DEV_ASSERT(reflection_binding_set_uniforms_count.size() == reflection_data.set_count && "The amount of elements in the reflection and the shader container can't be different.");
 		uint32_t uniform_index = 0;
 		for (uint32_t i = 0; i < reflection_data.set_count; i++) {
-			std::vector<RDC::ShaderUniform>& uniform_set = shader_refl.uniform_sets.data()[i];
+			Util::SmallVector<RDC::ShaderUniform>& uniform_set = shader_refl.uniform_sets.data()[i];
 			uint32_t uniforms_count = reflection_binding_set_uniforms_count[i];
 			uniform_set.resize(uniforms_count);
 			for (uint32_t j = 0; j < uniforms_count; j++) {
@@ -233,7 +234,7 @@ namespace Rendering
 		return shader_refl;
 	}
 
-	bool RenderingShaderContainer::from_shader_stage_spirv_data(std::vector<RenderingDeviceCommons::ShaderStageSPIRVData>& data)
+	bool RenderingShaderContainer::from_shader_stage_spirv_data(Util::SmallVector<RenderingDeviceCommons::ShaderStageSPIRVData>& data)
 	{
 		shaders.resize(data.size());
 
@@ -324,7 +325,7 @@ namespace Rendering
 
 		const uint32_t spirv_size = p_spirv.size() + 0;
 
-		std::vector<ReflectShaderStage>& r_refl = r_shader.shader_stages;
+		Util::SmallVector<ReflectShaderStage>& r_refl = r_shader.shader_stages;
 		r_refl.resize(spirv_size);
 
 		bool pipeline_type_detected = false;
@@ -340,6 +341,7 @@ namespace Rendering
 				case RDC::SHADER_STAGE_FRAGMENT:
 				case RDC::SHADER_STAGE_TESSELATION_CONTROL:
 				case RDC::SHADER_STAGE_TESSELATION_EVALUATION:
+				case RDC::SHADER_STAGE_GEOMETRY:
 					r_shader.pipeline_type = RDC::PIPELINE_TYPE_RASTERIZATION;
 					break;
 				case RDC::SHADER_STAGE_COMPUTE:
@@ -359,7 +361,7 @@ namespace Rendering
 				pipeline_type_detected = true;
 			}
 
-			const std::vector<uint64_t>& dynamic_buffers = p_spirv[i].dynamic_buffers;
+			const Util::SmallVector<uint64_t>& dynamic_buffers = p_spirv[i].dynamic_buffers;
 
 			if (stage == RDC::SHADER_STAGE_COMPUTE) {
 				ERR_FAIL_COND_V_MSG(spirv_size != 1, FAILED,
@@ -396,7 +398,7 @@ namespace Rendering
 				if (binding_count > 0) {
 					// Parse bindings.
 
-					std::vector<SpvReflectDescriptorBinding*> bindings;
+					Util::SmallVector<SpvReflectDescriptorBinding*> bindings;
 					bindings.resize(binding_count);
 					result = spvReflectEnumerateDescriptorBindings(&module, &binding_count, bindings.data());
 
@@ -596,7 +598,7 @@ namespace Rendering
 						"Reflection of SPIR-V shader stage '" + std::string(RDC::SHADER_STAGE_NAMES[p_spirv[i].shader_stage]) + "' failed enumerating specialization constants.");
 
 					if (sc_count) {
-						std::vector<SpvReflectSpecializationConstant*> spec_constants;
+						Util::SmallVector<SpvReflectSpecializationConstant*> spec_constants;
 						spec_constants.resize(sc_count);
 
 						result = spvReflectEnumerateSpecializationConstants(&module, &sc_count, spec_constants.data());
@@ -657,14 +659,14 @@ namespace Rendering
 					}
 				}
 
-				if (stage == RDC::SHADER_STAGE_VERTEX || stage == RDC::SHADER_STAGE_FRAGMENT) {
+				if (stage == RDC::SHADER_STAGE_VERTEX || stage == RDC::SHADER_STAGE_FRAGMENT || stage == RDC::SHADER_STAGE_GEOMETRY) {
 					uint32_t iv_count = 0;
 					result = spvReflectEnumerateInputVariables(&module, &iv_count, nullptr);
 					ERR_FAIL_COND_V_MSG(result != SPV_REFLECT_RESULT_SUCCESS, FAILED,
 						"Reflection of SPIR-V shader stage '" + std::string(RDC::SHADER_STAGE_NAMES[p_spirv[i].shader_stage]) + "' failed enumerating input variables.");
 
 					if (iv_count) {
-						std::vector<SpvReflectInterfaceVariable*> input_vars;
+						Util::SmallVector<SpvReflectInterfaceVariable*> input_vars;
 						input_vars.resize(iv_count);
 
 						result = spvReflectEnumerateInputVariables(&module, &iv_count, input_vars.data());
@@ -694,7 +696,7 @@ namespace Rendering
 						"Reflection of SPIR-V shader stage '" + std::string(RDC::SHADER_STAGE_NAMES[p_spirv[i].shader_stage]) + "' failed enumerating output variables.");
 
 					if (ov_count) {
-						std::vector<SpvReflectInterfaceVariable*> output_vars;
+						Util::SmallVector<SpvReflectInterfaceVariable*> output_vars;
 						output_vars.resize(ov_count);
 
 						result = spvReflectEnumerateOutputVariables(&module, &ov_count, output_vars.data());
@@ -721,7 +723,7 @@ namespace Rendering
 					ERR_FAIL_COND_V_MSG(pc_count > 1, FAILED,
 						"Reflection of SPIR-V shader stage '" + std::string(RDC::SHADER_STAGE_NAMES[p_spirv[i].shader_stage]) + "': Only one push constant is supported, which should be the same across shader stages.");
 
-					std::vector<SpvReflectBlockVariable*> pconstants;
+					Util::SmallVector<SpvReflectBlockVariable*> pconstants;
 					pconstants.resize(pc_count);
 					result = spvReflectEnumeratePushConstantBlocks(&module, &pc_count, pconstants.data());
 					ERR_FAIL_COND_V_MSG(result != SPV_REFLECT_RESULT_SUCCESS, FAILED,

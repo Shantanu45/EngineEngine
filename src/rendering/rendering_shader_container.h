@@ -8,6 +8,7 @@
 #pragma once
 #include <cstdint>
 #include "rendering_device_commons.h"
+#include "util/small_vector.h"
 
 struct SpvReflectShaderModule;
 struct SpvReflectDescriptorBinding;
@@ -75,10 +76,10 @@ namespace Rendering
 		};
 
 		ReflectionData reflection_data;
-		std::vector<uint32_t> reflection_binding_set_uniforms_count;
-		std::vector<ReflectionBindingData> reflection_binding_set_uniforms_data;
-		std::vector<ReflectionSpecializationData> reflection_specialization_data;
-		std::vector<RDC::ShaderStage> reflection_shader_stages;
+		Util::SmallVector<uint32_t> reflection_binding_set_uniforms_count;
+		Util::SmallVector<ReflectionBindingData> reflection_binding_set_uniforms_data;
+		Util::SmallVector<ReflectionSpecializationData> reflection_specialization_data;
+		Util::SmallVector<RDC::ShaderStage> reflection_shader_stages;
 
 		virtual uint32_t _format() const = 0;
 		virtual uint32_t _format_version() const = 0;
@@ -189,20 +190,20 @@ namespace Rendering
 		class ReflectShaderStage {
 			friend class RenderingShaderContainer;
 
-			std::vector<uint8_t> _spirv_data;
+			Util::SmallVector<uint8_t> _spirv_data;
 			SpvReflectShaderModule* _module = nullptr;
 
 		public:
 			RDC::ShaderStage shader_stage = RDC::SHADER_STAGE_MAX;
 			const SpvReflectShaderModule& module() const;
 			const std::span<const uint32_t> spirv() const;
-			const std::vector<uint8_t> spirv_data() const { return _spirv_data; }
+			const Util::SmallVector<uint8_t> spirv_data() const { return _spirv_data; }
 
 			ReflectShaderStage();
 			~ReflectShaderStage();
 		};
 
-		typedef std::vector<ReflectUniform> ReflectDescriptorSet;
+		typedef Util::SmallVector<ReflectUniform> ReflectDescriptorSet;
 
 		struct ReflectShader {
 			uint64_t vertex_input_mask = 0;
@@ -213,12 +214,12 @@ namespace Rendering
 			bool has_dynamic_buffers = false;
 			RDC::PipelineType pipeline_type = RDC::PIPELINE_TYPE_RASTERIZATION;
 
-			std::vector<ReflectShaderStage> shader_stages;
-			std::vector<ReflectDescriptorSet> uniform_sets;
-			std::vector<ReflectSymbol<SpvReflectDescriptorBinding>> reflect_uniforms;
-			std::vector<ReflectSpecializationConstant> specialization_constants;
-			std::vector<ReflectSymbol<SpvReflectSpecializationConstant>> reflect_specialization_constants;
-			std::vector<RDC::ShaderStage> stages_vector;
+			Util::SmallVector<ReflectShaderStage> shader_stages;
+			Util::SmallVector<ReflectDescriptorSet> uniform_sets;
+			Util::SmallVector<ReflectSymbol<SpvReflectDescriptorBinding>> reflect_uniforms;
+			Util::SmallVector<ReflectSpecializationConstant> specialization_constants;
+			Util::SmallVector<ReflectSymbol<SpvReflectSpecializationConstant>> reflect_specialization_constants;
+			Util::SmallVector<RDC::ShaderStage> stages_vector;
 			BitField<RDC::ShaderStage> stages_bits = {};
 			BitField<RDC::ShaderStage> push_constant_stages = {};
 
@@ -231,7 +232,7 @@ namespace Rendering
 			 * This is a flattened view of all uniform sets.
 			 */
 			ReflectUniform& uniform_at(uint32_t p_index) {
-				for (std::vector<ReflectUniform>& set : uniform_sets) {
+				for (Util::SmallVector<ReflectUniform>& set : uniform_sets) {
 					if (p_index < set.size()) {
 						return set[p_index];
 					}
@@ -242,7 +243,7 @@ namespace Rendering
 
 			uint32_t uniform_count() const {
 				uint32_t count = 0;
-				for (const std::vector<ReflectUniform>& set : uniform_sets) {
+				for (const Util::SmallVector<ReflectUniform>& set : uniform_sets) {
 					count += set.size();
 				}
 				return count;
@@ -271,11 +272,11 @@ namespace Rendering
 		};
 
 		std::string shader_name;
-		std::vector<Shader> shaders;
+		Util::SmallVector<Shader> shaders;
 
 		bool set_code_from_spirv(const std::string& p_shader_name, std::span<RDC::ShaderStageSPIRVData> p_spirv);
 		RDC::ShaderReflection get_shader_reflection() const;
-		bool from_shader_stage_spirv_data(std::vector<RenderingDeviceCommons::ShaderStageSPIRVData>& data);
+		bool from_shader_stage_spirv_data(Util::SmallVector<RenderingDeviceCommons::ShaderStageSPIRVData>& data);
 		bool from_bytes(const PackedByteArray& p_bytes);
 		PackedByteArray to_bytes() const;
 		bool compress_code(const uint8_t* p_decompressed_bytes, uint32_t p_decompressed_size, uint8_t* p_compressed_bytes, uint32_t* r_compressed_size, uint32_t* r_compressed_flags) const;

@@ -38,7 +38,7 @@ namespace EE
 
 		virtual void post_frame();
 
-		virtual void teardown_application() = 0;
+		virtual void teardown_application() {};
 
 		virtual void render_early_loading(double frame_time, double elapsed_time);
 

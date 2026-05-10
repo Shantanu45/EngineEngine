@@ -18,6 +18,16 @@ void Camera::set_perspective(float p_fov_degrees, float p_aspect, float p_near, 
 	_recalculate_projection();
 }
 
+float Camera::get_near_clip() const
+{
+	return _near;
+}
+
+float Camera::get_far_clip() const
+{
+	return _far;
+}
+
 void Camera::set_orthographic(float p_left, float p_right, float p_bottom, float p_top, float p_near, float p_far)
 {
 	_projection_type = CameraProjection::Orthographic;
@@ -127,33 +137,34 @@ void Camera::_recalculate_view()
 		_view = glm::lookAt(_position, _orbit_target, glm::vec3(0.0f, 1.0f, 0.0f));
 	}
 	else {
-		glm::mat4 rotation_matrix = glm::mat4_cast(_rotation);
-		glm::mat4 translation = glm::translate(glm::mat4(1.0f), -_position);
-		_view = rotation_matrix * translation;
+		// Build view matrix by inverting the camera's world transform (T * R).
+		// conjugate(q) == inverse rotation for unit quaternions, cheaper than glm::inverse.
+		glm::mat4 t = glm::translate(glm::mat4(1.0f), _position);
+		glm::mat4 r = glm::mat4_cast(_rotation);
+		_view = glm::inverse(t * r);
 	}
 	_update_frustum();
 }
 
 void Camera::_update_frustum()
 {
-	glm::mat4 vp = glm::transpose(_projection * _view);
-
-	auto extract = [&](glm::vec4 row) -> FrustumPlane {
-		float len = glm::length(glm::vec3(row));
-		return { glm::vec3(row) / len, row.w / len };
-		};
-
-	// Re-extract from original VP (undo double transpose)
 	glm::mat4 m = _projection * _view;
+
+	// Extract rows from column-major matrix for Gribb/Hartmann plane extraction
 	glm::vec4 c0 = glm::vec4(m[0][0], m[1][0], m[2][0], m[3][0]);
 	glm::vec4 c1 = glm::vec4(m[0][1], m[1][1], m[2][1], m[3][1]);
 	glm::vec4 c2 = glm::vec4(m[0][2], m[1][2], m[2][2], m[3][2]);
 	glm::vec4 c3 = glm::vec4(m[0][3], m[1][3], m[2][3], m[3][3]);
 
+	auto extract = [](glm::vec4 row) -> FrustumPlane {
+		float len = glm::length(glm::vec3(row));
+		return { glm::vec3(row) / len, row.w / len };
+		};
+
 	_frustum.planes[0] = extract(c3 + c0); // Left
 	_frustum.planes[1] = extract(c3 - c0); // Right
 	_frustum.planes[2] = extract(c3 + c1); // Bottom
 	_frustum.planes[3] = extract(c3 - c1); // Top
-	_frustum.planes[4] = extract(c3 + c2); // Near
+	_frustum.planes[4] = extract(c2);       // Near  (Vulkan ZO: z_clip >= 0, not OpenGL's c3+c2)
 	_frustum.planes[5] = extract(c3 - c2); // Far
 }

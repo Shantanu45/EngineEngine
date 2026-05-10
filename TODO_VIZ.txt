@@ -1,0 +1,176 @@
+Visual Quality Improvement Plan
+===============================
+
+Goal
+----
+Improve scene visual quality across forward, deferred, and future renderers.
+Prioritize changes that make lighting and material response more physically
+plausible before adding decorative effects.
+
+
+Priority 1: Verify Color Space
+------------------------------
+Color space correctness should come before lighting tweaks.
+
+Status:
+- GLTF base color and emissive textures are uploaded as sRGB textures.
+- GLTF normal, metallic-roughness, and occlusion textures are uploaded as
+  linear textures.
+- Embedded GLTF image data is normalized to RGBA8 before texture upload.
+- Final blit currently applies linear-to-sRGB encoding before presentation.
+
+Tasks:
+- Validate base color/albedo textures are sampled as sRGB in non-GLTF loading
+  paths when those paths are used.
+- Validate normal, metallic-roughness, AO, displacement, and data textures are
+  sampled as linear in non-GLTF loading paths when those paths are used.
+- Ensure lighting math happens in linear space.
+- Ensure final output gamma/sRGB handling is correct.
+- Add a simple test scene with known albedo values to validate the path.
+
+
+Priority 2: HDR Scene Color And Tone Mapping
+--------------------------------------------
+Current scene color paths use low dynamic range formats in places. Better
+lighting needs HDR before final presentation.
+
+Tasks:
+- Render scene color to an HDR format, e.g. `R16G16B16A16_SFLOAT`.
+- Add exposure control.
+- Add ACES or another filmic tone mapper.
+- Apply tone mapping before final swapchain output.
+- Keep ImGui composition readable after tone mapping.
+- Add debug controls for exposure and tone mapper selection.
+
+
+Priority 3: Image-Based Lighting
+--------------------------------
+Direct-light-only PBR is missing the main environment contribution that makes
+materials feel believable, especially metals.
+
+Tasks:
+- Generate or load a diffuse irradiance cubemap.
+- Generate or load a prefiltered specular environment cubemap.
+- Add or generate a BRDF LUT texture.
+- Add environment intensity control.
+- Integrate diffuse IBL into the PBR shader.
+- Integrate specular IBL into the PBR shader.
+- Decide whether visible skybox and lighting environment are the same resource
+  or separately configurable.
+
+
+Priority 4: Material Debug Views
+--------------------------------
+Debug views make visual problems much easier to diagnose.
+
+Tasks:
+- Add render/debug modes for:
+  - albedo.
+  - normal.
+  - roughness.
+  - metallic.
+  - ambient occlusion.
+  - emissive.
+  - shadow factor.
+  - light count.
+  - depth.
+- Expose debug view selection in ImGui.
+- Make debug views work in both forward and deferred where practical.
+
+
+Priority 5: Better Directional Shadows
+--------------------------------------
+Current shadows exist, but Sponza-scale scenes need better coverage and quality.
+
+Tasks:
+- Add cascaded shadow maps for directional lights.
+- Fit cascade projection bounds tightly to the camera frustum.
+- Add cascade split controls or stable defaults.
+- Improve shadow bias controls.
+- Add larger or configurable PCF kernels.
+- Add debug visualization for shadow maps, cascades, and light frustums.
+- Consider contact-hardening shadows later, after CSM is stable.
+
+
+Priority 6: Ambient Occlusion
+-----------------------------
+Screen-space AO adds important contact and crevice shading.
+
+Tasks:
+- Add SSAO or GTAO.
+- For forward, add the required depth/normal prepass if needed.
+- For deferred, use G-buffer normals/depth once the G-buffer is upgraded.
+- Add AO blur pass.
+- Sample AO in lighting.
+- Add ImGui controls for AO intensity, radius, and debug view.
+
+
+Priority 7: Bloom
+-----------------
+Bloom is most useful after HDR and tone mapping exist.
+
+Tasks:
+- Add bright-pass extraction from HDR scene color.
+- Add downsample and upsample blur chain.
+- Composite bloom before tone mapping or according to the chosen HDR pipeline.
+- Use bloom for emissive materials and bright light sources.
+- Keep default bloom subtle.
+- Add ImGui controls for threshold, intensity, and radius.
+
+
+Priority 8: Better Sky And Environment Control
+----------------------------------------------
+The skybox should support both visual presentation and lighting control.
+
+Tasks:
+- Add skybox/environment intensity control.
+- Add skybox mip/debug view.
+- Allow visible skybox and lighting environment to be configured separately
+  later if needed.
+- Consider procedural sky after image-based lighting is stable.
+
+
+Priority 9: Transparent Materials
+---------------------------------
+Transparent material support improves GLTF scene completeness.
+
+Tasks:
+- Split opaque, masked, and blended materials.
+- Keep masked materials in opaque/deferred-compatible passes.
+- Render blended materials in a sorted forward pass.
+- Add blend pipeline state variants.
+- Disable or carefully manage depth writes for blended materials.
+- Sort transparent drawables back-to-front.
+
+
+Priority 10: Anti-Aliasing
+--------------------------
+Add anti-aliasing after the main lighting path is stable.
+
+Tasks:
+- Add FXAA as a simple first pass.
+- Consider SMAA for better edge quality.
+- Consider TAA later if motion vectors and temporal history become available.
+- Make anti-aliasing selectable from ImGui.
+
+
+Suggested Order
+---------------
+1. Verify color space.
+2. Add HDR scene color, exposure, and tone mapping.
+3. Add image-based lighting.
+4. Add material debug views.
+5. Improve directional shadows with cascades.
+6. Add SSAO or GTAO.
+7. Add bloom.
+8. Add transparent pass.
+9. Add FXAA or SMAA.
+
+
+Highest-Value Bundle
+--------------------
+For the largest visible improvement per unit of work, focus first on:
+- color space correctness.
+- HDR scene color.
+- exposure and tone mapping.
+- image-based lighting.

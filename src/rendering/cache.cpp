@@ -1,4 +1,5 @@
 #include "cache.h"
+#include "util/small_vector.h"
 
 namespace Rendering
 {
@@ -6,7 +7,7 @@ namespace Rendering
 
 	RDD::FramebufferID FramebufferCache::_create(const FramebufferKey& key)
 	{
-		auto frame_buffer = device->create_framebuffer_from_render_pass(key.render_pass, key.attachments, key.width, key.height);
+		auto frame_buffer = device->create_framebuffer_from_render_pass(key.render_pass, key.attachments, key.width, key.height, key.layers);
 		cache[key] = { frame_buffer, current_frame };
 		return frame_buffer;
 	}
@@ -29,7 +30,7 @@ namespace Rendering
 	}
 
 
-	void FramebufferCache::tick(uint32_t p_max_age /*= 8*/)
+void FramebufferCache::tick(uint32_t p_max_age /*= 8*/)
 	{
 		for (auto it = cache.begin(); it != cache.end(); ) {
 			if (current_frame - it->second.last_used_frame > p_max_age) {
@@ -49,12 +50,12 @@ namespace Rendering
 		cache.clear();
 	}
 
-	RID TransientTextureCache::acquire(const RDD::TextureFormat& p_format, const RenderingDevice::TextureView& p_view, const std::vector<std::vector<uint8_t>>& p_data)
+	RID TransientTextureCache::acquire(const RDD::TextureFormat& p_format, const RenderingDevice::TextureView& p_view, const Util::SmallVector<Util::SmallVector<uint8_t>>& p_data)
 	{
 		for (auto& entry : cache) {
 			if (!entry.in_use && _formats_match(entry.format, p_format)) {
 				entry.in_use = true;
-				return entry.rid;  // reuse — no alloc
+				return entry.rid;  // reuse - no alloc
 			}
 		}
 

@@ -11,6 +11,7 @@
 #include "vulkan/vk_enum_string_helper.h"
 #include "util/logger.h"
 #include "util/error_macros.h"
+#include "util/small_vector.h"
 #include <SDL3/SDL_vulkan.h>
 #include "vulkan_device.h"
 
@@ -157,14 +158,14 @@ namespace Vulkan
 	Error RenderingContextDriverVulkan::_initialize_instance() {
 
 		Error err;
-		std::vector<const char*> enabled_extension_names;
+		Util::SmallVector<const char*> enabled_extension_names;
 		enabled_extension_names.reserve(enabled_instance_extension_names.size());
 		for (const std::string& extension_name : enabled_instance_extension_names) {
 			enabled_extension_names.push_back(extension_name.data());
 		}
 
 		VkApplicationInfo app_info = get_promoted_application_info();
-		std::vector<const char*> enabled_layer_names;
+		Util::SmallVector<const char*> enabled_layer_names;
 		if (_use_validation_layers()) {
 			err = _find_validation_layers(enabled_layer_names);
 			ERR_FAIL_COND_V(err != OK, err);
@@ -426,14 +427,14 @@ namespace Vulkan
 		return VK_FALSE;
 	}
 
-	Error RenderingContextDriverVulkan::_find_validation_layers(std::vector<const char*>& r_layer_names) const {
+	Error RenderingContextDriverVulkan::_find_validation_layers(Util::SmallVector<const char*>& r_layer_names) const {
 		r_layer_names.clear();
 
 		uint32_t instance_layer_count = 0;
 		VkResult err = vkEnumerateInstanceLayerProperties(&instance_layer_count, nullptr);
 		ERR_FAIL_COND_V(err != VK_SUCCESS, ERR_CANT_CREATE);
 		if (instance_layer_count > 0) {
-			std::vector<VkLayerProperties> layer_properties;
+			Util::SmallVector<VkLayerProperties> layer_properties;
 			layer_properties.resize(instance_layer_count);
 			err = vkEnumerateInstanceLayerProperties(&instance_layer_count, layer_properties.data());
 			ERR_FAIL_COND_V(err != VK_SUCCESS, ERR_CANT_CREATE);
@@ -551,7 +552,7 @@ namespace Vulkan
 		ERR_FAIL_COND_V(err != VK_SUCCESS && err != VK_INCOMPLETE, ERR_CANT_CREATE);
 		ERR_FAIL_COND_V_MSG(instance_extension_count == 0, ERR_CANT_CREATE, "No instance extensions were found.");
 
-		std::vector<VkExtensionProperties> instance_extensions;
+		Util::SmallVector<VkExtensionProperties> instance_extensions;
 		instance_extensions.resize(instance_extension_count);
 		err = vkEnumerateInstanceExtensionProperties(nullptr, &instance_extension_count, instance_extensions.data());
 		if (err != VK_SUCCESS && err != VK_INCOMPLETE) {

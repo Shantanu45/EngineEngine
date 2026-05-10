@@ -1,12 +1,14 @@
 #pragma once
 #include "rendering_device.h"
+#include "util/small_vector.h"
 
 namespace Rendering
 {
 	struct FramebufferKey {
 		RDD::RenderPassID    render_pass;
-		int        width, height, layers;
-		std::vector<RID> attachments;
+		int        width, height;
+		uint32_t layers;
+		Util::SmallVector<RID> attachments;
 
 		bool operator==(const FramebufferKey& o) const {
 			return render_pass == o.render_pass &&
@@ -48,8 +50,7 @@ namespace Rendering
 		~FramebufferCache();
 
 		RDD::FramebufferID get(const FramebufferKey& key);
-
-		void tick(uint32_t p_max_age = 8);
+void tick(uint32_t p_max_age = 8);
 
 		void clear();
 
@@ -75,7 +76,7 @@ namespace Rendering
 	public:
 		TransientTextureCache(RenderingDevice* p_device) : device(p_device) {}
 
-		RID acquire(const RDD::TextureFormat& p_format, const RenderingDevice::TextureView& p_view, const std::vector<std::vector<uint8_t>>& p_data);
+		RID acquire(const RDD::TextureFormat& p_format, const RenderingDevice::TextureView& p_view, const Util::SmallVector<Util::SmallVector<uint8_t>>& p_data);
 
 		void release(RID rid);
 
@@ -91,7 +92,7 @@ namespace Rendering
 			bool              in_use = false;
 		};
 
-		std::vector<CacheEntry> cache;
+		Util::SmallVector<CacheEntry> cache;
 		RenderingDevice* device;
 	};
 }

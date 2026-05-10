@@ -4,7 +4,7 @@
 #include "imgui.h"
 #include "../utils.h"
 
-struct basic_pass_resource
+struct blit_scene_input_resource
 {
 	FrameGraphResource scene;
 	FrameGraphResource depth;
@@ -16,6 +16,7 @@ namespace Rendering
 	struct imgui_pass_resource
 	{
 		FrameGraphResource ui;
+		FrameGraphResource framebuffer_resource;
 	};
 
 	struct blit_pass_resource
@@ -24,9 +25,8 @@ namespace Rendering
 		FrameGraphResource ui;
 	};
 
-	void add_blit_pass(FrameGraph& fg, FrameGraphBlackboard& bb)
+	inline void add_blit_pass(FrameGraph& fg, FrameGraphBlackboard& bb, const blit_scene_input_resource& scene_resource)
 	{
-		auto& scene_handle = bb.get<basic_pass_resource>();
 		auto& ui_handle = bb.get<imgui_pass_resource>();
 
 		fg.add_callback_pass<blit_pass_resource>(
@@ -34,9 +34,9 @@ namespace Rendering
 
 			[&](FrameGraph::Builder& builder, blit_pass_resource& data)
 			{
-				data.scene = builder.read(scene_handle.scene, TEXTURE_READ_FLAGS::READ_COLOR);
+				data.scene = builder.read(scene_resource.scene, TEXTURE_READ_FLAGS::READ_COLOR);
 				data.ui = builder.read(ui_handle.ui, TEXTURE_READ_FLAGS::READ_COLOR);
-				builder.read(scene_handle.depth, TEXTURE_READ_FLAGS::READ_COUNT);
+				builder.read(scene_resource.depth, TEXTURE_READ_FLAGS::READ_COUNT);
 				builder.set_side_effect();		// mark as non cull able
 			},
 
@@ -56,7 +56,7 @@ namespace Rendering
 		);
 	}
 
-	void add_imgui_pass(FrameGraph& fg, FrameGraphBlackboard& bb, Size2i extent)
+	inline void add_imgui_pass(FrameGraph& fg, FrameGraphBlackboard& bb, Size2i extent)
 	{
 		bb.add<imgui_pass_resource>() =
 			fg.add_callback_pass<imgui_pass_resource>(
@@ -74,6 +74,17 @@ namespace Rendering
 					data.ui = builder.create<Rendering::FrameGraphTexture>("imgui texture", { tf, RD::TextureView(), "imgui texture" });
 
 					data.ui = builder.write(data.ui, TEXTURE_WRITE_FLAGS::WRITE_COLOR);
+
+					data.framebuffer_resource = builder.create<Rendering::FrameGraphFramebuffer>(
+						"imgui framebuffer",
+						{
+							.build = [&fg, ui_id = data.ui](Rendering::RenderContext& rc) -> RID {
+								auto& ui_tex = fg.get_resource<Rendering::FrameGraphTexture>(ui_id);
+								return rc.device->framebuffer_create({ ui_tex.texture_rid });
+							},
+							.name = "imgui framebuffer"
+						});
+					data.framebuffer_resource = builder.write(data.framebuffer_resource, FrameGraph::kFlagsIgnored);
 				},
 
 				[=](const imgui_pass_resource& data,
@@ -84,14 +95,10 @@ namespace Rendering
 					auto cmd = rc.command_buffer;
 					auto wsi = rc.wsi;
 
-					// TODO: find alternative, not sure if its good to do it in a loop.
 					DEBUG_ASSERT(wsi->imgui_active, "Trying to add imgui pass when imgui_active if false, NOT ALLOWED!");
 
 					GPU_SCOPE(cmd, "Imgui Pass", Color(0.0, 0.0, 1.0, 1.0));
-					auto& imgui_tex = resources.get<Rendering::FrameGraphTexture>(data.ui);
-					RID frame_buffer = rc.device->framebuffer_create({ imgui_tex.texture_rid});
-					//imgui_tex.texture_rid = rc.device->get_imgui_texture();
-					//auto& scene = resources.get<Rendering::FrameGraphTexture>(data.ui);
+					RID frame_buffer = resources.get<Rendering::FrameGraphFramebuffer>(data.framebuffer_resource).framebuffer_rid;
 
 					ImGui::Render();
 					rc.device->imgui_execute(ImGui::GetDrawData(), cmd, frame_buffer);

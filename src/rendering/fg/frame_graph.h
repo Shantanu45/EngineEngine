@@ -3,6 +3,7 @@
 #include "pass_node.h"
 #include "resource_node.h"
 #include "resource_entry.h"
+#include "util/small_vector.h"
 
 class FrameGraph {
   friend class FrameGraphPassResources;
@@ -77,6 +78,9 @@ public:
   get_descriptor(FrameGraphResource id) const;
 
   template <_VIRTUALIZABLE_CONCEPT(T)>
+  [[nodiscard]] T &get_resource(FrameGraphResource id);
+
+  template <_VIRTUALIZABLE_CONCEPT(T)>
   /** Imports the given resource T into FrameGraph. */
   [[nodiscard]] FrameGraphResource import(const std::string_view name,
                                           const typename T::Desc &, T &&);
@@ -88,6 +92,16 @@ public:
   void compile();
   /** Invokes execution callbacks. */
   void execute(void *context = nullptr, void *allocator = nullptr);
+
+  /**
+   * resets nodes.
+   * 
+   */
+  void reset() {
+	  m_passNodes.clear();
+	  m_resourceNodes.clear();
+	  m_resourceRegistry.clear();
+  }
 
   template <typename Writer>
   std::ostream &debugOutput(std::ostream &, Writer &&) const;
@@ -129,9 +143,9 @@ private:
   }
 
 private:
-  std::vector<PassNode> m_passNodes;
-  std::vector<ResourceNode> m_resourceNodes;
-  std::vector<ResourceEntry> m_resourceRegistry;
+  Util::SmallVector<PassNode> m_passNodes;
+  Util::SmallVector<ResourceNode> m_resourceNodes;
+  Util::SmallVector<ResourceEntry> m_resourceRegistry;
 };
 
 

@@ -14,6 +14,8 @@ enum TEXTURE_WRITE_FLAGS : uint8_t
 {
 	WRITE_COLOR,
 	WRITE_DEPTH,
+	WRITE_COLOR_LOAD, // preserve existing content (LOAD_OP_LOAD, no clear)
+	WRITE_DEPTH_LOAD, // preserve existing depth   (LOAD_OP_LOAD, no clear)
 	WRITE_COUNT
 };
 
@@ -42,6 +44,7 @@ namespace Rendering
 		};
 
 		RID texture_rid;
+		RDD::TextureLayout       current_layout = RDD::TEXTURE_LAYOUT_UNDEFINED;
 
 		inline void create(const Desc& desc, void* ctx) {
 			auto& rc = *static_cast<Rendering::RenderContext*>(ctx);
@@ -79,7 +82,7 @@ namespace Rendering
 				barrier.dst_access = RDD::BARRIER_ACCESS_SHADER_READ_BIT;
 				barrier.prev_layout = RDD::TEXTURE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 				barrier.next_layout = RDD::TEXTURE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-				barrier.subresources = { RDD::TEXTURE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+				barrier.subresources = { RDD::TEXTURE_ASPECT_COLOR_BIT, 0, 1, 0, desc.texture_format.array_layers };
 
 				rc.device->apply_image_barrier(rc.command_buffer,
 					RDD::PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
@@ -91,12 +94,14 @@ namespace Rendering
 				barrier.dst_access = RDD::BARRIER_ACCESS_SHADER_READ_BIT;
 				barrier.prev_layout = RDD::TEXTURE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 				barrier.next_layout = RDD::TEXTURE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-				barrier.subresources = { RDD::TEXTURE_ASPECT_DEPTH_BIT, 0, 1, 0, 1 };
+				barrier.subresources = { RDD::TEXTURE_ASPECT_DEPTH_BIT, 0, 1, 0, desc.texture_format.array_layers };
 
 				rc.device->apply_image_barrier(rc.command_buffer,
 					RDD::PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
 					RDD::PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
 					{ &barrier, 1 });
+
+				current_layout = RDD::TEXTURE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
 			}
 			else
 			{
@@ -115,7 +120,7 @@ namespace Rendering
 			if (flags == TEXTURE_WRITE_FLAGS::WRITE_COLOR) {
 				barrier.dst_access = RDD::BARRIER_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 				barrier.next_layout = RDD::TEXTURE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-				barrier.subresources = { RDD::TEXTURE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+				barrier.subresources = { RDD::TEXTURE_ASPECT_COLOR_BIT, 0, 1, 0, desc.texture_format.array_layers };
 
 				rc.device->apply_image_barrier(rc.command_buffer,
 					RDD::PIPELINE_STAGE_TOP_OF_PIPE_BIT,
@@ -125,14 +130,47 @@ namespace Rendering
 			else if (flags == TEXTURE_WRITE_FLAGS::WRITE_DEPTH) {
 				barrier.dst_access = RDD::BARRIER_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
 					RDD::BARRIER_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+				barrier.prev_layout = current_layout;
 				barrier.next_layout = RDD::TEXTURE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-				barrier.subresources = { RDD::TEXTURE_ASPECT_DEPTH_BIT, 0, 1, 0, 1 };
+				barrier.subresources = { RDD::TEXTURE_ASPECT_DEPTH_BIT, 0, 1, 0, desc.texture_format.array_layers };
 
 				rc.device->apply_image_barrier(rc.command_buffer,
 					RDD::PIPELINE_STAGE_TOP_OF_PIPE_BIT,
 					RDD::PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
 					RDD::PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
 					{ &barrier, 1 });
+
+				current_layout = RDD::TEXTURE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+			}
+			else if (flags == TEXTURE_WRITE_FLAGS::WRITE_COLOR_LOAD) {
+				// Pass-to-pass sync: preserve existing color content (LOAD_OP_LOAD).
+				barrier.src_access  = RDD::BARRIER_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+				barrier.dst_access  = RDD::BARRIER_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+				                      RDD::BARRIER_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+				barrier.prev_layout = RDD::TEXTURE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+				barrier.next_layout = RDD::TEXTURE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+				barrier.subresources = { RDD::TEXTURE_ASPECT_COLOR_BIT, 0, 1, 0, desc.texture_format.array_layers };
+
+				rc.device->apply_image_barrier(rc.command_buffer,
+					RDD::PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+					RDD::PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+					{ &barrier, 1 });
+			}
+			else if (flags == TEXTURE_WRITE_FLAGS::WRITE_DEPTH_LOAD) {
+				// Pass-to-pass sync: preserve existing depth content (LOAD_OP_LOAD).
+				barrier.src_access  = RDD::BARRIER_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+				barrier.dst_access  = RDD::BARRIER_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+				barrier.prev_layout = RDD::TEXTURE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+				barrier.next_layout = RDD::TEXTURE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+				barrier.subresources = { RDD::TEXTURE_ASPECT_DEPTH_BIT, 0, 1, 0, desc.texture_format.array_layers };
+
+				rc.device->apply_image_barrier(rc.command_buffer,
+					RDD::PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+					RDD::PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+					RDD::PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+					{ &barrier, 1 });
+
+				current_layout = RDD::TEXTURE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 			}
 			else
 			{
@@ -143,5 +181,56 @@ namespace Rendering
 		inline static std::string to_string(const Desc& d) {
 			return d.texture_name;
 		}
+	};
+
+	struct FrameGraphFramebuffer {
+		struct Desc {
+			std::function<RID(RenderContext&)> build;
+			std::string name;
+		};
+
+		RID framebuffer_rid;
+
+		void create(const Desc& desc, void* ctx) {
+			auto& rc = *static_cast<RenderContext*>(ctx);
+			framebuffer_rid = desc.build(rc);
+		}
+
+		void destroy(const Desc& desc, void* ctx) {
+			auto& rc = *static_cast<RenderContext*>(ctx);
+			if (framebuffer_rid.is_valid()) {
+				rc.device->free_rid(framebuffer_rid);
+				framebuffer_rid = RID();
+			}
+		}
+
+		static std::string to_string(const Desc& d) { return d.name; }
+	};
+
+	struct FrameGraphUniformSet {
+		struct Desc {
+			std::function<RID(RenderContext&)> build;
+			std::string name;
+			bool owns_rid = true;
+		};
+
+		RID uniform_set_rid;
+		bool owns_rid = true;
+
+		void create(const Desc& desc, void* ctx) {
+			auto& rc = *static_cast<RenderContext*>(ctx);
+			uniform_set_rid = desc.build(rc);
+			owns_rid = desc.owns_rid;
+		}
+
+		void destroy(const Desc& desc, void* ctx) {
+			auto& rc = *static_cast<RenderContext*>(ctx);
+			if (owns_rid && uniform_set_rid.is_valid()) {
+				rc.device->free_rid(uniform_set_rid);
+				uniform_set_rid = RID();
+			}
+		}
+
+		static std::string to_string(const Desc& d) { return d.name; }
 	};
 }

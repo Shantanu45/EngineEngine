@@ -4,6 +4,7 @@
 #include "resource_node.h"
 #include "resource_entry.h"
 #include <vector>
+#include "util/small_vector.h"
 
 namespace graphviz {
 
@@ -181,18 +182,18 @@ struct Graph {
     std::string key;
     std::string label;
     Color fillcolor;
-    std::vector<std::string> cluster;
+    Util::SmallVector<std::string> cluster;
   };
-  std::vector<Vertex> vertices;
+  Util::SmallVector<Vertex> vertices;
 
   struct Edge {
     std::string key;
     Color color;
-    std::vector<std::string> vertices;
+    Util::SmallVector<std::string> vertices;
   };
-  std::vector<Edge> edges;
+  Util::SmallVector<Edge> edges;
 
-  std::vector<uint32_t> imported;
+  Util::SmallVector<uint32_t> imported;
 };
 
 struct Writer {
@@ -214,9 +215,9 @@ struct Writer {
 
   Graph graph{};
 
-  void operator()(const PassNode &, const std::vector<ResourceNode> &);
+  void operator()(const PassNode &, const Util::SmallVector<ResourceNode> &);
   void operator()(const ResourceNode &, const ResourceEntry &,
-                  const std::vector<PassNode> &);
+                  const Util::SmallVector<PassNode> &);
 
   void flush(std::ostream &) const;
 };

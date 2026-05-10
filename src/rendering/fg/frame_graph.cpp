@@ -100,15 +100,16 @@ PassNode &
 FrameGraph::_create_pass_node(const std::string_view name,
                             std::unique_ptr<FrameGraphPassConcept> &&base) {
   const auto id = static_cast<uint32_t>(m_passNodes.size());
-  return m_passNodes.emplace_back(PassNode{name, id, std::move(base)});
+  m_passNodes.emplace_back(PassNode{name, id, std::move(base)});
+  return m_passNodes.back();
 }
 
 ResourceNode &FrameGraph::_create_resource_node(const std::string_view name,
                                               uint32_t resourceId,
                                               uint32_t version) {
   const auto id = static_cast<uint32_t>(m_resourceNodes.size());
-  return m_resourceNodes.emplace_back(
-    ResourceNode{name, id, resourceId, version});
+  m_resourceNodes.emplace_back(ResourceNode{name, id, resourceId, version});
+  return m_resourceNodes.back();
 }
 FrameGraphResource FrameGraph::_clone(FrameGraphResource id) {
   const auto &node = _get_resource_node(id);

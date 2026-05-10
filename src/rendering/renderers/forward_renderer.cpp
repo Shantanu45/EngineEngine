@@ -1,0 +1,462 @@
+#include "rendering/renderers/forward_renderer.h"
+
+#include "rendering/wsi.h"
+#include "rendering/uniform_set_builder.h"
+#include "rendering/render_passes/common.h"
+#include "rendering/render_passes/shadow_passes.h"
+#include "rendering/shadow_system.h"
+#include "math/rect2.h"
+
+#include "util/profiler.h"
+#include "util/small_vector.h"
+
+#include <iterator>
+#include <utility>
+
+namespace Rendering {
+
+void ForwardRenderer::initialize(WSI* wsi, RenderingDevice* dev, RID cubemap) {
+    device = dev;
+
+    create_shared_resources(dev);
+    create_samplers(dev);
+    create_main_pipelines(wsi, dev);
+    create_overlay_pipelines(wsi, dev);
+    create_shadow_pipelines(wsi, dev);
+    create_main_uniform_sets(dev);
+    create_overlay_uniform_sets(dev, cubemap);
+    create_shadow_uniform_sets(dev);
+    debug_renderer.initialize(dev);
+}
+
+void ForwardRenderer::create_shared_resources(RenderingDevice* dev)
+{
+    frame_ubo.create(dev,  "Frame UBO");
+    light_ubo.create(dev,  "Light UBO");
+    shadow_ubo.create(dev, "Shadow UBO");
+}
+
+void ForwardRenderer::create_samplers(RenderingDevice* dev)
+{
+    {
+        RDC::SamplerState ss;
+        ss.mag_filter     = RDC::SAMPLER_FILTER_LINEAR;
+        ss.min_filter     = RDC::SAMPLER_FILTER_LINEAR;
+        ss.mip_filter     = RDC::SAMPLER_FILTER_LINEAR;
+        ss.repeat_u       = RDC::SAMPLER_REPEAT_MODE_REPEAT;
+        ss.repeat_v       = RDC::SAMPLER_REPEAT_MODE_REPEAT;
+        ss.use_anisotropy = true;
+        ss.anisotropy_max = 16.0f;
+        sampler = RIDHandle(dev->sampler_create(ss));
+    }
+
+    sampler_cube         = RIDHandle(dev->sampler_create({}));
+    point_shadow_sampler = RIDHandle(dev->sampler_create({}));
+
+    {
+        RDC::SamplerState ss;
+        ss.mag_filter     = RDC::SAMPLER_FILTER_LINEAR;
+        ss.min_filter     = RDC::SAMPLER_FILTER_LINEAR;
+        ss.enable_compare = true;
+        ss.compare_op     = RDC::COMPARE_OP_LESS_OR_EQUAL;
+        shadow_sampler = RIDHandle(dev->sampler_create(ss));
+    }
+}
+
+void ForwardRenderer::create_main_pipelines(WSI* wsi, RenderingDevice*)
+{
+    auto vertex_format = wsi->get_vertex_format_by_type(VERTEX_FORMAT_VARIATIONS::DEFAULT);
+
+    RD::AttachmentFormat color_att;
+    color_att.format      = RD::DATA_FORMAT_R16G16B16A16_SFLOAT;
+    color_att.usage_flags = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT;
+
+    RD::AttachmentFormat depth_att;
+    depth_att.format      = RD::DATA_FORMAT_D32_SFLOAT;
+    depth_att.usage_flags = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+
+    auto main_fb_format = RD::get_singleton()->framebuffer_format_create({ color_att, depth_att });
+
+    RDC::PipelineDepthStencilState ds_standard;
+    ds_standard.enable_depth_test      = true;
+    ds_standard.enable_depth_write     = true;
+    ds_standard.depth_compare_operator = RDC::COMPARE_OP_LESS;
+
+    pipeline_color = PipelineBuilder{}
+        .set_shader({ "assets://shaders/forward/forward.vert",
+                      "assets://shaders/forward/forward.frag" }, "light_map")
+        .set_vertex_format(vertex_format)
+        .set_depth_stencil_state(ds_standard)
+        .build(main_fb_format);
+
+    pipeline_pbr = PipelineBuilder{}
+        .set_shader({ "assets://shaders/pbr/forward.vert",
+                      "assets://shaders/pbr/forward.frag" }, "pbr_light_map")
+        .set_vertex_format(vertex_format)
+        .set_depth_stencil_state(ds_standard)
+        .build(main_fb_format);
+}
+
+void ForwardRenderer::create_overlay_pipelines(WSI* wsi, RenderingDevice*)
+{
+    auto vertex_format = wsi->get_vertex_format_by_type(VERTEX_FORMAT_VARIATIONS::DEFAULT);
+
+    RD::AttachmentFormat color_att;
+    color_att.format      = RD::DATA_FORMAT_R16G16B16A16_SFLOAT;
+    color_att.usage_flags = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT;
+
+    RD::AttachmentFormat depth_att;
+    depth_att.format      = RD::DATA_FORMAT_D32_SFLOAT;
+    depth_att.usage_flags = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+
+    auto main_fb_format = RD::get_singleton()->framebuffer_format_create({ color_att, depth_att });
+
+    RDC::PipelineDepthStencilState ds_standard;
+    ds_standard.enable_depth_test      = true;
+    ds_standard.enable_depth_write     = true;
+    ds_standard.depth_compare_operator = RDC::COMPARE_OP_LESS;
+
+    pipeline_light = PipelineBuilder{}
+        .set_shader({ "assets://shaders/light_cube.vert",
+                      "assets://shaders/light_cube.frag" }, "cube_shader")
+        .set_vertex_format(vertex_format)
+        .set_depth_stencil_state(ds_standard)
+        .build(main_fb_format);
+
+    pipeline_grid = PipelineBuilder{}
+        .set_shader({ "assets://shaders/grid.vert",
+                      "assets://shaders/grid.frag" }, "grid_shader")
+        .set_vertex_format(vertex_format)
+        .set_render_primitive(RDC::RENDER_PRIMITIVE_LINES)
+        .set_depth_stencil_state(ds_standard)
+        .build(main_fb_format);
+
+    {
+        RDC::PipelineDepthStencilState ds_skybox;
+        ds_skybox.enable_depth_test      = true;
+        ds_skybox.enable_depth_write     = false;
+        ds_skybox.depth_compare_operator = RDC::COMPARE_OP_LESS_OR_EQUAL;
+        RDC::PipelineRasterizationState rs_skybox;
+        rs_skybox.cull_mode = RDC::POLYGON_CULL_DISABLED;
+        pipeline_skybox = PipelineBuilder{}
+            .set_shader({ "assets://shaders/skybox.vert",
+                          "assets://shaders/skybox.frag" }, "skybox_shader")
+            .set_vertex_format(vertex_format)
+            .set_depth_stencil_state(ds_skybox)
+            .set_rasterization_state(rs_skybox)
+            .build(main_fb_format);
+    }
+}
+
+void ForwardRenderer::create_shadow_pipelines(WSI* wsi, RenderingDevice*)
+{
+    auto vertex_format = wsi->get_vertex_format_by_type(VERTEX_FORMAT_VARIATIONS::DEFAULT);
+
+    RD::AttachmentFormat shadow_att;
+    shadow_att.format      = RD::DATA_FORMAT_D32_SFLOAT;
+    shadow_att.usage_flags = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT;
+    auto shadow_fb_format  = RD::get_singleton()->framebuffer_format_create({ shadow_att });
+
+    RDC::PipelineDepthStencilState ds_standard;
+    ds_standard.enable_depth_test      = true;
+    ds_standard.enable_depth_write     = true;
+    ds_standard.depth_compare_operator = RDC::COMPARE_OP_LESS;
+
+    {
+        RDC::PipelineRasterizationState rs_shadow;
+        rs_shadow.cull_mode = RDC::POLYGON_CULL_FRONT;
+        rs_shadow.depth_bias_enabled = true;
+        rs_shadow.depth_bias_constant_factor = 1.25f;
+        rs_shadow.depth_bias_slope_factor = 1.75f;
+        pipeline_shadow = PipelineBuilder{}
+            .set_shader({ "assets://shaders/shadow.vert",
+                          "assets://shaders/shadow.geom",
+                          "assets://shaders/shadow.frag" }, "shadow_shader")
+            .set_vertex_format(vertex_format)
+            .set_depth_stencil_state(ds_standard)
+            .set_rasterization_state(rs_shadow)
+            .build(shadow_fb_format);
+    }
+
+    pipeline_point_shadow = PipelineBuilder{}
+        .set_shader({
+            "assets://shaders/point_shadow.vert",
+            "assets://shaders/point_shadow.geom",
+            "assets://shaders/point_shadow.frag"
+        }, "point_shadow_shader")
+        .set_vertex_format(vertex_format)
+        .set_depth_stencil_state(ds_standard)
+        .build(shadow_fb_format);
+}
+
+void ForwardRenderer::create_main_uniform_sets(RenderingDevice* dev)
+{
+    uniform_set_0 = UniformSetBuilder{}
+        .add(frame_ubo.as_uniform(0))
+        .add(shadow_ubo.as_uniform(1))
+        .add(light_ubo.as_uniform(2))
+        .add_sampler(3, sampler)
+        .add_sampler(4, shadow_sampler)
+        .add_sampler(5, point_shadow_sampler)
+        .build(dev, pipeline_color.shader_rid, 0);
+
+    uniform_set_0_pbr = UniformSetBuilder{}
+        .add(frame_ubo.as_uniform(0))
+        .add(shadow_ubo.as_uniform(1))
+        .add(light_ubo.as_uniform(2))
+        .add_sampler(3, sampler)
+        .add_sampler(4, shadow_sampler)
+        .add_sampler(5, point_shadow_sampler)
+        .build(dev, pipeline_pbr.shader_rid, 0);
+}
+
+void ForwardRenderer::create_overlay_uniform_sets(RenderingDevice* dev, RID cubemap)
+{
+    uniform_set_0_light = UniformSetBuilder{}
+        .add(frame_ubo.as_uniform(0))
+        .build(dev, pipeline_light.shader_rid, 0);
+
+    uniform_set_skybox = UniformSetBuilder{}
+        .add(frame_ubo.as_uniform(0))
+        .add_texture(1, sampler_cube, cubemap)
+        .build(dev, pipeline_skybox.shader_rid, 0);
+}
+
+void ForwardRenderer::create_shadow_uniform_sets(RenderingDevice* dev)
+{
+    uniform_set_0_shadow = UniformSetBuilder{}
+        .add(frame_ubo.as_uniform(0))
+        .add(shadow_ubo.as_uniform(1))
+        .add_sampler(3, sampler)
+        .build(dev, pipeline_shadow.shader_rid, 0);
+
+    uniform_set_0_point_shadow = UniformSetBuilder{}
+        .add(frame_ubo.as_uniform(0))
+        .add(shadow_ubo.as_uniform(1))
+        .add_sampler(3, sampler)
+        .build(dev, pipeline_point_shadow.shader_rid, 0);
+}
+
+void ForwardRenderer::shutdown()
+{
+    uniform_set_skybox.reset();
+    uniform_set_0_point_shadow.reset();
+    uniform_set_0_shadow.reset();
+    uniform_set_0_light.reset();
+    uniform_set_0_pbr.reset();
+    uniform_set_0.reset();
+
+    point_shadow_sampler.reset();
+    shadow_sampler.reset();
+    sampler_cube.reset();
+    sampler.reset();
+
+    shadow_ubo.free();
+    light_ubo.free();
+    frame_ubo.free();
+
+    device = nullptr;
+}
+
+// ---------------------------------------------------------------------------
+// Private — per-frame helpers
+// ---------------------------------------------------------------------------
+
+std::vector<Drawable> ForwardRenderer::build_main_drawables(const SceneView& view) const {
+    std::vector<Drawable> out;
+    out.reserve(view.instances.size() + 2);
+    std::vector<Drawable> opaque_drawables;
+    opaque_drawables.reserve(view.instances.size());
+    std::vector<Drawable> ordered_non_opaque_drawables;
+    ordered_non_opaque_drawables.reserve(view.instances.size());
+
+    glm::mat4 identity = glm::mat4(1.0f);
+
+    if (view.skybox_mesh != INVALID_MESH)
+        out.push_back(Drawable::make(pipeline_skybox, view.skybox_mesh,
+            PushConstantData::from(ObjectData_UBO{ identity, identity }),
+            { { (RID)uniform_set_skybox, 0 } }));
+
+    if (view.grid_mesh != INVALID_MESH)
+        out.push_back(Drawable::make(pipeline_grid, view.grid_mesh,
+            PushConstantData::from(ObjectData_UBO{ identity, glm::transpose(glm::inverse(identity)) }),
+            { { (RID)uniform_set_0_light, 0 } }));
+
+    for (const auto& inst : view.instances) {
+        bool opaque = inst.category == MeshCategory::Opaque;
+        Pipeline p    = opaque
+            ? (view.use_pbr_lighting ? pipeline_pbr : pipeline_color)
+            : pipeline_light;
+        RID      set0 = opaque
+            ? (view.use_pbr_lighting ? (RID)uniform_set_0_pbr : (RID)uniform_set_0)
+            : (RID)uniform_set_0_light;
+        auto drawable = Drawable::make(
+            p, inst.mesh,
+            PushConstantData::from(ObjectData_UBO{ inst.model, inst.normal_matrix }),
+            { { set0, 0 } },
+            inst.material_sets
+        );
+        if (opaque) {
+            opaque_drawables.push_back(std::move(drawable));
+        } else {
+            ordered_non_opaque_drawables.push_back(std::move(drawable));
+        }
+    }
+
+    sort_drawables_for_state_reuse(opaque_drawables);
+    out.insert(out.end(),
+               std::make_move_iterator(opaque_drawables.begin()),
+               std::make_move_iterator(opaque_drawables.end()));
+    out.insert(out.end(),
+               std::make_move_iterator(ordered_non_opaque_drawables.begin()),
+               std::make_move_iterator(ordered_non_opaque_drawables.end()));
+
+    return out;
+}
+
+// ---------------------------------------------------------------------------
+// IRenderer
+// ---------------------------------------------------------------------------
+
+void ForwardRenderer::setup_passes(FrameGraph& fg, FrameGraphBlackboard& bb,
+                                   const SceneView& view, MeshStorage& storage) {
+    ZoneScoped;
+    // Upload shadow buffer first — frame UBO references shadow indices from it.
+    const ShadowBuildResult shadow_build = ShadowSystem::build_shadow_buffer(
+        view.lights,
+        view.camera,
+        view.directional_shadow_mode);
+    shadow_ubo.upload(device, shadow_build.buffer);
+
+    // Upload frame UBO
+    {
+        FrameData_UBO frame{};
+        frame.camera                   = view.camera;
+        frame.time                     = static_cast<float>(view.elapsed);
+        frame.directional_shadow_index = shadow_build.directional_shadow_index;
+        frame.point_shadow_index       = shadow_build.point_shadow_index;
+        frame.material_debug_view      = static_cast<uint32_t>(view.material_debug_view);
+        frame.shadow_bias              = view.shadow_bias;
+        frame_ubo.upload(device, frame);
+    }
+
+    // Upload light buffer
+    {
+        LightBuffer_UBO buf{};
+        for (const auto& l : view.lights) {
+            if (buf.count >= MAX_LIGHTS) break;
+            buf.lights[buf.count++] = l;
+        }
+        light_ubo.upload(device, buf);
+    }
+
+    // Build drawable lists
+    auto shadow_draws = ShadowSystem::build_shadow_drawables(
+        view,
+        { ShadowProjection::Directional2D, pipeline_shadow, (RID)uniform_set_0_shadow });
+    auto point_shadow_draws = ShadowSystem::build_shadow_drawables(
+        view,
+        { ShadowProjection::PointCube, pipeline_point_shadow, (RID)uniform_set_0_point_shadow });
+    auto main_draws = build_main_drawables(view);
+
+    add_point_shadow_pass(fg, bb, 1024, point_shadow_draws, storage);
+    add_shadow_pass(fg, bb, { 2048, 2048 }, view.directional_shadow_mode, shadow_draws, storage);
+
+    auto active_color_pipeline = view.use_pbr_lighting ? pipeline_pbr : pipeline_color;
+    auto color_pipeline_rid = active_color_pipeline.pipeline_rid;
+
+    bb.add<forward_pass_resource>() =
+        fg.add_callback_pass<forward_pass_resource>(
+            "Forward Pass",
+            [&](FrameGraph::Builder& builder, forward_pass_resource& data)
+            {
+                RD::TextureFormat tf;
+                tf.texture_type = RD::TEXTURE_TYPE_2D;
+                tf.width        = view.extent.x;
+                tf.height       = view.extent.y;
+                tf.usage_bits   = RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT;
+                tf.format       = RD::DATA_FORMAT_R16G16B16A16_SFLOAT;
+                data.scene = builder.create<FrameGraphTexture>("scene texture", { tf, RD::TextureView(), "scene texture" });
+
+                RD::TextureFormat tf_depth;
+                tf_depth.texture_type = RD::TEXTURE_TYPE_2D;
+                tf_depth.width        = view.extent.x;
+                tf_depth.height       = view.extent.y;
+                tf_depth.usage_bits   = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+                tf_depth.format       = RD::DATA_FORMAT_D32_SFLOAT;
+                data.depth = builder.create<FrameGraphTexture>("scene depth texture", { tf_depth, RD::TextureView(), "scene depth texture" });
+
+                data.scene = builder.write(data.scene, TEXTURE_WRITE_FLAGS::WRITE_COLOR);
+                data.depth = builder.write(data.depth, TEXTURE_WRITE_FLAGS::WRITE_DEPTH);
+
+                auto& shadow_res       = bb.get<shadow_pass_resource>();
+                auto& point_shadow_res = bb.get<point_shadow_pass_resource>();
+                data.shadow_map_in   = builder.read(shadow_res.shadow_map,           TEXTURE_READ_FLAGS::READ_DEPTH);
+                data.point_shadow_in = builder.read(point_shadow_res.shadow_cubemap, TEXTURE_READ_FLAGS::READ_DEPTH);
+
+                data.shadow_uniform_set = builder.create<FrameGraphUniformSet>(
+                    "shadow uniform set",
+                    {
+                        .build = [&fg,
+                                  shader_rid = active_color_pipeline.shader_rid,
+                                  shadow_id  = shadow_res.shadow_map,
+                                  point_id   = point_shadow_res.shadow_cubemap]
+                                 (RenderContext& rc) -> RID {
+                            auto& shadow_tex       = fg.get_resource<FrameGraphTexture>(shadow_id);
+                            auto& point_shadow_tex = fg.get_resource<FrameGraphTexture>(point_id);
+                            return UniformSetBuilder{}
+                                .add_texture_only(0, shadow_tex.texture_rid)
+                                .add_texture_only(1, point_shadow_tex.texture_rid)
+                                .build_cached(rc.device, shader_rid, 1);
+                        },
+                        .name = "shadow uniform set",
+                        .owns_rid = false
+                    });
+                data.shadow_uniform_set = builder.write(data.shadow_uniform_set, FrameGraph::kFlagsIgnored);
+
+                data.framebuffer_resource = builder.create<FrameGraphFramebuffer>(
+                    "forward framebuffer",
+                    {
+                        .build = [&fg, scene_id = data.scene, depth_id = data.depth](RenderContext& rc) -> RID {
+                            auto& scene_tex = fg.get_resource<FrameGraphTexture>(scene_id);
+                            auto& depth_tex = fg.get_resource<FrameGraphTexture>(depth_id);
+                            return rc.device->framebuffer_create({ scene_tex.texture_rid, depth_tex.texture_rid });
+                        },
+                        .name = "forward framebuffer"
+                    });
+                data.framebuffer_resource = builder.write(data.framebuffer_resource, FrameGraph::kFlagsIgnored);
+            },
+            [drawables = main_draws, &storage, color_pipeline_rid](
+                const forward_pass_resource& data, FrameGraphPassResources& resources, void* ctx)
+            {
+                auto& rc  = *static_cast<RenderContext*>(ctx);
+                auto  cmd = rc.command_buffer;
+
+                RID uniform_set_1 = resources.get<FrameGraphUniformSet>(data.shadow_uniform_set).uniform_set_rid;
+                RID frame_buffer  = resources.get<FrameGraphFramebuffer>(data.framebuffer_resource).framebuffer_rid;
+
+                uint32_t w = rc.device->screen_get_width();
+                uint32_t h = rc.device->screen_get_height();
+
+                GPU_SCOPE(cmd, "Forward Pass", Color(1.0f, 0.0f, 0.0f, 1.0f));
+                std::array<RDD::RenderPassClearValue, 2> clear_values;
+                clear_values[0].color   = Color();
+                clear_values[1].depth   = 1.0f;
+                clear_values[1].stencil = 0;
+
+                rc.device->begin_render_pass_from_frame_buffer(frame_buffer, Rect2i(0, 0, w, h), clear_values);
+
+                for (auto drawable : drawables) {
+                    if (drawable.pipeline.pipeline_rid == color_pipeline_rid)
+                        drawable.set_uniform_set({ uniform_set_1, 1 });
+                    submit_drawable(rc, cmd, drawable, storage);
+                }
+
+                rc.wsi->end_render_pass(cmd);
+            });
+
+    auto& fwd = bb.get<forward_pass_resource>();
+    debug_renderer.add_pass(fg, bb, fwd.scene, fwd.depth, view.camera, view.extent);
+}
+
+} // namespace Rendering
