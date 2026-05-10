@@ -1,6 +1,7 @@
 #pragma once
 #include <glm/glm.hpp>
 #include <cstdint>
+#include <cstddef>
 #include "rendering/light.h"
 
 struct alignas(16) CameraData {
@@ -20,9 +21,12 @@ struct alignas(16) FrameData_UBO {
     uint32_t   directional_shadow_index; // index into ShadowBuffer_UBO
     uint32_t   point_shadow_index;       // index into ShadowBuffer_UBO
     uint32_t   material_debug_view;
-    float      _pad0 = 0.0f;
     glm::vec4  shadow_bias = glm::vec4(0.002f, 0.0005f, 0.005f, 0.0001f);
 };
+
+static_assert(sizeof(CameraData) == 160, "CameraData size mismatch");
+static_assert(offsetof(FrameData_UBO, time) == 160, "FrameData_UBO time offset mismatch");
+static_assert(offsetof(FrameData_UBO, shadow_bias) == 176, "FrameData_UBO shadow_bias offset mismatch");
 
 struct alignas(16) ObjectData_UBO {
     glm::mat4 model;
