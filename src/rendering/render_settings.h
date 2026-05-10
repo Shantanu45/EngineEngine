@@ -21,6 +21,11 @@ enum class MaterialDebugView : int {
     LightSpaceCoords = 11,
 };
 
+enum class DirectionalShadowMode : int {
+    SingleMap = 0,
+    Cascaded = 1,
+};
+
 struct RenderSettings {
     bool frustum_culling = true;
     bool wireframe       = false;
@@ -43,4 +48,5 @@ struct RenderSettings {
     float point_shadow_bias_min = 0.0001f;
     ToneMapper tone_mapper = ToneMapper::ACES;
     MaterialDebugView material_debug_view = MaterialDebugView::Lit;
+    DirectionalShadowMode directional_shadow_mode = DirectionalShadowMode::SingleMap;
 };

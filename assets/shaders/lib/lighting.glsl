@@ -7,6 +7,7 @@
 struct ShadowData {
     mat4  matrices[6];
     vec4  light_pos;
+    vec4  cascade_splits;
     uint  light_index;
     float _pad0, _pad1, _pad2;
 };

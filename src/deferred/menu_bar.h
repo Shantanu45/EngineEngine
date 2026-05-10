@@ -40,6 +40,9 @@ struct MenuBarPanel : IUIPanel {
                 ImGui::DragFloat("Directional Bias Min", &ctx.settings->directional_shadow_bias_min, 0.00001f, 0.0f, 0.005f, "%.5f");
                 ImGui::DragFloat("Point Bias Max", &ctx.settings->point_shadow_bias_max, 0.0001f, 0.0f, 0.05f, "%.5f");
                 ImGui::DragFloat("Point Bias Min", &ctx.settings->point_shadow_bias_min, 0.00001f, 0.0f, 0.005f, "%.5f");
+                int shadow_mode = static_cast<int>(ctx.settings->directional_shadow_mode);
+                if (ImGui::Combo("Directional Shadow", &shadow_mode, "Single Map\0Cascaded\0"))
+                    ctx.settings->directional_shadow_mode = static_cast<DirectionalShadowMode>(shadow_mode);
                 int tone_mapper = static_cast<int>(ctx.settings->tone_mapper);
                 if (ImGui::Combo("Tone Mapper", &tone_mapper, "None\0Reinhard\0ACES\0"))
                     ctx.settings->tone_mapper = static_cast<ToneMapper>(tone_mapper);

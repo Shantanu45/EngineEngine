@@ -47,6 +47,7 @@ struct SceneView {
     Size2i                    extent{};
     bool                      use_pbr_lighting = false;
     MaterialDebugView         material_debug_view = MaterialDebugView::Lit;
+    DirectionalShadowMode     directional_shadow_mode = DirectionalShadowMode::SingleMap;
     glm::vec4                 shadow_bias = glm::vec4(0.002f, 0.0005f, 0.005f, 0.0001f);
 };
 

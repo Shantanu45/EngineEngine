@@ -4,10 +4,14 @@
 #include "rendering/light.h"
 
 struct alignas(16) CameraData {
-    glm::mat4 view = glm::mat4(1.0f);
-    glm::mat4 proj = glm::mat4(1.0f);
-    glm::vec3 cameraPos = glm::vec3(0.0f);
-    float     _pad = 0.0f;
+	glm::mat4 view = glm::mat4(1.0f);
+	glm::mat4 proj = glm::mat4(1.0f);
+
+	glm::vec3 cameraPos = glm::vec3(0.0f);
+	float     near_clip = 0.1f;
+
+	float     far_clip = 1000.0f;
+	float     _pad[3] = {};
 };
 
 struct alignas(16) FrameData_UBO {
@@ -32,6 +36,7 @@ struct alignas(16) ObjectData_UBO {
 struct alignas(16) ShadowData {
     glm::mat4 matrices[6];
     glm::vec4 light_pos;
+    glm::vec4 cascade_splits;
     uint32_t  light_index;
     float     _pad[3];
 };
@@ -42,5 +47,5 @@ struct alignas(16) ShadowBuffer_UBO {
     ShadowData shadows[MAX_LIGHTS];
 };
 
-static_assert(sizeof(ShadowData) == 416,                         "ShadowData size mismatch");
-static_assert(sizeof(ShadowBuffer_UBO) == 16 + 416 * MAX_LIGHTS, "ShadowBuffer_UBO size mismatch");
+static_assert(sizeof(ShadowData) == 432,                         "ShadowData size mismatch");
+static_assert(sizeof(ShadowBuffer_UBO) == 16 + 432 * MAX_LIGHTS, "ShadowBuffer_UBO size mismatch");

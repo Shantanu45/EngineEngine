@@ -55,10 +55,14 @@ RenderSceneExtractResult RenderSceneExtractor::extract(RenderSceneExtractInput i
 	view.camera.view = input.render_camera.get_view();
 	view.camera.proj = input.render_camera.get_projection();
 	view.camera.cameraPos = input.render_camera.get_position();
+	view.camera.near_clip = input.render_camera.get_near_clip();
+	view.camera.far_clip = input.render_camera.get_far_clip();
+
 	view.elapsed     = input.elapsed;
 	view.extent      = input.extent;
 	view.use_pbr_lighting = input.settings.use_pbr_lighting;
 	view.material_debug_view = input.settings.material_debug_view;
+	view.directional_shadow_mode = input.settings.directional_shadow_mode;
 	view.shadow_bias = glm::vec4(
 		input.settings.directional_shadow_bias_scale,
 		input.settings.directional_shadow_bias_min,

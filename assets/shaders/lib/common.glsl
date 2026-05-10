@@ -6,7 +6,11 @@ struct CameraData {
     mat4 view;
     mat4 proj;
     vec3 cameraPos;
-    float _pad;
+    float near_clip;
+    float far_clip;
+    float _pad0;
+    float _pad1;
+    float _pad2;
 };
 
 struct ObjectData {

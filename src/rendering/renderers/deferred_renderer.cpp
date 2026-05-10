@@ -50,7 +50,10 @@ namespace Rendering
 	void DeferredRenderer::setup_passes(FrameGraph& fg, FrameGraphBlackboard& bb,
 		const SceneView& view, MeshStorage& storage)
 	{
-		const ShadowBuildResult shadow_build = ShadowSystem::build_shadow_buffer(view.lights);
+		const ShadowBuildResult shadow_build = ShadowSystem::build_shadow_buffer(
+			view.lights,
+			view.camera,
+			view.directional_shadow_mode);
 		shadow_ubo.upload(device, shadow_build.buffer);
 
 		// Upload per-frame UBOs

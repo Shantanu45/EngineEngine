@@ -109,10 +109,13 @@ void TerrainRuntime::render_frame(double frame_time, double elapsed_time)
 	view.camera.view = camera.get_view();
 	view.camera.proj = camera.get_projection();
 	view.camera.cameraPos = camera.get_position();
+	view.camera.near_clip = camera.get_near_clip();
+	view.camera.far_clip = camera.get_far_clip();
 	view.elapsed = elapsed_time;
 	view.extent = { device->screen_get_width(), device->screen_get_height() };
 	view.use_pbr_lighting = render_settings.use_pbr_lighting;
 	view.material_debug_view = render_settings.material_debug_view;
+	view.directional_shadow_mode = render_settings.directional_shadow_mode;
 	view.skybox_mesh = render_settings.draw_skybox ? skybox_mesh : Rendering::INVALID_MESH;
 	view.grid_mesh = render_settings.draw_grid ? grid_mesh : Rendering::INVALID_MESH;
 
@@ -497,6 +500,9 @@ void TerrainRuntime::draw_ui()
 	ImGui::SliderFloat("Water Forward Bias", &water_forward_bias, 0.0f, 0.8f);
 	ImGui::DragFloat("Water Min Size", &water_min_diameter, 10.0f, 80.0f, 2000.0f);
 	ImGui::SliderFloat("Water Depth Scale", &water_depth_scale, 1.0f, 6.0f);
+	int shadow_mode = static_cast<int>(render_settings.directional_shadow_mode);
+	if (ImGui::Combo("Directional Shadow", &shadow_mode, "Single Map\0Cascaded\0"))
+		render_settings.directional_shadow_mode = static_cast<DirectionalShadowMode>(shadow_mode);
 
 	int debug_view = static_cast<int>(render_settings.material_debug_view);
 	if (ImGui::BeginCombo("Debug", material_debug_view_name(render_settings.material_debug_view))) {

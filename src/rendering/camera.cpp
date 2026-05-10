@@ -18,6 +18,16 @@ void Camera::set_perspective(float p_fov_degrees, float p_aspect, float p_near, 
 	_recalculate_projection();
 }
 
+float Camera::get_near_clip() const
+{
+	return _near;
+}
+
+float Camera::get_far_clip() const
+{
+	return _far;
+}
+
 void Camera::set_orthographic(float p_left, float p_right, float p_bottom, float p_top, float p_near, float p_far)
 {
 	_projection_type = CameraProjection::Orthographic;

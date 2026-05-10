@@ -70,6 +70,9 @@ public:
 
 	void set_perspective(float p_fov_degrees, float p_aspect, float p_near, float p_far);
 
+	float get_near_clip() const;
+	float get_far_clip() const;
+
 	void set_orthographic(float p_left, float p_right, float p_bottom, float p_top,
 		float p_near, float p_far);
 
