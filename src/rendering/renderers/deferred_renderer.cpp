@@ -22,6 +22,8 @@ namespace Rendering
 
 	void DeferredRenderer::shutdown()
 	{
+		uniform_set_0_transparent_pbr.reset();
+		uniform_set_0_transparent.reset();
 		uniform_set_0_deferred_regular.reset();
 		uniform_set_0_deferred.reset();
 		uniform_set_skybox.reset();
@@ -82,6 +84,7 @@ namespace Rendering
 		setup_offscreen_pass(fg, bb, view, storage);
 		setup_deferred_pass(fg, bb, view, storage);
 		setup_overlay_pass(fg, bb, view, storage);
+		setup_transparent_pass(fg, bb, view, storage);
 
 		auto& deferred = bb.get<deferred_pass_resource>();
 		debug_renderer.add_pass(fg, bb, deferred.scene, deferred.depth, view.camera, view.extent);
@@ -132,7 +135,7 @@ namespace Rendering
 		std::vector<Drawable> drawables;
 		drawables.reserve(view.instances.size());
 		for (const auto& inst : view.instances) {
-			if (inst.category != MeshCategory::Opaque) continue;
+			if (inst.category != MeshCategory::Opaque || inst.transparent) continue;
 			drawables.push_back(Drawable::make(
 				pipeline_color, inst.mesh,
 				PushConstantData::from(ObjectData_UBO{ inst.model, inst.normal_matrix }),
@@ -432,6 +435,125 @@ namespace Rendering
 			});
 	}
 
+	void DeferredRenderer::setup_transparent_pass(FrameGraph& fg, FrameGraphBlackboard& bb, const SceneView& view, MeshStorage& storage)
+	{
+		std::vector<Drawable> drawables;
+		drawables.reserve(view.instances.size());
+
+		const Pipeline active_pipeline = view.use_pbr_lighting ? pipeline_transparent_pbr : pipeline_transparent;
+		const RID uniform_set_0 = view.use_pbr_lighting
+			? (RID)uniform_set_0_transparent_pbr
+			: (RID)uniform_set_0_transparent;
+
+		std::vector<const MeshInstance*> transparent_instances;
+		transparent_instances.reserve(view.instances.size());
+		for (const auto& inst : view.instances) {
+			if (inst.category == MeshCategory::Opaque && inst.transparent)
+				transparent_instances.push_back(&inst);
+		}
+
+		if (transparent_instances.empty())
+			return;
+
+		const glm::vec3 camera_pos = view.camera.cameraPos;
+		std::sort(transparent_instances.begin(), transparent_instances.end(),
+			[camera_pos](const MeshInstance* a, const MeshInstance* b) {
+				const glm::vec3 da = a->sort_center - camera_pos;
+				const glm::vec3 db = b->sort_center - camera_pos;
+				return glm::dot(da, da) > glm::dot(db, db);
+			});
+
+		for (const auto* inst : transparent_instances) {
+			drawables.push_back(Drawable::make(
+				active_pipeline, inst->mesh,
+				PushConstantData::from(ObjectData_UBO{ inst->model, inst->normal_matrix }),
+				{ { uniform_set_0, 0 } },
+				inst->transparent_material_sets
+			));
+		}
+
+		struct TransparentPassData {
+			FrameGraphResource scene;
+			FrameGraphResource depth;
+			FrameGraphResource shadow_map_in;
+			FrameGraphResource point_shadow_in;
+			FrameGraphResource shadow_uniform_set;
+			FrameGraphResource framebuffer_resource;
+		};
+
+		fg.add_callback_pass<TransparentPassData>(
+			"Transparent Pass",
+			[&](FrameGraph::Builder& builder, TransparentPassData& data)
+			{
+				auto& deferred = bb.get<deferred_pass_resource>();
+				data.scene = builder.write(deferred.scene, TEXTURE_WRITE_FLAGS::WRITE_COLOR_LOAD);
+				data.depth = builder.write(deferred.depth, TEXTURE_WRITE_FLAGS::WRITE_DEPTH_LOAD);
+				deferred.scene = data.scene;
+				deferred.depth = data.depth;
+
+				auto& shadow_res       = bb.get<shadow_pass_resource>();
+				auto& point_shadow_res = bb.get<point_shadow_pass_resource>();
+				data.shadow_map_in     = builder.read(shadow_res.shadow_map, TEXTURE_READ_FLAGS::READ_DEPTH);
+				data.point_shadow_in   = builder.read(point_shadow_res.shadow_cubemap, TEXTURE_READ_FLAGS::READ_DEPTH);
+
+				data.shadow_uniform_set = builder.create<FrameGraphUniformSet>(
+					"transparent shadow uniform set",
+					{
+						.build = [&fg,
+						          shader_rid = active_pipeline.shader_rid,
+						          shadow_id = shadow_res.shadow_map,
+						          point_id = point_shadow_res.shadow_cubemap]
+						         (RenderContext& rc) -> RID {
+							auto& shadow_tex = fg.get_resource<FrameGraphTexture>(shadow_id);
+							auto& point_shadow_tex = fg.get_resource<FrameGraphTexture>(point_id);
+							return UniformSetBuilder{}
+								.add_texture_only(0, shadow_tex.texture_rid)
+								.add_texture_only(1, point_shadow_tex.texture_rid)
+								.build_cached(rc.device, shader_rid, 1);
+						},
+						.name = "transparent shadow uniform set",
+						.owns_rid = false
+					});
+				data.shadow_uniform_set = builder.write(data.shadow_uniform_set, FrameGraph::kFlagsIgnored);
+
+				data.framebuffer_resource = builder.create<FrameGraphFramebuffer>(
+					"transparent framebuffer",
+					{
+						.build = [&fg, scene_id = data.scene, depth_id = data.depth](RenderContext& rc) -> RID {
+							auto& scene_tex = fg.get_resource<FrameGraphTexture>(scene_id);
+							auto& depth_tex = fg.get_resource<FrameGraphTexture>(depth_id);
+							return rc.device->framebuffer_create_load({ scene_tex.texture_rid, depth_tex.texture_rid });
+						},
+						.name = "transparent framebuffer"
+					});
+				data.framebuffer_resource = builder.write(data.framebuffer_resource, FrameGraph::kFlagsIgnored);
+			},
+			[drawables = std::move(drawables), &storage, extent = view.extent](
+				const TransparentPassData& data, FrameGraphPassResources& resources, void* ctx)
+			{
+				auto& rc = *static_cast<RenderContext*>(ctx);
+				auto  cmd = rc.command_buffer;
+
+				RID uniform_set_1 = resources.get<FrameGraphUniformSet>(data.shadow_uniform_set).uniform_set_rid;
+				RID frame_buffer = resources.get<FrameGraphFramebuffer>(data.framebuffer_resource).framebuffer_rid;
+
+				GPU_SCOPE(cmd, "Transparent Pass", Color(0.0f, 0.8f, 0.8f, 1.0f));
+				std::array<RDD::RenderPassClearValue, 2> clear_values;
+				clear_values[0].color = Color();
+				clear_values[1].depth = 1.0f;
+				clear_values[1].stencil = 0;
+
+				rc.device->begin_render_pass_from_frame_buffer(frame_buffer, Rect2i(0, 0, extent.x, extent.y), clear_values);
+
+				for (auto drawable : drawables) {
+					drawable.set_uniform_set({ uniform_set_1, 1 });
+					submit_drawable(rc, cmd, drawable, storage);
+				}
+
+				rc.wsi->end_render_pass(cmd);
+			});
+	}
+
 	void DeferredRenderer::create_offscreen_pipeline(WSI* wsi, RenderingDevice* dev)
 	{
 		auto vertex_format = wsi->get_vertex_format_by_type(VERTEX_FORMAT_VARIATIONS::DEFAULT);
@@ -606,6 +728,29 @@ namespace Rendering
 			.build(overlay_fb_format);
 
 		{
+			RDC::PipelineDepthStencilState ds_transparent;
+			ds_transparent.enable_depth_test      = true;
+			ds_transparent.enable_depth_write     = false;
+			ds_transparent.depth_compare_operator = RDC::COMPARE_OP_LESS_OR_EQUAL;
+
+			pipeline_transparent = PipelineBuilder{}
+				.set_shader({ "assets://shaders/forward/forward.vert",
+				              "assets://shaders/forward/forward.frag" }, "deferred_transparent")
+				.set_vertex_format(vertex_format)
+				.set_depth_stencil_state(ds_transparent)
+				.set_blend_state(RDC::PipelineColorBlendState::create_blend())
+				.build(overlay_fb_format);
+
+			pipeline_transparent_pbr = PipelineBuilder{}
+				.set_shader({ "assets://shaders/pbr/forward.vert",
+				              "assets://shaders/pbr/forward.frag" }, "deferred_transparent_pbr")
+				.set_vertex_format(vertex_format)
+				.set_depth_stencil_state(ds_transparent)
+				.set_blend_state(RDC::PipelineColorBlendState::create_blend())
+				.build(overlay_fb_format);
+		}
+
+		{
 			RDC::PipelineDepthStencilState ds_skybox;
 			ds_skybox.enable_depth_test      = true;
 			ds_skybox.enable_depth_write     = false;
@@ -652,6 +797,24 @@ namespace Rendering
 			.add(frame_ubo.as_uniform(0))
 			.add_texture(1, sampler_cube, cubemap)
 			.build(dev, pipeline_skybox.shader_rid, 0);
+
+		uniform_set_0_transparent = UniformSetBuilder{}
+			.add(frame_ubo.as_uniform(0))
+			.add(shadow_ubo.as_uniform(1))
+			.add(light_ubo.as_uniform(2))
+			.add_sampler(3, sampler)
+			.add_sampler(4, shadow_sampler)
+			.add_sampler(5, point_shadow_sampler)
+			.build(dev, pipeline_transparent.shader_rid, 0);
+
+		uniform_set_0_transparent_pbr = UniformSetBuilder{}
+			.add(frame_ubo.as_uniform(0))
+			.add(shadow_ubo.as_uniform(1))
+			.add(light_ubo.as_uniform(2))
+			.add_sampler(3, sampler)
+			.add_sampler(4, shadow_sampler)
+			.add_sampler(5, point_shadow_sampler)
+			.build(dev, pipeline_transparent_pbr.shader_rid, 0);
 	}
 
 }

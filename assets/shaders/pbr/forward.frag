@@ -201,5 +201,5 @@ void main()
         return;
     }
 
-    FragColor = vec4(color + emissive, 1.0);
+    FragColor = vec4(color + emissive, baseColor.a);
 }

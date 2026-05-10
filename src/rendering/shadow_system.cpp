@@ -74,7 +74,7 @@ std::vector<Drawable> ShadowSystem::build_shadow_drawables(
 	drawables.reserve(view.instances.size());
 
 	for (const auto& instance : view.instances) {
-		if (instance.category != MeshCategory::Opaque) {
+		if (instance.category != MeshCategory::Opaque || instance.transparent) {
 			continue;
 		}
 

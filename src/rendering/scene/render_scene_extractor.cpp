@@ -82,8 +82,15 @@ RenderSceneExtractResult RenderSceneExtractor::extract(RenderSceneExtractInput i
 			inst.model         = model;
 			inst.normal_matrix = normal_matrix;
 			inst.category      = to_render_mesh_category(m.category);
+			inst.sort_center   = glm::vec3(model[3]);
+			if (m.local_aabb.valid()) {
+				Rendering::AABB world_aabb = Rendering::transform_aabb(m.local_aabb, model);
+				inst.sort_center = (world_aabb.min + world_aabb.max) * 0.5f;
+			}
 			for (auto asset : m.materials) {
 				auto h = input.asset_registry.resolve_material(asset);
+				inst.transparent = inst.transparent ||
+					(h != Rendering::INVALID_MATERIAL && input.material_registry.is_blend(h));
 				inst.material_sets.push_back(
 					h != Rendering::INVALID_MATERIAL
 						? input.material_registry.get_uniform_set(h, input.settings.use_pbr_lighting)
@@ -95,6 +102,10 @@ RenderSceneExtractResult RenderSceneExtractor::extract(RenderSceneExtractInput i
 				inst.point_shadow_material_sets.push_back(
 					h != Rendering::INVALID_MATERIAL
 						? input.material_registry.get_point_shadow_uniform_set(h)
+						: RID());
+				inst.transparent_material_sets.push_back(
+					h != Rendering::INVALID_MATERIAL
+						? input.material_registry.get_transparent_uniform_set(h, input.settings.use_pbr_lighting)
 						: RID());
 			}
 			view.instances.push_back(std::move(inst));

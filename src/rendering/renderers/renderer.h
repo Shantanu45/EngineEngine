@@ -21,7 +21,10 @@ struct MeshInstance {
     Util::SmallVector<RID>    material_sets; // pre-resolved from MaterialRegistry, one per primitive
     Util::SmallVector<RID>    shadow_material_sets;
     Util::SmallVector<RID>    point_shadow_material_sets;
+    Util::SmallVector<RID>    transparent_material_sets;
     MeshCategory        category = MeshCategory::Opaque;
+    bool                transparent = false;
+    glm::vec3           sort_center = glm::vec3(0.0f);
 };
 
 struct SceneView {

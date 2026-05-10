@@ -55,6 +55,8 @@ namespace Rendering {
 		Pipeline pbr_color_pipeline() const { return pipeline_pbr; }
 		Pipeline shadow_pipeline() const { return pipeline_shadow; }
 		Pipeline point_shadow_pipeline() const { return pipeline_point_shadow; }
+		Pipeline transparent_pipeline() const { return pipeline_transparent; }
+		Pipeline pbr_transparent_pipeline() const { return pipeline_transparent_pbr; }
 
 	private:
 		void setup_offscreen_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
@@ -63,6 +65,8 @@ namespace Rendering {
 		                         const SceneView& view, MeshStorage& storage);
 		void setup_overlay_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
 		                        const SceneView& view, MeshStorage& storage);
+		void setup_transparent_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
+		                            const SceneView& view, MeshStorage& storage);
 
 		void create_offscreen_pipeline(WSI* wsi, RenderingDevice* device);
 		void create_deferred_pipeline(WSI* wsi, RenderingDevice* device, RID cubemap);
@@ -93,6 +97,8 @@ namespace Rendering {
 		Pipeline pipeline_shadow;
 		Pipeline pipeline_point_shadow;
 		Pipeline pipeline_skybox;
+		Pipeline pipeline_transparent;
+		Pipeline pipeline_transparent_pbr;
 
 		Pipeline deferred_pipeline;
 		Pipeline deferred_regular_pipeline;
@@ -107,5 +113,7 @@ namespace Rendering {
 
 		RIDHandle uniform_set_0_deferred;
 		RIDHandle uniform_set_0_deferred_regular;
+		RIDHandle uniform_set_0_transparent;
+		RIDHandle uniform_set_0_transparent_pbr;
 	};
 }

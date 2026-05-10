@@ -29,6 +29,8 @@ struct DeferredGltfSceneRequest {
 	RID pbr_shader_rid;
 	RID shadow_shader_rid;
 	RID point_shadow_shader_rid;
+	RID transparent_shader_rid;
+	RID transparent_pbr_shader_rid;
 	Rendering::RenderingDevice::VertexFormatID vertex_format = 0;
 	std::string path;
 	std::string name_prefix;

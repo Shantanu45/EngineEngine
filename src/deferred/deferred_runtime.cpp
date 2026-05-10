@@ -120,6 +120,8 @@ void DeferredRuntime::load_scene(FileSystem::Filesystem& filesystem, const std::
 		.pbr_shader_rid = render_pipeline.pbr_color_pipeline().shader_rid,
 		.shadow_shader_rid = render_pipeline.shadow_pipeline().shader_rid,
 		.point_shadow_shader_rid = render_pipeline.point_shadow_pipeline().shader_rid,
+		.transparent_shader_rid = render_pipeline.transparent_pipeline().shader_rid,
+		.transparent_pbr_shader_rid = render_pipeline.pbr_transparent_pipeline().shader_rid,
 		.vertex_format = vfmt,
 		.path = path,
 		.name_prefix = name_prefix,

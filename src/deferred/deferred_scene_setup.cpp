@@ -66,6 +66,8 @@ DeferredSceneHandle instantiate_deferred_gltf_scene(const DeferredGltfSceneReque
 		.pbr_shader_rid = request.pbr_shader_rid,
 		.shadow_shader_rid = request.shadow_shader_rid,
 		.point_shadow_shader_rid = request.point_shadow_shader_rid,
+		.transparent_shader_rid = request.transparent_shader_rid,
+		.transparent_pbr_shader_rid = request.transparent_pbr_shader_rid,
 		.vertex_format = request.vertex_format,
 		.source_path = request.path,
 		.name_prefix = request.name_prefix,
