@@ -4,6 +4,9 @@ EngineEngine is a C++20 real-time rendering playground built around Vulkan, SDL3
 
 The project is under active development, so expect renderer internals and sample apps to change as features are explored.
 
+## Screenshots
+<img width="1281" height="718" alt="image" src="https://github.com/user-attachments/assets/2c77b3d7-d562-4296-bb3f-ba8186646138" />
+
 ## Features
 
 - Vulkan rendering backend with SDL3 windowing
