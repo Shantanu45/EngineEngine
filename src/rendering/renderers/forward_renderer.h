@@ -52,6 +52,14 @@ namespace Rendering {
 
     private:
         std::vector<Drawable> build_main_drawables(const SceneView& view) const;
+        void create_shared_resources(RenderingDevice* device);
+        void create_samplers(RenderingDevice* device);
+        void create_main_pipelines(WSI* wsi, RenderingDevice* device);
+        void create_overlay_pipelines(WSI* wsi, RenderingDevice* device);
+        void create_shadow_pipelines(WSI* wsi, RenderingDevice* device);
+        void create_main_uniform_sets(RenderingDevice* device);
+        void create_overlay_uniform_sets(RenderingDevice* device, RID cubemap);
+        void create_shadow_uniform_sets(RenderingDevice* device);
 
         RenderingDevice* device = nullptr;
         DebugRenderer debug_renderer;

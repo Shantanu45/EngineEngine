@@ -16,8 +16,18 @@ namespace Rendering
 	void DeferredRenderer::initialize(WSI* wsi, RenderingDevice* dev, RID cubemap)
 	{
 		device = dev;
-		create_offscreen_pipeline(wsi, dev);
-		create_deferred_pipeline(wsi, dev, cubemap);
+		create_shared_resources(dev);
+		create_samplers(dev);
+		create_gbuffer_pipeline(wsi, dev);
+		create_shadow_pipelines(wsi, dev);
+		create_deferred_lighting_pipelines(wsi, dev);
+		create_overlay_pipelines(wsi, dev);
+		create_transparent_pipelines(wsi, dev);
+		create_gbuffer_uniform_sets(dev);
+		create_shadow_uniform_sets(dev);
+		create_deferred_lighting_uniform_sets(dev);
+		create_overlay_uniform_sets(dev, cubemap);
+		create_transparent_uniform_sets(dev);
 		debug_renderer.initialize(dev);
 	}
 
@@ -558,33 +568,69 @@ namespace Rendering
 			});
 	}
 
-	void DeferredRenderer::create_offscreen_pipeline(WSI* wsi, RenderingDevice* dev)
+	void DeferredRenderer::create_shared_resources(RenderingDevice* dev)
+	{
+		frame_ubo.create(dev, "Frame UBO");
+		shadow_ubo.create(dev, "Shadow UBO");
+		light_ubo.create(dev, "Light UBO");
+	}
+
+	void DeferredRenderer::create_samplers(RenderingDevice* dev)
+	{
+		{
+			RDC::SamplerState ss;
+			ss.mag_filter     = RDC::SAMPLER_FILTER_LINEAR;
+			ss.min_filter     = RDC::SAMPLER_FILTER_LINEAR;
+			ss.mip_filter     = RDC::SAMPLER_FILTER_LINEAR;
+			ss.repeat_u       = RDC::SAMPLER_REPEAT_MODE_REPEAT;
+			ss.repeat_v       = RDC::SAMPLER_REPEAT_MODE_REPEAT;
+			ss.repeat_w       = RDC::SAMPLER_REPEAT_MODE_REPEAT;
+			ss.use_anisotropy = true;
+			ss.anisotropy_max = 16.0f;
+			sampler = RIDHandle(dev->sampler_create(ss));
+		}
+
+		gbuffer_sampler = RIDHandle(dev->sampler_create({}));
+		point_shadow_sampler = RIDHandle(dev->sampler_create({}));
+		sampler_cube = RIDHandle(dev->sampler_create({}));
+
+		{
+			RDC::SamplerState ss;
+			ss.mag_filter     = RDC::SAMPLER_FILTER_LINEAR;
+			ss.min_filter     = RDC::SAMPLER_FILTER_LINEAR;
+			ss.enable_compare = true;
+			ss.compare_op     = RDC::COMPARE_OP_LESS_OR_EQUAL;
+			shadow_sampler = RIDHandle(dev->sampler_create(ss));
+		}
+	}
+
+	void DeferredRenderer::create_gbuffer_pipeline(WSI* wsi, RenderingDevice*)
 	{
 		auto vertex_format = wsi->get_vertex_format_by_type(VERTEX_FORMAT_VARIATIONS::DEFAULT);
 
-		// Framebuffers -----------------------
-		// Position (World space)
 		RD::AttachmentFormat position_att;
 		position_att.format = RDC::DATA_FORMAT_R16G16B16A16_SFLOAT;
 		position_att.usage_flags = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT;
 
-		// Albedo 8
 		RD::AttachmentFormat albedo_att;
 		albedo_att.format = RDC::DATA_FORMAT_R8G8B8A8_UNORM;
 		albedo_att.usage_flags = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT;
 
-		// Normal 16 (World space)
 		RD::AttachmentFormat normal_att;
 		normal_att.format = RDC::DATA_FORMAT_R16G16B16A16_SFLOAT;
 		normal_att.usage_flags = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT;
 
-		// Depth
 		RD::AttachmentFormat depth_att;
 		depth_att.format = RDC::DATA_FORMAT_D32_SFLOAT;
 		depth_att.usage_flags = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 
-		auto main_fb_format = RD::get_singleton()->framebuffer_format_create({ position_att,
-			normal_att, albedo_att, albedo_att, albedo_att, depth_att });
+		auto main_fb_format = RD::get_singleton()->framebuffer_format_create({
+			position_att,
+			normal_att,
+			albedo_att,
+			albedo_att,
+			albedo_att,
+			depth_att });
 
 		RD::PipelineDepthStencilState depth_state;
 		depth_state.enable_depth_test = true;
@@ -599,51 +645,36 @@ namespace Rendering
 			.set_blend_state(RDC::PipelineColorBlendState::create_disabled(5))
 			.build(main_fb_format);
 		pipeline_pbr = pipeline_color;
+	}
 
-		{
-			RDC::SamplerState ss;
-			ss.mag_filter     = RDC::SAMPLER_FILTER_LINEAR;
-			ss.min_filter     = RDC::SAMPLER_FILTER_LINEAR;
-			ss.mip_filter     = RDC::SAMPLER_FILTER_LINEAR;
-			ss.repeat_u       = RDC::SAMPLER_REPEAT_MODE_REPEAT;
-			ss.repeat_v       = RDC::SAMPLER_REPEAT_MODE_REPEAT;
-			ss.repeat_w       = RDC::SAMPLER_REPEAT_MODE_REPEAT;
-			ss.use_anisotropy = true;
-			ss.anisotropy_max = 16.0f;
-			sampler = RIDHandle(dev->sampler_create(ss));
-		}
-		gbuffer_sampler = RIDHandle(dev->sampler_create({}));
-		point_shadow_sampler = RIDHandle(dev->sampler_create({}));
-
-		{
-			RDC::SamplerState ss;
-			ss.mag_filter     = RDC::SAMPLER_FILTER_LINEAR;
-			ss.min_filter     = RDC::SAMPLER_FILTER_LINEAR;
-			ss.enable_compare = true;
-			ss.compare_op     = RDC::COMPARE_OP_LESS_OR_EQUAL;
-			shadow_sampler = RIDHandle(dev->sampler_create(ss));
-		}
+	void DeferredRenderer::create_shadow_pipelines(WSI* wsi, RenderingDevice*)
+	{
+		auto vertex_format = wsi->get_vertex_format_by_type(VERTEX_FORMAT_VARIATIONS::DEFAULT);
 
 		RD::AttachmentFormat shadow_att;
 		shadow_att.format      = RD::DATA_FORMAT_D32_SFLOAT;
 		shadow_att.usage_flags = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT;
 		auto shadow_fb_format  = RD::get_singleton()->framebuffer_format_create({ shadow_att });
 
-		{
-			RDC::PipelineRasterizationState rs_shadow;
-			rs_shadow.cull_mode = RDC::POLYGON_CULL_FRONT;
-			rs_shadow.depth_bias_enabled = true;
-			rs_shadow.depth_bias_constant_factor = 1.25f;
-			rs_shadow.depth_bias_slope_factor = 1.75f;
-			pipeline_shadow = PipelineBuilder{}
-				.set_shader({ "assets://shaders/shadow.vert",
-				              "assets://shaders/shadow.geom",
-				              "assets://shaders/shadow.frag" }, "shadow_shader")
-				.set_vertex_format(vertex_format)
-				.set_depth_stencil_state(depth_state)
-				.set_rasterization_state(rs_shadow)
-				.build(shadow_fb_format);
-		}
+		RD::PipelineDepthStencilState depth_state;
+		depth_state.enable_depth_test = true;
+		depth_state.enable_depth_write = true;
+		depth_state.depth_compare_operator = RDC::COMPARE_OP_LESS;
+
+		RDC::PipelineRasterizationState rs_shadow;
+		rs_shadow.cull_mode = RDC::POLYGON_CULL_FRONT;
+		rs_shadow.depth_bias_enabled = true;
+		rs_shadow.depth_bias_constant_factor = 1.25f;
+		rs_shadow.depth_bias_slope_factor = 1.75f;
+
+		pipeline_shadow = PipelineBuilder{}
+			.set_shader({ "assets://shaders/shadow.vert",
+			              "assets://shaders/shadow.geom",
+			              "assets://shaders/shadow.frag" }, "shadow_shader")
+			.set_vertex_format(vertex_format)
+			.set_depth_stencil_state(depth_state)
+			.set_rasterization_state(rs_shadow)
+			.build(shadow_fb_format);
 
 		pipeline_point_shadow = PipelineBuilder{}
 			.set_shader({
@@ -654,54 +685,14 @@ namespace Rendering
 			.set_vertex_format(vertex_format)
 			.set_depth_stencil_state(depth_state)
 			.build(shadow_fb_format);
-
-		// --- UBOs ---
-		frame_ubo.create(dev, "Frame UBO");
-		shadow_ubo.create(dev, "Shadow UBO");
-
-		// --- Uniform sets (set 0) ---
-		uniform_set_0 = UniformSetBuilder{}
-			.add(frame_ubo.as_uniform(0))
-			.add_sampler(3, sampler)
-			.build(dev, pipeline_color.shader_rid, 0);
-
-		uniform_set_0_shadow = UniformSetBuilder{}
-			.add(frame_ubo.as_uniform(0))
-			.add(shadow_ubo.as_uniform(1))
-			.add_sampler(3, sampler)
-			.build(dev, pipeline_shadow.shader_rid, 0);
-
-		uniform_set_0_point_shadow = UniformSetBuilder{}
-			.add(frame_ubo.as_uniform(0))
-			.add(shadow_ubo.as_uniform(1))
-			.add_sampler(3, sampler)
-			.build(dev, pipeline_point_shadow.shader_rid, 0);
 	}
 
-	void DeferredRenderer::create_deferred_pipeline(WSI* wsi, RenderingDevice* dev, RID cubemap)
+	void DeferredRenderer::create_deferred_lighting_pipelines(WSI*, RenderingDevice*)
 	{
-		auto vertex_format = wsi->get_vertex_format_by_type(VERTEX_FORMAT_VARIATIONS::DEFAULT);
-
-		// --- Framebuffer formats ---
-
 		RD::AttachmentFormat color_att;
 		color_att.format = RD::DATA_FORMAT_R16G16B16A16_SFLOAT;
 		color_att.usage_flags = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT;
-
 		auto deferred_fb_format = RD::get_singleton()->framebuffer_format_create({ color_att });
-
-		RD::AttachmentFormat depth_att;
-		depth_att.format = RD::DATA_FORMAT_D32_SFLOAT;
-		depth_att.usage_flags = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-
-		auto overlay_fb_format = RD::get_singleton()->framebuffer_format_create({ color_att, depth_att });
-
-		// --- Pipelines ---
-
-		RDC::PipelineDepthStencilState ds_standard;
-		ds_standard.enable_depth_test = false;
-		ds_standard.enable_depth_write = false;
-		ds_standard.depth_compare_operator = RDC::COMPARE_OP_LESS;
 
 		deferred_pipeline = PipelineBuilder{}
 			.set_shader({ "assets://shaders/deferred/deferred.vert",
@@ -714,6 +705,21 @@ namespace Rendering
 						  "assets://shaders/deferred/deferred_regular.frag" }, "deferred_regular")
 			.set_blend_state(RDC::PipelineColorBlendState::create_disabled())
 			.build(deferred_fb_format);
+	}
+
+	void DeferredRenderer::create_overlay_pipelines(WSI* wsi, RenderingDevice*)
+	{
+		auto vertex_format = wsi->get_vertex_format_by_type(VERTEX_FORMAT_VARIATIONS::DEFAULT);
+
+		RD::AttachmentFormat color_att;
+		color_att.format = RD::DATA_FORMAT_R16G16B16A16_SFLOAT;
+		color_att.usage_flags = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT;
+
+		RD::AttachmentFormat depth_att;
+		depth_att.format = RD::DATA_FORMAT_D32_SFLOAT;
+		depth_att.usage_flags = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+
+		auto overlay_fb_format = RD::get_singleton()->framebuffer_format_create({ color_att, depth_att });
 
 		RDC::PipelineDepthStencilState ds_overlay;
 		ds_overlay.enable_depth_test      = true;
@@ -735,50 +741,84 @@ namespace Rendering
 			.set_depth_stencil_state(ds_overlay)
 			.build(overlay_fb_format);
 
-		{
-			RDC::PipelineDepthStencilState ds_transparent;
-			ds_transparent.enable_depth_test      = true;
-			ds_transparent.enable_depth_write     = false;
-			ds_transparent.depth_compare_operator = RDC::COMPARE_OP_LESS_OR_EQUAL;
+		RDC::PipelineDepthStencilState ds_skybox;
+		ds_skybox.enable_depth_test      = true;
+		ds_skybox.enable_depth_write     = false;
+		ds_skybox.depth_compare_operator = RDC::COMPARE_OP_LESS_OR_EQUAL;
 
-			pipeline_transparent = PipelineBuilder{}
-				.set_shader({ "assets://shaders/forward/forward.vert",
-				              "assets://shaders/forward/forward.frag" }, "deferred_transparent")
-				.set_vertex_format(vertex_format)
-				.set_depth_stencil_state(ds_transparent)
-				.set_blend_state(RDC::PipelineColorBlendState::create_blend())
-				.build(overlay_fb_format);
+		RDC::PipelineRasterizationState rs_skybox;
+		rs_skybox.cull_mode = RDC::POLYGON_CULL_DISABLED;
 
-			pipeline_transparent_pbr = PipelineBuilder{}
-				.set_shader({ "assets://shaders/pbr/forward.vert",
-				              "assets://shaders/pbr/forward.frag" }, "deferred_transparent_pbr")
-				.set_vertex_format(vertex_format)
-				.set_depth_stencil_state(ds_transparent)
-				.set_blend_state(RDC::PipelineColorBlendState::create_blend())
-				.build(overlay_fb_format);
-		}
+		pipeline_skybox = PipelineBuilder{}
+			.set_shader({ "assets://shaders/skybox.vert",
+			              "assets://shaders/skybox.frag" }, "deferred_skybox_shader")
+			.set_vertex_format(vertex_format)
+			.set_depth_stencil_state(ds_skybox)
+			.set_rasterization_state(rs_skybox)
+			.build(overlay_fb_format);
+	}
 
-		{
-			RDC::PipelineDepthStencilState ds_skybox;
-			ds_skybox.enable_depth_test      = true;
-			ds_skybox.enable_depth_write     = false;
-			ds_skybox.depth_compare_operator = RDC::COMPARE_OP_LESS_OR_EQUAL;
-			RDC::PipelineRasterizationState rs_skybox;
-			rs_skybox.cull_mode = RDC::POLYGON_CULL_DISABLED;
-			pipeline_skybox = PipelineBuilder{}
-				.set_shader({ "assets://shaders/skybox.vert",
-				              "assets://shaders/skybox.frag" }, "deferred_skybox_shader")
-				.set_vertex_format(vertex_format)
-				.set_depth_stencil_state(ds_skybox)
-				.set_rasterization_state(rs_skybox)
-				.build(overlay_fb_format);
-		}
+	void DeferredRenderer::create_transparent_pipelines(WSI* wsi, RenderingDevice*)
+	{
+		auto vertex_format = wsi->get_vertex_format_by_type(VERTEX_FORMAT_VARIATIONS::DEFAULT);
 
-		// --- UBOs ---
-		light_ubo.create(dev, "Light UBO");
-		sampler_cube = RIDHandle(dev->sampler_create({}));
+		RD::AttachmentFormat color_att;
+		color_att.format = RD::DATA_FORMAT_R16G16B16A16_SFLOAT;
+		color_att.usage_flags = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT;
 
-		// --- Uniform sets (set 0) ---
+		RD::AttachmentFormat depth_att;
+		depth_att.format = RD::DATA_FORMAT_D32_SFLOAT;
+		depth_att.usage_flags = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+
+		auto overlay_fb_format = RD::get_singleton()->framebuffer_format_create({ color_att, depth_att });
+
+		RDC::PipelineDepthStencilState ds_transparent;
+		ds_transparent.enable_depth_test      = true;
+		ds_transparent.enable_depth_write     = false;
+		ds_transparent.depth_compare_operator = RDC::COMPARE_OP_LESS_OR_EQUAL;
+
+		pipeline_transparent = PipelineBuilder{}
+			.set_shader({ "assets://shaders/forward/forward.vert",
+			              "assets://shaders/forward/forward.frag" }, "deferred_transparent")
+			.set_vertex_format(vertex_format)
+			.set_depth_stencil_state(ds_transparent)
+			.set_blend_state(RDC::PipelineColorBlendState::create_blend())
+			.build(overlay_fb_format);
+
+		pipeline_transparent_pbr = PipelineBuilder{}
+			.set_shader({ "assets://shaders/pbr/forward.vert",
+			              "assets://shaders/pbr/forward.frag" }, "deferred_transparent_pbr")
+			.set_vertex_format(vertex_format)
+			.set_depth_stencil_state(ds_transparent)
+			.set_blend_state(RDC::PipelineColorBlendState::create_blend())
+			.build(overlay_fb_format);
+	}
+
+	void DeferredRenderer::create_gbuffer_uniform_sets(RenderingDevice* dev)
+	{
+		uniform_set_0 = UniformSetBuilder{}
+			.add(frame_ubo.as_uniform(0))
+			.add_sampler(3, sampler)
+			.build(dev, pipeline_color.shader_rid, 0);
+	}
+
+	void DeferredRenderer::create_shadow_uniform_sets(RenderingDevice* dev)
+	{
+		uniform_set_0_shadow = UniformSetBuilder{}
+			.add(frame_ubo.as_uniform(0))
+			.add(shadow_ubo.as_uniform(1))
+			.add_sampler(3, sampler)
+			.build(dev, pipeline_shadow.shader_rid, 0);
+
+		uniform_set_0_point_shadow = UniformSetBuilder{}
+			.add(frame_ubo.as_uniform(0))
+			.add(shadow_ubo.as_uniform(1))
+			.add_sampler(3, sampler)
+			.build(dev, pipeline_point_shadow.shader_rid, 0);
+	}
+
+	void DeferredRenderer::create_deferred_lighting_uniform_sets(RenderingDevice* dev)
+	{
 		uniform_set_0_deferred = UniformSetBuilder{}
 			.add(frame_ubo.as_uniform(0))
 			.add(shadow_ubo.as_uniform(1))
@@ -796,7 +836,10 @@ namespace Rendering
 			.add_sampler(4, shadow_sampler)
 			.add_sampler(5, point_shadow_sampler)
 			.build(dev, deferred_regular_pipeline.shader_rid, 0);
+	}
 
+	void DeferredRenderer::create_overlay_uniform_sets(RenderingDevice* dev, RID cubemap)
+	{
 		uniform_set_0_light = UniformSetBuilder{}
 			.add(frame_ubo.as_uniform(0))
 			.build(dev, pipeline_light.shader_rid, 0);
@@ -805,7 +848,10 @@ namespace Rendering
 			.add(frame_ubo.as_uniform(0))
 			.add_texture(1, sampler_cube, cubemap)
 			.build(dev, pipeline_skybox.shader_rid, 0);
+	}
 
+	void DeferredRenderer::create_transparent_uniform_sets(RenderingDevice* dev)
+	{
 		uniform_set_0_transparent = UniformSetBuilder{}
 			.add(frame_ubo.as_uniform(0))
 			.add(shadow_ubo.as_uniform(1))

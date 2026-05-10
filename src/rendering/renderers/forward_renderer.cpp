@@ -18,9 +18,54 @@ namespace Rendering {
 void ForwardRenderer::initialize(WSI* wsi, RenderingDevice* dev, RID cubemap) {
     device = dev;
 
-    auto vertex_format = wsi->get_vertex_format_by_type(VERTEX_FORMAT_VARIATIONS::DEFAULT);
+    create_shared_resources(dev);
+    create_samplers(dev);
+    create_main_pipelines(wsi, dev);
+    create_overlay_pipelines(wsi, dev);
+    create_shadow_pipelines(wsi, dev);
+    create_main_uniform_sets(dev);
+    create_overlay_uniform_sets(dev, cubemap);
+    create_shadow_uniform_sets(dev);
+    debug_renderer.initialize(dev);
+}
 
-    // --- Framebuffer formats ---
+void ForwardRenderer::create_shared_resources(RenderingDevice* dev)
+{
+    frame_ubo.create(dev,  "Frame UBO");
+    light_ubo.create(dev,  "Light UBO");
+    shadow_ubo.create(dev, "Shadow UBO");
+}
+
+void ForwardRenderer::create_samplers(RenderingDevice* dev)
+{
+    {
+        RDC::SamplerState ss;
+        ss.mag_filter     = RDC::SAMPLER_FILTER_LINEAR;
+        ss.min_filter     = RDC::SAMPLER_FILTER_LINEAR;
+        ss.mip_filter     = RDC::SAMPLER_FILTER_LINEAR;
+        ss.repeat_u       = RDC::SAMPLER_REPEAT_MODE_REPEAT;
+        ss.repeat_v       = RDC::SAMPLER_REPEAT_MODE_REPEAT;
+        ss.use_anisotropy = true;
+        ss.anisotropy_max = 16.0f;
+        sampler = RIDHandle(dev->sampler_create(ss));
+    }
+
+    sampler_cube         = RIDHandle(dev->sampler_create({}));
+    point_shadow_sampler = RIDHandle(dev->sampler_create({}));
+
+    {
+        RDC::SamplerState ss;
+        ss.mag_filter     = RDC::SAMPLER_FILTER_LINEAR;
+        ss.min_filter     = RDC::SAMPLER_FILTER_LINEAR;
+        ss.enable_compare = true;
+        ss.compare_op     = RDC::COMPARE_OP_LESS_OR_EQUAL;
+        shadow_sampler = RIDHandle(dev->sampler_create(ss));
+    }
+}
+
+void ForwardRenderer::create_main_pipelines(WSI* wsi, RenderingDevice*)
+{
+    auto vertex_format = wsi->get_vertex_format_by_type(VERTEX_FORMAT_VARIATIONS::DEFAULT);
 
     RD::AttachmentFormat color_att;
     color_att.format      = RD::DATA_FORMAT_R16G16B16A16_SFLOAT;
@@ -31,13 +76,6 @@ void ForwardRenderer::initialize(WSI* wsi, RenderingDevice* dev, RID cubemap) {
     depth_att.usage_flags = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 
     auto main_fb_format = RD::get_singleton()->framebuffer_format_create({ color_att, depth_att });
-
-    RD::AttachmentFormat shadow_att;
-    shadow_att.format      = RD::DATA_FORMAT_D32_SFLOAT;
-    shadow_att.usage_flags = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT;
-    auto shadow_fb_format  = RD::get_singleton()->framebuffer_format_create({ shadow_att });
-
-    // --- Pipelines ---
 
     RDC::PipelineDepthStencilState ds_standard;
     ds_standard.enable_depth_test      = true;
@@ -57,6 +95,26 @@ void ForwardRenderer::initialize(WSI* wsi, RenderingDevice* dev, RID cubemap) {
         .set_vertex_format(vertex_format)
         .set_depth_stencil_state(ds_standard)
         .build(main_fb_format);
+}
+
+void ForwardRenderer::create_overlay_pipelines(WSI* wsi, RenderingDevice*)
+{
+    auto vertex_format = wsi->get_vertex_format_by_type(VERTEX_FORMAT_VARIATIONS::DEFAULT);
+
+    RD::AttachmentFormat color_att;
+    color_att.format      = RD::DATA_FORMAT_R16G16B16A16_SFLOAT;
+    color_att.usage_flags = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT;
+
+    RD::AttachmentFormat depth_att;
+    depth_att.format      = RD::DATA_FORMAT_D32_SFLOAT;
+    depth_att.usage_flags = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+
+    auto main_fb_format = RD::get_singleton()->framebuffer_format_create({ color_att, depth_att });
+
+    RDC::PipelineDepthStencilState ds_standard;
+    ds_standard.enable_depth_test      = true;
+    ds_standard.enable_depth_write     = true;
+    ds_standard.depth_compare_operator = RDC::COMPARE_OP_LESS;
 
     pipeline_light = PipelineBuilder{}
         .set_shader({ "assets://shaders/light_cube.vert",
@@ -88,6 +146,21 @@ void ForwardRenderer::initialize(WSI* wsi, RenderingDevice* dev, RID cubemap) {
             .set_rasterization_state(rs_skybox)
             .build(main_fb_format);
     }
+}
+
+void ForwardRenderer::create_shadow_pipelines(WSI* wsi, RenderingDevice*)
+{
+    auto vertex_format = wsi->get_vertex_format_by_type(VERTEX_FORMAT_VARIATIONS::DEFAULT);
+
+    RD::AttachmentFormat shadow_att;
+    shadow_att.format      = RD::DATA_FORMAT_D32_SFLOAT;
+    shadow_att.usage_flags = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT;
+    auto shadow_fb_format  = RD::get_singleton()->framebuffer_format_create({ shadow_att });
+
+    RDC::PipelineDepthStencilState ds_standard;
+    ds_standard.enable_depth_test      = true;
+    ds_standard.enable_depth_write     = true;
+    ds_standard.depth_compare_operator = RDC::COMPARE_OP_LESS;
 
     {
         RDC::PipelineRasterizationState rs_shadow;
@@ -114,40 +187,10 @@ void ForwardRenderer::initialize(WSI* wsi, RenderingDevice* dev, RID cubemap) {
         .set_vertex_format(vertex_format)
         .set_depth_stencil_state(ds_standard)
         .build(shadow_fb_format);
+}
 
-    debug_renderer.initialize(dev);
-
-    // --- UBOs ---
-    frame_ubo.create(device,  "Frame UBO");
-    light_ubo.create(device,  "Light UBO");
-    shadow_ubo.create(device, "Shadow UBO");
-
-    // --- Samplers ---
-    {
-        RDC::SamplerState ss;
-        ss.mag_filter     = RDC::SAMPLER_FILTER_LINEAR;
-        ss.min_filter     = RDC::SAMPLER_FILTER_LINEAR;
-        ss.mip_filter     = RDC::SAMPLER_FILTER_LINEAR; // trilinear
-        ss.repeat_u       = RDC::SAMPLER_REPEAT_MODE_REPEAT;
-        ss.repeat_v       = RDC::SAMPLER_REPEAT_MODE_REPEAT;
-        ss.use_anisotropy = true;
-        ss.anisotropy_max = 16.0f;
-        sampler = RIDHandle(device->sampler_create(ss));
-    }
-    sampler_cube         = RIDHandle(device->sampler_create({}));
-    point_shadow_sampler = RIDHandle(device->sampler_create({}));
-
-    {
-        RDC::SamplerState ss;
-        ss.mag_filter     = RDC::SAMPLER_FILTER_LINEAR;
-        ss.min_filter     = RDC::SAMPLER_FILTER_LINEAR;
-        ss.enable_compare = true;
-        ss.compare_op     = RDC::COMPARE_OP_LESS_OR_EQUAL;
-        shadow_sampler = RIDHandle(device->sampler_create(ss));
-    }
-
-    // --- Uniform sets (set 0) ---
-    // Color pass: frame + shadow buffer + lights + samplers
+void ForwardRenderer::create_main_uniform_sets(RenderingDevice* dev)
+{
     uniform_set_0 = UniformSetBuilder{}
         .add(frame_ubo.as_uniform(0))
         .add(shadow_ubo.as_uniform(1))
@@ -155,7 +198,7 @@ void ForwardRenderer::initialize(WSI* wsi, RenderingDevice* dev, RID cubemap) {
         .add_sampler(3, sampler)
         .add_sampler(4, shadow_sampler)
         .add_sampler(5, point_shadow_sampler)
-        .build(device, pipeline_color.shader_rid, 0);
+        .build(dev, pipeline_color.shader_rid, 0);
 
     uniform_set_0_pbr = UniformSetBuilder{}
         .add(frame_ubo.as_uniform(0))
@@ -164,30 +207,34 @@ void ForwardRenderer::initialize(WSI* wsi, RenderingDevice* dev, RID cubemap) {
         .add_sampler(3, sampler)
         .add_sampler(4, shadow_sampler)
         .add_sampler(5, point_shadow_sampler)
-        .build(device, pipeline_pbr.shader_rid, 0);
+        .build(dev, pipeline_pbr.shader_rid, 0);
+}
 
+void ForwardRenderer::create_overlay_uniform_sets(RenderingDevice* dev, RID cubemap)
+{
     uniform_set_0_light = UniformSetBuilder{}
         .add(frame_ubo.as_uniform(0))
-        .build(device, pipeline_light.shader_rid, 0);
-
-    // Shadow pass: frame + shadow buffer (shadow.vert reads matrices from shadow buffer)
-    uniform_set_0_shadow = UniformSetBuilder{}
-        .add(frame_ubo.as_uniform(0))
-        .add(shadow_ubo.as_uniform(1))
-        .add_sampler(3, sampler)
-        .build(device, pipeline_shadow.shader_rid, 0);
-
-    // Point shadow pass: frame + shadow buffer (geom shader reads cubemap matrices from shadow buffer)
-    uniform_set_0_point_shadow = UniformSetBuilder{}
-        .add(frame_ubo.as_uniform(0))
-        .add(shadow_ubo.as_uniform(1))
-        .add_sampler(3, sampler)
-        .build(device, pipeline_point_shadow.shader_rid, 0);
+        .build(dev, pipeline_light.shader_rid, 0);
 
     uniform_set_skybox = UniformSetBuilder{}
         .add(frame_ubo.as_uniform(0))
         .add_texture(1, sampler_cube, cubemap)
-        .build(device, pipeline_skybox.shader_rid, 0);
+        .build(dev, pipeline_skybox.shader_rid, 0);
+}
+
+void ForwardRenderer::create_shadow_uniform_sets(RenderingDevice* dev)
+{
+    uniform_set_0_shadow = UniformSetBuilder{}
+        .add(frame_ubo.as_uniform(0))
+        .add(shadow_ubo.as_uniform(1))
+        .add_sampler(3, sampler)
+        .build(dev, pipeline_shadow.shader_rid, 0);
+
+    uniform_set_0_point_shadow = UniformSetBuilder{}
+        .add(frame_ubo.as_uniform(0))
+        .add(shadow_ubo.as_uniform(1))
+        .add_sampler(3, sampler)
+        .build(dev, pipeline_point_shadow.shader_rid, 0);
 }
 
 void ForwardRenderer::shutdown()

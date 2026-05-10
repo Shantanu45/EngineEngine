@@ -68,8 +68,18 @@ namespace Rendering {
 		void setup_transparent_pass(FrameGraph& fg, FrameGraphBlackboard& bb,
 		                            const SceneView& view, MeshStorage& storage);
 
-		void create_offscreen_pipeline(WSI* wsi, RenderingDevice* device);
-		void create_deferred_pipeline(WSI* wsi, RenderingDevice* device, RID cubemap);
+		void create_shared_resources(RenderingDevice* device);
+		void create_samplers(RenderingDevice* device);
+		void create_gbuffer_pipeline(WSI* wsi, RenderingDevice* device);
+		void create_shadow_pipelines(WSI* wsi, RenderingDevice* device);
+		void create_deferred_lighting_pipelines(WSI* wsi, RenderingDevice* device);
+		void create_overlay_pipelines(WSI* wsi, RenderingDevice* device);
+		void create_transparent_pipelines(WSI* wsi, RenderingDevice* device);
+		void create_gbuffer_uniform_sets(RenderingDevice* device);
+		void create_shadow_uniform_sets(RenderingDevice* device);
+		void create_deferred_lighting_uniform_sets(RenderingDevice* device);
+		void create_overlay_uniform_sets(RenderingDevice* device, RID cubemap);
+		void create_transparent_uniform_sets(RenderingDevice* device);
 
 	private:
 		std::vector<Drawable> build_overlay_drawables(const SceneView& view) const;
