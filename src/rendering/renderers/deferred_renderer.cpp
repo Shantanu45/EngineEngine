@@ -15,6 +15,28 @@ namespace Rendering
 		create_deferred_pipeline(wsi, dev);
 	}
 
+	void DeferredRenderer::shutdown()
+	{
+		uniform_set_0_deferred.reset();
+		uniform_set_skybox.reset();
+		uniform_set_0_point_shadow.reset();
+		uniform_set_0_shadow.reset();
+		uniform_set_0_light.reset();
+		uniform_set_0_pbr.reset();
+		uniform_set_0.reset();
+
+		point_shadow_sampler.reset();
+		shadow_sampler.reset();
+		sampler_cube.reset();
+		sampler.reset();
+
+		shadow_ubo.free();
+		light_ubo.free();
+		frame_ubo.free();
+
+		device = nullptr;
+	}
+
 	void DeferredRenderer::setup_passes(FrameGraph& fg, FrameGraphBlackboard& bb,
 		const SceneView& view, MeshStorage& storage)
 	{
@@ -49,7 +71,7 @@ namespace Rendering
 		for (const auto& inst : view.instances) {
 			if (inst.category != MeshCategory::Opaque) continue;
 			drawables.push_back(Drawable::make(
-				offscreen_pipeline, inst.mesh,
+				pipeline_color, inst.mesh,
 				PushConstantData::from(ObjectData_UBO{ inst.model, inst.normal_matrix }),
 				{ { (RID)uniform_set_0, 0 } },
 				inst.material_sets
@@ -57,7 +79,7 @@ namespace Rendering
 		}
 		sort_drawables_for_state_reuse(drawables);
 
-		auto pipeline_rid = offscreen_pipeline.pipeline_rid;
+		auto pipeline_rid = pipeline_color.pipeline_rid;
 
 		bb.add<offscreen_pass_resource>() =
 			fg.add_callback_pass<offscreen_pass_resource>(
@@ -90,7 +112,7 @@ namespace Rendering
 					tf_data.width = view.extent.x;
 					tf_data.height = view.extent.y;
 					tf_data.usage_bits = RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT;
-					tf_data.format = RD::DATA_FORMAT_R16G16B16A16_UNORM;
+					tf_data.format = RD::DATA_FORMAT_R16G16B16A16_SFLOAT;
 					data.normal_resource = builder.create<FrameGraphTexture>("normal texture", { tf_data, RD::TextureView(), "normal texture" });
 					data.normal_resource = builder.write(data.normal_resource, TEXTURE_WRITE_FLAGS::WRITE_COLOR);
 					data.position_resource = builder.create<FrameGraphTexture>("position texture", { tf_data, RD::TextureView(), "position texture" });
@@ -267,7 +289,7 @@ namespace Rendering
 		// Framebuffers -----------------------
 		// Position (World space)
 		RD::AttachmentFormat position_att;
-		position_att.format = RDC::DATA_FORMAT_R16G16B16A16_UNORM;
+		position_att.format = RDC::DATA_FORMAT_R16G16B16A16_SFLOAT;
 		position_att.usage_flags = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT;
 
 		// Albedo 8
@@ -277,7 +299,7 @@ namespace Rendering
 
 		// Normal 16 (World space)
 		RD::AttachmentFormat normal_att;
-		normal_att.format = RDC::DATA_FORMAT_R16G16B16A16_UNORM;
+		normal_att.format = RDC::DATA_FORMAT_R16G16B16A16_SFLOAT;
 		normal_att.usage_flags = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT;
 
 		// Depth
@@ -293,7 +315,7 @@ namespace Rendering
 		depth_state.enable_depth_write = true;
 		depth_state.depth_compare_operator = RDC::COMPARE_OP_LESS;
 
-		offscreen_pipeline = PipelineBuilder{}
+		pipeline_color = PipelineBuilder{}
 			.set_shader({ "assets://shaders/deferred/mrt.vert", "assets://shaders/deferred/mrt.frag" },
 				"offscreen_shader")
 			.set_vertex_format(vertex_format)
@@ -310,7 +332,7 @@ namespace Rendering
 		uniform_set_0 = UniformSetBuilder{}
 			.add(frame_ubo.as_uniform(0))
 			.add_sampler(3, sampler)
-			.build(dev, offscreen_pipeline.shader_rid, 0);
+			.build(dev, pipeline_color.shader_rid, 0);
 	}
 
 	void DeferredRenderer::create_deferred_pipeline(WSI* wsi, RenderingDevice* dev)

@@ -1,0 +1,38 @@
+#pragma once
+
+#include <memory>
+#include <vector>
+
+#include "rendering/camera.h"
+#include "rendering/render_settings.h"
+#include "rendering/render_stats.h"
+#include "rendering/wsi.h"
+#include "entt/entt.hpp"
+#include "util/small_vector.h"
+
+struct UIContext {
+    Camera*           camera     = nullptr;
+    entt::registry*   world      = nullptr;
+    Rendering::WSI*   wsi        = nullptr;
+    bool              show_stats = true;
+    RenderSettings*   settings   = nullptr;
+    Rendering::RenderStats* stats = nullptr;
+};
+
+struct IUIPanel {
+    virtual void draw(UIContext& ctx) = 0;
+    virtual ~IUIPanel()               = default;
+};
+
+class UILayer {
+public:
+    void add(std::unique_ptr<IUIPanel> panel) { panels.push_back(std::move(panel)); }
+
+    void draw_frame(UIContext& ctx) {
+        for (auto& p : panels)
+            p->draw(ctx);
+    }
+
+private:
+    Util::SmallVector<std::unique_ptr<IUIPanel>> panels;
+};
