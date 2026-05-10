@@ -60,6 +60,7 @@ layout(set = 2, binding = 1) uniform textureCube PointShadowMap;
 #define DEBUG_VIEW_DEPTH 9u
 #define DEBUG_VIEW_DIR_SHADOW_MAP 10u
 #define DEBUG_VIEW_LIGHT_SPACE_COORDS 11u
+#define DEBUG_VIEW_CASCADE_BOUNDARIES 12u
 
 void main()
 {
@@ -129,6 +130,10 @@ void main()
     }
     if (frame.materialDebugView == DEBUG_VIEW_LIGHT_SPACE_COORDS) {
         outColor = vec4(clamp(shadowProj, 0.0, 1.0), 1.0);
+        return;
+    }
+    if (frame.materialDebugView == DEBUG_VIEW_CASCADE_BOUNDARIES) {
+        outColor = vec4(directional_shadow_cascade_debug_color(directionalShadow, frame.camera.view, fragPos, cascadeIndex, cascadedShadow), 1.0);
         return;
     }
 

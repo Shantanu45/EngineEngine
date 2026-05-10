@@ -44,6 +44,9 @@ const char* material_debug_view_name(MaterialDebugView view)
 	case MaterialDebugView::ShadowFactor: return "Shadow";
 	case MaterialDebugView::LightCount: return "Light Count";
 	case MaterialDebugView::Depth: return "Depth";
+	case MaterialDebugView::DirectionalShadowMap: return "Directional Shadow Map";
+	case MaterialDebugView::LightSpaceCoords: return "Light Space Coords";
+	case MaterialDebugView::CascadeBoundaries: return "Cascade Boundaries";
 	}
 	return "Unknown";
 }
@@ -506,7 +509,7 @@ void TerrainRuntime::draw_ui()
 
 	int debug_view = static_cast<int>(render_settings.material_debug_view);
 	if (ImGui::BeginCombo("Debug", material_debug_view_name(render_settings.material_debug_view))) {
-		for (int i = 0; i <= static_cast<int>(MaterialDebugView::Depth); ++i) {
+		for (int i = 0; i <= static_cast<int>(MaterialDebugView::CascadeBoundaries); ++i) {
 			const auto value = static_cast<MaterialDebugView>(i);
 			const bool selected = debug_view == i;
 			if (ImGui::Selectable(material_debug_view_name(value), selected)) {

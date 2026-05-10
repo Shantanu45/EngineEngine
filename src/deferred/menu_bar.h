@@ -48,7 +48,7 @@ struct MenuBarPanel : IUIPanel {
                     ctx.settings->tone_mapper = static_cast<ToneMapper>(tone_mapper);
                 int debug_view = static_cast<int>(ctx.settings->material_debug_view);
                 if (ImGui::Combo("Material View", &debug_view,
-                    "Lit\0Albedo\0Normal\0Roughness\0Metallic\0Ambient Occlusion\0Emissive\0Shadow Factor\0Light Count\0Depth\0Directional Shadow Map\0Light Space Coords\0"))
+                    "Lit\0Albedo\0Normal\0Roughness\0Metallic\0Ambient Occlusion\0Emissive\0Shadow Factor\0Light Count\0Depth\0Directional Shadow Map\0Light Space Coords\0Cascade Boundaries\0"))
                     ctx.settings->material_debug_view = static_cast<MaterialDebugView>(debug_view);
                 ImGui::EndMenu();
             }

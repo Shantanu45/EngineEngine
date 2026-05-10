@@ -16,6 +16,33 @@ uint directional_shadow_cascade_index(ShadowData shadow, mat4 view, vec3 fragPos
     return cascadeIndex;
 }
 
+vec3 directional_shadow_cascade_debug_color(ShadowData shadow,
+                                            mat4 view,
+                                            vec3 fragPos,
+                                            uint cascadeIndex,
+                                            bool cascaded)
+{
+    vec3 colors[4] = vec3[](
+        vec3(0.10, 0.55, 1.00),
+        vec3(0.10, 0.90, 0.25),
+        vec3(1.00, 0.72, 0.10),
+        vec3(1.00, 0.20, 0.35)
+    );
+
+    vec3 color = colors[min(cascadeIndex, 3u)];
+    if (!cascaded)
+        return color;
+
+    float viewDepth = abs((view * vec4(fragPos, 1.0)).z);
+    float splitDistance = min(
+        min(abs(viewDepth - shadow.cascade_splits.x), abs(viewDepth - shadow.cascade_splits.y)),
+        abs(viewDepth - shadow.cascade_splits.z)
+    );
+    float lineWidth = max(viewDepth * 0.0025, 0.20);
+    float boundary = 1.0 - smoothstep(0.0, lineWidth, splitDistance);
+    return mix(color, vec3(1.0), boundary);
+}
+
 float shadow_factor(vec4 fragPosLS,
                     uint cascadeIndex,
                     vec3 normal,

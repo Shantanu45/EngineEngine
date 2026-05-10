@@ -68,6 +68,7 @@ layout(set = 2, binding = 6) uniform texture2D occlusion_tex;
 #define DEBUG_VIEW_DEPTH 9u
 #define DEBUG_VIEW_DIR_SHADOW_MAP 10u
 #define DEBUG_VIEW_LIGHT_SPACE_COORDS 11u
+#define DEBUG_VIEW_CASCADE_BOUNDARIES 12u
 
 // Parallax Occlusion Mapping: ray-marches the height map in tangent space and
 // returns UV coordinates offset to the intersection point on the surface.
@@ -188,6 +189,10 @@ void main()
     }
     if (frame.materialDebugView == DEBUG_VIEW_LIGHT_SPACE_COORDS) {
         FragColor = vec4(clamp(shadowProj, 0.0, 1.0), 1.0);
+        return;
+    }
+    if (frame.materialDebugView == DEBUG_VIEW_CASCADE_BOUNDARIES) {
+        FragColor = vec4(directional_shadow_cascade_debug_color(directionalShadow, frame.camera.view, FragPos, cascadeIndex, cascadedShadow), 1.0);
         return;
     }
 

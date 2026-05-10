@@ -19,6 +19,7 @@ enum class MaterialDebugView : int {
     Depth = 9,
     DirectionalShadowMap = 10,
     LightSpaceCoords = 11,
+    CascadeBoundaries = 12,
 };
 
 enum class DirectionalShadowMode : int {
