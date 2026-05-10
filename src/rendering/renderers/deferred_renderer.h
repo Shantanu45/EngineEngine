@@ -30,6 +30,9 @@ struct deferred_pass_resource : public blit_scene_input_resource
 {
 	FrameGraphResource framebuffer_resource;
 	FrameGraphResource offscreen_tex_resources;
+	FrameGraphResource shadow_map_in;
+	FrameGraphResource point_shadow_in;
+	FrameGraphResource shadow_uniform_set;
 };
 
 namespace Rendering {

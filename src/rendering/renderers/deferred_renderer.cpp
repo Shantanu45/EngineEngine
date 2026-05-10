@@ -3,6 +3,8 @@
 #include <rendering/uniform_set_builder.h>
 #include <rendering/drawable.h>
 #include <rendering/wsi.h>
+#include "rendering/render_passes/shadow_passes.h"
+#include "rendering/shadow_system.h"
 #include "math/rect2.h"
 #include "util/small_vector.h"
 
@@ -40,13 +42,16 @@ namespace Rendering
 	void DeferredRenderer::setup_passes(FrameGraph& fg, FrameGraphBlackboard& bb,
 		const SceneView& view, MeshStorage& storage)
 	{
+		const ShadowBuildResult shadow_build = ShadowSystem::build_shadow_buffer(view.lights);
+		shadow_ubo.upload(device, shadow_build.buffer);
+
 		// Upload per-frame UBOs
 		{
 			FrameData_UBO frame{};
 			frame.camera                  = view.camera;
 			frame.time                     = static_cast<float>(view.elapsed);
-			frame.directional_shadow_index = 0;
-			frame.point_shadow_index       = 0;
+			frame.directional_shadow_index = shadow_build.directional_shadow_index;
+			frame.point_shadow_index       = shadow_build.point_shadow_index;
 			frame.material_debug_view      = static_cast<uint32_t>(view.material_debug_view);
 			frame_ubo.upload(device, frame);
 		}
@@ -59,6 +64,15 @@ namespace Rendering
 			light_ubo.upload(device, buf);
 		}
 
+		auto shadow_draws = ShadowSystem::build_shadow_drawables(
+			view,
+			{ ShadowProjection::Directional2D, pipeline_shadow, (RID)uniform_set_0_shadow });
+		auto point_shadow_draws = ShadowSystem::build_shadow_drawables(
+			view,
+			{ ShadowProjection::PointCube, pipeline_point_shadow, (RID)uniform_set_0_point_shadow });
+
+		add_point_shadow_pass(fg, bb, 1024, point_shadow_draws, storage);
+		add_shadow_pass(fg, bb, { 2048, 2048 }, shadow_draws, storage);
 		setup_offscreen_pass(fg, bb, view, storage);
 		setup_deferred_pass(fg, bb, view, storage);
 	}
@@ -209,6 +223,11 @@ namespace Rendering
 					data.scene = builder.write(data.scene, TEXTURE_WRITE_FLAGS::WRITE_COLOR);
 					data.depth = builder.write(data.depth, TEXTURE_WRITE_FLAGS::WRITE_DEPTH);
 
+					auto& shadow_res       = bb.get<shadow_pass_resource>();
+					auto& point_shadow_res = bb.get<point_shadow_pass_resource>();
+					data.shadow_map_in     = builder.read(shadow_res.shadow_map, TEXTURE_READ_FLAGS::READ_DEPTH);
+					data.point_shadow_in   = builder.read(point_shadow_res.shadow_cubemap, TEXTURE_READ_FLAGS::READ_DEPTH);
+
 					data.offscreen_tex_resources = builder.create<FrameGraphUniformSet>(
 						"offscreen uniform set",
 						{
@@ -239,6 +258,26 @@ namespace Rendering
 						});
 					data.offscreen_tex_resources = builder.write(data.offscreen_tex_resources, FrameGraph::kFlagsIgnored);
 
+					data.shadow_uniform_set = builder.create<FrameGraphUniformSet>(
+						"deferred shadow uniform set",
+						{
+							.build = [&fg,
+							          shader_rid = deferred_pipeline.shader_rid,
+							          shadow_id = shadow_res.shadow_map,
+							          point_id = point_shadow_res.shadow_cubemap]
+							         (RenderContext& rc) -> RID {
+								auto& shadow_tex = fg.get_resource<FrameGraphTexture>(shadow_id);
+								auto& point_shadow_tex = fg.get_resource<FrameGraphTexture>(point_id);
+								return UniformSetBuilder{}
+									.add_texture_only(0, shadow_tex.texture_rid)
+									.add_texture_only(1, point_shadow_tex.texture_rid)
+									.build_cached(rc.device, shader_rid, 2);
+							},
+							.name = "deferred shadow uniform set",
+							.owns_rid = false
+						});
+					data.shadow_uniform_set = builder.write(data.shadow_uniform_set, FrameGraph::kFlagsIgnored);
+
 					data.framebuffer_resource = builder.create<FrameGraphFramebuffer>(
 						"deferred framebuffer",
 						{
@@ -263,6 +302,7 @@ namespace Rendering
 					uint32_t h = rc.device->screen_get_height();
 
 					RID uniform_set_1 = resources.get<FrameGraphUniformSet>(data.offscreen_tex_resources).uniform_set_rid;
+					RID uniform_set_2 = resources.get<FrameGraphUniformSet>(data.shadow_uniform_set).uniform_set_rid;
 					RID frame_buffer = resources.get<FrameGraphFramebuffer>(data.framebuffer_resource).framebuffer_rid;
 
 					GPU_SCOPE(cmd, "Deferred Pass", Color(1.0f, 0.0f, 0.0f, 1.0f));
@@ -276,6 +316,7 @@ namespace Rendering
 					rc.device->bind_render_pipeline(cmd, pipeline_rid);
 					rc.device->bind_uniform_set(shader_rid, uniform_set_0_rid, 0);
 					rc.device->bind_uniform_set(shader_rid, uniform_set_1, 1);
+					rc.device->bind_uniform_set(shader_rid, uniform_set_2, 2);
 					rc.device->render_draw(cmd, 3, 1);
 
 					rc.wsi->end_render_pass(cmd);
@@ -324,15 +365,65 @@ namespace Rendering
 			.build(main_fb_format);
 
 		sampler = RIDHandle(dev->sampler_create({}));
+		point_shadow_sampler = RIDHandle(dev->sampler_create({}));
+
+		{
+			RDC::SamplerState ss;
+			ss.mag_filter     = RDC::SAMPLER_FILTER_LINEAR;
+			ss.min_filter     = RDC::SAMPLER_FILTER_LINEAR;
+			ss.enable_compare = true;
+			ss.compare_op     = RDC::COMPARE_OP_LESS_OR_EQUAL;
+			shadow_sampler = RIDHandle(dev->sampler_create(ss));
+		}
+
+		RD::AttachmentFormat shadow_att;
+		shadow_att.format      = RD::DATA_FORMAT_D32_SFLOAT;
+		shadow_att.usage_flags = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT;
+		auto shadow_fb_format  = RD::get_singleton()->framebuffer_format_create({ shadow_att });
+
+		{
+			RDC::PipelineRasterizationState rs_shadow;
+			rs_shadow.cull_mode = RDC::POLYGON_CULL_FRONT;
+			pipeline_shadow = PipelineBuilder{}
+				.set_shader({ "assets://shaders/shadow.vert",
+				              "assets://shaders/shadow.frag" }, "shadow_shader")
+				.set_vertex_format(vertex_format)
+				.set_depth_stencil_state(depth_state)
+				.set_rasterization_state(rs_shadow)
+				.build(shadow_fb_format);
+		}
+
+		pipeline_point_shadow = PipelineBuilder{}
+			.set_shader({
+				"assets://shaders/point_shadow.vert",
+				"assets://shaders/point_shadow.geom",
+				"assets://shaders/point_shadow.frag"
+			}, "point_shadow_shader")
+			.set_vertex_format(vertex_format)
+			.set_depth_stencil_state(depth_state)
+			.build(shadow_fb_format);
 
 		// --- UBOs ---
 		frame_ubo.create(dev, "Frame UBO");
+		shadow_ubo.create(dev, "Shadow UBO");
 
 		// --- Uniform sets (set 0) ---
 		uniform_set_0 = UniformSetBuilder{}
 			.add(frame_ubo.as_uniform(0))
 			.add_sampler(3, sampler)
 			.build(dev, pipeline_color.shader_rid, 0);
+
+		uniform_set_0_shadow = UniformSetBuilder{}
+			.add(frame_ubo.as_uniform(0))
+			.add(shadow_ubo.as_uniform(1))
+			.add_sampler(3, sampler)
+			.build(dev, pipeline_shadow.shader_rid, 0);
+
+		uniform_set_0_point_shadow = UniformSetBuilder{}
+			.add(frame_ubo.as_uniform(0))
+			.add(shadow_ubo.as_uniform(1))
+			.add_sampler(3, sampler)
+			.build(dev, pipeline_point_shadow.shader_rid, 0);
 	}
 
 	void DeferredRenderer::create_deferred_pipeline(WSI* wsi, RenderingDevice* dev)
@@ -364,13 +455,15 @@ namespace Rendering
 
 		// --- UBOs ---
 		light_ubo.create(dev, "Light UBO");
-		shadow_ubo.create(dev, "Shadow UBO");
 
 		// --- Uniform sets (set 0) ---
 		uniform_set_0_deferred = UniformSetBuilder{}
 			.add(frame_ubo.as_uniform(0))
+			.add(shadow_ubo.as_uniform(1))
 			.add(light_ubo.as_uniform(2))
 			.add_sampler(3, sampler)
+			.add_sampler(4, shadow_sampler)
+			.add_sampler(5, point_shadow_sampler)
 			.build(dev, deferred_pipeline.shader_rid, 0);
 	}
 

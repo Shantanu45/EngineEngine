@@ -14,6 +14,14 @@ layout(set = 0, binding = 0) uniform FrameUBO {
     uint materialDebugView;
 } frame;
 
+layout(set = 0, binding = 1) uniform ShadowBuffer {
+    uint count;
+    float _pad0;
+    float _pad1;
+    float _pad2;
+    ShadowData shadows[MAX_LIGHTS];
+} shadowBuf;
+
 layout(set = 0, binding = 2) uniform LightBuffer {
     uint  lightCount;
     float _pad;
@@ -23,6 +31,8 @@ layout(set = 0, binding = 2) uniform LightBuffer {
 } lightData;
 
 layout(set = 0, binding = 3) uniform sampler texSampler;
+layout(set = 0, binding = 4) uniform sampler pcfSampler;
+layout(set = 0, binding = 5) uniform sampler pointShadowSampler;
 
 // GBuffer inputs (written by mrt.frag: location 0=position, 1=normal, 2=albedo)
 layout(set = 1, binding = 0) uniform texture2D albedoMap;
@@ -30,6 +40,11 @@ layout(set = 1, binding = 1) uniform texture2D positionMap;
 layout(set = 1, binding = 2) uniform texture2D normalMap;
 layout(set = 1, binding = 3) uniform texture2D materialMap;
 layout(set = 1, binding = 4) uniform texture2D emissiveMap;
+
+layout(set = 2, binding = 0) uniform texture2D shadowMap;
+layout(set = 2, binding = 1) uniform textureCube PointShadowMap;
+
+#include "../lib/shadows.glsl"
 
 #define DEBUG_VIEW_LIT 0u
 #define DEBUG_VIEW_ALBEDO 1u
@@ -79,10 +94,6 @@ void main()
         outColor = vec4(emissive, 1.0);
         return;
     }
-    if (frame.materialDebugView == DEBUG_VIEW_SHADOW) {
-        outColor = vec4(vec3(1.0), 1.0);
-        return;
-    }
     if (frame.materialDebugView == DEBUG_VIEW_LIGHT_COUNT) {
         outColor = vec4(vec3(min(float(lightData.lightCount) / float(MAX_LIGHTS), 1.0)), 1.0);
         return;
@@ -95,14 +106,35 @@ void main()
     }
 
     vec3 color = 0.05 * albedo * ambientOcclusion; // ambient
+    float minShadow = 1.0;
+    vec4 fragPosLightSpace = shadowBuf.shadows[frame.dirShadowIdx].matrices[0] * vec4(fragPos, 1.0);
 
     for (uint i = 0u; i < lightData.lightCount; i++) {
+        float shadow = 1.0;
+        if (lightData.lights[i].type == LIGHT_DIRECTIONAL) {
+            vec3 ld = normalize(-vec3(lightData.lights[i].direction));
+            shadow = shadow_factor(fragPosLightSpace, normal, ld);
+        } else if (lightData.lights[i].type == LIGHT_POINT) {
+            shadow = sample_point_shadow(
+                fragPos,
+                lightData.lights[i].position.xyz,
+                lightData.lights[i].position.w,
+                normal
+            );
+        }
+        minShadow = min(minShadow, shadow);
+
         if (lightData.lights[i].type == LIGHT_DIRECTIONAL)
-            color += CalcDirLight(lightData.lights[i], albedo, albedo, normal, viewDir, 32.0);
+            color += shadow * CalcDirLight(lightData.lights[i], albedo, metallic, roughness, normal, viewDir);
         else if (lightData.lights[i].type == LIGHT_POINT)
-            color += CalcPointLight(lightData.lights[i], albedo, albedo, normal, fragPos, viewDir, 32.0);
+            color += shadow * CalcPointLight(lightData.lights[i], albedo, metallic, roughness, normal, fragPos, viewDir);
         else if (lightData.lights[i].type == LIGHT_SPOT)
-            color += CalcSpotLight(lightData.lights[i], albedo, albedo, normal, fragPos, viewDir, 32.0);
+            color += shadow * CalcSpotLight(lightData.lights[i], albedo, metallic, roughness, normal, fragPos, viewDir);
+    }
+
+    if (frame.materialDebugView == DEBUG_VIEW_SHADOW) {
+        outColor = vec4(vec3(minShadow), 1.0);
+        return;
     }
 
     outColor = vec4(color + emissive, 1.0);
