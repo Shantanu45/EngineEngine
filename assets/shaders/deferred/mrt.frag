@@ -1,6 +1,6 @@
 #version 450
 #include "../lib/common.glsl"
-#include "../lib/lighting.glsl"
+#include "../lib/pbr_lighting.glsl"
 
 layout(set = 0, binding = 3) uniform sampler texSampler;
 
@@ -19,6 +19,7 @@ layout (location = 0) in vec3 inNormal;
 layout (location = 1) in vec2 inUV;
 layout (location = 3) in vec3 inWorldPos;
 layout (location = 4) in vec3 inTangent;
+layout (location = 5) in vec3 inBitangent;
 
 layout (location = 0) out vec4 outPosition;
 layout (location = 1) out vec4 outNormal;
@@ -32,13 +33,17 @@ void main()
 {
 	outPosition = vec4(inWorldPos, 1.0);
 
-	// Calculate normal in tangent space
 	vec3 N = normalize(inNormal);
-	vec3 T = normalize(inTangent);
-	vec3 B = cross(N, T);
-	mat3 TBN = mat3(T, B, N);
-	vec3 tnorm = TBN * normalize(texture(sampler2D(normal_tex, texSampler), inUV).rgb * 2.0 - 1.0);
-	outNormal = vec4(tnorm, 1.0);
+	vec3 normal = N;
+	bool hasTangentBasis = dot(inTangent, inTangent) > 0.000001 &&
+	                       dot(inBitangent, inBitangent) > 0.000001;
+	if (hasTangentBasis) {
+		mat3 TBN = mat3(normalize(inTangent), normalize(inBitangent), N);
+		vec3 tangentNormal = texture(sampler2D(normal_tex, texSampler), inUV).rgb * 2.0 - 1.0;
+		tangentNormal.xy *= mat.material.emissive_and_normal.w; // normal_scale
+		normal = normalize(TBN * tangentNormal);
+	}
+	outNormal = vec4(normal, 1.0);
 
 	vec4 baseColor = texture(sampler2D(diffuse_tex, texSampler), inUV)
 		* mat.material.base_color_factor;

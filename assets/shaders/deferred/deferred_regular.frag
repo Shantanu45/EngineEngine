@@ -1,6 +1,6 @@
 #version 450
 #include "../lib/common.glsl"
-#include "../lib/pbr_lighting.glsl"
+#include "../lib/lighting.glsl"
 
 layout(location = 0) in vec2 inUV;
 
@@ -34,7 +34,6 @@ layout(set = 0, binding = 3) uniform sampler texSampler;
 layout(set = 0, binding = 4) uniform sampler pcfSampler;
 layout(set = 0, binding = 5) uniform sampler pointShadowSampler;
 
-// GBuffer inputs (written by mrt.frag: location 0=position, 1=normal, 2=albedo)
 layout(set = 1, binding = 0) uniform texture2D albedoMap;
 layout(set = 1, binding = 1) uniform texture2D positionMap;
 layout(set = 1, binding = 2) uniform texture2D normalMap;
@@ -60,8 +59,8 @@ layout(set = 2, binding = 1) uniform textureCube PointShadowMap;
 void main()
 {
     vec3 fragPos = texture(sampler2D(positionMap, texSampler), inUV).xyz;
-    vec3 normal  = normalize(texture(sampler2D(normalMap,   texSampler), inUV).xyz);
-    vec3 albedo  = texture(sampler2D(albedoMap,   texSampler), inUV).rgb;
+    vec3 normal  = normalize(texture(sampler2D(normalMap, texSampler), inUV).xyz);
+    vec3 albedo  = texture(sampler2D(albedoMap, texSampler), inUV).rgb;
     vec3 material = texture(sampler2D(materialMap, texSampler), inUV).rgb;
     vec3 emissive = texture(sampler2D(emissiveMap, texSampler), inUV).rgb;
     float roughness = material.r;
@@ -105,7 +104,7 @@ void main()
         return;
     }
 
-    vec3 color = 0.05 * albedo * ambientOcclusion; // ambient
+    vec3 color = 0.05 * albedo * ambientOcclusion;
     float minShadow = 1.0;
     vec4 fragPosLightSpace = shadowBuf.shadows[frame.dirShadowIdx].matrices[0] * vec4(fragPos, 1.0);
 

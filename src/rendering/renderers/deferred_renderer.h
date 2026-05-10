@@ -80,13 +80,14 @@ namespace Rendering {
 
 		// Samplers
 		RIDHandle sampler;
+		RIDHandle gbuffer_sampler;
 		RIDHandle sampler_cube;
 		RIDHandle shadow_sampler;
 		RIDHandle point_shadow_sampler;
 
 		// Pipelines
 		Pipeline pipeline_color;			// offscreen
-		Pipeline pipeline_pbr;				// offscreen pbr			
+		Pipeline pipeline_pbr;			// reserved for material creation parity
 		Pipeline pipeline_light;
 		Pipeline pipeline_grid;
 		Pipeline pipeline_shadow;
@@ -94,6 +95,7 @@ namespace Rendering {
 		Pipeline pipeline_skybox;
 
 		Pipeline deferred_pipeline;
+		Pipeline deferred_regular_pipeline;
 
 		// Uniform sets — declared last so they are destroyed first.
 		RIDHandle uniform_set_0;
@@ -104,5 +106,6 @@ namespace Rendering {
 		RIDHandle uniform_set_skybox;
 
 		RIDHandle uniform_set_0_deferred;
+		RIDHandle uniform_set_0_deferred_regular;
 	};
 }

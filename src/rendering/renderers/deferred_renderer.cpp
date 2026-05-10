@@ -22,6 +22,7 @@ namespace Rendering
 
 	void DeferredRenderer::shutdown()
 	{
+		uniform_set_0_deferred_regular.reset();
 		uniform_set_0_deferred.reset();
 		uniform_set_skybox.reset();
 		uniform_set_0_point_shadow.reset();
@@ -33,6 +34,7 @@ namespace Rendering
 		point_shadow_sampler.reset();
 		shadow_sampler.reset();
 		sampler_cube.reset();
+		gbuffer_sampler.reset();
 		sampler.reset();
 
 		shadow_ubo.free();
@@ -241,7 +243,12 @@ namespace Rendering
 
 	void DeferredRenderer::setup_deferred_pass(FrameGraph& fg, FrameGraphBlackboard& bb, const SceneView& view, MeshStorage& storage)
 	{
-		auto pipeline_rid = deferred_pipeline.pipeline_rid;
+		const Pipeline active_pipeline = view.use_pbr_lighting ? deferred_pipeline : deferred_regular_pipeline;
+		auto pipeline_rid = active_pipeline.pipeline_rid;
+		auto shader_rid = active_pipeline.shader_rid;
+		auto uniform_set_0_rid = view.use_pbr_lighting
+			? (RID)uniform_set_0_deferred
+			: (RID)uniform_set_0_deferred_regular;
 
 		bb.add<deferred_pass_resource>() =
 			fg.add_callback_pass<deferred_pass_resource>(
@@ -267,7 +274,6 @@ namespace Rendering
 					builder.read(offscreen_resource.emissive_resource, TEXTURE_READ_FLAGS::READ_COLOR);
 
 					data.scene = builder.write(data.scene, TEXTURE_WRITE_FLAGS::WRITE_COLOR);
-					data.depth = builder.write(data.depth, TEXTURE_WRITE_FLAGS::WRITE_DEPTH);
 
 					auto& shadow_res       = bb.get<shadow_pass_resource>();
 					auto& point_shadow_res = bb.get<point_shadow_pass_resource>();
@@ -278,7 +284,7 @@ namespace Rendering
 						"offscreen uniform set",
 						{
 							.build = [&fg,
-										shader_rid = deferred_pipeline.shader_rid,
+										shader_rid,
 										albedo = offscreen_resource.albedo_resource,
 										position = offscreen_resource.position_resource,
 										normal = offscreen_resource.normal_resource,
@@ -308,7 +314,7 @@ namespace Rendering
 						"deferred shadow uniform set",
 						{
 							.build = [&fg,
-							          shader_rid = deferred_pipeline.shader_rid,
+							          shader_rid,
 							          shadow_id = shadow_res.shadow_map,
 							          point_id = point_shadow_res.shadow_cubemap]
 							         (RenderContext& rc) -> RID {
@@ -327,18 +333,17 @@ namespace Rendering
 					data.framebuffer_resource = builder.create<FrameGraphFramebuffer>(
 						"deferred framebuffer",
 						{
-							.build = [&fg, scene_id = data.scene, depth_id = data.depth](RenderContext& rc) -> RID {
+							.build = [&fg, scene_id = data.scene](RenderContext& rc) -> RID {
 								auto& scene_tex = fg.get_resource<FrameGraphTexture>(scene_id);
-								auto& depth_tex = fg.get_resource<FrameGraphTexture>(depth_id);
-								return rc.device->framebuffer_create({ scene_tex.texture_rid, depth_tex.texture_rid });
+								return rc.device->framebuffer_create({ scene_tex.texture_rid });
 							},
 							.name = "deferred framebuffer"
 						});
 					data.framebuffer_resource = builder.write(data.framebuffer_resource, FrameGraph::kFlagsIgnored);
 				},
 				[pipeline_rid,
-				 shader_rid = deferred_pipeline.shader_rid,
-				 uniform_set_0_rid = (RID)uniform_set_0_deferred](
+				 shader_rid,
+				 uniform_set_0_rid](
 					const deferred_pass_resource& data, FrameGraphPassResources& resources, void* ctx)
 				{
 					auto& rc = *static_cast<RenderContext*>(ctx);
@@ -352,10 +357,8 @@ namespace Rendering
 					RID frame_buffer = resources.get<FrameGraphFramebuffer>(data.framebuffer_resource).framebuffer_rid;
 
 					GPU_SCOPE(cmd, "Deferred Pass", Color(1.0f, 0.0f, 0.0f, 1.0f));
-					std::array<RDD::RenderPassClearValue, 2> clear_values;
+					std::array<RDD::RenderPassClearValue, 1> clear_values;
 					clear_values[0].color = Color();
-					clear_values[1].depth = 1.0f;
-					clear_values[1].stencil = 0;
 
 					rc.device->begin_render_pass_from_frame_buffer(frame_buffer, Rect2i(0, 0, w, h), clear_values);
 
@@ -468,8 +471,21 @@ namespace Rendering
 			.set_depth_stencil_state(depth_state)
 			.set_blend_state(RDC::PipelineColorBlendState::create_disabled(5))
 			.build(main_fb_format);
+		pipeline_pbr = pipeline_color;
 
-		sampler = RIDHandle(dev->sampler_create({}));
+		{
+			RDC::SamplerState ss;
+			ss.mag_filter     = RDC::SAMPLER_FILTER_LINEAR;
+			ss.min_filter     = RDC::SAMPLER_FILTER_LINEAR;
+			ss.mip_filter     = RDC::SAMPLER_FILTER_LINEAR;
+			ss.repeat_u       = RDC::SAMPLER_REPEAT_MODE_REPEAT;
+			ss.repeat_v       = RDC::SAMPLER_REPEAT_MODE_REPEAT;
+			ss.repeat_w       = RDC::SAMPLER_REPEAT_MODE_REPEAT;
+			ss.use_anisotropy = true;
+			ss.anisotropy_max = 16.0f;
+			sampler = RIDHandle(dev->sampler_create(ss));
+		}
+		gbuffer_sampler = RIDHandle(dev->sampler_create({}));
 		point_shadow_sampler = RIDHandle(dev->sampler_create({}));
 
 		{
@@ -541,11 +557,13 @@ namespace Rendering
 		color_att.format = RD::DATA_FORMAT_R16G16B16A16_SFLOAT;
 		color_att.usage_flags = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT;
 
+		auto deferred_fb_format = RD::get_singleton()->framebuffer_format_create({ color_att });
+
 		RD::AttachmentFormat depth_att;
 		depth_att.format = RD::DATA_FORMAT_D32_SFLOAT;
 		depth_att.usage_flags = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 
-		auto main_fb_format = RD::get_singleton()->framebuffer_format_create({ color_att, depth_att });
+		auto overlay_fb_format = RD::get_singleton()->framebuffer_format_create({ color_att, depth_att });
 
 		// --- Pipelines ---
 
@@ -558,7 +576,13 @@ namespace Rendering
 			.set_shader({ "assets://shaders/deferred/deferred.vert",
 						  "assets://shaders/deferred/deferred.frag" }, "deferred")
 			.set_blend_state(RDC::PipelineColorBlendState::create_disabled())
-			.build(main_fb_format);
+			.build(deferred_fb_format);
+
+		deferred_regular_pipeline = PipelineBuilder{}
+			.set_shader({ "assets://shaders/deferred/deferred.vert",
+						  "assets://shaders/deferred/deferred_regular.frag" }, "deferred_regular")
+			.set_blend_state(RDC::PipelineColorBlendState::create_disabled())
+			.build(deferred_fb_format);
 
 		RDC::PipelineDepthStencilState ds_overlay;
 		ds_overlay.enable_depth_test      = true;
@@ -570,7 +594,7 @@ namespace Rendering
 			              "assets://shaders/light_cube.frag" }, "deferred_light_cube_shader")
 			.set_vertex_format(vertex_format)
 			.set_depth_stencil_state(ds_overlay)
-			.build(main_fb_format);
+			.build(overlay_fb_format);
 
 		pipeline_grid = PipelineBuilder{}
 			.set_shader({ "assets://shaders/grid.vert",
@@ -578,7 +602,7 @@ namespace Rendering
 			.set_vertex_format(vertex_format)
 			.set_render_primitive(RDC::RENDER_PRIMITIVE_LINES)
 			.set_depth_stencil_state(ds_overlay)
-			.build(main_fb_format);
+			.build(overlay_fb_format);
 
 		{
 			RDC::PipelineDepthStencilState ds_skybox;
@@ -593,7 +617,7 @@ namespace Rendering
 				.set_vertex_format(vertex_format)
 				.set_depth_stencil_state(ds_skybox)
 				.set_rasterization_state(rs_skybox)
-				.build(main_fb_format);
+				.build(overlay_fb_format);
 		}
 
 		// --- UBOs ---
@@ -605,10 +629,19 @@ namespace Rendering
 			.add(frame_ubo.as_uniform(0))
 			.add(shadow_ubo.as_uniform(1))
 			.add(light_ubo.as_uniform(2))
-			.add_sampler(3, sampler)
+			.add_sampler(3, gbuffer_sampler)
 			.add_sampler(4, shadow_sampler)
 			.add_sampler(5, point_shadow_sampler)
 			.build(dev, deferred_pipeline.shader_rid, 0);
+
+		uniform_set_0_deferred_regular = UniformSetBuilder{}
+			.add(frame_ubo.as_uniform(0))
+			.add(shadow_ubo.as_uniform(1))
+			.add(light_ubo.as_uniform(2))
+			.add_sampler(3, gbuffer_sampler)
+			.add_sampler(4, shadow_sampler)
+			.add_sampler(5, point_shadow_sampler)
+			.build(dev, deferred_regular_pipeline.shader_rid, 0);
 
 		uniform_set_0_light = UniformSetBuilder{}
 			.add(frame_ubo.as_uniform(0))
