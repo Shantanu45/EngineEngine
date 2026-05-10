@@ -111,14 +111,20 @@ void main()
 
     vec3 color = 0.05 * albedo * ambientOcclusion; // ambient
     float minShadow = 1.0;
-    vec4 fragPosLightSpace = shadowBuf.shadows[frame.dirShadowIdx].matrices[0] * vec4(fragPos, 1.0);
+    ShadowData directionalShadow = shadowBuf.shadows[frame.dirShadowIdx];
+    bool cascadedShadow = directional_shadow_is_cascaded(directionalShadow);
+    uint cascadeIndex = cascadedShadow
+        ? directional_shadow_cascade_index(directionalShadow, frame.camera.view, fragPos)
+        : 0u;
+    vec4 fragPosLightSpace = directionalShadow.matrices[cascadeIndex] * vec4(fragPos, 1.0);
     vec3 shadowProj = fragPosLightSpace.xyz / fragPosLightSpace.w;
     shadowProj.xy = shadowProj.xy * 0.5 + 0.5;
+    vec2 shadowUv = directional_shadow_atlas_uv(shadowProj.xy, cascadeIndex, cascadedShadow);
     if (frame.materialDebugView == DEBUG_VIEW_DIR_SHADOW_MAP) {
         if (any(lessThan(shadowProj.xy, vec2(0.0))) || any(greaterThan(shadowProj.xy, vec2(1.0)))) {
             outColor = vec4(1.0, 0.0, 1.0, 1.0);
         } else {
-            outColor = vec4(vec3(texture(sampler2D(shadowMap, texSampler), shadowProj.xy).r), 1.0);
+            outColor = vec4(vec3(texture(sampler2D(shadowMap, texSampler), shadowUv).r), 1.0);
         }
         return;
     }
@@ -131,7 +137,7 @@ void main()
         float shadow = 1.0;
         if (lightData.lights[i].type == LIGHT_DIRECTIONAL) {
             vec3 ld = normalize(-vec3(lightData.lights[i].direction));
-            shadow = shadow_factor(fragPosLightSpace, normal, ld, frame.shadowBias.x, frame.shadowBias.y);
+            shadow = shadow_factor(fragPosLightSpace, cascadeIndex, cascadedShadow, normal, ld, frame.shadowBias.x, frame.shadowBias.y);
         } else if (lightData.lights[i].type == LIGHT_POINT) {
             shadow = sample_point_shadow(
                 fragPos,

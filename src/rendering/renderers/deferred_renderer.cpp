@@ -84,7 +84,7 @@ namespace Rendering
 			{ ShadowProjection::PointCube, pipeline_point_shadow, (RID)uniform_set_0_point_shadow });
 
 		add_point_shadow_pass(fg, bb, 1024, point_shadow_draws, storage);
-		add_shadow_pass(fg, bb, { 2048, 2048 }, shadow_draws, storage);
+		add_shadow_pass(fg, bb, { 2048, 2048 }, view.directional_shadow_mode, shadow_draws, storage);
 		setup_offscreen_pass(fg, bb, view, storage);
 		setup_deferred_pass(fg, bb, view, storage);
 		setup_overlay_pass(fg, bb, view, storage);

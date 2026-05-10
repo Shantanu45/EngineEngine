@@ -29,6 +29,12 @@ struct alignas(16) ObjectData_UBO {
     glm::mat4 normalMatrix;
 };
 
+struct alignas(16) ShadowObjectData_UBO {
+    glm::mat4 model;
+    uint32_t  cascade_index = 0;
+    float     _pad[3] = {};
+};
+
 // One entry per shadow-casting light, regardless of type.
 // matrices[0]     = directional / spot light-space matrix
 // matrices[0..5]  = point light cubemap face matrices

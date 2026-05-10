@@ -1,8 +1,12 @@
 #pragma once
 #include "framegraph_resources.h"
 #include "rendering/drawable.h"
+#include "rendering/frame_data.h"
+#include "rendering/render_settings.h"
 #include "math/math_common.h"
 #include "util/small_vector.h"
+
+#include <cstring>
 
 struct shadow_pass_resource {
     FrameGraphResource shadow_map;
@@ -16,10 +20,22 @@ struct point_shadow_pass_resource {
 
 namespace Rendering
 {
+    inline void set_directional_shadow_cascade_index(Drawable& drawable, uint32_t cascade_index)
+    {
+        if (drawable.push_constants.size != sizeof(ShadowObjectData_UBO))
+            return;
+
+        ShadowObjectData_UBO data{};
+        std::memcpy(&data, drawable.push_constants.data.data(), sizeof(data));
+        data.cascade_index = cascade_index;
+        std::memcpy(drawable.push_constants.data.data(), &data, sizeof(data));
+    }
+
     inline void add_shadow_pass(
         FrameGraph& fg,
         FrameGraphBlackboard& bb,
         Size2i shadow_extent,
+        DirectionalShadowMode directional_shadow_mode,
         std::vector<Drawable> drawables,
         MeshStorage& storage)
     {
@@ -67,13 +83,24 @@ namespace Rendering
                     clear_values[0].depth   = 1.0f;
                     clear_values[0].stencil = 0;
 
-                    rc.device->begin_render_pass_from_frame_buffer(
-                        fb, Rect2i(0, 0, shadow_extent.x, shadow_extent.y), clear_values);
+                    const bool cascaded = directional_shadow_mode == DirectionalShadowMode::Cascaded;
+                    const uint32_t pass_count = cascaded ? 4u : 1u;
+                    const int32_t tile_w = cascaded ? shadow_extent.x / 2 : shadow_extent.x;
+                    const int32_t tile_h = cascaded ? shadow_extent.y / 2 : shadow_extent.y;
 
-                    for (const auto& drawable : drawables)
-                        submit_drawable(rc, cmd, drawable, storage);
+                    for (uint32_t cascade = 0; cascade < pass_count; ++cascade) {
+                        const int32_t tile_x = cascaded ? static_cast<int32_t>(cascade % 2u) * tile_w : 0;
+                        const int32_t tile_y = cascaded ? static_cast<int32_t>(cascade / 2u) * tile_h : 0;
+                        rc.device->begin_render_pass_from_frame_buffer(
+                            fb, Rect2i(tile_x, tile_y, tile_w, tile_h), clear_values);
 
-                    rc.wsi->end_render_pass(cmd);
+                        for (auto drawable : drawables) {
+                            set_directional_shadow_cascade_index(drawable, cascade);
+                            submit_drawable(rc, cmd, drawable, storage);
+                        }
+
+                        rc.wsi->end_render_pass(cmd);
+                    }
                 });
     }
 

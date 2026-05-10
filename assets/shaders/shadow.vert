@@ -26,12 +26,15 @@ layout(set = 0, binding = 1) uniform ShadowBuffer {
 
 layout(push_constant) uniform PC {
     mat4 model;
-    mat4 normalMatrix;
+    uint cascadeIndex;
+    float _pad0;
+    float _pad1;
+    float _pad2;
 } pc;
 
 layout(location = 0) out vec2 TexCoords;
 
 void main() {
     TexCoords = inTexcoord;
-    gl_Position = shadowBuf.shadows[frame.dirShadowIdx].matrices[0] * pc.model * vec4(inPosition, 1.0);
+    gl_Position = shadowBuf.shadows[frame.dirShadowIdx].matrices[pc.cascadeIndex] * pc.model * vec4(inPosition, 1.0);
 }

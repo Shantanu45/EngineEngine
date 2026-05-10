@@ -312,7 +312,7 @@ void ForwardRenderer::setup_passes(FrameGraph& fg, FrameGraphBlackboard& bb,
     auto main_draws = build_main_drawables(view);
 
     add_point_shadow_pass(fg, bb, 1024, point_shadow_draws, storage);
-    add_shadow_pass(fg, bb, { 2048, 2048 }, shadow_draws, storage);
+    add_shadow_pass(fg, bb, { 2048, 2048 }, view.directional_shadow_mode, shadow_draws, storage);
 
     auto active_color_pipeline = view.use_pbr_lighting ? pipeline_pbr : pipeline_color;
     auto color_pipeline_rid = active_color_pipeline.pipeline_rid;

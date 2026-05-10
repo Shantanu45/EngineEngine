@@ -24,6 +24,12 @@ layout(set = 0, binding = 0) uniform FrameUBO {
 layout(set = 1, binding = 0) uniform texture2D shadowMap;
 layout(set = 1, binding = 1) uniform textureCube PointShadowMap;
 
+layout(set = 0, binding = 1) uniform ShadowBuffer {
+    uint count;
+    float _pad0, _pad1, _pad2;
+    ShadowData shadows[MAX_LIGHTS];
+} shadowBuf;
+
 layout(set = 2, binding = 0) uniform MaterialUBO {
     Material material;
 } mat;
@@ -164,13 +170,20 @@ void main()
         FragColor = vec4(vec3(gl_FragCoord.z), 1.0);
         return;
     }
-    vec3 shadowProj = fragPosLightSpace.xyz / fragPosLightSpace.w;
+    ShadowData directionalShadow = shadowBuf.shadows[frame.dirShadowIdx];
+    bool cascadedShadow = directional_shadow_is_cascaded(directionalShadow);
+    uint cascadeIndex = cascadedShadow
+        ? directional_shadow_cascade_index(directionalShadow, frame.camera.view, FragPos)
+        : 0u;
+    vec4 directionalFragPosLightSpace = directionalShadow.matrices[cascadeIndex] * vec4(FragPos, 1.0);
+    vec3 shadowProj = directionalFragPosLightSpace.xyz / directionalFragPosLightSpace.w;
     shadowProj.xy = shadowProj.xy * 0.5 + 0.5;
+    vec2 shadowUv = directional_shadow_atlas_uv(shadowProj.xy, cascadeIndex, cascadedShadow);
     if (frame.materialDebugView == DEBUG_VIEW_DIR_SHADOW_MAP) {
         if (any(lessThan(shadowProj.xy, vec2(0.0))) || any(greaterThan(shadowProj.xy, vec2(1.0)))) {
             FragColor = vec4(1.0, 0.0, 1.0, 1.0);
         } else {
-            FragColor = vec4(vec3(texture(sampler2D(shadowMap, texSampler), shadowProj.xy).r), 1.0);
+            FragColor = vec4(vec3(texture(sampler2D(shadowMap, texSampler), shadowUv).r), 1.0);
         }
         return;
     }
@@ -186,7 +199,7 @@ void main()
         float shadow = 1.0;
         if (lightData.lights[i].type == LIGHT_DIRECTIONAL) {
             vec3 ld = normalize(-vec3(lightData.lights[i].direction));
-            shadow = shadow_factor(fragPosLightSpace, normal, ld, frame.shadowBias.x, frame.shadowBias.y);
+            shadow = shadow_factor(directionalFragPosLightSpace, cascadeIndex, cascadedShadow, normal, ld, frame.shadowBias.x, frame.shadowBias.y);
         } else if (lightData.lights[i].type == LIGHT_POINT) {
             shadow = sample_point_shadow(
                 FragPos,

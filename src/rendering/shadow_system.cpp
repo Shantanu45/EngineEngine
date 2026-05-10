@@ -89,10 +89,18 @@ std::vector<Drawable> ShadowSystem::build_shadow_drawables(
 			continue;
 		}
 
+		PushConstantData push_constants;
+		if (binding.projection == ShadowProjection::Directional2D) {
+			push_constants = PushConstantData::from(ShadowObjectData_UBO{ instance.model, 0 });
+		}
+		else {
+			push_constants = PushConstantData::from(ObjectData_UBO{ instance.model, instance.normal_matrix });
+		}
+
 		drawables.push_back(Drawable::make(
 			binding.pipeline,
 			instance.mesh,
-			PushConstantData::from(ObjectData_UBO{ instance.model, instance.normal_matrix }),
+			push_constants,
 			{ { binding.uniform_set_0, 0 } },
 			shadow_material_sets_for_projection(instance, binding.projection)));
 	}
@@ -175,7 +183,7 @@ ShadowData ShadowSystem::_update_cascades(const CameraData& camera, const glm::v
 		glm::vec3 max_extents = glm::vec3(radius);
 		glm::vec3 min_extents = -max_extents;
 
-		const glm::vec3 light_direction = glm::normalize(-light_dir);
+		const glm::vec3 light_direction = glm::normalize(light_dir);
 		glm::mat4 light_view_matrix = glm::lookAt(frustum_center - light_direction * -min_extents.z, frustum_center, glm::vec3(0.0f, 1.0f, 0.0f));
 		glm::mat4 light_ortho_matrix = glm::orthoRH_ZO(min_extents.x, max_extents.x, min_extents.y, max_extents.y, 0.0f, max_extents.z - min_extents.z);
 

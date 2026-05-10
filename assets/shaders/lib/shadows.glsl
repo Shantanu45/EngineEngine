@@ -1,7 +1,36 @@
 #ifndef SHADOWS_GLSL
 #define SHADOWS_GLSL
 
+bool directional_shadow_is_cascaded(ShadowData shadow)
+{
+    return shadow.cascade_splits.w > 0.0;
+}
+
+uint directional_shadow_cascade_index(ShadowData shadow, mat4 view, vec3 fragPos)
+{
+    float viewDepth = abs((view * vec4(fragPos, 1.0)).z);
+    uint cascadeIndex = 0u;
+    if (viewDepth > shadow.cascade_splits.x) cascadeIndex = 1u;
+    if (viewDepth > shadow.cascade_splits.y) cascadeIndex = 2u;
+    if (viewDepth > shadow.cascade_splits.z) cascadeIndex = 3u;
+    return cascadeIndex;
+}
+
+vec2 directional_shadow_atlas_uv(vec2 uv, uint cascadeIndex, bool cascaded)
+{
+    if (!cascaded)
+        return uv;
+
+    vec2 atlasOffset = vec2(
+        (cascadeIndex & 1u) == 0u ? 0.0 : 0.5,
+        cascadeIndex < 2u ? 0.0 : 0.5
+    );
+    return uv * 0.5 + atlasOffset;
+}
+
 float shadow_factor(vec4 fragPosLS,
+                    uint cascadeIndex,
+                    bool cascaded,
                     vec3 normal,
                     vec3 lightDir,
                     float biasScale,
@@ -11,6 +40,7 @@ float shadow_factor(vec4 fragPosLS,
     proj.xy = proj.xy * 0.5 + 0.5;
     if (proj.x < 0.0 || proj.x > 1.0 || proj.y < 0.0 || proj.y > 1.0) return 1.0;
     if (proj.z > 1.0) return 1.0;
+    proj.xy = directional_shadow_atlas_uv(proj.xy, cascadeIndex, cascaded);
 
     float cosTheta = max(dot(normalize(normal), normalize(lightDir)), 0.0);
     float bias = max(biasScale * (1.0 - cosTheta), biasMin);
