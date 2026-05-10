@@ -629,6 +629,9 @@ namespace Rendering
 		{
 			RDC::PipelineRasterizationState rs_shadow;
 			rs_shadow.cull_mode = RDC::POLYGON_CULL_FRONT;
+			rs_shadow.depth_bias_enabled = true;
+			rs_shadow.depth_bias_constant_factor = 1.25f;
+			rs_shadow.depth_bias_slope_factor = 1.75f;
 			pipeline_shadow = PipelineBuilder{}
 				.set_shader({ "assets://shaders/shadow.vert",
 				              "assets://shaders/shadow.frag" }, "shadow_shader")

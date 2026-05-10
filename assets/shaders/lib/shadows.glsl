@@ -9,6 +9,7 @@ float shadow_factor(vec4 fragPosLS,
 {
     vec3 proj = fragPosLS.xyz / fragPosLS.w;
     proj.xy = proj.xy * 0.5 + 0.5;
+    if (proj.x < 0.0 || proj.x > 1.0 || proj.y < 0.0 || proj.y > 1.0) return 1.0;
     if (proj.z > 1.0) return 1.0;
 
     float cosTheta = max(dot(normalize(normal), normalize(lightDir)), 0.0);
