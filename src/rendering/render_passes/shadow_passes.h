@@ -45,9 +45,10 @@ namespace Rendering
                 [&](FrameGraph::Builder& builder, shadow_pass_resource& data)
                 {
                     RD::TextureFormat tf;
-                    tf.texture_type = RD::TEXTURE_TYPE_2D;
+                    tf.texture_type = RD::TEXTURE_TYPE_2D_ARRAY;
                     tf.width        = shadow_extent.x;
                     tf.height       = shadow_extent.y;
+                    tf.array_layers = 4;
                     tf.usage_bits   = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
                                     | RD::TEXTURE_USAGE_SAMPLING_BIT;
                     tf.format       = RD::DATA_FORMAT_D32_SFLOAT;
@@ -83,24 +84,18 @@ namespace Rendering
                     clear_values[0].depth   = 1.0f;
                     clear_values[0].stencil = 0;
 
-                    const bool cascaded = directional_shadow_mode == DirectionalShadowMode::Cascaded;
-                    const uint32_t pass_count = cascaded ? 4u : 1u;
-                    const int32_t tile_w = cascaded ? shadow_extent.x / 2 : shadow_extent.x;
-                    const int32_t tile_h = cascaded ? shadow_extent.y / 2 : shadow_extent.y;
+                    const uint32_t pass_count = directional_shadow_mode == DirectionalShadowMode::Cascaded ? 4u : 1u;
 
+                    rc.device->begin_render_pass_from_frame_buffer(
+                        fb, Rect2i(0, 0, shadow_extent.x, shadow_extent.y), clear_values);
                     for (uint32_t cascade = 0; cascade < pass_count; ++cascade) {
-                        const int32_t tile_x = cascaded ? static_cast<int32_t>(cascade % 2u) * tile_w : 0;
-                        const int32_t tile_y = cascaded ? static_cast<int32_t>(cascade / 2u) * tile_h : 0;
-                        rc.device->begin_render_pass_from_frame_buffer(
-                            fb, Rect2i(tile_x, tile_y, tile_w, tile_h), clear_values);
-
                         for (auto drawable : drawables) {
                             set_directional_shadow_cascade_index(drawable, cascade);
                             submit_drawable(rc, cmd, drawable, storage);
                         }
-
-                        rc.wsi->end_render_pass(cmd);
                     }
+
+                    rc.wsi->end_render_pass(cmd);
                 });
     }
 

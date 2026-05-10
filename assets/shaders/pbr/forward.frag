@@ -21,7 +21,7 @@ layout(set = 0, binding = 0) uniform FrameUBO {
     vec4 shadowBias;
 } frame;
 
-layout(set = 1, binding = 0) uniform texture2D shadowMap;
+layout(set = 1, binding = 0) uniform texture2DArray shadowMap;
 layout(set = 1, binding = 1) uniform textureCube PointShadowMap;
 
 layout(set = 0, binding = 1) uniform ShadowBuffer {
@@ -170,12 +170,11 @@ void main()
     vec4 directionalFragPosLightSpace = directionalShadow.matrices[cascadeIndex] * vec4(FragPos, 1.0);
     vec3 shadowProj = directionalFragPosLightSpace.xyz / directionalFragPosLightSpace.w;
     shadowProj.xy = shadowProj.xy * 0.5 + 0.5;
-    vec2 shadowUv = directional_shadow_atlas_uv(shadowProj.xy, cascadeIndex, cascadedShadow);
     if (frame.materialDebugView == DEBUG_VIEW_DIR_SHADOW_MAP) {
         if (any(lessThan(shadowProj.xy, vec2(0.0))) || any(greaterThan(shadowProj.xy, vec2(1.0)))) {
             FragColor = vec4(1.0, 0.0, 1.0, 1.0);
         } else {
-            FragColor = vec4(vec3(texture(sampler2D(shadowMap, texSampler), shadowUv).r), 1.0);
+            FragColor = vec4(vec3(texture(sampler2DArray(shadowMap, texSampler), vec3(shadowProj.xy, float(cascadeIndex))).r), 1.0);
         }
         return;
     }
@@ -191,7 +190,7 @@ void main()
         float shadow = 1.0;
         if (lightData.lights[i].type == LIGHT_DIRECTIONAL) {
             vec3 ld = normalize(-vec3(lightData.lights[i].direction));
-            shadow = shadow_factor(directionalFragPosLightSpace, cascadeIndex, cascadedShadow, normal, ld, frame.shadowBias.x, frame.shadowBias.y);
+            shadow = shadow_factor(directionalFragPosLightSpace, cascadeIndex, normal, ld, frame.shadowBias.x, frame.shadowBias.y);
         } else if (lightData.lights[i].type == LIGHT_POINT) {
             shadow = sample_point_shadow(
                 FragPos,

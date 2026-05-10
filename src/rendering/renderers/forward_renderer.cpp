@@ -97,6 +97,7 @@ void ForwardRenderer::initialize(WSI* wsi, RenderingDevice* dev, RID cubemap) {
         rs_shadow.depth_bias_slope_factor = 1.75f;
         pipeline_shadow = PipelineBuilder{}
             .set_shader({ "assets://shaders/shadow.vert",
+                          "assets://shaders/shadow.geom",
                           "assets://shaders/shadow.frag" }, "shadow_shader")
             .set_vertex_format(vertex_format)
             .set_depth_stencil_state(ds_standard)

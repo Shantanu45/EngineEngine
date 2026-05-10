@@ -16,21 +16,8 @@ uint directional_shadow_cascade_index(ShadowData shadow, mat4 view, vec3 fragPos
     return cascadeIndex;
 }
 
-vec2 directional_shadow_atlas_uv(vec2 uv, uint cascadeIndex, bool cascaded)
-{
-    if (!cascaded)
-        return uv;
-
-    vec2 atlasOffset = vec2(
-        (cascadeIndex & 1u) == 0u ? 0.0 : 0.5,
-        cascadeIndex < 2u ? 0.0 : 0.5
-    );
-    return uv * 0.5 + atlasOffset;
-}
-
 float shadow_factor(vec4 fragPosLS,
                     uint cascadeIndex,
-                    bool cascaded,
                     vec3 normal,
                     vec3 lightDir,
                     float biasScale,
@@ -40,17 +27,18 @@ float shadow_factor(vec4 fragPosLS,
     proj.xy = proj.xy * 0.5 + 0.5;
     if (proj.x < 0.0 || proj.x > 1.0 || proj.y < 0.0 || proj.y > 1.0) return 1.0;
     if (proj.z > 1.0) return 1.0;
-    proj.xy = directional_shadow_atlas_uv(proj.xy, cascadeIndex, cascaded);
 
     float cosTheta = max(dot(normalize(normal), normalize(lightDir)), 0.0);
     float bias = max(biasScale * (1.0 - cosTheta), biasMin);
 
-    vec2 texelSize = 1.0 / textureSize(sampler2DShadow(shadowMap, pcfSampler), 0);
+    vec2 texelSize = 1.0 / vec2(textureSize(sampler2DArrayShadow(shadowMap, pcfSampler), 0).xy);
     float shadow = 0.0;
     for (int x = -1; x <= 1; x++) {
         for (int y = -1; y <= 1; y++) {
-            shadow += texture(sampler2DShadow(shadowMap, pcfSampler),
-                              vec3(proj.xy + vec2(x, y) * texelSize, proj.z - bias));
+            shadow += texture(sampler2DArrayShadow(shadowMap, pcfSampler),
+                              vec4(proj.xy + vec2(x, y) * texelSize,
+                                   float(cascadeIndex),
+                                   proj.z - bias));
         }
     }
     return shadow / 9.0;
