@@ -34,7 +34,7 @@ Important app targets include:
 - `deferred`
 - `terrain`
 - `shader_playground`
-- `Test`
+- `_test`
 
 ## Requirements
 
