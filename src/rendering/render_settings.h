@@ -30,6 +30,12 @@ struct RenderSettings {
     bool show_timings       = false;
     bool show_timing_graphs = false;
     bool draw_debug_aabbs = false;
+    bool use_debug_culling_camera = false;
+    bool render_from_debug_camera = false;
+    bool debug_camera_detached = false;
+    bool draw_render_frustum = false;
+    bool draw_culling_frustum = false;
+    bool draw_culling_results = false;
     float exposure = 1.0f;
     float directional_shadow_bias_scale = 0.002f;
     float directional_shadow_bias_min = 0.0005f;

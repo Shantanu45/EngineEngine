@@ -76,6 +76,7 @@ private:
 	SceneMeshAssetHandle point_light_mesh_asset = INVALID_SCENE_MESH_ASSET;
 
 	Camera camera;
+	Camera debug_camera;
 	std::shared_ptr<EE::InputSystemInterface> input_system;
 
 	Rendering::WSI* wsi = nullptr;

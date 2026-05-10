@@ -12,6 +12,7 @@
 
 struct UIContext {
     Camera*           camera     = nullptr;
+    Camera*           debug_camera = nullptr;
     entt::registry*   world      = nullptr;
     Rendering::WSI*   wsi        = nullptr;
     bool              show_stats = true;

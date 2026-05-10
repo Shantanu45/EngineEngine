@@ -30,7 +30,12 @@ bool DeferredRuntime::initialize(const DeferredRuntimeConfig& config)
 void DeferredRuntime::render_frame(double frame_time, double elapsed_time)
 {
 	ZoneScoped;
-	camera.update_from_input(input_system.get(), frame_time);
+	Camera& input_camera = render_settings.render_from_debug_camera ? debug_camera : camera;
+	input_camera.update_from_input(input_system.get(), frame_time);
+	if (!render_settings.debug_camera_detached && !render_settings.render_from_debug_camera) {
+		debug_camera.set_position(camera.get_position());
+		debug_camera.set_rotation(camera.get_rotation());
+	}
 	update_world_transforms(world);
 	RenderUtilities::capturing_timestamps = render_settings.show_timings;
 
@@ -39,9 +44,12 @@ void DeferredRuntime::render_frame(double frame_time, double elapsed_time)
 		ui_layer.draw_frame(ui_ctx);
 	}
 
+	const Camera& render_camera = render_settings.render_from_debug_camera ? debug_camera : camera;
+	const Camera& culling_camera = render_settings.use_debug_culling_camera ? debug_camera : camera;
 	RenderSceneExtractResult extracted_scene = scene_extractor.extract(RenderSceneExtractInput{
 		.world = world,
-		.camera = camera,
+		.render_camera = render_camera,
+		.culling_camera = culling_camera,
 		.settings = render_settings,
 		.asset_registry = resources.assets(),
 		.material_registry = resources.materials(),
@@ -79,6 +87,18 @@ void DeferredRuntime::configure_camera(const DeferredCameraConfig& camera_config
 		camera_config.euler_degrees.y,
 		camera_config.euler_degrees.z);
 	camera.set_mode(camera_config.mode);
+	debug_camera.set_perspective(
+		camera_config.fov_degrees,
+		camera_config.aspect,
+		camera_config.near_plane,
+		camera_config.far_plane);
+	debug_camera.set_reset_on_resize(camera_config.reset_aspect_on_resize);
+	debug_camera.set_position(camera_config.position);
+	debug_camera.set_euler_degrees(
+		camera_config.euler_degrees.x,
+		camera_config.euler_degrees.y,
+		camera_config.euler_degrees.z);
+	debug_camera.set_mode(camera_config.mode);
 }
 
 void DeferredRuntime::configure_wsi()
@@ -138,6 +158,7 @@ void DeferredRuntime::load_scene(FileSystem::Filesystem& filesystem, const std::
 void DeferredRuntime::register_default_ui()
 {
 	ui_ctx.camera = &camera;
+	ui_ctx.debug_camera = &debug_camera;
 	ui_ctx.world = &world;
 	ui_ctx.wsi = wsi;
 	ui_ctx.settings = &render_settings;

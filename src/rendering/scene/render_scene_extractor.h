@@ -14,7 +14,8 @@
 
 struct RenderSceneExtractInput {
 	entt::registry& world;
-	const Camera& camera;
+	const Camera& render_camera;
+	const Camera& culling_camera;
 	const RenderSettings& settings;
 	const Rendering::RenderAssetRegistry& asset_registry;
 	Rendering::MaterialRegistry& material_registry;

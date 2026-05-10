@@ -52,9 +52,9 @@ RenderSceneExtractResult RenderSceneExtractor::extract(RenderSceneExtractInput i
 
 	RenderSceneExtractResult result;
 	auto& view = result.view;
-	view.camera.view = input.camera.get_view();
-	view.camera.proj = input.camera.get_projection();
-	view.camera.cameraPos = input.camera.get_position();
+	view.camera.view = input.render_camera.get_view();
+	view.camera.proj = input.render_camera.get_projection();
+	view.camera.cameraPos = input.render_camera.get_position();
 	view.elapsed     = input.elapsed;
 	view.extent      = input.extent;
 	view.use_pbr_lighting = input.settings.use_pbr_lighting;
@@ -66,6 +66,11 @@ RenderSceneExtractResult RenderSceneExtractor::extract(RenderSceneExtractInput i
 		input.settings.point_shadow_bias_min);
 	view.skybox_mesh = input.settings.draw_skybox ? input.skybox_mesh : Rendering::INVALID_MESH;
 	view.grid_mesh   = input.settings.draw_grid ? input.grid_mesh : Rendering::INVALID_MESH;
+
+	if (input.settings.draw_render_frustum)
+		Rendering::DebugDraw::get().add_frustum(input.render_camera.get_view_projection(), glm::vec4(0.1f, 1.0f, 0.2f, 1.0f));
+	if (input.settings.draw_culling_frustum)
+		Rendering::DebugDraw::get().add_frustum(input.culling_camera.get_view_projection(), glm::vec4(1.0f, 0.85f, 0.1f, 1.0f));
 
 	auto emit_mesh = [&](MeshComponent& m, const glm::mat4& model, const glm::mat4& normal_matrix) {
 			Rendering::ShadowCasterInstance shadow_inst;
@@ -95,10 +100,18 @@ RenderSceneExtractResult RenderSceneExtractor::extract(RenderSceneExtractInput i
 
 			if (m.local_aabb.valid()) {
 				Rendering::AABB world_aabb = Rendering::transform_aabb(m.local_aabb, model);
+				const bool visible_to_culling_camera = input.culling_camera.is_aabb_visible(world_aabb.min, world_aabb.max);
 				if (input.settings.draw_debug_aabbs)
 					Rendering::DebugDraw::get().add_aabb(world_aabb.min, world_aabb.max);
+				if (input.settings.draw_culling_results)
+					Rendering::DebugDraw::get().add_aabb(
+						world_aabb.min,
+						world_aabb.max,
+						visible_to_culling_camera
+							? glm::vec4(0.1f, 0.7f, 1.0f, 1.0f)
+							: glm::vec4(1.0f, 0.1f, 0.1f, 1.0f));
 				if (input.settings.frustum_culling &&
-					!input.camera.is_aabb_visible(world_aabb.min, world_aabb.max))
+					!visible_to_culling_camera)
 					return false;
 			}
 

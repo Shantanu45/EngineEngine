@@ -1,6 +1,7 @@
 #pragma once
 #include <vector>
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_inverse.hpp>
 #include "util/small_vector.h"
 
 namespace Rendering {
@@ -34,6 +35,27 @@ public:
         l({mx.x,mx.y,mn.z}, {mx.x,mx.y,mx.z});
         l({mx.x,mn.y,mx.z}, {mx.x,mx.y,mx.z});
         l({mn.x,mx.y,mx.z}, {mx.x,mx.y,mx.z});
+    }
+
+    void add_frustum(const glm::mat4& view_projection, glm::vec4 color = { 0, 1, 1, 1 }) {
+        const glm::mat4 inv = glm::inverse(view_projection);
+        glm::vec3 corners[8];
+        const glm::vec3 ndc[8] = {
+            {-1.0f, -1.0f, 0.0f}, { 1.0f, -1.0f, 0.0f},
+            { 1.0f,  1.0f, 0.0f}, {-1.0f,  1.0f, 0.0f},
+            {-1.0f, -1.0f, 1.0f}, { 1.0f, -1.0f, 1.0f},
+            { 1.0f,  1.0f, 1.0f}, {-1.0f,  1.0f, 1.0f},
+        };
+
+        for (int i = 0; i < 8; ++i) {
+            const glm::vec4 world = inv * glm::vec4(ndc[i], 1.0f);
+            corners[i] = glm::vec3(world) / world.w;
+        }
+
+        auto l = [&](int a, int b) { add_line(corners[a], corners[b], color); };
+        l(0, 1); l(1, 2); l(2, 3); l(3, 0);
+        l(4, 5); l(5, 6); l(6, 7); l(7, 4);
+        l(0, 4); l(1, 5); l(2, 6); l(3, 7);
     }
 
     const Util::SmallVector<DebugVertex>& vertices() const { return verts; }
