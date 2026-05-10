@@ -27,12 +27,22 @@ struct MeshInstance {
     glm::vec3           sort_center = glm::vec3(0.0f);
 };
 
+struct ShadowCasterInstance {
+    MeshHandle          mesh;
+    glm::mat4           model;
+    glm::mat4           normal_matrix;
+    Util::SmallVector<RID> shadow_material_sets;
+    Util::SmallVector<RID> point_shadow_material_sets;
+    MeshCategory        category = MeshCategory::Opaque;
+};
+
 struct SceneView {
     CameraData                camera;
     double                    elapsed     = 0.0;
     MeshHandle                skybox_mesh = INVALID_MESH;
     MeshHandle                grid_mesh   = INVALID_MESH;
     Util::SmallVector<MeshInstance> instances;
+    Util::SmallVector<ShadowCasterInstance> shadow_casters;
     Util::SmallVector<Light>        lights;
     Size2i                    extent{};
     bool                      use_pbr_lighting = false;

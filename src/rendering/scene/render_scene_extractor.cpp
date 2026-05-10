@@ -68,6 +68,31 @@ RenderSceneExtractResult RenderSceneExtractor::extract(RenderSceneExtractInput i
 	view.grid_mesh   = input.settings.draw_grid ? input.grid_mesh : Rendering::INVALID_MESH;
 
 	auto emit_mesh = [&](MeshComponent& m, const glm::mat4& model, const glm::mat4& normal_matrix) {
+			Rendering::ShadowCasterInstance shadow_inst;
+			shadow_inst.mesh          = input.asset_registry.resolve_mesh(m.mesh);
+			shadow_inst.model         = model;
+			shadow_inst.normal_matrix = normal_matrix;
+			shadow_inst.category      = to_render_mesh_category(m.category);
+
+			bool casts_shadow = m.materials.empty();
+			for (auto asset : m.materials) {
+				auto h = input.asset_registry.resolve_material(asset);
+				if (h != Rendering::INVALID_MATERIAL && input.material_registry.is_blend(h))
+					continue;
+
+				casts_shadow = true;
+				shadow_inst.shadow_material_sets.push_back(
+					h != Rendering::INVALID_MATERIAL
+						? input.material_registry.get_shadow_uniform_set(h)
+						: RID());
+				shadow_inst.point_shadow_material_sets.push_back(
+					h != Rendering::INVALID_MATERIAL
+						? input.material_registry.get_point_shadow_uniform_set(h)
+						: RID());
+			}
+			if (shadow_inst.category == Rendering::MeshCategory::Opaque && casts_shadow)
+				view.shadow_casters.push_back(std::move(shadow_inst));
+
 			if (m.local_aabb.valid()) {
 				Rendering::AABB world_aabb = Rendering::transform_aabb(m.local_aabb, model);
 				if (input.settings.draw_debug_aabbs)

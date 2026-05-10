@@ -8,6 +8,7 @@
 #include "math/rect2.h"
 #include "util/small_vector.h"
 
+#include <algorithm>
 #include <iterator>
 
 namespace Rendering

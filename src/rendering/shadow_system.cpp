@@ -11,7 +11,7 @@ uint32_t to_light_type(LightType type)
 }
 
 Util::SmallVector<RID> shadow_material_sets_for_projection(
-	const MeshInstance& instance,
+	const ShadowCasterInstance& instance,
 	ShadowProjection projection)
 {
 	switch (projection) {
@@ -71,10 +71,10 @@ std::vector<Drawable> ShadowSystem::build_shadow_drawables(
 	const ShadowShaderBinding& binding)
 {
 	std::vector<Drawable> drawables;
-	drawables.reserve(view.instances.size());
+	drawables.reserve(view.shadow_casters.size());
 
-	for (const auto& instance : view.instances) {
-		if (instance.category != MeshCategory::Opaque || instance.transparent) {
+	for (const auto& instance : view.shadow_casters) {
+		if (instance.category != MeshCategory::Opaque) {
 			continue;
 		}
 
