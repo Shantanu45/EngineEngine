@@ -14,6 +14,8 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE VK_NO_PROTOTYPES)
 target_compile_definitions(${PROJECT_NAME} PRIVATE IMGUI_IMPL_VULKAN_USE_VOLK)
 target_compile_definitions(${PROJECT_NAME} PRIVATE TRACY_ENABLE)
 
+add_definitions(-DNOMINMAX) 
+
 find_package(SDL3 REQUIRED)
 find_package(VulkanMemoryAllocator REQUIRED)
 find_package(glm REQUIRED)

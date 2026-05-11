@@ -26,7 +26,6 @@ find_package(EnTT REQUIRED)
 find_package(Tracy CONFIG REQUIRED)
 
 add_definitions(-DNOMINMAX) 
-add_definitions() 
 
 set(INCLUDES 
 	"${PROJECT_SOURCE_DIR}/src"

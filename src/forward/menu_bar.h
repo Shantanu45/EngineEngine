@@ -2,8 +2,12 @@
 
 #include "imgui.h"
 #include "forward/ui_layer.h"
+#include "util/renderdoc_helpers.h"
 
 struct MenuBarPanel : IUIPanel {
+private:
+	uint32_t rdoc_frame_captured = 0;
+public:
     void draw(UIContext& ctx) override {
         if (ImGui::BeginMainMenuBar()) {
             if (ImGui::BeginMenu("Debug")) {
@@ -52,6 +56,25 @@ struct MenuBarPanel : IUIPanel {
                     ctx.settings->material_debug_view = static_cast<MaterialDebugView>(debug_view);
                 ImGui::EndMenu();
             }
+
+			if ((Util::rdoc != nullptr) && (ImGui::BeginMenu("Ops")))
+			{
+				if (ImGui::Button("Capture Rdoc Frame"))
+				{
+					Util::capture_next_frame();
+				}
+
+				rdoc_frame_captured = Util::get_rdoc_num_captures();
+
+				if (ImGui::Button(std::format("Open Rdoc Capture {}", rdoc_frame_captured).c_str()))            // more optimzed way to handle dynamic string?
+				{
+					if (rdoc_frame_captured > 0)
+					{
+						Util::open_last_captured();
+					}
+				}
+				ImGui::EndMenu();
+			}
 
             ImGui::EndMainMenuBar();
         }
