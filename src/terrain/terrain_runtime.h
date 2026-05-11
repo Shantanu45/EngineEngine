@@ -163,10 +163,10 @@ private:
 	float water_forward_bias = 0.f;
 
 	/** Minimum world-space width of the water plane. */
-	float water_min_diameter = 480.0f;
+	float water_min_diameter = 80.0f;
 
 	/** Multiplier applied to water width to make the plane longer in the camera-forward direction. */
-	float water_depth_scale = 2.5f;
+	float water_depth_scale = 1.f;
 
 	/** Set by the UI to rebuild terrain on a deferred frame boundary. */
 	bool regenerate_requested = false;

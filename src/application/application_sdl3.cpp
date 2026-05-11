@@ -18,6 +18,7 @@
 #include "volk.h"
 #include "input/input.h"
 #include "application_events.h"
+#include "util/renderdoc_helpers.h"
 #include <CLI/CLI.hpp>
 
 namespace EE
@@ -336,11 +337,19 @@ namespace EE
 		cli.add_option("--width",  opts.width,  "Window width  (default: application default)");
 		cli.add_option("--height", opts.height, "Window height (default: application default)");
 		cli.add_flag  ("--fullscreen", opts.fullscreen,  "Fullscreen mode");
+		cli.add_flag  ("--attach-rdoc", opts.attatch_rdoc,  "Attach render doc");
+		cli.add_option("--rdoc-folder", opts.rdoc_folder,  "Renderdoc folder (deafult: C:/Program Files/RenderDoc/)");
+		cli.add_option("--capture-path", opts.rdoc_capture_path,  "Path captures will be safer (deafult: temp/)");
 		cli.add_flag  ("--no-vsync{false}", opts.vsync,  "Disable vsync");
 		cli.add_option("--render-mode,--lighting-model", opts.render_mode,
 			"Initial lighting model: regular or pbr")
 			->check(CLI::IsMember({ "regular", "pbr" }));
 		CLI11_PARSE(cli, argc, argv);
+
+		if (opts.attatch_rdoc)
+		{
+			Util::init_render_doc(opts.rdoc_folder, opts.rdoc_capture_path);
+		}
 
 		WSIPlatformSDL::Options wsi_options;
 		wsi_options.override_width  = opts.width;
@@ -375,7 +384,14 @@ namespace EE
 		{
 			// creates platform 
 			auto platform = std::make_unique<WSIPlatformSDL>(wsi_options);
-			return platform->run(app.get());
+			int result = platform->run(app.get());
+
+			if (opts.attatch_rdoc && Util::rdoc != nullptr)
+			{
+				Util::shutdown_render_doc();
+			}
+
+			return result;
 
 		}
 		else
