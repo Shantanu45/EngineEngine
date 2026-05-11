@@ -69,11 +69,9 @@ namespace Util
     }
 
     inline void shutdown_render_doc() {
-        rdoc = nullptr;  // stop using the API first
-
-        HMODULE lib = GetModuleHandleA("renderdoc.dll");
-        if (lib) {
-            FreeLibrary(lib);  // triggers DLL_PROCESS_DETACH -> RenderDoc shuts down
-        }
+        // Do not manually unload renderdoc.dll. RenderDoc owns global Vulkan hook
+        // state and DLL detach can assert if it races process/layer teardown.
+        // The OS will unload the module when the process exits.
+        rdoc = nullptr;
     }
 }

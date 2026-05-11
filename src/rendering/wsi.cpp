@@ -311,6 +311,10 @@ namespace Rendering
         //mesh_storage->finalize();
 
         rendering_device->finalize();
+        if (rendering_context && active_window != DisplayServerEnums::INVALID_WINDOW_ID) {
+            rendering_context->window_destroy(active_window);
+            active_window = DisplayServerEnums::INVALID_WINDOW_ID;
+        }
     }
 
     Error WSI::_create_rendering_context_window(DisplayServerEnums::WindowID p_window_id, const std::string& p_rendering_driver)

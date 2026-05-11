@@ -369,6 +369,7 @@ namespace Rendering
 		_free_rids(vertex_array_owner, "VertexArray");
 		_free_rids(vertex_buffer_owner, "VertexBuffer");
 		_free_rids(framebuffer_owner, "Framebuffer");
+		_free_rids(texture_owner, "Texture");
 		_free_rids(sampler_owner, "Sampler");
 	}
 

@@ -355,7 +355,6 @@ namespace EE
 		wsi_options.override_width  = opts.width;
 		wsi_options.override_height = opts.height;
 		wsi_options.fullscreen      = opts.fullscreen;
-		int exit_code;
 
 		Locator::ServiceLocator& locator = Services::get();
 
@@ -378,7 +377,7 @@ namespace EE
 
 		// creates application
 		auto app = std::unique_ptr<Application>(create_application(argc, argv));
-		int ret;
+		int ret = EXIT_FAILURE;
 
 		if (app)
 		{
@@ -386,18 +385,18 @@ namespace EE
 			auto platform = std::make_unique<WSIPlatformSDL>(wsi_options);
 			int result = platform->run(app.get());
 
-			if (opts.attatch_rdoc && Util::rdoc != nullptr)
-			{
-				Util::shutdown_render_doc();
-			}
+			// Tear down the Vulkan device/context before unloading RenderDoc. RenderDoc
+			// asserts if its Vulkan resource map still contains live objects at detach.
+			app.reset();
 
-			return result;
-
+			ret = result;
 		}
-		else
+		
+		if (opts.attatch_rdoc && Util::rdoc != nullptr)
 		{
-			ret = EXIT_FAILURE;
+			Util::shutdown_render_doc();
 		}
+
 		return ret;
 	}
 }
