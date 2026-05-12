@@ -392,7 +392,7 @@ namespace Rendering::Shapes
 
     // --- Upload helpers -----------------------------------------------------------
 
-    // Generic upload - takes any ShapeData and uploads it into MeshStorage
+    // Generic upload - takes any ShapeData and uploads it into MeshStorage(basically creates mesh underlying data giving ShapeData)
     inline MeshHandle upload(
         MeshStorage& storage,
         const std::string& name,
