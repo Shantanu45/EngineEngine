@@ -368,6 +368,16 @@ namespace Rendering
 			uint32_t push_constant_size = 0;
 		};
 
+		struct ComputePipeline {
+			RID shader;
+			RDD::ShaderID shader_driver_id;
+			uint32_t shader_layout_hash = 0;
+			Util::SmallVector<uint32_t> set_formats;
+			RDD::PipelineID driver_id;
+			BitField<RDD::PipelineStageBits> stage_bits = {};
+			uint32_t push_constant_size = 0;
+		};
+
 		struct Shader : public ShaderReflection {
 			std::string name; // Used for debug.
 			RDD::ShaderID driver_id;
@@ -805,6 +815,7 @@ namespace Rendering
 			std::list<Shader> shaders_to_dispose_of;
 			std::list<UniformSet> uniform_sets_to_dispose_of;
 			std::list<RenderPipeline> render_pipelines_to_dispose_of;
+			std::list<ComputePipeline> compute_pipelines_to_dispose_of;
 
 			// The command pool used by the command buffer.
 			RenderingDeviceDriver::CommandPoolID command_pool;
@@ -973,6 +984,17 @@ namespace Rendering
 		 * Updates or persists the driver pipeline cache.
 		 */
 		void update_pipeline_cache(bool p_closing = false);
+
+		/**
+		 * Creates a compute pipeline from a compute shader.
+		 */
+		RID compute_pipeline_create(RID p_shader);
+
+		/**
+		 * Binds a compute pipeline, optionally binds uniform sets, then dispatches.
+		 * p_uniform_sets may be empty. Push constants must be set separately via set_push_constant.
+		 */
+		void compute_dispatch(RID p_pipeline, const Util::SmallVector<RID>& p_uniform_sets, uint32_t p_x_groups, uint32_t p_y_groups, uint32_t p_z_groups);
 #pragma endregion
 
 #pragma region Screen
@@ -1936,6 +1958,7 @@ Util::SmallVector<TransferWorker*> transfer_worker_pool;
 		RID_Owner<RDD::SamplerID, true> sampler_owner;
 
 		RID_Owner<RenderPipeline, true> render_pipeline_owner;
+		RID_Owner<ComputePipeline, true> compute_pipeline_owner;
 
 		RID_Owner<Shader, true> shader_owner;
 

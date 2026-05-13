@@ -357,7 +357,7 @@ namespace Rendering
 	void RenderingDevice::_finalize_owned_rids()
 	{
 		_free_rids(render_pipeline_owner, "Pipeline");
-		//_free_rids(compute_pipeline_owner, "Compute");
+		_free_rids(compute_pipeline_owner, "Compute");
 		_free_rids(uniform_set_owner, "UniformSet");
 		_free_rids(texture_buffer_owner, "TextureBuffer");
 		_free_rids(storage_buffer_owner, "StorageBuffer");
@@ -1083,6 +1083,52 @@ namespace Rendering
 	void RenderingDevice::update_pipeline_cache(bool p_closing /*= false*/)
 	{
 
+	}
+
+	RID RenderingDevice::compute_pipeline_create(RID p_shader)
+	{
+		Shader* shader = shader_owner.get_or_null(p_shader);
+		ERR_FAIL_NULL_V_MSG(shader, RID(), "compute_pipeline_create: invalid shader RID.");
+		ERR_FAIL_COND_V_MSG(shader->pipeline_type != PIPELINE_TYPE_COMPUTE, RID(),
+			"Only compute shaders can be used in compute pipelines.");
+
+		ComputePipeline pipeline;
+		pipeline.driver_id = driver->compute_pipeline_create(shader->driver_id, {});
+		ERR_FAIL_COND_V_MSG(!pipeline.driver_id, RID(), "compute_pipeline_create: driver pipeline creation failed.");
+
+		pipeline.shader = p_shader;
+		pipeline.shader_driver_id = shader->driver_id;
+		pipeline.shader_layout_hash = shader->layout_hash;
+		pipeline.set_formats = shader->set_formats;
+		pipeline.push_constant_size = shader->push_constant_size;
+		pipeline.stage_bits = shader->stage_bits;
+
+		RID id = compute_pipeline_owner.make_rid(pipeline);
+		_add_dependency(id, p_shader);
+		return id;
+	}
+
+	void RenderingDevice::compute_dispatch(RID p_pipeline, const Util::SmallVector<RID>& p_uniform_sets, uint32_t p_x_groups, uint32_t p_y_groups, uint32_t p_z_groups)
+	{
+		ComputePipeline* pipeline = compute_pipeline_owner.get_or_null(p_pipeline);
+		ERR_FAIL_NULL_MSG(pipeline, "compute_dispatch: invalid pipeline RID.");
+
+		RDD::CommandBufferID cmd = get_current_command_buffer();
+		driver->command_bind_compute_pipeline(cmd, pipeline->driver_id);
+
+		if (!p_uniform_sets.empty()) {
+			Util::SmallVector<RDD::UniformSetID> driver_sets;
+			driver_sets.reserve(p_uniform_sets.size());
+			for (const RID& rid : p_uniform_sets) {
+				UniformSet* us = uniform_set_owner.get_or_null(rid);
+				ERR_FAIL_NULL_MSG(us, "compute_dispatch: invalid uniform set RID.");
+				driver_sets.push_back(us->driver_id);
+			}
+			uint32_t dynamic_offsets = driver->uniform_sets_get_dynamic_offsets(driver_sets, pipeline->shader_driver_id, 0, driver_sets.size());
+			driver->command_bind_compute_uniform_sets(cmd, driver_sets, pipeline->shader_driver_id, 0, driver_sets.size(), dynamic_offsets);
+		}
+
+		driver->command_compute_dispatch(cmd, p_x_groups, p_y_groups, p_z_groups);
 	}
 
 #pragma endregion
@@ -5297,6 +5343,11 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 			frames[frame].render_pipelines_to_dispose_of.push_back(*pipeline);
 			render_pipeline_owner.free(p_id);
 		}
+		else if (compute_pipeline_owner.owns(p_id)) {
+			ComputePipeline* pipeline = compute_pipeline_owner.get_or_null(p_id);
+			frames[frame].compute_pipelines_to_dispose_of.push_back(*pipeline);
+			compute_pipeline_owner.free(p_id);
+		}
 		else {
 #ifdef DEV_ENABLED
 			ERR_PRINT("Attempted to free invalid ID: " + itos(p_id.get_id()) + " " + resource_name);
@@ -5401,6 +5452,12 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 			driver->pipeline_free(pipeline->driver_id);
 
 			frames[p_frame].render_pipelines_to_dispose_of.pop_front();
+		}
+
+		while (!frames[p_frame].compute_pipelines_to_dispose_of.empty()) {
+			ComputePipeline* pipeline = &(frames[p_frame]).compute_pipelines_to_dispose_of.front();
+			driver->pipeline_free(pipeline->driver_id);
+			frames[p_frame].compute_pipelines_to_dispose_of.pop_front();
 		}
 
 		// Uniform sets.
