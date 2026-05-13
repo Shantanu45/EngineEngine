@@ -135,6 +135,9 @@ private:
 	/** Forward renderer used by this sample. */
 	Rendering::ForwardRenderPipeline render_pipeline;
 
+	// render doc count of frames captured.
+	uint32_t rdoc_frame_captured = 0;
+
 	/** Per-frame renderer options mirrored into the UI. */
 	RenderSettings render_settings;
 

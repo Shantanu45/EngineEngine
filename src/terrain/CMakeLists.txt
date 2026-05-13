@@ -14,6 +14,8 @@ find_package(libassert REQUIRED)
 find_package(stb REQUIRED)
 find_package(TinyGLTF REQUIRED)
 
+add_definitions(-DNOMINMAX) 
+
 target_include_directories(${TERRAIN_CORE_NAME} PRIVATE
 	"${PROJECT_SOURCE_DIR}/src"
 	"${PROJECT_SOURCE_DIR}/third_party"

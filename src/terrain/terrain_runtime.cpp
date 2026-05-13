@@ -6,6 +6,8 @@
 #include "util/profiler.h"
 
 #include <glm/gtc/matrix_transform.hpp>
+#include "util/renderdoc_helpers.h"
+
 
 #include <algorithm>
 #include <array>
@@ -519,6 +521,25 @@ void TerrainRuntime::draw_ui()
 				ImGui::SetItemDefaultFocus();
 		}
 		ImGui::EndCombo();
+	}
+
+	if ((Util::rdoc != nullptr) && (ImGui::BeginMenu("Ops")))
+	{
+		if (ImGui::Button("Capture Rdoc Frame"))
+		{
+			Util::capture_next_frame();
+		}
+
+		rdoc_frame_captured = Util::get_rdoc_num_captures();
+
+		if (ImGui::Button(std::format("Open Rdoc Capture {}", rdoc_frame_captured).c_str()))            // more optimzed way to handle dynamic string?
+		{
+			if (rdoc_frame_captured > 0)
+			{
+				Util::open_last_captured();
+			}
+		}
+		ImGui::EndMenu();
 	}
 
 	ImGui::Text("Palette: height + slope");
