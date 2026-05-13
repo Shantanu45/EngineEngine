@@ -1085,15 +1085,29 @@ namespace Rendering
 
 	}
 
-	RID RenderingDevice::compute_pipeline_create(RID p_shader)
+	RID RenderingDevice::compute_pipeline_create(RID p_shader, const Util::SmallVector<PipelineSpecializationConstant>& p_specialization_constants)
 	{
 		Shader* shader = shader_owner.get_or_null(p_shader);
 		ERR_FAIL_NULL_V_MSG(shader, RID(), "compute_pipeline_create: invalid shader RID.");
 		ERR_FAIL_COND_V_MSG(shader->pipeline_type != PIPELINE_TYPE_COMPUTE, RID(),
 			"Only compute shaders can be used in compute pipelines.");
+		ERR_FAIL_COND_V_MSG(!shader->stage_bits.has_flag(RDD::PIPELINE_STAGE_COMPUTE_SHADER_BIT), RID(),
+			"Compute shader stage is not provided for pipeline creation.");
+
+		for (int i = 0; i < shader->specialization_constants.size(); i++) {
+			const ShaderSpecializationConstant& sc = shader->specialization_constants[i];
+			for (int j = 0; j < p_specialization_constants.size(); j++) {
+				const PipelineSpecializationConstant& psc = p_specialization_constants[j];
+				if (psc.constant_id == sc.constant_id) {
+					ERR_FAIL_COND_V_MSG(psc.type != sc.type, RID(), std::format("Specialization constant provided for id {} is of the wrong type.", std::to_string(sc.constant_id)));
+					break;
+				}
+			}
+		}
 
 		ComputePipeline pipeline;
-		pipeline.driver_id = driver->compute_pipeline_create(shader->driver_id, {});
+		Util::SmallVector<PipelineSpecializationConstant> specialization_constants = p_specialization_constants;
+		pipeline.driver_id = driver->compute_pipeline_create(shader->driver_id, specialization_constants);
 		ERR_FAIL_COND_V_MSG(!pipeline.driver_id, RID(), "compute_pipeline_create: driver pipeline creation failed.");
 
 		pipeline.shader = p_shader;

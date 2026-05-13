@@ -988,7 +988,8 @@ namespace Rendering
 		/**
 		 * Creates a compute pipeline from a compute shader.
 		 */
-		RID compute_pipeline_create(RID p_shader);
+		RID compute_pipeline_create(RID p_shader,
+			const Util::SmallVector<PipelineSpecializationConstant>& p_specialization_constants = Util::SmallVector<PipelineSpecializationConstant>());
 
 		/**
 		 * Binds a compute pipeline, optionally binds uniform sets, then dispatches.

@@ -5321,6 +5321,7 @@ namespace Vulkan
 		thread_local Util::SmallVector<respv::SpecConstant> respv_spec_constants;
 		thread_local Util::SmallVector<VkShaderModule> respv_shader_modules;
 		thread_local Util::SmallVector<VkSpecializationMapEntry> specialization_entries;
+		thread_local Util::SmallVector<VkSpecializationInfo> specialization_infos;
 
 #if RECORD_PIPELINE_STATISTICS
 		thread_local Util::SmallVector<uint64_t> respv_run_time;
@@ -5334,6 +5335,8 @@ namespace Vulkan
 
 		respv_shader_modules.clear();
 		specialization_entries.clear();
+		specialization_infos.clear();
+		specialization_infos.resize(shader_info->vk_stages_create_info.size());
 
 		for (uint32_t i = 0; i < shader_info->vk_stages_create_info.size(); i++) {
 			vk_pipeline_stages[i] = shader_info->vk_stages_create_info[i];
@@ -5407,8 +5410,7 @@ namespace Vulkan
 						}
 					}
 
-					Util::SmallVector<VkSpecializationInfo> specialization_info_vec;
-					VkSpecializationInfo* specialization_info = specialization_info_vec.data();
+					VkSpecializationInfo* specialization_info = &specialization_infos[i];
 					*specialization_info = {};
 					specialization_info->dataSize = p_specialization_constants.size() * sizeof(PipelineSpecializationConstant);
 					specialization_info->pData = p_specialization_constants.data();
@@ -5477,10 +5479,32 @@ namespace Vulkan
 		const ShaderInfo* shader_info = (const ShaderInfo*)p_shader.id;
 		ERR_FAIL_COND_V_MSG(shader_info->vk_stages_create_info.size() != 1, PipelineID(),
 			"Compute pipeline shader must have exactly one stage (compute).");
+		ERR_FAIL_COND_V_MSG(shader_info->vk_stages_create_info[0].stage != VK_SHADER_STAGE_COMPUTE_BIT, PipelineID(),
+			"Compute pipeline shader stage must be VK_SHADER_STAGE_COMPUTE_BIT.");
 
 		VkComputePipelineCreateInfo pipeline_create_info = {};
+		VkPipelineShaderStageCreateInfo pipeline_stage = shader_info->vk_stages_create_info[0];
+		Util::SmallVector<VkSpecializationMapEntry> specialization_entries;
+		VkSpecializationInfo specialization_info = {};
+
+		if (p_specialization_constants.size()) {
+			specialization_entries.resize(p_specialization_constants.size());
+			for (uint32_t i = 0; i < p_specialization_constants.size(); i++) {
+				specialization_entries[i] = {};
+				specialization_entries[i].constantID = p_specialization_constants[i].constant_id;
+				specialization_entries[i].offset = (const char*)&p_specialization_constants[i].int_value - (const char*)p_specialization_constants.data();
+				specialization_entries[i].size = sizeof(uint32_t);
+			}
+
+			specialization_info.dataSize = p_specialization_constants.size() * sizeof(PipelineSpecializationConstant);
+			specialization_info.pData = p_specialization_constants.data();
+			specialization_info.mapEntryCount = specialization_entries.size();
+			specialization_info.pMapEntries = specialization_entries.data();
+			pipeline_stage.pSpecializationInfo = &specialization_info;
+		}
+
 		pipeline_create_info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-		pipeline_create_info.stage = shader_info->vk_stages_create_info[0];
+		pipeline_create_info.stage = pipeline_stage;
 		pipeline_create_info.layout = shader_info->vk_pipeline_layout;
 
 		VkPipeline vk_pipeline = VK_NULL_HANDLE;
