@@ -1122,10 +1122,19 @@ namespace Rendering
 		return id;
 	}
 
+	bool RenderingDevice::compute_pipeline_is_valid(RID p_pipeline)
+	{
+		return compute_pipeline_owner.owns(p_pipeline);
+	}
+
 	void RenderingDevice::compute_dispatch(RID p_pipeline, const Util::SmallVector<RID>& p_uniform_sets, uint32_t p_x_groups, uint32_t p_y_groups, uint32_t p_z_groups)
 	{
 		ComputePipeline* pipeline = compute_pipeline_owner.get_or_null(p_pipeline);
 		ERR_FAIL_NULL_MSG(pipeline, "compute_dispatch: invalid pipeline RID.");
+		ERR_FAIL_COND_MSG(p_x_groups == 0 || p_y_groups == 0 || p_z_groups == 0,
+			"compute_dispatch: group counts must all be greater than zero.");
+		ERR_FAIL_COND_MSG(p_uniform_sets.size() > pipeline->set_formats.size(),
+			"compute_dispatch: more uniform sets were supplied than the compute shader declares.");
 
 		RDD::CommandBufferID cmd = get_current_command_buffer();
 		driver->command_bind_compute_pipeline(cmd, pipeline->driver_id);
@@ -1133,9 +1142,16 @@ namespace Rendering
 		if (!p_uniform_sets.empty()) {
 			Util::SmallVector<RDD::UniformSetID> driver_sets;
 			driver_sets.reserve(p_uniform_sets.size());
-			for (const RID& rid : p_uniform_sets) {
+			for (uint32_t i = 0; i < p_uniform_sets.size(); i++) {
+				const RID& rid = p_uniform_sets[i];
 				UniformSet* us = uniform_set_owner.get_or_null(rid);
 				ERR_FAIL_NULL_MSG(us, "compute_dispatch: invalid uniform set RID.");
+				ERR_FAIL_COND_MSG(us->shader_id != pipeline->shader,
+					"compute_dispatch: uniform set was created for a different shader than the compute pipeline.");
+				ERR_FAIL_COND_MSG(us->shader_set != i,
+					std::format("compute_dispatch: uniform set for set {} was supplied at index {}.", us->shader_set, i));
+				ERR_FAIL_COND_MSG(us->format != pipeline->set_formats[i],
+					std::format("compute_dispatch: uniform set {} is not compatible with the compute pipeline layout.", i));
 				driver_sets.push_back(us->driver_id);
 			}
 			uint32_t dynamic_offsets = driver->uniform_sets_get_dynamic_offsets(driver_sets, pipeline->shader_driver_id, 0, driver_sets.size());
@@ -1143,6 +1159,45 @@ namespace Rendering
 		}
 
 		driver->command_compute_dispatch(cmd, p_x_groups, p_y_groups, p_z_groups);
+	}
+
+	void RenderingDevice::compute_dispatch_indirect(RID p_pipeline, const Util::SmallVector<RID>& p_uniform_sets, RID p_indirect_buffer, uint64_t p_offset)
+	{
+		ComputePipeline* pipeline = compute_pipeline_owner.get_or_null(p_pipeline);
+		ERR_FAIL_NULL_MSG(pipeline, "compute_dispatch_indirect: invalid pipeline RID.");
+		ERR_FAIL_COND_MSG(p_uniform_sets.size() > pipeline->set_formats.size(),
+			"compute_dispatch_indirect: more uniform sets were supplied than the compute shader declares.");
+
+		Buffer* indirect_buffer = _get_buffer_from_owner(p_indirect_buffer);
+		ERR_FAIL_NULL_MSG(indirect_buffer, "compute_dispatch_indirect: indirect buffer RID is not a valid buffer.");
+		ERR_FAIL_COND_MSG(!indirect_buffer->usage.has_flag(RDD::BUFFER_USAGE_INDIRECT_BIT),
+			"compute_dispatch_indirect: indirect buffer must be created with BUFFER_CREATION_AS_INDIRECT_BIT.");
+		ERR_FAIL_COND_MSG(p_offset + sizeof(uint32_t) * 3 > indirect_buffer->size,
+			"compute_dispatch_indirect: indirect dispatch arguments exceed the indirect buffer size.");
+
+		RDD::CommandBufferID cmd = get_current_command_buffer();
+		driver->command_bind_compute_pipeline(cmd, pipeline->driver_id);
+
+		if (!p_uniform_sets.empty()) {
+			Util::SmallVector<RDD::UniformSetID> driver_sets;
+			driver_sets.reserve(p_uniform_sets.size());
+			for (uint32_t i = 0; i < p_uniform_sets.size(); i++) {
+				const RID& rid = p_uniform_sets[i];
+				UniformSet* us = uniform_set_owner.get_or_null(rid);
+				ERR_FAIL_NULL_MSG(us, "compute_dispatch_indirect: invalid uniform set RID.");
+				ERR_FAIL_COND_MSG(us->shader_id != pipeline->shader,
+					"compute_dispatch_indirect: uniform set was created for a different shader than the compute pipeline.");
+				ERR_FAIL_COND_MSG(us->shader_set != i,
+					std::format("compute_dispatch_indirect: uniform set for set {} was supplied at index {}.", us->shader_set, i));
+				ERR_FAIL_COND_MSG(us->format != pipeline->set_formats[i],
+					std::format("compute_dispatch_indirect: uniform set {} is not compatible with the compute pipeline layout.", i));
+				driver_sets.push_back(us->driver_id);
+			}
+			uint32_t dynamic_offsets = driver->uniform_sets_get_dynamic_offsets(driver_sets, pipeline->shader_driver_id, 0, driver_sets.size());
+			driver->command_bind_compute_uniform_sets(cmd, driver_sets, pipeline->shader_driver_id, 0, driver_sets.size(), dynamic_offsets);
+		}
+
+		driver->command_compute_dispatch_indirect(cmd, indirect_buffer->driver_id, p_offset);
 	}
 
 #pragma endregion
@@ -1685,6 +1740,9 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 		if (p_creation_bits.has_flag(BUFFER_CREATION_DEVICE_ADDRESS_BIT)) {
 			buffer.usage.set_flag(RDD::BUFFER_USAGE_DEVICE_ADDRESS_BIT);
 		}
+		if (p_creation_bits.has_flag(BUFFER_CREATION_AS_INDIRECT_BIT)) {
+			buffer.usage.set_flag(RDD::BUFFER_USAGE_INDIRECT_BIT);
+		}
 		if (p_creation_bits.has_flag(BUFFER_CREATION_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT)) {
 			buffer.usage.set_flag(RDD::BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT);
 		}
@@ -1755,6 +1813,42 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 		return id;
 	}
 
+	RID RenderingDevice::storage_buffer_create(uint32_t p_size_bytes, std::span<uint8_t> p_data /*= {}*/, BitField<BufferCreationBits> p_creation_bits /*= 0*/)
+	{
+		ERR_FAIL_COND_V(p_data.size() && (uint32_t)p_data.size() != p_size_bytes, RID());
+
+		Buffer buffer;
+		buffer.size = p_size_bytes;
+		buffer.usage = RDD::BUFFER_USAGE_TRANSFER_FROM_BIT | RDD::BUFFER_USAGE_TRANSFER_TO_BIT | RDD::BUFFER_USAGE_STORAGE_BIT;
+		if (p_creation_bits.has_flag(BUFFER_CREATION_DYNAMIC_PERSISTENT_BIT)) {
+			buffer.usage.set_flag(RDD::BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT);
+			buffer.usage.clear_flag(RDD::BUFFER_USAGE_TRANSFER_TO_BIT);
+		}
+		if (p_creation_bits.has_flag(BUFFER_CREATION_DEVICE_ADDRESS_BIT)) {
+			buffer.usage.set_flag(RDD::BUFFER_USAGE_DEVICE_ADDRESS_BIT);
+		}
+		if (p_creation_bits.has_flag(BUFFER_CREATION_AS_INDIRECT_BIT)) {
+			buffer.usage.set_flag(RDD::BUFFER_USAGE_INDIRECT_BIT);
+		}
+		if (p_creation_bits.has_flag(BUFFER_CREATION_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT)) {
+			buffer.usage.set_flag(RDD::BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT);
+		}
+		buffer.driver_id = driver->buffer_create(buffer.size, buffer.usage, RDD::MEMORY_ALLOCATION_TYPE_GPU, frames_drawn);
+		ERR_FAIL_COND_V(!buffer.driver_id, RID());
+
+		if (p_data.size()) {
+			_buffer_initialize(&buffer, p_data);
+		}
+
+		buffer_memory += buffer.size;
+
+		RID id = storage_buffer_owner.make_rid(buffer);
+#ifdef DEV_ENABLED
+		set_resource_name(id, std::format("RID {}", id.get_id()));
+#endif
+		return id;
+	}
+
 	RID RenderingDevice::uniform_set_create(const std::span<Uniform>& p_uniforms, RID p_shader, uint32_t p_shader_set, bool p_linear_pool /*= false*/)
 	{
 		ERR_FAIL_COND_V(p_uniforms.size() == 0, RID());
@@ -1778,11 +1872,11 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 		driver_uniforms.resize(set_uniform_count);
 
 		// Used for verification to make sure a uniform set does not use a framebuffer bound texture.
-		//Util::SmallVector<UniformSet::AttachableTexture> attachable_textures;
+		Util::SmallVector<UniformSet::AttachableTexture> attachable_textures;
 		//Util::SmallVector<RDG::ResourceTracker*> draw_trackers;
 		//Util::SmallVector<RDG::ResourceUsage> draw_trackers_usage;
 		//std::unordered_map<RID, RDG::ResourceUsage> untracked_usage;
-		//Util::SmallVector<UniformSet::SharedTexture> shared_textures_to_update;
+		Util::SmallVector<UniformSet::SharedTexture> shared_textures_to_update;
 		Util::SmallVector<RID> pending_clear_textures;
 
 		for (uint32_t i = 0; i < set_uniform_count; i++) {
@@ -2082,47 +2176,26 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 			} break;
 			case UNIFORM_TYPE_STORAGE_BUFFER:
 			case UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC: {
-				//ERR_FAIL_COND_V_MSG(uniform.get_id_count() != 1, RID(),
-				//	std::format("Storage buffer supplied (binding: {}) must provide one ID ({} provided).", uniform.binding, uniform.get_id_count()));
+				ERR_FAIL_COND_V_MSG(uniform.get_id_count() != 1, RID(),
+					std::format("Storage buffer supplied (binding: {}) must provide one ID ({} provided).", uniform.binding, uniform.get_id_count()));
 
-				//Buffer* buffer = nullptr;
+				Buffer* buffer = nullptr;
+				RID buffer_id = uniform.get_id(0);
+				if (storage_buffer_owner.owns(buffer_id)) {
+					buffer = storage_buffer_owner.get_or_null(buffer_id);
+				}
+				else if (vertex_buffer_owner.owns(buffer_id)) {
+					buffer = vertex_buffer_owner.get_or_null(buffer_id);
+					ERR_FAIL_COND_V_MSG(!buffer->usage.has_flag(RDD::BUFFER_USAGE_STORAGE_BIT), RID(),
+						std::format("Vertex buffer supplied (binding: {}) was not created with storage usage.", uniform.binding));
+				}
+				ERR_FAIL_NULL_V_MSG(buffer, RID(), std::format("Storage buffer supplied (binding: {}) is invalid.", uniform.binding));
 
-				//RID buffer_id = uniform.get_id(0);
-				//if (storage_buffer_owner.owns(buffer_id)) {
-				//	buffer = storage_buffer_owner.get_or_null(buffer_id);
-				//}
-				//else if (vertex_buffer_owner.owns(buffer_id)) {
-				//	buffer = vertex_buffer_owner.get_or_null(buffer_id);
+				ERR_FAIL_COND_V_MSG(set_uniform.length > 0 && buffer->size < (uint32_t)set_uniform.length, RID(),
+					std::format("Storage buffer supplied (binding: {}) size ({}) is smaller than shader storage buffer size ({}).", uniform.binding, buffer->size, set_uniform.length));
 
-				//	ERR_FAIL_COND_V_MSG(!(buffer->usage.has_flag(RDD::BUFFER_USAGE_STORAGE_BIT)), RID(), std::format("Vertex buffer supplied (binding: {}) was not created with storage flag.", uniform.binding));
-				//}
-				//ERR_FAIL_NULL_V_MSG(buffer, RID(), std::format("Storage buffer supplied (binding: {}) is invalid.", uniform.binding));
-
-				//// If 0, then it's sized on link time.
-				//ERR_FAIL_COND_V_MSG(set_uniform.length > 0 && buffer->size != (uint32_t)set_uniform.length, RID(),
-				//	std::format("Storage buffer supplied (binding: {}) size ({}) does not match size of shader uniform: ({}).", uniform.binding, buffer->size, set_uniform.length));
-
-				//if (set_uniform.writable && _buffer_make_mutable(buffer, buffer_id)) {
-					// The buffer must be mutable if it's used for writing.
-					//draw_graph.add_synchronization();
-				//}
-
-				//if (buffer->draw_tracker != nullptr) {
-				//	draw_trackers.push_back(buffer->draw_tracker);
-
-				//	if (set_uniform.writable) {
-				//		draw_trackers_usage.push_back(RESOURCE_USAGE_STORAGE_BUFFER_READ_WRITE);
-				//	}
-				//	else {
-				//		draw_trackers_usage.push_back(RESOURCE_USAGE_STORAGE_BUFFER_READ);
-				//	}
-				//}
-				//else {
-				//	untracked_usage[buffer_id] = RESOURCE_USAGE_STORAGE_BUFFER_READ;
-				//}
-
-				//driver_uniform.ids.push_back(buffer->driver_id);
-				//_check_transfer_worker_buffer(buffer);
+				driver_uniform.ids.push_back(buffer->driver_id);
+				_check_transfer_worker_buffer(buffer);
 			} break;
 			case UNIFORM_TYPE_INPUT_ATTACHMENT: {
 				/*ERR_FAIL_COND_V_MSG(shader->pipeline_type != PIPELINE_TYPE_RASTERIZATION, RID(), "InputAttachment (binding: " + itos(uniform.binding) + ") supplied for non-render shader (this is not allowed).");
@@ -2179,11 +2252,11 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 		UniformSet uniform_set;
 		uniform_set.driver_id = driver_uniform_set;
 		uniform_set.format = shader->set_formats[p_shader_set];
-		//uniform_set.attachable_textures = attachable_textures;
+		uniform_set.attachable_textures = attachable_textures;
 		//uniform_set.draw_trackers = draw_trackers;
 		//uniform_set.draw_trackers_usage = draw_trackers_usage;
 		//uniform_set.untracked_usage = untracked_usage;
-		//uniform_set.shared_textures_to_update = shared_textures_to_update;
+		uniform_set.shared_textures_to_update = shared_textures_to_update;
 		uniform_set.pending_clear_textures = pending_clear_textures;
 		uniform_set.shader_set = p_shader_set;
 		uniform_set.shader_id = p_shader;
@@ -3238,6 +3311,31 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 		driver->command_pipeline_barrier(p_cmd_buffer, p_src_stages, p_dst_stages, {}, {}, p_texture_barriers, {});
 	}
 
+	void RenderingDevice::apply_buffer_barrier(RDD::CommandBufferID p_cmd_buffer, BitField<RenderingDeviceDriver::PipelineStageBits> p_src_stages, BitField<RenderingDeviceDriver::PipelineStageBits> p_dst_stages, std::span<RenderingDeviceDriver::BufferBarrier> p_buffer_barriers)
+	{
+		driver->command_pipeline_barrier(p_cmd_buffer, p_src_stages, p_dst_stages, {}, p_buffer_barriers, {}, {});
+	}
+
+	void RenderingDevice::apply_buffer_barrier(RDD::CommandBufferID p_cmd_buffer, BitField<RenderingDeviceDriver::PipelineStageBits> p_src_stages, BitField<RenderingDeviceDriver::PipelineStageBits> p_dst_stages,
+		RID p_buffer, BitField<RenderingDeviceDriver::BarrierAccessBits> p_src_access, BitField<RenderingDeviceDriver::BarrierAccessBits> p_dst_access,
+		uint64_t p_offset, uint64_t p_size)
+	{
+		Buffer* buffer = _get_buffer_from_owner(p_buffer);
+		ERR_FAIL_NULL_MSG(buffer, "apply_buffer_barrier: buffer RID is not a valid buffer.");
+		ERR_FAIL_COND_MSG(p_offset > buffer->size, "apply_buffer_barrier: barrier offset exceeds buffer size.");
+
+		RDD::BufferBarrier barrier;
+		barrier.buffer = buffer->driver_id;
+		barrier.src_access = p_src_access;
+		barrier.dst_access = p_dst_access;
+		barrier.offset = p_offset;
+		barrier.size = p_size == RDD::BUFFER_WHOLE_SIZE ? buffer->size - p_offset : p_size;
+		ERR_FAIL_COND_MSG(barrier.offset + barrier.size > buffer->size,
+			"apply_buffer_barrier: barrier range exceeds buffer size.");
+
+		driver->command_pipeline_barrier(p_cmd_buffer, p_src_stages, p_dst_stages, {}, { &barrier, 1 }, {}, {});
+	}
+
 #pragma endregion
 
 #pragma region Frame
@@ -4285,9 +4383,9 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 		//	DEV_ASSERT(false && "FIXME: Broken.");
 		//	//buffer = texture_buffer_owner.get_or_null(p_buffer)->buffer;
 		//}
-		//else if (storage_buffer_owner.owns(p_buffer)) {
-		//	buffer = storage_buffer_owner.get_or_null(p_buffer);
-		//}
+		else if (storage_buffer_owner.owns(p_buffer)) {
+			buffer = storage_buffer_owner.get_or_null(p_buffer);
+		}
 		//else if (instances_buffer_owner.owns(p_buffer)) {
 		//	buffer = &instances_buffer_owner.get_or_null(p_buffer)->buffer;
 		//}

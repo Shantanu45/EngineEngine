@@ -173,6 +173,7 @@ namespace Rendering
 			BUFFER_CREATION_AS_STORAGE_BIT = (1 << 1),
 			BUFFER_CREATION_DYNAMIC_PERSISTENT_BIT = (1 << 2),
 			BUFFER_CREATION_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT = (1 << 3),
+			BUFFER_CREATION_AS_INDIRECT_BIT = (1 << 4),
 		};
 
 		enum StagingRequiredAction {
@@ -992,10 +993,20 @@ namespace Rendering
 			const Util::SmallVector<PipelineSpecializationConstant>& p_specialization_constants = Util::SmallVector<PipelineSpecializationConstant>());
 
 		/**
+		 * Returns true when the RID currently refers to a live compute pipeline.
+		 */
+		bool compute_pipeline_is_valid(RID p_pipeline);
+
+		/**
 		 * Binds a compute pipeline, optionally binds uniform sets, then dispatches.
 		 * p_uniform_sets may be empty. Push constants must be set separately via set_push_constant.
 		 */
 		void compute_dispatch(RID p_pipeline, const Util::SmallVector<RID>& p_uniform_sets, uint32_t p_x_groups, uint32_t p_y_groups, uint32_t p_z_groups);
+
+		/**
+		 * Binds a compute pipeline, optionally binds uniform sets, then dispatches using an indirect argument buffer.
+		 */
+		void compute_dispatch_indirect(RID p_pipeline, const Util::SmallVector<RID>& p_uniform_sets, RID p_indirect_buffer, uint64_t p_offset);
 #pragma endregion
 
 #pragma region Screen
@@ -1101,6 +1112,11 @@ namespace Rendering
 		 * Creates a GPU uniform buffer and optionally uploads initial data through staging.
 		 */
 		RID uniform_buffer_create(uint32_t p_size_bytes, std::span<uint8_t> p_data = {}, BitField<BufferCreationBits> p_creation_bits = 0);
+
+		/**
+		 * Creates a GPU storage buffer and optionally uploads initial data through staging.
+		 */
+		RID storage_buffer_create(uint32_t p_size_bytes, std::span<uint8_t> p_data = {}, BitField<BufferCreationBits> p_creation_bits = 0);
 
 		/**
 		 * Creates a driver uniform set for a shader set index from RD uniform bindings.
@@ -1252,6 +1268,18 @@ namespace Rendering
 		 * Emits image barriers into a command buffer.
 		 */
 		void apply_image_barrier(RDD::CommandBufferID p_cmd_buffer, BitField<RenderingDeviceDriver::PipelineStageBits> p_src_stages, BitField<RenderingDeviceDriver::PipelineStageBits> p_dst_stages, std::span<RenderingDeviceDriver::TextureBarrier> p_texture_barriers);
+
+		/**
+		 * Emits buffer barriers into a command buffer.
+		 */
+		void apply_buffer_barrier(RDD::CommandBufferID p_cmd_buffer, BitField<RenderingDeviceDriver::PipelineStageBits> p_src_stages, BitField<RenderingDeviceDriver::PipelineStageBits> p_dst_stages, std::span<RenderingDeviceDriver::BufferBarrier> p_buffer_barriers);
+
+		/**
+		 * Emits a buffer barrier for a RID-owned buffer.
+		 */
+		void apply_buffer_barrier(RDD::CommandBufferID p_cmd_buffer, BitField<RenderingDeviceDriver::PipelineStageBits> p_src_stages, BitField<RenderingDeviceDriver::PipelineStageBits> p_dst_stages,
+			RID p_buffer, BitField<RenderingDeviceDriver::BarrierAccessBits> p_src_access, BitField<RenderingDeviceDriver::BarrierAccessBits> p_dst_access,
+			uint64_t p_offset = 0, uint64_t p_size = RenderingDeviceDriver::BUFFER_WHOLE_SIZE);
 
 #pragma endregion
 
