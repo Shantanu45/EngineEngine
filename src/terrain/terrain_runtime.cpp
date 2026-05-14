@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <string>
 #include <utility>
 
@@ -53,6 +54,22 @@ const char* material_debug_view_name(MaterialDebugView view)
 	return "Unknown";
 }
 
+struct TerrainComputeParams {
+	uint32_t seed = 0;
+	uint32_t noise_type = 0;
+	uint32_t texture_size = 0;
+	uint32_t octaves = 0;
+	float chunk_size = 0.0f;
+	float height_scale = 0.0f;
+	float base_frequency = 0.0f;
+	float lacunarity = 0.0f;
+	float persistence = 0.0f;
+	float warp_strength = 0.0f;
+	float warp_strength2 = 0.0f;
+	float chunk_x = 0.0f;
+	float chunk_z = 0.0f;
+};
+
 } // namespace
 
 bool TerrainRuntime::initialize(
@@ -85,6 +102,7 @@ bool TerrainRuntime::initialize(
 	render_settings.draw_skybox = true;
 
 	render_pipeline.initialize(wsi, device, resources.skybox_cubemap());
+	create_compute_resources();
 	create_scene_resources();
 	create_water_resources();
 
@@ -106,6 +124,7 @@ void TerrainRuntime::render_frame(double frame_time, double elapsed_time)
 	camera.update_from_input(input_system.get(), frame_time);
 	update_streaming_chunks();
 	process_pending_mesh_destroys();
+	dispatch_height_compute();
 	device->imgui_begin_frame();
 	draw_ui();
 	resources.materials().upload_dirty(device);
@@ -183,8 +202,13 @@ void TerrainRuntime::shutdown()
 	for (auto& pending : pending_mesh_destroys)
 		resources.meshes().destroy_mesh(pending.mesh);
 	pending_mesh_destroys.clear();
+	height_compute_uniform_set.reset();
+	height_compute_output_buffer.reset();
+	height_compute_params_buffer.reset();
+	height_compute_pipeline = {};
 	render_pipeline.shutdown();
 	resources.shutdown();
+	terrain_color_textures.clear();
 }
 
 void TerrainRuntime::configure_wsi()
@@ -345,6 +369,71 @@ RID TerrainRuntime::create_chunk_color_texture(int32_t chunk_x, int32_t chunk_z)
 	return texture;
 }
 
+void TerrainRuntime::create_compute_resources()
+{
+	height_compute_pipeline = Rendering::ComputePipelineBuilder{}
+		.set_shader("assets://shaders/terrain/height.comp", "terrain_height_compute")
+		.build();
+	if (!height_compute_pipeline.pipeline_rid.is_valid() || !height_compute_pipeline.shader_rid.is_valid())
+		return;
+
+	height_compute_params_buffer = RIDHandle(device->storage_buffer_create(sizeof(TerrainComputeParams)));
+	if (!height_compute_params_buffer.is_valid())
+		return;
+	device->set_resource_name(height_compute_params_buffer, "terrain_height_compute_params");
+
+	const uint32_t height_count = height_compute_texture_size * height_compute_texture_size;
+	height_compute_output_buffer = RIDHandle(device->storage_buffer_create(height_count * sizeof(float)));
+	if (!height_compute_output_buffer.is_valid())
+		return;
+	device->set_resource_name(height_compute_output_buffer, "terrain_height_compute_output");
+
+	Rendering::RenderingDevice::Uniform params_uniform;
+	params_uniform.uniform_type = Rendering::RenderingDeviceCommons::UNIFORM_TYPE_STORAGE_BUFFER;
+	params_uniform.binding = 0;
+	params_uniform.append_id(height_compute_params_buffer);
+
+	Rendering::RenderingDevice::Uniform output_uniform;
+	output_uniform.uniform_type = Rendering::RenderingDeviceCommons::UNIFORM_TYPE_STORAGE_BUFFER;
+	output_uniform.binding = 1;
+	output_uniform.append_id(height_compute_output_buffer);
+
+	Util::SmallVector<Rendering::RenderingDevice::Uniform> uniforms;
+	uniforms.push_back(params_uniform);
+	uniforms.push_back(output_uniform);
+	height_compute_uniform_set = RIDHandle(device->uniform_set_create(uniforms, height_compute_pipeline.shader_rid, 0));
+}
+
+void TerrainRuntime::dispatch_height_compute()
+{
+	if (!height_compute_enabled || !height_compute_pipeline.pipeline_rid.is_valid() || !height_compute_uniform_set.is_valid())
+		return;
+
+	const TerrainComputeParams params{
+		.seed = terrain_settings.seed,
+		.noise_type = static_cast<uint32_t>(terrain_settings.noise_type),
+		.texture_size = height_compute_texture_size,
+		.octaves = terrain_settings.octaves,
+		.chunk_size = terrain_settings.chunk_size,
+		.height_scale = terrain_settings.height_scale,
+		.base_frequency = terrain_settings.base_frequency,
+		.lacunarity = terrain_settings.lacunarity,
+		.persistence = terrain_settings.persistence,
+		.warp_strength = terrain_settings.warp_strength,
+		.warp_strength2 = terrain_settings.warp_strength2,
+		.chunk_x = static_cast<float>(chunk_center.x),
+		.chunk_z = static_cast<float>(chunk_center.y),
+	};
+
+	device->buffer_update(height_compute_params_buffer, 0, sizeof(params), &params);
+
+	Util::SmallVector<RID> sets;
+	sets.push_back(height_compute_uniform_set);
+	const uint32_t groups = (height_compute_texture_size + 7u) / 8u;
+	device->compute_dispatch(height_compute_pipeline.pipeline_rid, sets, groups, groups, 1);
+	++height_compute_dispatches;
+}
+
 void TerrainRuntime::create_water_resources()
 {
 	water_mesh = Rendering::Shapes::upload_plane(
@@ -503,6 +592,10 @@ void TerrainRuntime::draw_ui()
 
 	if (ImGui::Button("Regenerate"))
 		regenerate_requested = true;
+
+	ImGui::Separator();
+	ImGui::Checkbox("GPU Height Compute", &height_compute_enabled);
+	ImGui::Text("Compute dispatches: %llu", static_cast<unsigned long long>(height_compute_dispatches));
 
 	ImGui::Separator();
 	ImGui::Checkbox("PBR", &render_settings.use_pbr_lighting);

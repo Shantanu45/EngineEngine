@@ -8,6 +8,7 @@
 #include "input/input.h"
 #include "rendering/camera.h"
 #include "rendering/material.h"
+#include "rendering/pipeline_builder.h"
 #include "rendering/render_resource_store.h"
 #include "rendering/render_settings.h"
 #include "rendering/renderers/forward_render_pipeline.h"
@@ -111,6 +112,12 @@ private:
 	/** Generates a small height/slope-based albedo texture for a terrain chunk. */
 	RID create_chunk_color_texture(int32_t x, int32_t z);
 
+	/** Creates the compute pipeline and buffers used for GPU terrain height generation experiments. */
+	void create_compute_resources();
+
+	/** Dispatches a compute pass that writes a height field for the current center chunk. */
+	void dispatch_height_compute();
+
 	/** Creates the reusable water plane mesh and water material. */
 	void create_water_resources();
 
@@ -194,6 +201,27 @@ private:
 
 	/** Handles that keep generated terrain color textures alive. */
 	std::vector<RIDHandle> terrain_color_textures;
+
+	/** Compute pipeline that generates terrain heights into a storage buffer. */
+	Rendering::Pipeline height_compute_pipeline;
+
+	/** Storage buffer containing terrain generation parameters consumed by the compute shader. */
+	RIDHandle height_compute_params_buffer;
+
+	/** Storage buffer receiving generated terrain heights from the compute shader. */
+	RIDHandle height_compute_output_buffer;
+
+	/** Descriptor set binding the terrain compute parameter and output buffers. */
+	RIDHandle height_compute_uniform_set;
+
+	/** Width/height of the generated GPU height field. */
+	uint32_t height_compute_texture_size = 128;
+
+	/** Enables the GPU height-field compute pass. CPU terrain generation remains the rendering source for now. */
+	bool height_compute_enabled = true;
+
+	/** Number of height-field compute dispatches recorded this run. */
+	uint64_t height_compute_dispatches = 0;
 
 	/** Cache of generated chunks keyed by packed integer chunk coordinates. */
 	std::unordered_map<uint64_t, TerrainChunk> chunk_cache;
