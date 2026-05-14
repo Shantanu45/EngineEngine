@@ -59,6 +59,7 @@ struct TerrainComputeParams {
 	uint32_t noise_type = 0;
 	uint32_t texture_size = 0;
 	uint32_t octaves = 0;
+	uint32_t chunk_resolution = 0;
 	float chunk_size = 0.0f;
 	float height_scale = 0.0f;
 	float base_frequency = 0.0f;
@@ -203,6 +204,7 @@ void TerrainRuntime::shutdown()
 		resources.meshes().destroy_mesh(pending.mesh);
 	pending_mesh_destroys.clear();
 	height_compute_uniform_set.reset();
+	height_compute_color_buffer.reset();
 	height_compute_output_buffer.reset();
 	height_compute_params_buffer.reset();
 	height_compute_pipeline = {};
@@ -292,7 +294,9 @@ Rendering::MaterialHandle TerrainRuntime::create_chunk_material(int32_t x, int32
 	material.base_color_factor = glm::vec4(1.0f);
 	material.roughness_factor = 0.95f;
 	material.metallic_factor = 0.0f;
-	material.diffuse = create_chunk_color_texture(x, z);
+	material.diffuse = gpu_color_textures_enabled
+		? create_chunk_color_texture_gpu(x, z)
+		: create_chunk_color_texture(x, z);
 	return resources.materials().create(
 		device,
 		std::move(material),
@@ -350,6 +354,59 @@ RID TerrainRuntime::create_chunk_color_texture(int32_t chunk_x, int32_t chunk_z)
 		}
 	}
 
+	return create_chunk_color_texture_from_pixels(chunk_x, chunk_z, pixels, texture_size, "cpu");
+}
+
+RID TerrainRuntime::create_chunk_color_texture_gpu(int32_t chunk_x, int32_t chunk_z)
+{
+	if (!height_compute_pipeline.pipeline_rid.is_valid() || !height_compute_uniform_set.is_valid()) {
+		++color_texture_compute_failures;
+		return create_chunk_color_texture(chunk_x, chunk_z);
+	}
+
+	const TerrainComputeParams params{
+		.seed = terrain_settings.seed,
+		.noise_type = static_cast<uint32_t>(terrain_settings.noise_type),
+		.texture_size = height_compute_texture_size,
+		.octaves = terrain_settings.octaves,
+		.chunk_resolution = terrain_settings.chunk_resolution,
+		.chunk_size = terrain_settings.chunk_size,
+		.height_scale = terrain_settings.height_scale,
+		.base_frequency = terrain_settings.base_frequency,
+		.lacunarity = terrain_settings.lacunarity,
+		.persistence = terrain_settings.persistence,
+		.warp_strength = terrain_settings.warp_strength,
+		.warp_strength2 = terrain_settings.warp_strength2,
+		.chunk_x = static_cast<float>(chunk_x),
+		.chunk_z = static_cast<float>(chunk_z),
+	};
+
+	device->buffer_update(height_compute_params_buffer, 0, sizeof(params), &params);
+
+	Util::SmallVector<RID> sets;
+	sets.push_back(height_compute_uniform_set);
+	const uint32_t groups = (height_compute_texture_size + 7u) / 8u;
+	device->compute_dispatch(height_compute_pipeline.pipeline_rid, sets, groups, groups, 1);
+	++color_texture_compute_dispatches;
+
+	const uint32_t color_count = height_compute_texture_size * height_compute_texture_size;
+	const uint32_t byte_count = color_count * sizeof(uint32_t);
+	auto pixels = device->buffer_get_data(height_compute_color_buffer, 0, byte_count);
+	if (pixels.size() != byte_count) {
+		++color_texture_compute_failures;
+		return create_chunk_color_texture(chunk_x, chunk_z);
+	}
+
+	return create_chunk_color_texture_from_pixels(chunk_x, chunk_z, pixels, height_compute_texture_size, "gpu");
+}
+
+RID TerrainRuntime::create_chunk_color_texture_from_pixels(
+	int32_t chunk_x,
+	int32_t chunk_z,
+	const Util::SmallVector<uint8_t>& pixels,
+	uint32_t texture_size,
+	const char* source_name)
+{
 	Rendering::RenderingDeviceCommons::TextureFormat texture_format;
 	texture_format.texture_type = Rendering::RenderingDeviceCommons::TEXTURE_TYPE_2D;
 	texture_format.width = texture_size;
@@ -363,7 +420,8 @@ RID TerrainRuntime::create_chunk_color_texture(int32_t chunk_x, int32_t chunk_z)
 	RID texture = device->texture_create(texture_format, Rendering::RenderingDevice::TextureView(), { pixels });
 	device->set_resource_name(
 		texture,
-		"terrain_color_" + std::to_string(terrain_texture_generation++) +
+		std::string("terrain_color_") + source_name + "_" +
+		std::to_string(terrain_texture_generation++) +
 		"_" + std::to_string(chunk_x) + "_" + std::to_string(chunk_z));
 	terrain_color_textures.emplace_back(texture);
 	return texture;
@@ -388,6 +446,11 @@ void TerrainRuntime::create_compute_resources()
 		return;
 	device->set_resource_name(height_compute_output_buffer, "terrain_height_compute_output");
 
+	height_compute_color_buffer = RIDHandle(device->storage_buffer_create(height_count * sizeof(uint32_t)));
+	if (!height_compute_color_buffer.is_valid())
+		return;
+	device->set_resource_name(height_compute_color_buffer, "terrain_color_compute_output");
+
 	Rendering::RenderingDevice::Uniform params_uniform;
 	params_uniform.uniform_type = Rendering::RenderingDeviceCommons::UNIFORM_TYPE_STORAGE_BUFFER;
 	params_uniform.binding = 0;
@@ -398,9 +461,15 @@ void TerrainRuntime::create_compute_resources()
 	output_uniform.binding = 1;
 	output_uniform.append_id(height_compute_output_buffer);
 
+	Rendering::RenderingDevice::Uniform color_uniform;
+	color_uniform.uniform_type = Rendering::RenderingDeviceCommons::UNIFORM_TYPE_STORAGE_BUFFER;
+	color_uniform.binding = 2;
+	color_uniform.append_id(height_compute_color_buffer);
+
 	Util::SmallVector<Rendering::RenderingDevice::Uniform> uniforms;
 	uniforms.push_back(params_uniform);
 	uniforms.push_back(output_uniform);
+	uniforms.push_back(color_uniform);
 	height_compute_uniform_set = RIDHandle(device->uniform_set_create(uniforms, height_compute_pipeline.shader_rid, 0));
 }
 
@@ -414,6 +483,7 @@ void TerrainRuntime::dispatch_height_compute()
 		.noise_type = static_cast<uint32_t>(terrain_settings.noise_type),
 		.texture_size = height_compute_texture_size,
 		.octaves = terrain_settings.octaves,
+		.chunk_resolution = terrain_settings.chunk_resolution,
 		.chunk_size = terrain_settings.chunk_size,
 		.height_scale = terrain_settings.height_scale,
 		.base_frequency = terrain_settings.base_frequency,
@@ -436,6 +506,10 @@ void TerrainRuntime::dispatch_height_compute()
 	if (height_compute_validation_requested) {
 		height_compute_validation_requested = false;
 		validate_height_compute();
+	}
+	if (color_compute_inspect_requested) {
+		color_compute_inspect_requested = false;
+		inspect_compute_colors();
 	}
 }
 
@@ -471,6 +545,28 @@ void TerrainRuntime::validate_height_compute()
 	height_compute_max_error = max_error;
 	height_compute_avg_error = static_cast<float>(total_error / static_cast<double>(height_count));
 	height_compute_validation_valid = true;
+}
+
+void TerrainRuntime::inspect_compute_colors()
+{
+	const uint32_t color_count = height_compute_texture_size * height_compute_texture_size;
+	const uint32_t byte_count = color_count * sizeof(uint32_t);
+	const auto data = device->buffer_get_data(height_compute_color_buffer, 0, byte_count);
+	if (data.size() != byte_count) {
+		color_compute_inspect_valid = false;
+		return;
+	}
+
+	const uint32_t* pixels = reinterpret_cast<const uint32_t*>(data.data());
+	uint32_t checksum = 2166136261u;
+	for (uint32_t i = 0; i < color_count; ++i) {
+		checksum ^= pixels[i];
+		checksum *= 16777619u;
+	}
+
+	color_compute_first_pixel = color_count > 0 ? pixels[0] : 0u;
+	color_compute_checksum = checksum;
+	color_compute_inspect_valid = true;
 }
 
 void TerrainRuntime::create_water_resources()
@@ -634,13 +730,36 @@ void TerrainRuntime::draw_ui()
 
 	ImGui::Separator();
 	ImGui::Checkbox("GPU Height Compute", &height_compute_enabled);
+	if (ImGui::Checkbox("GPU Color Textures", &gpu_color_textures_enabled))
+		regenerate_requested = true;
 	if (ImGui::Button("Validate GPU Heights"))
 		height_compute_validation_requested = true;
-	ImGui::Text("Compute dispatches: %llu", static_cast<unsigned long long>(height_compute_dispatches));
+	if (ImGui::Button("Inspect GPU Colors"))
+		color_compute_inspect_requested = true;
+	const std::string compute_dispatch_text =
+		"Height debug dispatches: " + std::to_string(height_compute_dispatches);
+	const std::string color_texture_dispatch_text =
+		"Color texture dispatches: " + std::to_string(color_texture_compute_dispatches) +
+		" failures: " + std::to_string(color_texture_compute_failures);
+	ImGui::TextUnformatted(compute_dispatch_text.c_str());
+	ImGui::TextUnformatted(color_texture_dispatch_text.c_str());
 	if (height_compute_validation_valid)
 		ImGui::Text("Height error avg %.4f max %.4f", height_compute_avg_error, height_compute_max_error);
 	else
 		ImGui::Text("Height validation: not run");
+	if (color_compute_inspect_valid) {
+		char color_text[96];
+		std::snprintf(
+			color_text,
+			sizeof(color_text),
+			"Color first %08X checksum %08X",
+			color_compute_first_pixel,
+			color_compute_checksum);
+		ImGui::TextUnformatted(color_text);
+	}
+	else {
+		ImGui::Text("Color inspect: not run");
+	}
 
 	ImGui::Separator();
 	ImGui::Checkbox("PBR", &render_settings.use_pbr_lighting);

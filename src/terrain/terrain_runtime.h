@@ -15,6 +15,7 @@
 #include "rendering/rid_handle.h"
 #include "rendering/wsi.h"
 #include "terrain/terrain_generator.h"
+#include "util/small_vector.h"
 
 namespace Terrain {
 
@@ -112,6 +113,17 @@ private:
 	/** Generates a small height/slope-based albedo texture for a terrain chunk. */
 	RID create_chunk_color_texture(int32_t x, int32_t z);
 
+	/** Generates a chunk albedo texture through the terrain compute shader and readback. */
+	RID create_chunk_color_texture_gpu(int32_t x, int32_t z);
+
+	/** Uploads RGBA8 texels as a sampled terrain albedo texture. */
+	RID create_chunk_color_texture_from_pixels(
+		int32_t chunk_x,
+		int32_t chunk_z,
+		const Util::SmallVector<uint8_t>& pixels,
+		uint32_t texture_size,
+		const char* source_name);
+
 	/** Creates the compute pipeline and buffers used for GPU terrain height generation experiments. */
 	void create_compute_resources();
 
@@ -120,6 +132,9 @@ private:
 
 	/** Reads back the generated height field and compares it against the CPU height function. */
 	void validate_height_compute();
+
+	/** Reads back the generated color buffer and records a small debug checksum. */
+	void inspect_compute_colors();
 
 	/** Creates the reusable water plane mesh and water material. */
 	void create_water_resources();
@@ -214,6 +229,9 @@ private:
 	/** Storage buffer receiving generated terrain heights from the compute shader. */
 	RIDHandle height_compute_output_buffer;
 
+	/** Storage buffer receiving generated RGBA8 terrain colors from the compute shader. */
+	RIDHandle height_compute_color_buffer;
+
 	/** Descriptor set binding the terrain compute parameter and output buffers. */
 	RIDHandle height_compute_uniform_set;
 
@@ -223,8 +241,17 @@ private:
 	/** Enables the GPU height-field compute pass. CPU terrain generation remains the rendering source for now. */
 	bool height_compute_enabled = true;
 
+	/** Uses the compute-generated color storage buffer to create chunk albedo textures. */
+	bool gpu_color_textures_enabled = false;
+
 	/** Number of height-field compute dispatches recorded this run. */
 	uint64_t height_compute_dispatches = 0;
+
+	/** Number of chunk color texture dispatches recorded this run. */
+	uint64_t color_texture_compute_dispatches = 0;
+
+	/** Number of failed GPU color texture readbacks that fell back to CPU generation. */
+	uint64_t color_texture_compute_failures = 0;
 
 	/** Set by the UI to run one GPU-vs-CPU height validation pass on the next frame. */
 	bool height_compute_validation_requested = false;
@@ -237,6 +264,18 @@ private:
 
 	/** Average absolute height error from the last GPU-vs-CPU validation pass. */
 	float height_compute_avg_error = 0.0f;
+
+	/** Set by the UI to read back generated color data on the next compute dispatch. */
+	bool color_compute_inspect_requested = false;
+
+	/** Whether generated color readback information is available for display. */
+	bool color_compute_inspect_valid = false;
+
+	/** First generated RGBA8 texel from the last color readback. */
+	uint32_t color_compute_first_pixel = 0;
+
+	/** FNV-style checksum over the generated color buffer from the last readback. */
+	uint32_t color_compute_checksum = 0;
 
 	/** Cache of generated chunks keyed by packed integer chunk coordinates. */
 	std::unordered_map<uint64_t, TerrainChunk> chunk_cache;

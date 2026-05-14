@@ -7,6 +7,7 @@ layout(set = 0, binding = 0, std430) readonly buffer TerrainComputeParamsBuffer 
 	uint noise_type;
 	uint texture_size;
 	uint octaves;
+	uint chunk_resolution;
 	float chunk_size;
 	float height_scale;
 	float base_frequency;
@@ -20,6 +21,10 @@ layout(set = 0, binding = 0, std430) readonly buffer TerrainComputeParamsBuffer 
 
 layout(set = 0, binding = 1, std430) writeonly buffer TerrainHeightBuffer {
 	float heights[];
+};
+
+layout(set = 0, binding = 2, std430) writeonly buffer TerrainColorBuffer {
+	uint colors[];
 };
 
 float fade(float t)
@@ -125,6 +130,37 @@ float terrain_height(vec2 world_xz)
 	return shaped * params.height_scale;
 }
 
+uint pack_rgba8(vec3 color)
+{
+	uvec3 rgb = uvec3(clamp(color, vec3(0.0), vec3(1.0)) * 255.0);
+	return rgb.r | (rgb.g << 8u) | (rgb.b << 16u) | (255u << 24u);
+}
+
+vec3 terrain_color(vec2 world_xz)
+{
+	float normal_sample_step = params.chunk_size / max(float(params.chunk_resolution), 1.0);
+	float h = terrain_height(world_xz);
+	float h_l = terrain_height(world_xz + vec2(-normal_sample_step, 0.0));
+	float h_r = terrain_height(world_xz + vec2(normal_sample_step, 0.0));
+	float h_d = terrain_height(world_xz + vec2(0.0, -normal_sample_step));
+	float h_u = terrain_height(world_xz + vec2(0.0, normal_sample_step));
+	vec3 normal = normalize(vec3(h_l - h_r, normal_sample_step * 2.0, h_d - h_u));
+	float slope = 1.0 - clamp(normal.y, 0.0, 1.0);
+
+	vec3 low_grass = vec3(0.10, 0.23, 0.11);
+	vec3 grass = vec3(0.26, 0.45, 0.18);
+	vec3 dry_grass = vec3(0.48, 0.42, 0.22);
+	vec3 rock = vec3(0.42, 0.40, 0.36);
+	vec3 snow = vec3(0.86, 0.88, 0.84);
+
+	float height01 = clamp((h / max(params.height_scale, 0.001) + 1.0) * 0.5, 0.0, 1.0);
+	vec3 color = mix(low_grass, grass, smoothstep(0.18, 0.42, height01));
+	color = mix(color, dry_grass, smoothstep(0.45, 0.68, height01) * 0.35);
+	color = mix(color, rock, smoothstep(0.22, 0.55, slope));
+	color = mix(color, snow, smoothstep(0.76, 0.92, height01));
+	return color;
+}
+
 void main()
 {
 	uvec2 id = gl_GlobalInvocationID.xy;
@@ -137,5 +173,7 @@ void main()
 	vec2 origin = vec2(params.chunk_x, params.chunk_z) * size - vec2(half_chunk);
 	vec2 world_xz = origin + vec2(id) * (size / denom);
 
-	heights[id.y * params.texture_size + id.x] = terrain_height(world_xz);
+	uint offset = id.y * params.texture_size + id.x;
+	heights[offset] = terrain_height(world_xz);
+	colors[offset] = pack_rgba8(terrain_color(world_xz));
 }
