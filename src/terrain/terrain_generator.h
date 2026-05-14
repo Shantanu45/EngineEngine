@@ -6,6 +6,8 @@
 
 namespace Terrain {
 
+enum class NoiseType { Value, Perlin };
+
 /**
  * Controls procedural terrain generation for both mesh geometry and matching color textures.
  *
@@ -37,6 +39,12 @@ struct TerrainSettings {
 
 	/** Amplitude multiplier applied after each octave. */
 	float persistence = 0.5f;
+
+	/** noise type used for terrain generation */
+	NoiseType noise_type = NoiseType::Value;
+
+	float warp_strength = 1;
+
 };
 
 /**

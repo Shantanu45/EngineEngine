@@ -456,9 +456,17 @@ void TerrainRuntime::draw_ui()
 {
 	ImGui::Begin("Terrain");
 
+	int noise_type = static_cast<int>(terrain_settings.noise_type);
+	if (ImGui::Combo("Noise Type", &noise_type, "Value\0Perlin\0"))
+		terrain_settings.noise_type = static_cast<NoiseType>(noise_type);
+
 	int seed = static_cast<int>(terrain_settings.seed);
 	if (ImGui::InputInt("Seed", &seed))
 		terrain_settings.seed = static_cast<uint32_t>(std::max(seed, 0));
+
+	float warp_strength = static_cast<int>(terrain_settings.warp_strength);
+	if (ImGui::InputFloat("Warp Strength", &warp_strength))
+		terrain_settings.warp_strength = static_cast<uint32_t>(warp_strength);
 
 	int resolution = static_cast<int>(terrain_settings.chunk_resolution);
 	if (ImGui::SliderInt("Resolution", &resolution, 8, 256))

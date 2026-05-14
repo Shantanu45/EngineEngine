@@ -29,6 +29,7 @@ float random_unit(uint32_t x, uint32_t y, uint32_t seed)
 	return static_cast<float>(hash(x, y, seed) & 0xffffu) / 32767.5f - 1.0f;
 }
 
+
 float value_noise(float x, float y, uint32_t seed)
 {
 	const int32_t x0 = static_cast<int32_t>(std::floor(x));
@@ -49,34 +50,77 @@ float value_noise(float x, float y, uint32_t seed)
 	return lerp(lerp(a, b, tx), lerp(c, d, tx), ty);
 }
 
+glm::vec2 gradient(uint32_t x, uint32_t y, uint32_t seed)
+{
+	const uint32_t h = hash(x, y, seed) & 3u;
+	constexpr glm::vec2 dirs[4] = {
+		{ 1.0f,  1.0f}, {-1.0f,  1.0f},
+		{-1.0f, -1.0f}, { 1.0f, -1.0f}
+	};
+	return dirs[h];
+}
+
+float perlin_noise(float x, float y, uint32_t seed)
+{
+	const int32_t x0 = static_cast<int32_t>(std::floor(x));
+	const int32_t y0 = static_cast<int32_t>(std::floor(y));
+
+	const float xf = x - static_cast<float>(x0);
+	const float yf = y - static_cast<float>(y0);
+
+	const float tx = fade(xf);
+	const float ty = fade(yf);
+
+	const float a = glm::dot(gradient(x0, y0, seed), { xf,        yf });
+	const float b = glm::dot(gradient(x0 + 1, y0, seed), { xf - 1.0f, yf });
+	const float c = glm::dot(gradient(x0, y0 + 1, seed), { xf,        yf - 1.0f });
+	const float d = glm::dot(gradient(x0 + 1, y0 + 1, seed), { xf - 1.0f, yf - 1.0f });
+
+	return lerp(lerp(a, b, tx), lerp(c, d, tx), ty);
+}
+
 float fractal_noise(float x, float y, const TerrainSettings& settings)
 {
 	float frequency = settings.base_frequency;
 	float amplitude = 1.0f;
-	float value = 0.0f;
+	float sample = 0.0f;
 	float norm = 0.0f;
 
 	for (uint32_t octave = 0; octave < settings.octaves; ++octave) {
 		// Each octave samples the same continuous world-space point at a higher
 		// frequency and lower amplitude. The normalized sum stays roughly [-1, 1].
-		value += value_noise(x * frequency, y * frequency, settings.seed + octave * 1013u) * amplitude;
+		sample += ((settings.noise_type == NoiseType::Perlin)
+			? perlin_noise(x * frequency, y * frequency, settings.seed + octave * 1013u)
+			: value_noise(x * frequency, y * frequency, settings.seed + octave * 1013u)) * amplitude;
+		//value += value_noise(x * frequency, y * frequency, settings.seed + octave * 1013u) * amplitude;
 		norm += amplitude;
 		frequency *= settings.lacunarity;
 		amplitude *= settings.persistence;
 	}
 
-	return norm > 0.0f ? value / norm : 0.0f;
+	return norm > 0.0f ? sample / norm : 0.0f;
 }
 
 } // namespace
 
+// Domain Warping
 float sample_terrain_height(const TerrainSettings& settings, float x, float z)
 {
-	const float h = fractal_noise(x, z, settings);
-	// Blend linear and cubic noise to keep broad hills while making peaks/valleys less uniform.
+	float wx = fractal_noise(x, z, settings) * settings.warp_strength;
+	float wz = fractal_noise(x + 5.2f, z + 1.3f, settings) * settings.warp_strength;
+
+	const float h = fractal_noise(x + wx, z + wz, settings);
 	const float shaped = h * 0.75f + h * h * h * 0.25f;
 	return shaped * settings.height_scale;
 }
+
+//float sample_terrain_height(const TerrainSettings& settings, float x, float z)
+//{
+//	const float h = fractal_noise(x, z, settings);
+//	// Blend linear and cubic noise to keep broad hills while making peaks/valleys less uniform.
+//	const float shaped = h * 0.75f + h * h * h * 0.25f;
+//	return shaped * settings.height_scale;
+//}
 
 Rendering::Shapes::ShapeData generate_terrain_mesh(const TerrainSettings& settings)
 {
