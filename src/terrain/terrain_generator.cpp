@@ -106,10 +106,15 @@ float fractal_noise(float x, float y, const TerrainSettings& settings)
 // Domain Warping
 float sample_terrain_height(const TerrainSettings& settings, float x, float z)
 {
-	float wx = fractal_noise(x, z, settings) * settings.warp_strength;
-	float wz = fractal_noise(x + 5.2f, z + 1.3f, settings) * settings.warp_strength;
+	// First warp pass: displace sample coordinates by noise.
+	float wx1 = fractal_noise(x, z, settings) * settings.warp_strength;
+	float wz1 = fractal_noise(x + 5.2f, z + 1.3f, settings) * settings.warp_strength;
 
-	const float h = fractal_noise(x + wx, z + wz, settings);
+	// Second warp pass: warp the warp itself for geological folding.
+	float wx2 = fractal_noise(x + wx1, z + wz1, settings) * settings.warp_strength2;
+	float wz2 = fractal_noise(x + wx1 + 1.7f, z + wz1 + 9.2f, settings) * settings.warp_strength2;
+
+	const float h = fractal_noise(x + wx2, z + wz2, settings);
 	const float shaped = h * 0.75f + h * h * h * 0.25f;
 	return shaped * settings.height_scale;
 }

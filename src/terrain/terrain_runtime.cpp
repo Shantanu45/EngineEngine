@@ -466,6 +466,10 @@ void TerrainRuntime::draw_ui()
 	if (ImGui::InputFloat("Warp Strength", &warp_strength))
 		terrain_settings.warp_strength = static_cast<uint32_t>(warp_strength);
 
+	float warp_strength2 = static_cast<int>(terrain_settings.warp_strength2);
+	if (ImGui::InputFloat("Warp Strength 2", &warp_strength2))
+		terrain_settings.warp_strength2 = static_cast<uint32_t>(warp_strength2);
+
 	int resolution = static_cast<int>(terrain_settings.chunk_resolution);
 	if (ImGui::SliderInt("Resolution", &resolution, 8, 256))
 		terrain_settings.chunk_resolution = static_cast<uint32_t>(resolution);

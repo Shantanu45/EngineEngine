@@ -44,7 +44,7 @@ struct TerrainSettings {
 	NoiseType noise_type = NoiseType::Value;
 
 	float warp_strength = 1;
-
+	float warp_strength2 = 0.5f;
 };
 
 /**
