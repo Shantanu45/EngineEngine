@@ -1147,6 +1147,11 @@ namespace Rendering
 		Error buffer_update(RID p_buffer, uint32_t p_offset, uint32_t p_size, const void* p_data, bool p_skip_check = false);
 
 		/**
+		 * Reads a subrange of a GPU buffer into CPU memory, flushing GPU work when required.
+		 */
+		Util::SmallVector<uint8_t> buffer_get_data(RID p_buffer, uint32_t p_offset, uint32_t p_size);
+
+		/**
 		 * Records a GPU-side clear of a buffer range.
 		 */
 		Error buffer_clear(RID p_buffer, uint32_t p_offset, uint32_t p_size);

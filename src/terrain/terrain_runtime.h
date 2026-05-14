@@ -118,6 +118,9 @@ private:
 	/** Dispatches a compute pass that writes a height field for the current center chunk. */
 	void dispatch_height_compute();
 
+	/** Reads back the generated height field and compares it against the CPU height function. */
+	void validate_height_compute();
+
 	/** Creates the reusable water plane mesh and water material. */
 	void create_water_resources();
 
@@ -222,6 +225,18 @@ private:
 
 	/** Number of height-field compute dispatches recorded this run. */
 	uint64_t height_compute_dispatches = 0;
+
+	/** Set by the UI to run one GPU-vs-CPU height validation pass on the next frame. */
+	bool height_compute_validation_requested = false;
+
+	/** Whether a GPU-vs-CPU validation result is available for display. */
+	bool height_compute_validation_valid = false;
+
+	/** Maximum absolute height error from the last GPU-vs-CPU validation pass. */
+	float height_compute_max_error = 0.0f;
+
+	/** Average absolute height error from the last GPU-vs-CPU validation pass. */
+	float height_compute_avg_error = 0.0f;
 
 	/** Cache of generated chunks keyed by packed integer chunk coordinates. */
 	std::unordered_map<uint64_t, TerrainChunk> chunk_cache;

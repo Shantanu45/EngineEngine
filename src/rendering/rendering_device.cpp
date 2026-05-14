@@ -2482,6 +2482,48 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 		return OK;
 	}
 
+	Util::SmallVector<uint8_t> RenderingDevice::buffer_get_data(RID p_buffer, uint32_t p_offset, uint32_t p_size)
+	{
+		Buffer* buffer = _get_buffer_from_owner(p_buffer);
+		ERR_FAIL_NULL_V_MSG(buffer, Util::SmallVector<uint8_t>(), "Buffer argument is not a valid buffer of any type.");
+		ERR_FAIL_COND_V_MSG(p_offset + p_size > buffer->size, Util::SmallVector<uint8_t>(),
+			std::format("Attempted to read buffer ({} bytes) past the end.", (p_offset + p_size) - buffer->size));
+
+		BitField<RDD::BufferUsageBits> usage = RDD::BUFFER_USAGE_TRANSFER_TO_BIT;
+		RDD::BufferID readback_buffer = driver->buffer_create(p_size, usage, RDD::MEMORY_ALLOCATION_TYPE_CPU, frames_drawn);
+		ERR_FAIL_COND_V(!readback_buffer, Util::SmallVector<uint8_t>());
+
+		RDD::BufferBarrier barrier;
+		barrier.buffer = buffer->driver_id;
+		barrier.src_access = RDD::BARRIER_ACCESS_SHADER_WRITE_BIT;
+		barrier.dst_access = RDD::BARRIER_ACCESS_COPY_READ_BIT;
+		barrier.offset = p_offset;
+		barrier.size = p_size;
+		driver->command_pipeline_barrier(
+			get_current_command_buffer(),
+			RDD::PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+			RDD::PIPELINE_STAGE_COPY_BIT,
+			{}, { &barrier, 1 }, {}, {});
+
+		RDD::BufferCopyRegion region;
+		region.src_offset = p_offset;
+		region.dst_offset = 0;
+		region.size = p_size;
+		driver->command_copy_buffer(get_current_command_buffer(), buffer->driver_id, readback_buffer, { &region, 1 });
+
+		_flush_and_stall_for_all_frames();
+
+		const uint8_t* read_ptr = driver->buffer_map(readback_buffer);
+		ERR_FAIL_NULL_V(read_ptr, Util::SmallVector<uint8_t>());
+
+		Util::SmallVector<uint8_t> data;
+		data.resize(p_size);
+		std::memcpy(data.data(), read_ptr, p_size);
+		driver->buffer_unmap(readback_buffer);
+		driver->buffer_free(readback_buffer);
+		return data;
+	}
+
 	Error RenderingDevice::buffer_clear(RID p_buffer, uint32_t p_offset, uint32_t p_size)
 	{
 		Buffer* buffer = _get_buffer_from_owner(p_buffer);

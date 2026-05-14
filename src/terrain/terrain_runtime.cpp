@@ -432,6 +432,45 @@ void TerrainRuntime::dispatch_height_compute()
 	const uint32_t groups = (height_compute_texture_size + 7u) / 8u;
 	device->compute_dispatch(height_compute_pipeline.pipeline_rid, sets, groups, groups, 1);
 	++height_compute_dispatches;
+
+	if (height_compute_validation_requested) {
+		height_compute_validation_requested = false;
+		validate_height_compute();
+	}
+}
+
+void TerrainRuntime::validate_height_compute()
+{
+	const uint32_t height_count = height_compute_texture_size * height_compute_texture_size;
+	const uint32_t byte_count = height_count * sizeof(float);
+	const auto data = device->buffer_get_data(height_compute_output_buffer, 0, byte_count);
+	if (data.size() != byte_count) {
+		height_compute_validation_valid = false;
+		return;
+	}
+
+	const float* gpu_heights = reinterpret_cast<const float*>(data.data());
+	const float step = terrain_settings.chunk_size / static_cast<float>(height_compute_texture_size - 1u);
+	const float half_chunk = terrain_settings.chunk_size * 0.5f;
+	const float origin_x = static_cast<float>(chunk_center.x) * terrain_settings.chunk_size - half_chunk;
+	const float origin_z = static_cast<float>(chunk_center.y) * terrain_settings.chunk_size - half_chunk;
+
+	double total_error = 0.0;
+	float max_error = 0.0f;
+	for (uint32_t z = 0; z < height_compute_texture_size; ++z) {
+		for (uint32_t x = 0; x < height_compute_texture_size; ++x) {
+			const float world_x = origin_x + static_cast<float>(x) * step;
+			const float world_z = origin_z + static_cast<float>(z) * step;
+			const float cpu_height = sample_terrain_height(terrain_settings, world_x, world_z);
+			const float error = std::abs(gpu_heights[z * height_compute_texture_size + x] - cpu_height);
+			total_error += static_cast<double>(error);
+			max_error = std::max(max_error, error);
+		}
+	}
+
+	height_compute_max_error = max_error;
+	height_compute_avg_error = static_cast<float>(total_error / static_cast<double>(height_count));
+	height_compute_validation_valid = true;
 }
 
 void TerrainRuntime::create_water_resources()
@@ -595,7 +634,13 @@ void TerrainRuntime::draw_ui()
 
 	ImGui::Separator();
 	ImGui::Checkbox("GPU Height Compute", &height_compute_enabled);
+	if (ImGui::Button("Validate GPU Heights"))
+		height_compute_validation_requested = true;
 	ImGui::Text("Compute dispatches: %llu", static_cast<unsigned long long>(height_compute_dispatches));
+	if (height_compute_validation_valid)
+		ImGui::Text("Height error avg %.4f max %.4f", height_compute_avg_error, height_compute_max_error);
+	else
+		ImGui::Text("Height validation: not run");
 
 	ImGui::Separator();
 	ImGui::Checkbox("PBR", &render_settings.use_pbr_lighting);
