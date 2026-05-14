@@ -657,16 +657,16 @@ namespace Rendering
 		// ----- COMMANDS -----
 
 		// Binding.
-		//virtual void command_bind_compute_pipeline(CommandBufferID p_cmd_buffer, PipelineID p_pipeline) = 0;
-		//virtual void command_bind_compute_uniform_sets(CommandBufferID p_cmd_buffer, std::span<UniformSetID> p_uniform_sets, ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count, uint32_t p_dynamic_offsets) = 0;
+		virtual void command_bind_compute_pipeline(CommandBufferID p_cmd_buffer, PipelineID p_pipeline) = 0;
+		virtual void command_bind_compute_uniform_sets(CommandBufferID p_cmd_buffer, std::span<UniformSetID> p_uniform_sets, ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count, uint32_t p_dynamic_offsets) = 0;
 
 		// Dispatching.
-		//virtual void command_compute_dispatch(CommandBufferID p_cmd_buffer, uint32_t p_x_groups, uint32_t p_y_groups, uint32_t p_z_groups) = 0;
-		//virtual void command_compute_dispatch_indirect(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset) = 0;
+		virtual void command_compute_dispatch(CommandBufferID p_cmd_buffer, uint32_t p_x_groups, uint32_t p_y_groups, uint32_t p_z_groups) = 0;
+		virtual void command_compute_dispatch_indirect(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset) = 0;
 
 		// ----- PIPELINE -----
 
-		//virtual PipelineID compute_pipeline_create(ShaderID p_shader, std::span<PipelineSpecializationConstant> p_specialization_constants) = 0;
+		virtual PipelineID compute_pipeline_create(ShaderID p_shader, std::span<PipelineSpecializationConstant> p_specialization_constants) = 0;
 
 		/********************/
 		/**** RAYTRACING ****/

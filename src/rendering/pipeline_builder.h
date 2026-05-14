@@ -127,4 +127,46 @@ namespace Rendering
 		RDC::PipelineDepthStencilState depth_stencil_state;
 		Util::SmallVector<RDC::PipelineSpecializationConstant> specialization_constants;
 	};
+
+	class ComputePipelineBuilder
+	{
+	public:
+		ComputePipelineBuilder()
+		{
+			device = RenderingDevice::get_singleton();
+		}
+
+		~ComputePipelineBuilder() = default;
+
+		ComputePipelineBuilder& set_shader(const std::string& shader_path, const std::string& name)
+		{
+			Util::SmallVector<std::string> shaders;
+			shaders.push_back(shader_path);
+			shader = device->create_program(name, shaders);
+			return *this;
+		}
+
+		ComputePipelineBuilder& set_shader(RID p_shader)
+		{
+			shader = p_shader;
+			return *this;
+		}
+
+		ComputePipelineBuilder& set_specialization_constants(const Util::SmallVector<RDC::PipelineSpecializationConstant>& p_specialization_constants)
+		{
+			specialization_constants = p_specialization_constants;
+			return *this;
+		}
+
+		Pipeline build()
+		{
+			RID p = device->compute_pipeline_create(shader, specialization_constants);
+			return { p, shader };
+		}
+
+	private:
+		RenderingDevice* device;
+		RID shader;
+		Util::SmallVector<RDC::PipelineSpecializationConstant> specialization_constants;
+	};
 }

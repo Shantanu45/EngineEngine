@@ -129,7 +129,7 @@ void TerrainRuntime::render_frame(double frame_time, double elapsed_time)
 		view.instances.push_back(Rendering::MeshInstance{
 			.mesh = chunk.mesh,
 			.model = model,
-			.normal_matrix = glm::transpose(glm::inverse(model)),
+			.normal_matrix = model,
 			.material_sets = { resources.materials().get_uniform_set(chunk.material, render_settings.use_pbr_lighting) },
 			.shadow_material_sets = { resources.materials().get_shadow_uniform_set(chunk.material) },
 			.point_shadow_material_sets = { resources.materials().get_point_shadow_uniform_set(chunk.material) },
@@ -162,8 +162,6 @@ void TerrainRuntime::render_frame(double frame_time, double elapsed_time)
 			.model = water_model,
 			.normal_matrix = glm::transpose(glm::inverse(water_model)),
 			.material_sets = { resources.materials().get_uniform_set(water_material, render_settings.use_pbr_lighting) },
-			.shadow_material_sets = { resources.materials().get_shadow_uniform_set(water_material) },
-			.point_shadow_material_sets = { resources.materials().get_point_shadow_uniform_set(water_material) },
 			.category = Rendering::MeshCategory::Opaque,
 		});
 	}

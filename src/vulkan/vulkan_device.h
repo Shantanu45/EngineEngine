@@ -522,9 +522,15 @@ namespace Vulkan
 		void command_render_set_line_width(CommandBufferID p_cmd_buffer, float p_width) override;
 
 		RenderingDeviceDriverVulkan::PipelineID render_pipeline_create(ShaderID p_shader, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive,
-			PipelineRasterizationState p_rasterization_state, PipelineMultisampleState p_multisample_state, PipelineDepthStencilState p_depth_stencil_state, 
+			PipelineRasterizationState p_rasterization_state, PipelineMultisampleState p_multisample_state, PipelineDepthStencilState p_depth_stencil_state,
 			PipelineColorBlendState p_blend_state, std::span<int32_t> p_color_attachments, BitField<PipelineDynamicStateFlags> p_dynamic_state,
 			RenderPassID p_render_pass, uint32_t p_render_subpass, std::span<PipelineSpecializationConstant> p_specialization_constants = std::span<PipelineSpecializationConstant>()) override;
+
+		PipelineID compute_pipeline_create(ShaderID p_shader, std::span<PipelineSpecializationConstant> p_specialization_constants) override;
+		void command_bind_compute_pipeline(CommandBufferID p_cmd_buffer, PipelineID p_pipeline) override;
+		void command_bind_compute_uniform_sets(CommandBufferID p_cmd_buffer, std::span<UniformSetID> p_uniform_sets, ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count, uint32_t p_dynamic_offsets) override;
+		void command_compute_dispatch(CommandBufferID p_cmd_buffer, uint32_t p_x_groups, uint32_t p_y_groups, uint32_t p_z_groups) override;
+		void command_compute_dispatch_indirect(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset) override;
 
 		void print_lost_device_info();
 

@@ -5321,6 +5321,7 @@ namespace Vulkan
 		thread_local Util::SmallVector<respv::SpecConstant> respv_spec_constants;
 		thread_local Util::SmallVector<VkShaderModule> respv_shader_modules;
 		thread_local Util::SmallVector<VkSpecializationMapEntry> specialization_entries;
+		thread_local Util::SmallVector<VkSpecializationInfo> specialization_infos;
 
 #if RECORD_PIPELINE_STATISTICS
 		thread_local Util::SmallVector<uint64_t> respv_run_time;
@@ -5334,6 +5335,8 @@ namespace Vulkan
 
 		respv_shader_modules.clear();
 		specialization_entries.clear();
+		specialization_infos.clear();
+		specialization_infos.resize(shader_info->vk_stages_create_info.size());
 
 		for (uint32_t i = 0; i < shader_info->vk_stages_create_info.size(); i++) {
 			vk_pipeline_stages[i] = shader_info->vk_stages_create_info[i];
@@ -5407,8 +5410,7 @@ namespace Vulkan
 						}
 					}
 
-					Util::SmallVector<VkSpecializationInfo> specialization_info_vec;
-					VkSpecializationInfo* specialization_info = specialization_info_vec.data();
+					VkSpecializationInfo* specialization_info = &specialization_infos[i];
 					*specialization_info = {};
 					specialization_info->dataSize = p_specialization_constants.size() * sizeof(PipelineSpecializationConstant);
 					specialization_info->pData = p_specialization_constants.data();
@@ -5473,6 +5475,89 @@ namespace Vulkan
 		return PipelineID(vk_pipeline);
 	}
 
+	RenderingDeviceDriverVulkan::PipelineID RenderingDeviceDriverVulkan::compute_pipeline_create(ShaderID p_shader, std::span<PipelineSpecializationConstant> p_specialization_constants) {
+		const ShaderInfo* shader_info = (const ShaderInfo*)p_shader.id;
+		ERR_FAIL_COND_V_MSG(shader_info->vk_stages_create_info.size() != 1, PipelineID(),
+			"Compute pipeline shader must have exactly one stage (compute).");
+		ERR_FAIL_COND_V_MSG(shader_info->vk_stages_create_info[0].stage != VK_SHADER_STAGE_COMPUTE_BIT, PipelineID(),
+			"Compute pipeline shader stage must be VK_SHADER_STAGE_COMPUTE_BIT.");
+
+		VkComputePipelineCreateInfo pipeline_create_info = {};
+		VkPipelineShaderStageCreateInfo pipeline_stage = shader_info->vk_stages_create_info[0];
+		Util::SmallVector<VkSpecializationMapEntry> specialization_entries;
+		VkSpecializationInfo specialization_info = {};
+
+		if (p_specialization_constants.size()) {
+			specialization_entries.resize(p_specialization_constants.size());
+			for (uint32_t i = 0; i < p_specialization_constants.size(); i++) {
+				specialization_entries[i] = {};
+				specialization_entries[i].constantID = p_specialization_constants[i].constant_id;
+				specialization_entries[i].offset = (const char*)&p_specialization_constants[i].int_value - (const char*)p_specialization_constants.data();
+				specialization_entries[i].size = sizeof(uint32_t);
+			}
+
+			specialization_info.dataSize = p_specialization_constants.size() * sizeof(PipelineSpecializationConstant);
+			specialization_info.pData = p_specialization_constants.data();
+			specialization_info.mapEntryCount = specialization_entries.size();
+			specialization_info.pMapEntries = specialization_entries.data();
+			pipeline_stage.pSpecializationInfo = &specialization_info;
+		}
+
+		pipeline_create_info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+		pipeline_create_info.stage = pipeline_stage;
+		pipeline_create_info.layout = shader_info->vk_pipeline_layout;
+
+		VkPipeline vk_pipeline = VK_NULL_HANDLE;
+		VkResult err = vkCreateComputePipelines(vk_device, pipelines_cache.vk_cache, 1, &pipeline_create_info, nullptr, &vk_pipeline);
+		ERR_FAIL_COND_V_MSG(err, PipelineID(), std::format("vkCreateComputePipelines failed with error {}", std::to_string(err)));
+
+		return PipelineID(vk_pipeline);
+	}
+
+	void RenderingDeviceDriverVulkan::command_bind_compute_pipeline(CommandBufferID p_cmd_buffer, PipelineID p_pipeline) {
+		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
+		vkCmdBindPipeline(command_buffer->vk_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, (VkPipeline)p_pipeline.id);
+	}
+
+	void RenderingDeviceDriverVulkan::command_bind_compute_uniform_sets(CommandBufferID p_cmd_buffer, std::span<UniformSetID> p_uniform_sets, ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count, uint32_t p_dynamic_offsets) {
+		if (p_set_count == 0) {
+			return;
+		}
+
+		thread_local Util::SmallVector<VkDescriptorSet> sets;
+		sets.clear();
+		sets.resize(p_set_count);
+
+		uint32_t dynamic_offsets[MAX_DYNAMIC_BUFFERS];
+		uint32_t shift = 0u;
+		uint32_t curr_dynamic_offset = 0u;
+
+		for (uint32_t i = 0; i < p_set_count; i++) {
+			const UniformSetInfo* usi = (const UniformSetInfo*)p_uniform_sets[i].id;
+			sets[i] = usi->vk_descriptor_set;
+			const uint32_t dynamic_offset_count = usi->dynamic_buffers.size();
+			for (uint32_t j = 0; j < dynamic_offset_count; ++j) {
+				const uint32_t frame_idx = (p_dynamic_offsets >> shift) & 0xFu;
+				shift += 4u;
+				dynamic_offsets[curr_dynamic_offset++] = uint32_t(frame_idx * usi->dynamic_buffers[j]->size);
+			}
+		}
+
+		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
+		const ShaderInfo* shader_info = (const ShaderInfo*)p_shader.id;
+		vkCmdBindDescriptorSets(command_buffer->vk_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, shader_info->vk_pipeline_layout, p_first_set_index, p_set_count, &sets[0], curr_dynamic_offset, dynamic_offsets);
+	}
+
+	void RenderingDeviceDriverVulkan::command_compute_dispatch(CommandBufferID p_cmd_buffer, uint32_t p_x_groups, uint32_t p_y_groups, uint32_t p_z_groups) {
+		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
+		vkCmdDispatch(command_buffer->vk_command_buffer, p_x_groups, p_y_groups, p_z_groups);
+	}
+
+	void RenderingDeviceDriverVulkan::command_compute_dispatch_indirect(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset) {
+		const CommandBufferInfo* command_buffer = (const CommandBufferInfo*)p_cmd_buffer.id;
+		const BufferInfo* buf_info = (const BufferInfo*)p_indirect_buffer.id;
+		vkCmdDispatchIndirect(command_buffer->vk_command_buffer, buf_info->vk_buffer, p_offset);
+	}
 
 #pragma endregion
 
