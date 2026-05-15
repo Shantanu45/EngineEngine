@@ -62,8 +62,7 @@ ImportedGltfScene GltfSceneImporter::import(const GltfSceneImportContext& contex
 		imported.materials.push_back(context.material_registry.create(
 			context.device,
 			std::move(mat),
-			context.fallback_texture,
-			context.fallback_normal_texture,
+			context.fallback_textures,
 			context.shader_rid,
 			context.pbr_shader_rid,
 			context.shadow_shader_rid,

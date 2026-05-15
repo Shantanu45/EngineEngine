@@ -31,8 +31,7 @@ struct GltfSceneImportContext {
 	MeshStorage& mesh_storage;
 	MaterialRegistry& material_registry;
 	RenderingDevice* device = nullptr;
-	RID fallback_texture;
-	RID fallback_normal_texture;
+	MaterialFallbackTextures fallback_textures;
 	RID shader_rid;
 	RID pbr_shader_rid;
 	RID shadow_shader_rid;

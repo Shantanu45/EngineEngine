@@ -18,6 +18,8 @@ public:
         loader_    = std::make_unique<ImageLoader>(fs);
     }
 
+    void set_missing_texture(RID texture) { missing_texture_ = texture; }
+
     // Load from disk, compress, and cache.
     RID color(const std::string& path)  { return get(path, /*is_srgb=*/true);  }
     RID linear(const std::string& path) { return get(path, /*is_srgb=*/false); }
@@ -28,12 +30,18 @@ public:
         auto key = std::make_pair(cache_key, is_srgb);
         auto it  = cache_.find(key);
         if (it != cache_.end()) return it->second;
-        return cache_[key] = compress_and_upload(cache_key, img, is_srgb);
+        RID rid = compress_and_upload(cache_key, img, is_srgb);
+        if (!rid.is_valid())
+            return missing_texture_;
+        return cache_[key] = rid;
     }
 
     void free_all() {
-        for (auto& [key, rid] : cache_)
+        for (auto& [key, rid] : cache_) {
+            if (rid == missing_texture_)
+                continue;
             device_->free_rid(rid);
+        }
         cache_.clear();
     }
 
@@ -52,18 +60,27 @@ private:
                 if (mapping) {
                     auto chain = dds_to_bc7_chain(mapping->data<uint8_t>(),
                                                    static_cast<size_t>(mapping->get_size()));
-                    if (chain.valid())
-                        return cache_[key] = upload_texture_bc7(device_, chain, path);
+                    if (chain.valid()) {
+                        RID rid = upload_texture_bc7(device_, chain, path);
+                        if (rid.is_valid())
+                            return cache_[key] = rid;
+                    }
                 }
             }
         }
 
         auto img = loader_->load_from_file(path);
-        return cache_[key] = compress_and_upload(path, img, is_srgb);
+        RID rid = compress_and_upload(path, img, is_srgb);
+        if (!rid.is_valid())
+            return missing_texture_;
+        return cache_[key] = rid;
     }
 
     // Shared path: check disk cache, then compress + save + upload if miss.
     RID compress_and_upload(const std::string& cache_key, const ImageData& img, bool is_srgb) {
+        if (!img.is_valid())
+            return RID();
+
         if (!bc7_cache_) {
             auto fmt = is_srgb ? RDC::DATA_FORMAT_R8G8B8A8_SRGB
                                : RDC::DATA_FORMAT_R8G8B8A8_UNORM;
@@ -110,6 +127,7 @@ private:
     RenderingDevice*             device_    = nullptr;
     FileSystem::Filesystem*      fs_        = nullptr;
     std::unique_ptr<ImageLoader> loader_;
+    RID                          missing_texture_;
     bool                         bc7_cache_ = true;
     std::map<std::pair<std::string, bool>, RID> cache_;
 };

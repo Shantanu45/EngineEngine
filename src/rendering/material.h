@@ -26,6 +26,30 @@ namespace Rendering
 
 	enum class AlphaMode { Opaque, Mask, Blend };
 
+	struct MaterialFallbackTextures
+	{
+		RID color;
+		RID metallic_roughness;
+		RID normal;
+		RID displacement;
+		RID emissive;
+		RID occlusion;
+		RID missing;
+
+		static MaterialFallbackTextures single(RID fallback)
+		{
+			return MaterialFallbackTextures{
+				.color = fallback,
+				.metallic_roughness = fallback,
+				.normal = fallback,
+				.displacement = fallback,
+				.emissive = fallback,
+				.occlusion = fallback,
+				.missing = fallback,
+			};
+		}
+	};
+
 	class Material
 	{
 	public:
@@ -73,22 +97,21 @@ namespace Rendering
 
 		RID build_uniform_set(
 			RenderingDevice* device,
-			RID fallback,
-			RID normal_fallback,
+			const MaterialFallbackTextures& fallbacks,
 			RID shader_rid)
 		{
-			RID normal_texture = normal.is_valid() ? normal : normal_fallback;
-			if (!normal_texture.is_valid())
-				normal_texture = fallback;
+			auto fallback_or_missing = [&](RID fallback) {
+				return fallback.is_valid() ? fallback : fallbacks.missing;
+			};
 
 			return Rendering::UniformSetBuilder{}
 				.add(ubo.as_uniform(0))
-				.add_texture_only(1, diffuse.is_valid()            ? diffuse            : fallback)
-				.add_texture_only(2, metallic_roughness.is_valid() ? metallic_roughness : fallback)
-				.add_texture_only(3, normal_texture)
-				.add_texture_only(4, displacement.is_valid()       ? displacement       : fallback)
-				.add_texture_only(5, emissive.is_valid()           ? emissive           : fallback)
-				.add_texture_only(6, occlusion.is_valid()          ? occlusion          : fallback)
+				.add_texture_only(1, diffuse.is_valid()            ? diffuse            : fallback_or_missing(fallbacks.color))
+				.add_texture_only(2, metallic_roughness.is_valid() ? metallic_roughness : fallback_or_missing(fallbacks.metallic_roughness))
+				.add_texture_only(3, normal.is_valid()             ? normal             : fallback_or_missing(fallbacks.normal))
+				.add_texture_only(4, displacement.is_valid()       ? displacement       : fallback_or_missing(fallbacks.displacement))
+				.add_texture_only(5, emissive.is_valid()           ? emissive           : fallback_or_missing(fallbacks.emissive))
+				.add_texture_only(6, occlusion.is_valid()          ? occlusion          : fallback_or_missing(fallbacks.occlusion))
 				.build(device, shader_rid, 2);
 		}
 
@@ -103,10 +126,10 @@ namespace Rendering
 	class MaterialRegistry
 	{
 	public:
-		MaterialHandle create(RenderingDevice* device, Material mat, RID fallback, RID normal_fallback, RID shader_rid)
+		MaterialHandle create(RenderingDevice* device, Material mat, const MaterialFallbackTextures& fallbacks, RID shader_rid)
 		{
 			mat.create(device);
-			RIDHandle us(mat.build_uniform_set(device, fallback, normal_fallback, shader_rid));
+			RIDHandle us(mat.build_uniform_set(device, fallbacks, shader_rid));
 
 			MaterialHandle h = static_cast<MaterialHandle>(materials.size());
 			materials.push_back(std::move(mat));
@@ -121,34 +144,34 @@ namespace Rendering
 
 		MaterialHandle create(RenderingDevice* device, Material mat, RID fallback, RID shader_rid)
 		{
-			return create(device, std::move(mat), fallback, RID(), shader_rid);
+			return create(device, std::move(mat), MaterialFallbackTextures::single(fallback), shader_rid);
 		}
 
-		MaterialHandle create(RenderingDevice* device, Material mat, RID fallback, RID normal_fallback, RID shader_rid, RID pbr_shader_rid)
+		MaterialHandle create(RenderingDevice* device, Material mat, const MaterialFallbackTextures& fallbacks, RID shader_rid, RID pbr_shader_rid)
 		{
-			return create(device, std::move(mat), fallback, normal_fallback, shader_rid, pbr_shader_rid, RID(), RID());
+			return create(device, std::move(mat), fallbacks, shader_rid, pbr_shader_rid, RID(), RID());
 		}
 
-		MaterialHandle create(RenderingDevice* device, Material mat, RID fallback, RID normal_fallback, RID shader_rid,
+		MaterialHandle create(RenderingDevice* device, Material mat, const MaterialFallbackTextures& fallbacks, RID shader_rid,
 			RID pbr_shader_rid, RID shadow_shader_rid, RID point_shadow_shader_rid,
 			RID transparent_shader_rid = RID(), RID transparent_pbr_shader_rid = RID())
 		{
 			mat.create(device);
-			RIDHandle us(mat.build_uniform_set(device, fallback, normal_fallback, shader_rid));
+			RIDHandle us(mat.build_uniform_set(device, fallbacks, shader_rid));
 			RIDHandle pbr_us(pbr_shader_rid.is_valid()
-				? mat.build_uniform_set(device, fallback, normal_fallback, pbr_shader_rid)
+				? mat.build_uniform_set(device, fallbacks, pbr_shader_rid)
 				: RID());
 			RIDHandle shadow_us(shadow_shader_rid.is_valid()
-				? mat.build_uniform_set(device, fallback, normal_fallback, shadow_shader_rid)
+				? mat.build_uniform_set(device, fallbacks, shadow_shader_rid)
 				: RID());
 			RIDHandle point_shadow_us(point_shadow_shader_rid.is_valid()
-				? mat.build_uniform_set(device, fallback, normal_fallback, point_shadow_shader_rid)
+				? mat.build_uniform_set(device, fallbacks, point_shadow_shader_rid)
 				: RID());
 			RIDHandle transparent_us(transparent_shader_rid.is_valid()
-				? mat.build_uniform_set(device, fallback, normal_fallback, transparent_shader_rid)
+				? mat.build_uniform_set(device, fallbacks, transparent_shader_rid)
 				: RID());
 			RIDHandle transparent_pbr_us(transparent_pbr_shader_rid.is_valid()
-				? mat.build_uniform_set(device, fallback, normal_fallback, transparent_pbr_shader_rid)
+				? mat.build_uniform_set(device, fallbacks, transparent_pbr_shader_rid)
 				: RID());
 
 			MaterialHandle h = static_cast<MaterialHandle>(materials.size());

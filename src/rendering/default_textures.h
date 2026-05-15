@@ -27,6 +27,11 @@ namespace Rendering
 		return create_1x1_texture(device, 255, 255, 255, 255, "fallback_white");
 	}
 
+	inline RID create_metallic_roughness_texture(RenderingDevice* device)
+	{
+		return create_1x1_texture(device, 255, 255, 255, 255, "fallback_metallic_roughness");
+	}
+
 	// 1x1 black — useful as a fallback for emissive, AO, or specular slots.
 	inline RID create_black_texture(RenderingDevice* device)
 	{

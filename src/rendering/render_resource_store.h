@@ -24,6 +24,7 @@ public:
 	MeshStorage& meshes() { return mesh_storage; }
 	RID default_white_texture() const { return white_texture; }
 	RID default_normal_texture() const { return normal_texture; }
+	const MaterialFallbackTextures& default_material_fallbacks() const { return material_fallbacks; }
 	RID skybox_cubemap() const { return skybox_texture; }
 
 	const TextureCache& textures() const { return texture_cache; }
@@ -35,7 +36,10 @@ private:
 	RenderingDevice* device = nullptr;
 	FileSystem::FilesystemInterface* filesystem = nullptr;
 	RIDHandle white_texture;
+	RIDHandle metallic_roughness_texture;
 	RIDHandle normal_texture;
+	RIDHandle missing_texture;
+	MaterialFallbackTextures material_fallbacks;
 	RIDHandle skybox_texture;
 	TextureCache texture_cache;
 	RenderAssetRegistry asset_registry;

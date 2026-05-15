@@ -305,8 +305,7 @@ Rendering::MaterialHandle TerrainRuntime::create_chunk_material(int32_t x, int32
 	return resources.materials().create(
 		device,
 		std::move(material),
-		resources.default_white_texture(),
-		resources.default_normal_texture(),
+		resources.default_material_fallbacks(),
 		render_pipeline.color_pipeline().shader_rid,
 		render_pipeline.pbr_color_pipeline().shader_rid,
 		render_pipeline.shadow_pipeline().shader_rid,
@@ -590,8 +589,7 @@ void TerrainRuntime::create_water_resources()
 	water_material = resources.materials().create(
 		device,
 		std::move(material),
-		resources.default_white_texture(),
-		resources.default_normal_texture(),
+		resources.default_material_fallbacks(),
 		render_pipeline.color_pipeline().shader_rid,
 		render_pipeline.pbr_color_pipeline().shader_rid,
 		render_pipeline.shadow_pipeline().shader_rid,

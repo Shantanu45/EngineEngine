@@ -24,8 +24,7 @@ struct DeferredGltfSceneRequest {
 	FileSystem::FilesystemInterface& filesystem;
 	Rendering::RenderingDevice* device = nullptr;
 	Rendering::RenderResourceStore& resources;
-	RID fallback_texture;
-	RID fallback_normal_texture;
+	Rendering::MaterialFallbackTextures fallback_textures;
 	RID shader_rid;
 	RID pbr_shader_rid;
 	RID shadow_shader_rid;
