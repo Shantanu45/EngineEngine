@@ -20,6 +20,7 @@ struct forward_pass_resource : public blit_scene_input_resource
 	FrameGraphResource shadow_map_in;
 	FrameGraphResource point_shadow_in;
 	FrameGraphResource shadow_uniform_set;
+	FrameGraphResource transparent_shadow_uniform_set;
 	FrameGraphResource framebuffer_resource;
 };
 
@@ -49,15 +50,19 @@ namespace Rendering {
         Pipeline pbr_color_pipeline() const { return pipeline_pbr; }
         Pipeline shadow_pipeline() const { return pipeline_shadow; }
         Pipeline point_shadow_pipeline() const { return pipeline_point_shadow; }
+        Pipeline transparent_pipeline() const { return pipeline_transparent; }
+        Pipeline pbr_transparent_pipeline() const { return pipeline_transparent_pbr; }
 
     private:
         std::vector<Drawable> build_main_drawables(const SceneView& view) const;
         void create_shared_resources(RenderingDevice* device);
         void create_samplers(RenderingDevice* device);
         void create_main_pipelines(WSI* wsi, RenderingDevice* device);
+        void create_transparent_pipelines(WSI* wsi, RenderingDevice* device);
         void create_overlay_pipelines(WSI* wsi, RenderingDevice* device);
         void create_shadow_pipelines(WSI* wsi, RenderingDevice* device);
         void create_main_uniform_sets(RenderingDevice* device);
+        void create_transparent_uniform_sets(RenderingDevice* device);
         void create_overlay_uniform_sets(RenderingDevice* device, RID cubemap);
         void create_shadow_uniform_sets(RenderingDevice* device);
 
@@ -78,6 +83,8 @@ namespace Rendering {
         // Pipelines
         Pipeline pipeline_color;
         Pipeline pipeline_pbr;
+        Pipeline pipeline_transparent;
+        Pipeline pipeline_transparent_pbr;
         Pipeline pipeline_light;
         Pipeline pipeline_grid;
         Pipeline pipeline_shadow;
@@ -87,6 +94,8 @@ namespace Rendering {
         // Uniform sets — declared last so they are destroyed first.
         RIDHandle uniform_set_0;
         RIDHandle uniform_set_0_pbr;
+        RIDHandle uniform_set_0_transparent;
+        RIDHandle uniform_set_0_transparent_pbr;
         RIDHandle uniform_set_0_light;
         RIDHandle uniform_set_0_shadow;
         RIDHandle uniform_set_0_point_shadow;

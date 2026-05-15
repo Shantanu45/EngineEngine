@@ -10,6 +10,7 @@
 #include "util/profiler.h"
 #include "util/small_vector.h"
 
+#include <algorithm>
 #include <iterator>
 #include <utility>
 
@@ -21,9 +22,11 @@ void ForwardRenderer::initialize(WSI* wsi, RenderingDevice* dev, RID cubemap) {
     create_shared_resources(dev);
     create_samplers(dev);
     create_main_pipelines(wsi, dev);
+    create_transparent_pipelines(wsi, dev);
     create_overlay_pipelines(wsi, dev);
     create_shadow_pipelines(wsi, dev);
     create_main_uniform_sets(dev);
+    create_transparent_uniform_sets(dev);
     create_overlay_uniform_sets(dev, cubemap);
     create_shadow_uniform_sets(dev);
     debug_renderer.initialize(dev);
@@ -87,6 +90,7 @@ void ForwardRenderer::create_main_pipelines(WSI* wsi, RenderingDevice*)
                       "assets://shaders/forward/forward.frag" }, "light_map")
         .set_vertex_format(vertex_format)
         .set_depth_stencil_state(ds_standard)
+        .set_blend_state(RDC::PipelineColorBlendState::create_disabled())
         .build(main_fb_format);
 
     pipeline_pbr = PipelineBuilder{}
@@ -94,6 +98,43 @@ void ForwardRenderer::create_main_pipelines(WSI* wsi, RenderingDevice*)
                       "assets://shaders/pbr/forward.frag" }, "pbr_light_map")
         .set_vertex_format(vertex_format)
         .set_depth_stencil_state(ds_standard)
+        .set_blend_state(RDC::PipelineColorBlendState::create_disabled())
+        .build(main_fb_format);
+}
+
+void ForwardRenderer::create_transparent_pipelines(WSI* wsi, RenderingDevice*)
+{
+    auto vertex_format = wsi->get_vertex_format_by_type(VERTEX_FORMAT_VARIATIONS::DEFAULT);
+
+    RD::AttachmentFormat color_att;
+    color_att.format      = RD::DATA_FORMAT_R16G16B16A16_SFLOAT;
+    color_att.usage_flags = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT;
+
+    RD::AttachmentFormat depth_att;
+    depth_att.format      = RD::DATA_FORMAT_D32_SFLOAT;
+    depth_att.usage_flags = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+
+    auto main_fb_format = RD::get_singleton()->framebuffer_format_create({ color_att, depth_att });
+
+    RDC::PipelineDepthStencilState ds_transparent;
+    ds_transparent.enable_depth_test      = true;
+    ds_transparent.enable_depth_write     = false;
+    ds_transparent.depth_compare_operator = RDC::COMPARE_OP_LESS_OR_EQUAL;
+
+    pipeline_transparent = PipelineBuilder{}
+        .set_shader({ "assets://shaders/forward/forward.vert",
+                      "assets://shaders/forward/forward.frag" }, "forward_transparent")
+        .set_vertex_format(vertex_format)
+        .set_depth_stencil_state(ds_transparent)
+        .set_blend_state(RDC::PipelineColorBlendState::create_blend())
+        .build(main_fb_format);
+
+    pipeline_transparent_pbr = PipelineBuilder{}
+        .set_shader({ "assets://shaders/pbr/forward.vert",
+                      "assets://shaders/pbr/forward.frag" }, "forward_transparent_pbr")
+        .set_vertex_format(vertex_format)
+        .set_depth_stencil_state(ds_transparent)
+        .set_blend_state(RDC::PipelineColorBlendState::create_blend())
         .build(main_fb_format);
 }
 
@@ -210,6 +251,27 @@ void ForwardRenderer::create_main_uniform_sets(RenderingDevice* dev)
         .build(dev, pipeline_pbr.shader_rid, 0);
 }
 
+void ForwardRenderer::create_transparent_uniform_sets(RenderingDevice* dev)
+{
+    uniform_set_0_transparent = UniformSetBuilder{}
+        .add(frame_ubo.as_uniform(0))
+        .add(shadow_ubo.as_uniform(1))
+        .add(light_ubo.as_uniform(2))
+        .add_sampler(3, sampler)
+        .add_sampler(4, shadow_sampler)
+        .add_sampler(5, point_shadow_sampler)
+        .build(dev, pipeline_transparent.shader_rid, 0);
+
+    uniform_set_0_transparent_pbr = UniformSetBuilder{}
+        .add(frame_ubo.as_uniform(0))
+        .add(shadow_ubo.as_uniform(1))
+        .add(light_ubo.as_uniform(2))
+        .add_sampler(3, sampler)
+        .add_sampler(4, shadow_sampler)
+        .add_sampler(5, point_shadow_sampler)
+        .build(dev, pipeline_transparent_pbr.shader_rid, 0);
+}
+
 void ForwardRenderer::create_overlay_uniform_sets(RenderingDevice* dev, RID cubemap)
 {
     uniform_set_0_light = UniformSetBuilder{}
@@ -243,6 +305,8 @@ void ForwardRenderer::shutdown()
     uniform_set_0_point_shadow.reset();
     uniform_set_0_shadow.reset();
     uniform_set_0_light.reset();
+    uniform_set_0_transparent_pbr.reset();
+    uniform_set_0_transparent.reset();
     uniform_set_0_pbr.reset();
     uniform_set_0.reset();
 
@@ -267,6 +331,8 @@ std::vector<Drawable> ForwardRenderer::build_main_drawables(const SceneView& vie
     out.reserve(view.instances.size() + 2);
     std::vector<Drawable> opaque_drawables;
     opaque_drawables.reserve(view.instances.size());
+    std::vector<const MeshInstance*> transparent_instances;
+    transparent_instances.reserve(view.instances.size());
     std::vector<Drawable> ordered_non_opaque_drawables;
     ordered_non_opaque_drawables.reserve(view.instances.size());
 
@@ -283,33 +349,63 @@ std::vector<Drawable> ForwardRenderer::build_main_drawables(const SceneView& vie
             { { (RID)uniform_set_0_light, 0 } }));
 
     for (const auto& inst : view.instances) {
-        bool opaque = inst.category == MeshCategory::Opaque;
-        Pipeline p    = opaque
-            ? (view.use_pbr_lighting ? pipeline_pbr : pipeline_color)
-            : pipeline_light;
-        RID      set0 = opaque
-            ? (view.use_pbr_lighting ? (RID)uniform_set_0_pbr : (RID)uniform_set_0)
-            : (RID)uniform_set_0_light;
-        auto drawable = Drawable::make(
-            p, inst.mesh,
-            PushConstantData::from(ObjectData_UBO{ inst.model, inst.normal_matrix }),
-            { { set0, 0 } },
-            inst.material_sets
-        );
+        const bool opaque = inst.category == MeshCategory::Opaque && !inst.transparent;
+        const bool transparent = inst.category == MeshCategory::Opaque && inst.transparent;
         if (opaque) {
+            Pipeline p = view.use_pbr_lighting ? pipeline_pbr : pipeline_color;
+            RID set0 = view.use_pbr_lighting ? (RID)uniform_set_0_pbr : (RID)uniform_set_0;
+            auto drawable = Drawable::make(
+                p, inst.mesh,
+                PushConstantData::from(ObjectData_UBO{ inst.model, inst.normal_matrix }),
+                { { set0, 0 } },
+                inst.material_sets
+            );
             opaque_drawables.push_back(std::move(drawable));
+        } else if (transparent) {
+            transparent_instances.push_back(&inst);
         } else {
+            auto drawable = Drawable::make(
+                pipeline_light, inst.mesh,
+                PushConstantData::from(ObjectData_UBO{ inst.model, inst.normal_matrix }),
+                { { (RID)uniform_set_0_light, 0 } },
+                inst.material_sets
+            );
             ordered_non_opaque_drawables.push_back(std::move(drawable));
         }
     }
 
     sort_drawables_for_state_reuse(opaque_drawables);
+    const glm::vec3 camera_pos = view.camera.cameraPos;
+    std::sort(transparent_instances.begin(), transparent_instances.end(),
+        [camera_pos](const MeshInstance* a, const MeshInstance* b) {
+            const glm::vec3 da = a->sort_center - camera_pos;
+            const glm::vec3 db = b->sort_center - camera_pos;
+            return glm::dot(da, da) > glm::dot(db, db);
+        });
+
+    const Pipeline transparent_pipeline = view.use_pbr_lighting ? pipeline_transparent_pbr : pipeline_transparent;
+    const RID transparent_set0 = view.use_pbr_lighting
+        ? (RID)uniform_set_0_transparent_pbr
+        : (RID)uniform_set_0_transparent;
+    std::vector<Drawable> transparent_drawables;
+    transparent_drawables.reserve(transparent_instances.size());
+    for (const auto* inst : transparent_instances) {
+        transparent_drawables.push_back(Drawable::make(
+            transparent_pipeline, inst->mesh,
+            PushConstantData::from(ObjectData_UBO{ inst->model, inst->normal_matrix }),
+            { { transparent_set0, 0 } },
+            inst->transparent_material_sets
+        ));
+    }
     out.insert(out.end(),
                std::make_move_iterator(opaque_drawables.begin()),
                std::make_move_iterator(opaque_drawables.end()));
     out.insert(out.end(),
                std::make_move_iterator(ordered_non_opaque_drawables.begin()),
                std::make_move_iterator(ordered_non_opaque_drawables.end()));
+    out.insert(out.end(),
+               std::make_move_iterator(transparent_drawables.begin()),
+               std::make_move_iterator(transparent_drawables.end()));
 
     return out;
 }
@@ -364,6 +460,10 @@ void ForwardRenderer::setup_passes(FrameGraph& fg, FrameGraphBlackboard& bb,
 
     auto active_color_pipeline = view.use_pbr_lighting ? pipeline_pbr : pipeline_color;
     auto color_pipeline_rid = active_color_pipeline.pipeline_rid;
+    auto color_shader_rid = active_color_pipeline.shader_rid;
+    auto active_transparent_pipeline = view.use_pbr_lighting ? pipeline_transparent_pbr : pipeline_transparent;
+    auto transparent_pipeline_rid = active_transparent_pipeline.pipeline_rid;
+    auto transparent_shader_rid = active_transparent_pipeline.shader_rid;
 
     bb.add<forward_pass_resource>() =
         fg.add_callback_pass<forward_pass_resource>(
@@ -398,7 +498,7 @@ void ForwardRenderer::setup_passes(FrameGraph& fg, FrameGraphBlackboard& bb,
                     "shadow uniform set",
                     {
                         .build = [&fg,
-                                  shader_rid = active_color_pipeline.shader_rid,
+                                  shader_rid = color_shader_rid,
                                   shadow_id  = shadow_res.shadow_map,
                                   point_id   = point_shadow_res.shadow_cubemap]
                                  (RenderContext& rc) -> RID {
@@ -414,6 +514,26 @@ void ForwardRenderer::setup_passes(FrameGraph& fg, FrameGraphBlackboard& bb,
                     });
                 data.shadow_uniform_set = builder.write(data.shadow_uniform_set, FrameGraph::kFlagsIgnored);
 
+                data.transparent_shadow_uniform_set = builder.create<FrameGraphUniformSet>(
+                    "transparent shadow uniform set",
+                    {
+                        .build = [&fg,
+                                  shader_rid = transparent_shader_rid,
+                                  shadow_id  = shadow_res.shadow_map,
+                                  point_id   = point_shadow_res.shadow_cubemap]
+                                 (RenderContext& rc) -> RID {
+                            auto& shadow_tex       = fg.get_resource<FrameGraphTexture>(shadow_id);
+                            auto& point_shadow_tex = fg.get_resource<FrameGraphTexture>(point_id);
+                            return UniformSetBuilder{}
+                                .add_texture_only(0, shadow_tex.texture_rid)
+                                .add_texture_only(1, point_shadow_tex.texture_rid)
+                                .build_cached(rc.device, shader_rid, 1);
+                        },
+                        .name = "transparent shadow uniform set",
+                        .owns_rid = false
+                    });
+                data.transparent_shadow_uniform_set = builder.write(data.transparent_shadow_uniform_set, FrameGraph::kFlagsIgnored);
+
                 data.framebuffer_resource = builder.create<FrameGraphFramebuffer>(
                     "forward framebuffer",
                     {
@@ -426,13 +546,14 @@ void ForwardRenderer::setup_passes(FrameGraph& fg, FrameGraphBlackboard& bb,
                     });
                 data.framebuffer_resource = builder.write(data.framebuffer_resource, FrameGraph::kFlagsIgnored);
             },
-            [drawables = main_draws, &storage, color_pipeline_rid](
+            [drawables = main_draws, &storage, color_pipeline_rid, transparent_pipeline_rid](
                 const forward_pass_resource& data, FrameGraphPassResources& resources, void* ctx)
             {
                 auto& rc  = *static_cast<RenderContext*>(ctx);
                 auto  cmd = rc.command_buffer;
 
                 RID uniform_set_1 = resources.get<FrameGraphUniformSet>(data.shadow_uniform_set).uniform_set_rid;
+                RID transparent_uniform_set_1 = resources.get<FrameGraphUniformSet>(data.transparent_shadow_uniform_set).uniform_set_rid;
                 RID frame_buffer  = resources.get<FrameGraphFramebuffer>(data.framebuffer_resource).framebuffer_rid;
 
                 uint32_t w = rc.device->screen_get_width();
@@ -449,6 +570,8 @@ void ForwardRenderer::setup_passes(FrameGraph& fg, FrameGraphBlackboard& bb,
                 for (auto drawable : drawables) {
                     if (drawable.pipeline.pipeline_rid == color_pipeline_rid)
                         drawable.set_uniform_set({ uniform_set_1, 1 });
+                    else if (drawable.pipeline.pipeline_rid == transparent_pipeline_rid)
+                        drawable.set_uniform_set({ transparent_uniform_set_1, 1 });
                     submit_drawable(rc, cmd, drawable, storage);
                 }
 
