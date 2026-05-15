@@ -66,14 +66,22 @@ float value_noise(float x, float y, uint seed)
 
 vec2 gradient(uint x, uint y, uint seed)
 {
-	uint h = hash_u32(x, y, seed) & 3u;
+	uint h = hash_u32(x, y, seed) & 7u;
 	if (h == 0u)
-		return vec2(1.0, 1.0);
+		return vec2(1.0, 0.0);
 	if (h == 1u)
-		return vec2(-1.0, 1.0);
+		return vec2(0.70710678118, 0.70710678118);
 	if (h == 2u)
-		return vec2(-1.0, -1.0);
-	return vec2(1.0, -1.0);
+		return vec2(0.0, 1.0);
+	if (h == 3u)
+		return vec2(-0.70710678118, 0.70710678118);
+	if (h == 4u)
+		return vec2(-1.0, 0.0);
+	if (h == 5u)
+		return vec2(-0.70710678118, -0.70710678118);
+	if (h == 6u)
+		return vec2(0.0, -1.0);
+	return vec2(0.70710678118, -0.70710678118);
 }
 
 float perlin_noise(float x, float y, uint seed)
@@ -92,7 +100,7 @@ float perlin_noise(float x, float y, uint seed)
 	float c = dot(gradient(uint(x0), uint(y0 + 1), seed), vec2(xf, yf - 1.0));
 	float d = dot(gradient(uint(x0 + 1), uint(y0 + 1), seed), vec2(xf - 1.0, yf - 1.0));
 
-	return mix(mix(a, b, tx), mix(c, d, tx), ty);
+	return mix(mix(a, b, tx), mix(c, d, tx), ty) * 1.41421356237;
 }
 
 float fractal_noise(float x, float y)

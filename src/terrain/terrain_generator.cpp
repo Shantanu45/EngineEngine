@@ -52,10 +52,17 @@ float value_noise(float x, float y, uint32_t seed)
 
 glm::vec2 gradient(uint32_t x, uint32_t y, uint32_t seed)
 {
-	const uint32_t h = hash(x, y, seed) & 3u;
-	constexpr glm::vec2 dirs[4] = {
-		{ 1.0f,  1.0f}, {-1.0f,  1.0f},
-		{-1.0f, -1.0f}, { 1.0f, -1.0f}
+	const uint32_t h = hash(x, y, seed) & 7u;
+	constexpr float inv_sqrt2 = 0.70710678118f;
+	constexpr glm::vec2 dirs[8] = {
+		{ 1.0f, 0.0f },
+		{ inv_sqrt2, inv_sqrt2 },
+		{ 0.0f, 1.0f },
+		{ -inv_sqrt2, inv_sqrt2 },
+		{ -1.0f, 0.0f },
+		{ -inv_sqrt2, -inv_sqrt2 },
+		{ 0.0f, -1.0f },
+		{ inv_sqrt2, -inv_sqrt2 },
 	};
 	return dirs[h];
 }
@@ -76,7 +83,7 @@ float perlin_noise(float x, float y, uint32_t seed)
 	const float c = glm::dot(gradient(x0, y0 + 1, seed), { xf,        yf - 1.0f });
 	const float d = glm::dot(gradient(x0 + 1, y0 + 1, seed), { xf - 1.0f, yf - 1.0f });
 
-	return lerp(lerp(a, b, tx), lerp(c, d, tx), ty);
+	return lerp(lerp(a, b, tx), lerp(c, d, tx), ty) * 1.41421356237f;
 }
 
 float fractal_noise(float x, float y, const TerrainSettings& settings)
