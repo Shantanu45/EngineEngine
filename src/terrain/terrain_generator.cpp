@@ -86,9 +86,16 @@ float perlin_noise(float x, float y, uint32_t seed)
 	return lerp(lerp(a, b, tx), lerp(c, d, tx), ty) * 1.41421356237f;
 }
 
-float fractal_noise(float x, float y, const TerrainSettings& settings)
+float base_noise(float x, float y, uint32_t seed, NoiseType type)
 {
-	float frequency = settings.base_frequency;
+	return type == NoiseType::Perlin
+		? perlin_noise(x, y, seed)
+		: value_noise(x, y, seed);
+}
+
+float fractal_noise_scaled(float x, float y, const TerrainSettings& settings, float frequency_scale, uint32_t seed_offset)
+{
+	float frequency = settings.base_frequency * frequency_scale;
 	float amplitude = 1.0f;
 	float sample = 0.0f;
 	float norm = 0.0f;
@@ -96,16 +103,67 @@ float fractal_noise(float x, float y, const TerrainSettings& settings)
 	for (uint32_t octave = 0; octave < settings.octaves; ++octave) {
 		// Each octave samples the same continuous world-space point at a higher
 		// frequency and lower amplitude. The normalized sum stays roughly [-1, 1].
-		sample += ((settings.noise_type == NoiseType::Perlin)
-			? perlin_noise(x * frequency, y * frequency, settings.seed + octave * 1013u)
-			: value_noise(x * frequency, y * frequency, settings.seed + octave * 1013u)) * amplitude;
-		//value += value_noise(x * frequency, y * frequency, settings.seed + octave * 1013u) * amplitude;
+		sample += base_noise(
+			x * frequency,
+			y * frequency,
+			settings.seed + seed_offset + octave * 1013u,
+			settings.noise_type) * amplitude;
 		norm += amplitude;
 		frequency *= settings.lacunarity;
 		amplitude *= settings.persistence;
 	}
 
 	return norm > 0.0f ? sample / norm : 0.0f;
+}
+
+float fractal_noise(float x, float y, const TerrainSettings& settings)
+{
+	return fractal_noise_scaled(x, y, settings, 1.0f, 0u);
+}
+
+float ridged_noise(float x, float y, const TerrainSettings& settings)
+{
+	float frequency = settings.base_frequency;
+	float amplitude = 1.0f;
+	float sample = 0.0f;
+	float norm = 0.0f;
+
+	for (uint32_t octave = 0; octave < settings.octaves; ++octave) {
+		const float n = base_noise(
+			x * frequency,
+			y * frequency,
+			settings.seed + 7919u + octave * 1013u,
+			settings.noise_type);
+		const float ridge = 1.0f - std::abs(n);
+		sample += ridge * ridge * amplitude;
+		norm += amplitude;
+		frequency *= settings.lacunarity;
+		amplitude *= settings.persistence;
+	}
+
+	return norm > 0.0f ? sample / norm : 0.0f;
+}
+
+float shape_height(float h, float detail, float ridge, const TerrainSettings& settings)
+{
+	h += detail * settings.detail_strength;
+	h += (ridge - 0.45f) * settings.ridged_strength;
+	h /= 1.0f + std::abs(settings.detail_strength) + std::abs(settings.ridged_strength) * 0.55f;
+
+	float shaped = h * 0.75f + h * h * h * 0.25f;
+
+	const float levels = std::max(settings.terrace_levels, 1.0f);
+	const float terrace01 = std::floor(glm::clamp(shaped * 0.5f + 0.5f, 0.0f, 1.0f) * levels) / levels;
+	const float terraced = terrace01 * 2.0f - 1.0f;
+	shaped = glm::mix(shaped, terraced, glm::clamp(settings.terrace_strength, 0.0f, 1.0f));
+
+	const float roughness = glm::clamp(std::abs(detail), 0.0f, 1.0f);
+	const float peaks = glm::smoothstep(0.25f, 0.9f, shaped);
+	const float valleys = glm::smoothstep(0.25f, 0.9f, -shaped);
+	shaped -= peaks * roughness * settings.erosion_strength;
+	shaped += valleys * roughness * settings.erosion_strength * 0.5f;
+
+	return shaped;
 }
 
 } // namespace
@@ -121,9 +179,14 @@ float sample_terrain_height(const TerrainSettings& settings, float x, float z)
 	float wx2 = fractal_noise(x + wx1, z + wz1, settings) * settings.warp_strength2;
 	float wz2 = fractal_noise(x + wx1 + 1.7f, z + wz1 + 9.2f, settings) * settings.warp_strength2;
 
-	const float h = fractal_noise(x + wx2, z + wz2, settings);
-	const float shaped = h * 0.75f + h * h * h * 0.25f;
-	return shaped * settings.height_scale;
+	const float sx = x + wx2;
+	const float sz = z + wz2;
+	const float base = fractal_noise(sx, sz, settings);
+	const float macro = fractal_noise_scaled(sx, sz, settings, settings.macro_frequency_scale, 3571u);
+	const float detail = fractal_noise_scaled(sx, sz, settings, settings.detail_frequency_scale, 1543u);
+	const float ridge = ridged_noise(sx, sz, settings);
+	const float h = glm::mix(base, macro, 0.35f);
+	return shape_height(h, detail, ridge, settings) * settings.height_scale;
 }
 
 //float sample_terrain_height(const TerrainSettings& settings, float x, float z)
@@ -133,6 +196,37 @@ float sample_terrain_height(const TerrainSettings& settings, float x, float z)
 //	const float shaped = h * 0.75f + h * h * h * 0.25f;
 //	return shaped * settings.height_scale;
 //}
+
+glm::vec3 sample_terrain_color(const TerrainSettings& settings, float x, float z)
+{
+	const float normal_sample_step = settings.chunk_size / glm::max(static_cast<float>(settings.chunk_resolution), 1.0f);
+	const float h = sample_terrain_height(settings, x, z);
+	const float h_l = sample_terrain_height(settings, x - normal_sample_step, z);
+	const float h_r = sample_terrain_height(settings, x + normal_sample_step, z);
+	const float h_d = sample_terrain_height(settings, x, z - normal_sample_step);
+	const float h_u = sample_terrain_height(settings, x, z + normal_sample_step);
+	const glm::vec3 normal = glm::normalize(glm::vec3(h_l - h_r, normal_sample_step * 2.0f, h_d - h_u));
+	const float slope = 1.0f - glm::clamp(normal.y, 0.0f, 1.0f);
+
+	const glm::vec3 low_grass(0.10f, 0.23f, 0.11f);
+	const glm::vec3 grass(0.26f, 0.45f, 0.18f);
+	const glm::vec3 lush_grass(0.14f, 0.38f, 0.16f);
+	const glm::vec3 dry_grass(0.48f, 0.42f, 0.22f);
+	const glm::vec3 rock(0.42f, 0.40f, 0.36f);
+	const glm::vec3 snow(0.86f, 0.88f, 0.84f);
+
+	const float moisture = glm::clamp(
+		fractal_noise_scaled(x, z, settings, settings.moisture_frequency / glm::max(settings.base_frequency, 0.0001f), 12289u) * 0.5f + 0.5f,
+		0.0f,
+		1.0f);
+	const float height01 = glm::clamp((h / glm::max(settings.height_scale, 0.001f) + 1.0f) * 0.5f, 0.0f, 1.0f);
+	glm::vec3 color = glm::mix(low_grass, grass, glm::smoothstep(0.18f, 0.42f, height01));
+	color = glm::mix(color, lush_grass, moisture * settings.moisture_strength * (1.0f - slope));
+	color = glm::mix(color, dry_grass, glm::smoothstep(0.45f, 0.68f, height01) * (1.0f - moisture * 0.45f));
+	color = glm::mix(color, rock, glm::smoothstep(0.22f, 0.55f, slope));
+	color = glm::mix(color, snow, glm::smoothstep(0.76f, 0.92f, height01));
+	return color;
+}
 
 Rendering::Shapes::ShapeData generate_terrain_mesh(const TerrainSettings& settings)
 {

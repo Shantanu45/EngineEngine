@@ -2,6 +2,8 @@
 
 #include <cstdint>
 
+#include <glm/glm.hpp>
+
 #include "rendering/primitve_shapes.h"
 
 namespace Terrain {
@@ -45,6 +47,33 @@ struct TerrainSettings {
 
 	float warp_strength = 1;
 	float warp_strength2 = 0.5f;
+
+	/** Low-frequency multiplier used for broad landforms. */
+	float macro_frequency_scale = 0.45f;
+
+	/** High-frequency multiplier used for fine terrain detail. */
+	float detail_frequency_scale = 3.0f;
+
+	/** Amount of high-frequency detail blended into the height field. */
+	float detail_strength = 0.16f;
+
+	/** Amount of ridged mountain structure added to the height field. */
+	float ridged_strength = 0.22f;
+
+	/** Amount of subtle stepped plateau shaping. */
+	float terrace_strength = 0.08f;
+
+	/** Number of height bands used by terrace shaping. */
+	float terrace_levels = 8.0f;
+
+	/** Softens extreme highs/lows using detail noise as a cheap erosion proxy. */
+	float erosion_strength = 0.10f;
+
+	/** Low-frequency biome/moisture variation used by terrain color. */
+	float moisture_frequency = 0.018f;
+
+	/** Strength of moisture tinting in terrain color. */
+	float moisture_strength = 0.35f;
 };
 
 /**
@@ -55,6 +84,11 @@ struct TerrainSettings {
  * lets streamed chunks match each other spatially.
  */
 float sample_terrain_height(const TerrainSettings& settings, float x, float z);
+
+/**
+ * Samples terrain albedo from the same height, slope, and biome rules used by generated color textures.
+ */
+glm::vec3 sample_terrain_color(const TerrainSettings& settings, float x, float z);
 
 /**
  * Generates the default terrain chunk at chunk coordinate (0, 0).

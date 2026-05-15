@@ -70,6 +70,18 @@ struct TerrainComputeParams {
 	float warp_strength2 = 0.0f;
 	float chunk_x = 0.0f;
 	float chunk_z = 0.0f;
+	float macro_frequency_scale = 0.0f;
+	float detail_frequency_scale = 0.0f;
+	float detail_strength = 0.0f;
+	float ridged_strength = 0.0f;
+	float terrace_strength = 0.0f;
+	float terrace_levels = 0.0f;
+	float erosion_strength = 0.0f;
+	float moisture_frequency = 0.0f;
+	float moisture_strength = 0.0f;
+	float _pad0 = 0.0f;
+	float _pad1 = 0.0f;
+	float _pad2 = 0.0f;
 };
 
 } // namespace
@@ -321,13 +333,6 @@ RID TerrainRuntime::create_chunk_color_texture(int32_t chunk_x, int32_t chunk_z)
 	const float half_chunk = terrain_settings.chunk_size * 0.5f;
 	const float origin_x = static_cast<float>(chunk_x) * terrain_settings.chunk_size - half_chunk;
 	const float origin_z = static_cast<float>(chunk_z) * terrain_settings.chunk_size - half_chunk;
-	const float normal_sample_step = terrain_settings.chunk_size / static_cast<float>(terrain_settings.chunk_resolution);
-
-	const glm::vec3 low_grass(0.10f, 0.23f, 0.11f);
-	const glm::vec3 grass(0.26f, 0.45f, 0.18f);
-	const glm::vec3 dry_grass(0.48f, 0.42f, 0.22f);
-	const glm::vec3 rock(0.42f, 0.40f, 0.36f);
-	const glm::vec3 snow(0.86f, 0.88f, 0.84f);
 
 	Util::SmallVector<uint8_t> pixels;
 	pixels.resize(static_cast<size_t>(texture_size) * static_cast<size_t>(texture_size) * 4u);
@@ -336,22 +341,7 @@ RID TerrainRuntime::create_chunk_color_texture(int32_t chunk_x, int32_t chunk_z)
 		for (uint32_t x = 0; x < texture_size; ++x) {
 			const float world_x = origin_x + static_cast<float>(x) * step;
 			const float world_z = origin_z + static_cast<float>(z) * step;
-			const float h = sample_terrain_height(terrain_settings, world_x, world_z);
-
-			const float h_l = sample_terrain_height(terrain_settings, world_x - normal_sample_step, world_z);
-			const float h_r = sample_terrain_height(terrain_settings, world_x + normal_sample_step, world_z);
-			const float h_d = sample_terrain_height(terrain_settings, world_x, world_z - normal_sample_step);
-			const float h_u = sample_terrain_height(terrain_settings, world_x, world_z + normal_sample_step);
-			const glm::vec3 normal = glm::normalize(glm::vec3(h_l - h_r, normal_sample_step * 2.0f, h_d - h_u));
-			const float slope = 1.0f - glm::clamp(normal.y, 0.0f, 1.0f);
-
-			// Derive an albedo palette from height and slope: low/flat areas are greener,
-			// steep areas become rockier, and high elevations pick up snow.
-			const float height01 = glm::clamp((h / glm::max(terrain_settings.height_scale, 0.001f) + 1.0f) * 0.5f, 0.0f, 1.0f);
-			glm::vec3 color = glm::mix(low_grass, grass, glm::smoothstep(0.18f, 0.42f, height01));
-			color = glm::mix(color, dry_grass, glm::smoothstep(0.45f, 0.68f, height01) * 0.35f);
-			color = glm::mix(color, rock, glm::smoothstep(0.22f, 0.55f, slope));
-			color = glm::mix(color, snow, glm::smoothstep(0.76f, 0.92f, height01));
+			const glm::vec3 color = sample_terrain_color(terrain_settings, world_x, world_z);
 
 			const size_t offset = (static_cast<size_t>(z) * texture_size + x) * 4u;
 			pixels[offset + 0u] = static_cast<uint8_t>(glm::clamp(color.r, 0.0f, 1.0f) * 255.0f);
@@ -398,6 +388,15 @@ RID TerrainRuntime::create_chunk_color_texture_gpu(int32_t chunk_x, int32_t chun
 		.warp_strength2 = terrain_settings.warp_strength2,
 		.chunk_x = static_cast<float>(chunk_x),
 		.chunk_z = static_cast<float>(chunk_z),
+		.macro_frequency_scale = terrain_settings.macro_frequency_scale,
+		.detail_frequency_scale = terrain_settings.detail_frequency_scale,
+		.detail_strength = terrain_settings.detail_strength,
+		.ridged_strength = terrain_settings.ridged_strength,
+		.terrace_strength = terrain_settings.terrace_strength,
+		.terrace_levels = terrain_settings.terrace_levels,
+		.erosion_strength = terrain_settings.erosion_strength,
+		.moisture_frequency = terrain_settings.moisture_frequency,
+		.moisture_strength = terrain_settings.moisture_strength,
 	};
 
 	device->buffer_update(height_compute_params_buffer, 0, sizeof(params), &params);
@@ -597,6 +596,15 @@ void TerrainRuntime::dispatch_height_compute()
 		.warp_strength2 = terrain_settings.warp_strength2,
 		.chunk_x = static_cast<float>(chunk_center.x),
 		.chunk_z = static_cast<float>(chunk_center.y),
+		.macro_frequency_scale = terrain_settings.macro_frequency_scale,
+		.detail_frequency_scale = terrain_settings.detail_frequency_scale,
+		.detail_strength = terrain_settings.detail_strength,
+		.ridged_strength = terrain_settings.ridged_strength,
+		.terrace_strength = terrain_settings.terrace_strength,
+		.terrace_levels = terrain_settings.terrace_levels,
+		.erosion_strength = terrain_settings.erosion_strength,
+		.moisture_frequency = terrain_settings.moisture_frequency,
+		.moisture_strength = terrain_settings.moisture_strength,
 	};
 
 	device->buffer_update(height_compute_params_buffer, 0, sizeof(params), &params);
@@ -792,13 +800,13 @@ void TerrainRuntime::draw_ui()
 	if (ImGui::InputInt("Seed", &seed))
 		terrain_settings.seed = static_cast<uint32_t>(std::max(seed, 0));
 
-	float warp_strength = static_cast<int>(terrain_settings.warp_strength);
+	float warp_strength = terrain_settings.warp_strength;
 	if (ImGui::InputFloat("Warp Strength", &warp_strength))
-		terrain_settings.warp_strength = static_cast<uint32_t>(warp_strength);
+		terrain_settings.warp_strength = glm::max(warp_strength, 0.0f);
 
-	float warp_strength2 = static_cast<int>(terrain_settings.warp_strength2);
+	float warp_strength2 = terrain_settings.warp_strength2;
 	if (ImGui::InputFloat("Warp Strength 2", &warp_strength2))
-		terrain_settings.warp_strength2 = static_cast<uint32_t>(warp_strength2);
+		terrain_settings.warp_strength2 = glm::max(warp_strength2, 0.0f);
 
 	int resolution = static_cast<int>(terrain_settings.chunk_resolution);
 	if (ImGui::SliderInt("Resolution", &resolution, 8, 256))
@@ -830,6 +838,15 @@ void TerrainRuntime::draw_ui()
 
 	ImGui::DragFloat("Lacunarity", &terrain_settings.lacunarity, 0.01f, 1.0f, 4.0f);
 	ImGui::DragFloat("Persistence", &terrain_settings.persistence, 0.01f, 0.0f, 1.0f);
+	ImGui::DragFloat("Macro Scale", &terrain_settings.macro_frequency_scale, 0.01f, 0.05f, 2.0f);
+	ImGui::DragFloat("Detail Scale", &terrain_settings.detail_frequency_scale, 0.05f, 1.0f, 10.0f);
+	ImGui::DragFloat("Detail Strength", &terrain_settings.detail_strength, 0.01f, 0.0f, 1.0f);
+	ImGui::DragFloat("Ridged Strength", &terrain_settings.ridged_strength, 0.01f, 0.0f, 1.0f);
+	ImGui::DragFloat("Terrace Strength", &terrain_settings.terrace_strength, 0.01f, 0.0f, 1.0f);
+	ImGui::DragFloat("Terrace Levels", &terrain_settings.terrace_levels, 0.25f, 1.0f, 32.0f);
+	ImGui::DragFloat("Erosion Strength", &terrain_settings.erosion_strength, 0.01f, 0.0f, 1.0f);
+	ImGui::DragFloat("Moisture Frequency", &terrain_settings.moisture_frequency, 0.001f, 0.001f, 0.1f, "%.3f");
+	ImGui::DragFloat("Moisture Strength", &terrain_settings.moisture_strength, 0.01f, 0.0f, 1.0f);
 
 	if (ImGui::Button("Regenerate"))
 		regenerate_requested = true;
