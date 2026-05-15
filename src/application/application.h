@@ -48,7 +48,7 @@ namespace EE
 
 		virtual std::string get_name()
 		{
-			return "maker";
+			return "EEngine";
 		}
 
 		virtual unsigned get_version()

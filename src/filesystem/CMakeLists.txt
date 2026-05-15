@@ -14,8 +14,8 @@ find_package(libassert REQUIRED)
 
 # allows us to use std::max when Windows.h is included
 add_definitions(-DNOMINMAX) 
-target_compile_definitions(${PROJECT_NAME} PRIVATE MAKER_DEFAULT_BUILTIN_DIRECTORY=\"${PROJECT_SOURCE_DIR}/assets\")
-target_compile_definitions(${PROJECT_NAME} PRIVATE MAKER_DEFAULT_CACHE_DIRECTORY=\"${CMAKE_BINARY_DIR}/cache\")
+target_compile_definitions(${PROJECT_NAME} PRIVATE EE_DEFAULT_BUILTIN_DIRECTORY=\"${PROJECT_SOURCE_DIR}/assets\")
+target_compile_definitions(${PROJECT_NAME} PRIVATE EE_DEFAULT_CACHE_DIRECTORY=\"${CMAKE_BINARY_DIR}/cache\")
 
 
 set(INCLUDES 

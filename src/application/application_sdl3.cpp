@@ -122,7 +122,7 @@ namespace EE
 
 			application.name = name;
 			if (application.name.empty())
-				application.name = "EngineEngine";
+				application.name = "EEngine";
 
 			SDL_WindowFlags window_flags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_VULKAN;
 			if (fullscreen_)
@@ -136,8 +136,8 @@ namespace EE
 			}
 
 			application.info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-			application.info.pEngineName = "Maker";
-			application.info.pApplicationName = application.name.empty() ? "Maker" : application.name.c_str();
+			application.info.pEngineName = "EEngine";
+			application.info.pApplicationName = application.name.empty() ? "EEngine" : application.name.c_str();
 			application.info.apiVersion = VK_API_VERSION_1_1;
 
 			auto is = Services::get().get<InputSystemInterface>();
@@ -350,6 +350,7 @@ namespace EE
 		{
 			Util::init_render_doc(opts.rdoc_folder, opts.rdoc_capture_path);
 		}
+
 
 		WSIPlatformSDL::Options wsi_options;
 		wsi_options.override_width  = opts.width;

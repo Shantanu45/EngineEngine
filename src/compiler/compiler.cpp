@@ -250,7 +250,7 @@ namespace Compiler
 			for (auto& define : *defines)
 				options.AddMacroDefinition(define.first, std::to_string(define.second));
 
-#if MAKER_COMPILER_OPTIMIZE
+#if EE_COMPILER_OPTIMIZE
 		if (optimization != Optimization::ForceOff)
 			options.SetOptimizationLevel(shaderc_optimization_level_performance);
 		else

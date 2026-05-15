@@ -105,16 +105,16 @@ namespace FileSystem
 		if (!asset_dir.empty())
 			register_protocol("builtin", std::unique_ptr<FilesystemBackend>(new OSFilesystem(asset_dir)));
 
-#ifdef MAKER_DEFAULT_BUILTIN_DIRECTORY
-		auto builtin_dir = std::string(MAKER_DEFAULT_BUILTIN_DIRECTORY);
+#ifdef EE_DEFAULT_BUILTIN_DIRECTORY
+		auto builtin_dir = std::string(EE_DEFAULT_BUILTIN_DIRECTORY);
 #else
 		auto builtin_dir = "";
 #endif
 		if (!builtin_dir.empty())
 			register_protocol("builtin", std::unique_ptr<FilesystemBackend>(new OSFilesystem(builtin_dir)));
 
-#ifdef MAKER_DEFAULT_CACHE_DIRECTORY
-		auto cache_dir = std::string(MAKER_DEFAULT_CACHE_DIRECTORY);
+#ifdef EE_DEFAULT_CACHE_DIRECTORY
+		auto cache_dir = std::string(EE_DEFAULT_CACHE_DIRECTORY);
 #else
 		auto cache_dir = "";
 #endif
@@ -130,7 +130,7 @@ namespace FileSystem
 
 		if (default_asset_directory)
 		{
-#ifdef MAKER_SHIPPING
+#ifdef EE_SHIPPING
 			LOGW("Default asset directory %s was provided, but this is only intended for non-shipping configs.\n",
 				default_asset_directory);
 #else
