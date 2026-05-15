@@ -23,7 +23,9 @@ layout(set = 0, binding = 1, std430) writeonly buffer TerrainHeightBuffer {
 	float heights[];
 };
 
-layout(set = 0, binding = 2, std430) writeonly buffer TerrainColorBuffer {
+layout(rgba8, set = 0, binding = 2) writeonly uniform image2D terrainColorImage;
+
+layout(set = 0, binding = 3, std430) writeonly buffer TerrainColorBuffer {
 	uint colors[];
 };
 
@@ -174,6 +176,8 @@ void main()
 	vec2 world_xz = origin + vec2(id) * (size / denom);
 
 	uint offset = id.y * params.texture_size + id.x;
+	vec3 color = terrain_color(world_xz);
 	heights[offset] = terrain_height(world_xz);
-	colors[offset] = pack_rgba8(terrain_color(world_xz));
+	colors[offset] = pack_rgba8(color);
+	imageStore(terrainColorImage, ivec2(id), vec4(color, 1.0));
 }

@@ -113,8 +113,20 @@ private:
 	/** Generates a small height/slope-based albedo texture for a terrain chunk. */
 	RID create_chunk_color_texture(int32_t x, int32_t z);
 
-	/** Generates a chunk albedo texture through the terrain compute shader and readback. */
+	/** Generates a chunk albedo texture directly through the terrain compute shader. */
 	RID create_chunk_color_texture_gpu(int32_t x, int32_t z);
+
+	/** Creates a texture that compute can write and terrain materials can sample. */
+	RID create_chunk_color_storage_texture(int32_t x, int32_t z, const char* source_name);
+
+	/** Creates the compute descriptor set for a destination terrain color image. */
+	RID create_height_compute_uniform_set(RID color_texture);
+
+	/** Transitions a compute color image into the layout needed by the height shader. */
+	void transition_color_image_for_compute(RID color_texture, bool was_written);
+
+	/** Transitions a compute-written color image into the layout used by material sampling. */
+	void transition_color_image_for_sampling(RID color_texture);
 
 	/** Uploads RGBA8 texels as a sampled terrain albedo texture. */
 	RID create_chunk_color_texture_from_pixels(
@@ -220,6 +232,9 @@ private:
 	/** Handles that keep generated terrain color textures alive. */
 	std::vector<RIDHandle> terrain_color_textures;
 
+	/** Keeps per-generated-texture compute descriptor sets alive while their textures are alive. */
+	std::vector<RIDHandle> terrain_color_compute_uniform_sets;
+
 	/** Compute pipeline that generates terrain heights into a storage buffer. */
 	Rendering::Pipeline height_compute_pipeline;
 
@@ -232,8 +247,14 @@ private:
 	/** Storage buffer receiving generated RGBA8 terrain colors from the compute shader. */
 	RIDHandle height_compute_color_buffer;
 
+	/** Reusable storage image used by the center-chunk debug compute dispatch. */
+	RIDHandle height_compute_debug_color_texture;
+
 	/** Descriptor set binding the terrain compute parameter and output buffers. */
 	RIDHandle height_compute_uniform_set;
+
+	/** Tracks whether the reusable debug storage image has already been written by compute. */
+	bool height_compute_debug_color_texture_written = false;
 
 	/** Width/height of the generated GPU height field. */
 	uint32_t height_compute_texture_size = 128;
@@ -250,7 +271,7 @@ private:
 	/** Number of chunk color texture dispatches recorded this run. */
 	uint64_t color_texture_compute_dispatches = 0;
 
-	/** Number of failed GPU color texture readbacks that fell back to CPU generation. */
+	/** Number of failed GPU color texture generations that fell back to CPU generation. */
 	uint64_t color_texture_compute_failures = 0;
 
 	/** Set by the UI to run one GPU-vs-CPU height validation pass on the next frame. */
