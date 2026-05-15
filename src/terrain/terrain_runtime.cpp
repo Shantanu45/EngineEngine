@@ -1,6 +1,7 @@
 #include "terrain/terrain_runtime.h"
 
 #include "imgui.h"
+#include "rendering/debug_draw.h"
 #include "rendering/primitve_shapes.h"
 #include "rendering/utils.h"
 #include "util/profiler.h"
@@ -194,6 +195,9 @@ void TerrainRuntime::render_frame(double frame_time, double elapsed_time)
 		.type = static_cast<uint32_t>(LightType::Directional),
 		.outer_angle = 0.0f,
 	});
+
+	if (render_settings.draw_world_axes)
+		Rendering::DebugDraw::get().add_basis(glm::mat4(1.0f), 2.0f);
 
 	wsi->set_render_settings(render_settings);
 	render_pipeline.render(view, resources.meshes(), true);
@@ -766,6 +770,7 @@ void TerrainRuntime::draw_ui()
 	ImGui::Checkbox("PBR", &render_settings.use_pbr_lighting);
 	ImGui::Checkbox("Grid", &render_settings.draw_grid);
 	ImGui::Checkbox("Skybox", &render_settings.draw_skybox);
+	ImGui::Checkbox("World Axes", &render_settings.draw_world_axes);
 	ImGui::Checkbox("Water", &water_enabled);
 	ImGui::DragFloat("Water Level", &water_level, 0.1f, -40.0f, 80.0f);
 	ImGui::SliderInt("Water Padding", &water_padding_chunks, 0, 64);

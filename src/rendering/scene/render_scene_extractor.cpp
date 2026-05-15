@@ -75,6 +75,8 @@ RenderSceneExtractResult RenderSceneExtractor::extract(RenderSceneExtractInput i
 		Rendering::DebugDraw::get().add_frustum(input.render_camera.get_view_projection(), glm::vec4(0.1f, 1.0f, 0.2f, 1.0f));
 	if (input.settings.draw_culling_frustum)
 		Rendering::DebugDraw::get().add_frustum(input.culling_camera.get_view_projection(), glm::vec4(1.0f, 0.85f, 0.1f, 1.0f));
+	if (input.settings.draw_world_axes)
+		Rendering::DebugDraw::get().add_basis(glm::mat4(1.0f), 2.0f);
 
 	auto emit_mesh = [&](MeshComponent& m, const glm::mat4& model, const glm::mat4& normal_matrix) {
 			Rendering::ShadowCasterInstance shadow_inst;

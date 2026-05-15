@@ -32,6 +32,7 @@ struct RenderSettings {
     bool wireframe       = false;
     bool draw_grid       = true;
     bool draw_skybox     = true;
+    bool draw_world_axes = true;
     bool use_pbr_lighting = true;
     bool show_timings       = false;
     bool show_timing_graphs = false;
