@@ -5683,6 +5683,9 @@ Rendering::RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_for
 		auto fs = Services::get().get<FilesystemInterface>();
 		compiler = std::make_unique<Compiler::GLSLCompiler>(*fs);
 		compiler->set_target(Compiler::Target::Vulkan13);
+
+		// shader debug symbols on; TODO: easier way to configure this without changing rendering_device code
+		compiler->set_optimization(Compiler::GLSLCompiler::Optimization::ForceOff);
 	}
 
 	RenderingDevice::~RenderingDevice() {

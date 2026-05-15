@@ -176,6 +176,7 @@ void TerrainRuntime::render_frame(double frame_time, double elapsed_time)
 		const float yaw = std::atan2(forward.x, forward.z);
 		const glm::mat4 water_model =
 			model *
+			glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, display_water_level, 0.0f)) *
 			glm::scale(glm::mat4(1.0f), glm::vec3(width, 1.0f, depth));
 		view.instances.push_back(Rendering::MeshInstance{
 			.mesh = water_mesh,
