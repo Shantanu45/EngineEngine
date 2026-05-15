@@ -3244,8 +3244,13 @@ namespace Vulkan
 					layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
 					layout_binding.descriptorCount = uniform.length;
 				} break;
+				case UNIFORM_TYPE_SAMPLER_WITH_TEXTURE_BUFFER: {
+					layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+					layout_binding.descriptorCount = uniform.length;
+				} break;
 				case UNIFORM_TYPE_IMAGE_BUFFER: {
 					layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
+					layout_binding.descriptorCount = uniform.length;
 				} break;
 				case UNIFORM_TYPE_UNIFORM_BUFFER: {
 					layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -3865,8 +3870,11 @@ namespace Vulkan
 				total_buffer_infos += u.ids.size();
 				total_buffer_views += u.ids.size();
 				break;
+			case UNIFORM_TYPE_IMAGE_BUFFER:
+				total_buffer_infos += u.ids.size();
+				total_buffer_views += u.ids.size();
+				break;
 			case UNIFORM_TYPE_SAMPLER_WITH_TEXTURE_BUFFER:
-				total_image_infos += u.ids.size() / 2; // sampler part
 				total_buffer_infos += u.ids.size() / 2;
 				total_buffer_views += u.ids.size() / 2;
 				break;
@@ -4005,13 +4013,9 @@ namespace Vulkan
 
 			case UNIFORM_TYPE_SAMPLER_WITH_TEXTURE_BUFFER: {
 				num_descriptors = uniform.ids.size() / 2;
-				VkDescriptorImageInfo* idst = &img_infos[img_offset];
 				VkDescriptorBufferInfo* bdst = &buf_infos[buf_offset];
 				VkBufferView* vdst = &buf_views[view_offset];
 				for (uint32_t j = 0; j < num_descriptors; j++) {
-					idst[j] = {};
-					idst[j].sampler = (VkSampler)uniform.ids[j * 2 + 0].id;
-
 					const BufferInfo* bi = (const BufferInfo*)uniform.ids[j * 2 + 1].id;
 					bdst[j] = {};
 					bdst[j].buffer = bi->vk_buffer;
@@ -4019,16 +4023,28 @@ namespace Vulkan
 					vdst[j] = bi->vk_view;
 				}
 				vk_writes[writes_amount].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
-				vk_writes[writes_amount].pImageInfo = idst;
 				vk_writes[writes_amount].pBufferInfo = bdst;
 				vk_writes[writes_amount].pTexelBufferView = vdst;
-				img_offset += num_descriptors;
 				buf_offset += num_descriptors;
 				view_offset += num_descriptors;
 			} break;
 
 			case UNIFORM_TYPE_IMAGE_BUFFER: {
-				CRASH_NOW_MSG("Unimplemented!"); // TODO.
+				num_descriptors = uniform.ids.size();
+				VkDescriptorBufferInfo* bdst = &buf_infos[buf_offset];
+				VkBufferView* vdst = &buf_views[view_offset];
+				for (uint32_t j = 0; j < num_descriptors; j++) {
+					const BufferInfo* bi = (const BufferInfo*)uniform.ids[j].id;
+					bdst[j] = {};
+					bdst[j].buffer = bi->vk_buffer;
+					bdst[j].range = bi->size;
+					vdst[j] = bi->vk_view;
+				}
+				vk_writes[writes_amount].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
+				vk_writes[writes_amount].pBufferInfo = bdst;
+				vk_writes[writes_amount].pTexelBufferView = vdst;
+				buf_offset += num_descriptors;
+				view_offset += num_descriptors;
 			} break;
 
 			case UNIFORM_TYPE_UNIFORM_BUFFER: {
@@ -4099,7 +4115,9 @@ namespace Vulkan
 				for (uint32_t j = 0; j < num_descriptors; j++) {
 					dst[j] = {};
 					dst[j].imageView = ((const TextureInfo*)uniform.ids[j].id)->vk_view;
-					dst[j].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+					dst[j].imageLayout = uniform.is_depth
+						? VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
+						: VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 				}
 				vk_writes[writes_amount].descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
 				vk_writes[writes_amount].pImageInfo = dst;
