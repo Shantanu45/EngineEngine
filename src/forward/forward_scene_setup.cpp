@@ -62,6 +62,7 @@ ForwardSceneHandle instantiate_forward_gltf_scene(const ForwardGltfSceneRequest&
 		.material_registry = request.resources.materials(),
 		.device            = request.device,
 		.fallback_texture  = request.fallback_texture,
+		.fallback_normal_texture = request.fallback_normal_texture,
 		.shader_rid        = request.shader_rid,
 		.pbr_shader_rid    = request.pbr_shader_rid,
 		.shadow_shader_rid = request.shadow_shader_rid,

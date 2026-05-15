@@ -23,6 +23,7 @@ public:
 	MaterialRegistry& materials() { return material_registry; }
 	MeshStorage& meshes() { return mesh_storage; }
 	RID default_white_texture() const { return white_texture; }
+	RID default_normal_texture() const { return normal_texture; }
 	RID skybox_cubemap() const { return skybox_texture; }
 
 	const TextureCache& textures() const { return texture_cache; }
@@ -34,6 +35,7 @@ private:
 	RenderingDevice* device = nullptr;
 	FileSystem::FilesystemInterface* filesystem = nullptr;
 	RIDHandle white_texture;
+	RIDHandle normal_texture;
 	RIDHandle skybox_texture;
 	TextureCache texture_cache;
 	RenderAssetRegistry asset_registry;

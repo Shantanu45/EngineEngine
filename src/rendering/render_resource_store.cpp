@@ -12,6 +12,7 @@ void RenderResourceStore::initialize(RenderingDevice* device_, FileSystem::Files
 	texture_cache.init(device, filesystem);
 	mesh_storage.initialize(device);
 	white_texture = RIDHandle(create_white_texture(device));
+	normal_texture = RIDHandle(create_flat_normal_texture(device));
 	initialized = true;
 }
 
@@ -31,6 +32,7 @@ void RenderResourceStore::shutdown()
 	texture_cache.free_all();
 	mesh_storage.finalize();
 	skybox_texture.reset();
+	normal_texture.reset();
 	white_texture.reset();
 
 	initialized = false;

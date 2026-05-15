@@ -141,6 +141,7 @@ void ForwardRuntime::load_scene(FileSystem::Filesystem& filesystem, const std::s
 		.device            = device,
 		.resources         = resources,
 		.fallback_texture  = resources.default_white_texture(),
+		.fallback_normal_texture = resources.default_normal_texture(),
 		.shader_rid        = render_pipeline.color_pipeline().shader_rid,
 		.pbr_shader_rid    = render_pipeline.pbr_color_pipeline().shader_rid,
 		.shadow_shader_rid = render_pipeline.shadow_pipeline().shader_rid,

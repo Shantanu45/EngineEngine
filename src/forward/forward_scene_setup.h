@@ -25,6 +25,7 @@ struct ForwardGltfSceneRequest {
 	Rendering::RenderingDevice* device = nullptr;
 	Rendering::RenderResourceStore& resources;
 	RID fallback_texture;
+	RID fallback_normal_texture;
 	RID shader_rid;
 	RID pbr_shader_rid;
 	RID shadow_shader_rid;

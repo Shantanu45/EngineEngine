@@ -74,13 +74,18 @@ namespace Rendering
 		RID build_uniform_set(
 			RenderingDevice* device,
 			RID fallback,
+			RID normal_fallback,
 			RID shader_rid)
 		{
+			RID normal_texture = normal.is_valid() ? normal : normal_fallback;
+			if (!normal_texture.is_valid())
+				normal_texture = fallback;
+
 			return Rendering::UniformSetBuilder{}
 				.add(ubo.as_uniform(0))
 				.add_texture_only(1, diffuse.is_valid()            ? diffuse            : fallback)
 				.add_texture_only(2, metallic_roughness.is_valid() ? metallic_roughness : fallback)
-				.add_texture_only(3, normal.is_valid()             ? normal             : fallback)
+				.add_texture_only(3, normal_texture)
 				.add_texture_only(4, displacement.is_valid()       ? displacement       : fallback)
 				.add_texture_only(5, emissive.is_valid()           ? emissive           : fallback)
 				.add_texture_only(6, occlusion.is_valid()          ? occlusion          : fallback)
@@ -98,10 +103,10 @@ namespace Rendering
 	class MaterialRegistry
 	{
 	public:
-		MaterialHandle create(RenderingDevice* device, Material mat, RID fallback, RID shader_rid)
+		MaterialHandle create(RenderingDevice* device, Material mat, RID fallback, RID normal_fallback, RID shader_rid)
 		{
 			mat.create(device);
-			RIDHandle us(mat.build_uniform_set(device, fallback, shader_rid));
+			RIDHandle us(mat.build_uniform_set(device, fallback, normal_fallback, shader_rid));
 
 			MaterialHandle h = static_cast<MaterialHandle>(materials.size());
 			materials.push_back(std::move(mat));
@@ -114,31 +119,36 @@ namespace Rendering
 			return h;
 		}
 
-		MaterialHandle create(RenderingDevice* device, Material mat, RID fallback, RID shader_rid, RID pbr_shader_rid)
+		MaterialHandle create(RenderingDevice* device, Material mat, RID fallback, RID shader_rid)
 		{
-			return create(device, std::move(mat), fallback, shader_rid, pbr_shader_rid, RID(), RID());
+			return create(device, std::move(mat), fallback, RID(), shader_rid);
 		}
 
-		MaterialHandle create(RenderingDevice* device, Material mat, RID fallback, RID shader_rid,
+		MaterialHandle create(RenderingDevice* device, Material mat, RID fallback, RID normal_fallback, RID shader_rid, RID pbr_shader_rid)
+		{
+			return create(device, std::move(mat), fallback, normal_fallback, shader_rid, pbr_shader_rid, RID(), RID());
+		}
+
+		MaterialHandle create(RenderingDevice* device, Material mat, RID fallback, RID normal_fallback, RID shader_rid,
 			RID pbr_shader_rid, RID shadow_shader_rid, RID point_shadow_shader_rid,
 			RID transparent_shader_rid = RID(), RID transparent_pbr_shader_rid = RID())
 		{
 			mat.create(device);
-			RIDHandle us(mat.build_uniform_set(device, fallback, shader_rid));
+			RIDHandle us(mat.build_uniform_set(device, fallback, normal_fallback, shader_rid));
 			RIDHandle pbr_us(pbr_shader_rid.is_valid()
-				? mat.build_uniform_set(device, fallback, pbr_shader_rid)
+				? mat.build_uniform_set(device, fallback, normal_fallback, pbr_shader_rid)
 				: RID());
 			RIDHandle shadow_us(shadow_shader_rid.is_valid()
-				? mat.build_uniform_set(device, fallback, shadow_shader_rid)
+				? mat.build_uniform_set(device, fallback, normal_fallback, shadow_shader_rid)
 				: RID());
 			RIDHandle point_shadow_us(point_shadow_shader_rid.is_valid()
-				? mat.build_uniform_set(device, fallback, point_shadow_shader_rid)
+				? mat.build_uniform_set(device, fallback, normal_fallback, point_shadow_shader_rid)
 				: RID());
 			RIDHandle transparent_us(transparent_shader_rid.is_valid()
-				? mat.build_uniform_set(device, fallback, transparent_shader_rid)
+				? mat.build_uniform_set(device, fallback, normal_fallback, transparent_shader_rid)
 				: RID());
 			RIDHandle transparent_pbr_us(transparent_pbr_shader_rid.is_valid()
-				? mat.build_uniform_set(device, fallback, transparent_pbr_shader_rid)
+				? mat.build_uniform_set(device, fallback, normal_fallback, transparent_pbr_shader_rid)
 				: RID());
 
 			MaterialHandle h = static_cast<MaterialHandle>(materials.size());
